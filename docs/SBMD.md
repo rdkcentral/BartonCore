@@ -44,7 +44,7 @@ supported device type adds too much friction to the goal of broad device support
 
 SBMD addresses this by using textual specification files that map between Matter
 types and Barton resources, enabling new device type support without rebuilding or
-redeploying firmware. Each driver is a single `.sbmd.js` file (schema version 4)
+redeploying firmware. Each driver is a single `.sbmd.js` file (schema version 5)
 where the full driver — metadata, resources, and handler logic — is expressed
 in JavaScript.
 
@@ -147,7 +147,7 @@ Every `.sbmd.js` file has two sections:
 
 ```js
 SbmdDriver({
-  schemaVersion: "4.0",
+  schemaVersion: "5.0",
   driverVersion: "1.0",
   name: "...",
   constants:         { ... },
@@ -174,7 +174,7 @@ function myHandler(args) { ... }
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `schemaVersion` | string | yes | Schema version. Currently `"4.0"`. |
+| `schemaVersion` | string | yes | Schema version. Currently `"5.0"`. |
 | `driverVersion` | string | yes | Driver-specific version string. |
 | `name` | string | yes | Human-readable driver name. |
 | `constants` | object | yes | Named constants (see [4.2](#42-constants)). |
@@ -544,35 +544,26 @@ Attribute handlers process incoming Matter attribute reports from the device.
 
 ```js
 attributeHandlers: {
-  // Alias form — resolved to cluster + attribute from the aliases section
+  // Bound via aliases, each resolved to a cluster + attribute from the aliases section.
   handlerName: {
-    aliases:      string[],          // alias names (mutually exclusive with clusterId)
-    supplements:  { ... },           // optional: pre-fetched data
-    handler:      functionRef,       // required: handler function
-  },
-
-  // Explicit form — cluster + attribute ID(s) specified directly
-  handlerName: {
-    clusterId:    number,            // required: cluster to match
-    attributeId:  number | "*",      // single attribute or wildcard
-    attributeIds: number[],          // OR: multiple attributes (mutually exclusive with attributeId)
+    aliases:      string[],          // required: alias names to match
     supplements:  { ... },           // optional: pre-fetched data
     handler:      functionRef,       // required: handler function
   },
 }
 ```
 
-The `aliases` field and `clusterId` + `attributeId`/`attributeIds` fields are
-mutually exclusive. When `aliases` is used, the runtime resolves each entry to
-its corresponding cluster and attribute from the `aliases` section. The handler
-fires for any matching alias.
+The runtime resolves each entry in `aliases` to its corresponding cluster and
+attribute from the `aliases` section (or to a cluster wildcard when the alias
+declares no `attributeId`). The handler fires for any matching alias.
 
 **Trigger dispatch**:
-- **Single**: `attributeId: ATTR_LOCK_STATE` — fires for one specific attribute.
-- **Multiple**: `attributeIds: [ATTR_ACTUATOR_ENABLED, ATTR_DOOR_STATE]` — fires
-  for any of the listed attributes. The handler is called once per triggering
+- **Single**: an alias bound to one `attributeId` (e.g. `lockState`) — fires for
+  that specific attribute.
+- **Multiple**: list several aliases — the handler is called once per triggering
   attribute change; `args.attribute` identifies which one fired.
-- **Wildcard**: `attributeId: "*"` — fires for any attribute on the cluster.
+- **Wildcard**: an alias that declares only a `clusterId` (no `attributeId`) —
+  fires for any attribute on the cluster.
 
 When multiple handlers match the same attribute report, all matching handlers
 fire. More specific handlers (single/multi) fire before wildcard handlers.
@@ -583,25 +574,16 @@ Event handlers process incoming Matter events from the device.
 
 ```js
 eventHandlers: {
-  // Alias form
   handlerName: {
     aliases: string[],
     supplements: { ... },
     handler: functionRef,
   },
-
-  // Explicit form
-  handlerName: {
-    clusterId: number,
-    eventId:   number | "*",
-    eventIds:  number[],
-    supplements: { ... },
-    handler:   functionRef,
-  },
 }
 ```
 
-Same dispatch rules and aliases/explicit mutual exclusivity as attribute handlers.
+Same dispatch rules as attribute handlers: aliases resolve to a cluster + event
+(or a cluster wildcard when the alias declares no `eventId`).
 
 ### 4.11 Command Handlers
 
@@ -611,25 +593,16 @@ is, commands that are not correlated to a pending `.device.requestCommand()`
 
 ```js
 commandHandlers: {
-  // Alias form
   handlerName: {
     aliases: string[],
     supplements: { ... },
     handler: functionRef,
   },
-
-  // Explicit form
-  handlerName: {
-    clusterId: number,
-    commandId:   number | "*",
-    commandIds:  number[],
-    supplements: { ... },
-    handler:   functionRef,
-  },
 }
 ```
 
-Same dispatch rules and aliases/explicit mutual exclusivity as attribute handlers.
+Same dispatch rules as attribute handlers: aliases resolve to a cluster + command
+(or a cluster wildcard when the alias declares no `commandId`).
 
 **Important**: When a command arrives that matches a pending `requestCommand`'s
 `responseCommandId`, the request's response handler is called instead. Command
@@ -1302,7 +1275,7 @@ level control).
 
 ```js
 SbmdDriver({
-  schemaVersion: "4.0",
+  schemaVersion: "5.0",
   driverVersion: "1.0",
   name: "Light",
 
@@ -1454,7 +1427,7 @@ but shows the minimum required structure.
 
 ```js
 SbmdDriver({
-  schemaVersion: "4.0",
+  schemaVersion: "5.0",
   driverVersion: "1.0",
   name: "Light (Inline)",
 
@@ -1517,7 +1490,7 @@ production drivers.
 
 ```js
 SbmdDriver({
-  schemaVersion: "4.0",
+  schemaVersion: "5.0",
   driverVersion: "1.0",
   name: "Light (Minimal)",
 
@@ -1586,13 +1559,13 @@ production driver.
 
 Demonstrates: device-level resources, endpoint-scoped resources, aliases and
 prerequisites with `optional: true`, resource seeding, modes (`static`,
-`noEvents`), single/multi/wildcard attribute/event/command handlers (alias and
-explicit forms), supplements, persistent and transient data storage, invoke with
+`noEvents`), single/multi/wildcard attribute/event/command handlers bound via
+aliases, supplements, persistent and transient data storage, invoke with
 `responseCommandId`, TLV encoding, and feature map inspection.
 
 ```js
 SbmdDriver({
-  schemaVersion: "4.0",
+  schemaVersion: "5.0",
   driverVersion: "1.0",
   name: "Door Lock",
 
@@ -1656,9 +1629,30 @@ SbmdDriver({
       clusterId: CL_DOOR_LOCK,
       eventId: EVT_LOCK_OPERATION,
     },
+    doorLockAlarm: {
+      clusterId: CL_DOOR_LOCK,
+      eventId: EVT_DOOR_LOCK_ALARM,
+    },
+    lockUserChange: {
+      clusterId: CL_DOOR_LOCK,
+      eventId: EVT_LOCK_USER_CHANGE,
+    },
     getCredentialStatusResp: {
       clusterId: CL_DOOR_LOCK,
       commandId: CMD_GET_CREDENTIAL_STATUS_RESP,
+    },
+    getUserResp: {
+      clusterId: CL_DOOR_LOCK,
+      commandId: CMD_GET_USER_RESP,
+    },
+    setCredentialResp: {
+      clusterId: CL_DOOR_LOCK,
+      commandId: CMD_SET_CREDENTIAL_RESP,
+    },
+    // An alias with only a clusterId (no attribute/event/command id) is a
+    // cluster-wide wildcard: it matches any element of that cluster.
+    doorLockAny: {
+      clusterId: CL_DOOR_LOCK,
     },
   },
 
@@ -1755,20 +1749,18 @@ SbmdDriver({
       handler: handleLockStateAttribute,
     },
 
-    // Multiple attributes — explicit form, shared handler
+    // Multiple attributes via aliases, shared handler
     lockActuator: {
-      clusterId: CL_DOOR_LOCK,
-      attributeIds: [ATTR_ACTUATOR_ENABLED, ATTR_DOOR_STATE],
+      aliases: ["actuatorEnabled", "doorState"],
       supplements: {
         resources: [EP_LOCK + "/" + RES_LOCKED],
       },
       handler: handleActuatorAttributes,
     },
 
-    // Wildcard — catch-all for any attribute on a cluster
+    // Wildcard — catch-all for any attribute on a cluster (cluster-wide alias)
     lockDiagnostics: {
-      clusterId: CL_DOOR_LOCK,
-      attributeId: "*",
+      aliases: ["doorLockAny"],
       handler: handleLockDiagnostics,
     },
   },
@@ -1784,20 +1776,18 @@ SbmdDriver({
       handler: handleLockOperation,
     },
 
-    // Multiple events — explicit form
+    // Multiple events via aliases
     lockAlarms: {
-      clusterId: CL_DOOR_LOCK,
-      eventIds: [EVT_DOOR_LOCK_ALARM, EVT_LOCK_USER_CHANGE],
+      aliases: ["doorLockAlarm", "lockUserChange"],
       handler: handleLockAlarms,
       supplements: {
         persistentData: ["alarmCount"],
       },
     },
 
-    // Wildcard
+    // Wildcard (cluster-wide alias)
     lockEventCatchAll: {
-      clusterId: CL_DOOR_LOCK,
-      eventId: "*",
+      aliases: ["doorLockAny"],
       handler: handleLockEventCatchAll,
     },
   },
@@ -1812,17 +1802,15 @@ SbmdDriver({
       handler: handleGetCredentialStatusResponse,
     },
 
-    // Multiple commands — explicit form
+    // Multiple commands via aliases
     userCommands: {
-      clusterId: CL_DOOR_LOCK,
-      commandIds: [CMD_GET_USER_RESP, CMD_SET_CREDENTIAL_RESP],
+      aliases: ["getUserResp", "setCredentialResp"],
       handler: handleUserCommandResponses,
     },
 
-    // Wildcard
+    // Wildcard (cluster-wide alias)
     lockCommandCatchAll: {
-      clusterId: CL_DOOR_LOCK,
-      commandId: "*",
+      aliases: ["doorLockAny"],
       handler: handleLockCommandCatchAll,
     },
   },

@@ -1,16 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "sbmd-spec-schema-v4.0.json",
-  "title": "SBMD v4.0 Registration Schema",
-  "description": "JSON Schema for the SbmdDriver() registration object in .sbmd.js spec files (schema version 4.0). Functions are represented as `true` after extraction.",
+  "$id": "sbmd-spec-schema-v5.0.json",
+  "title": "SBMD v5.0 Registration Schema",
+  "description": "JSON Schema for the SbmdDriver() registration object in .sbmd.js spec files (schema version 5.0). Functions are represented as `true` after extraction.",
   "type": "object",
   "required": ["schemaVersion", "driverVersion", "name", "constants", "barton", "matter"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "const": "4.0",
-      "description": "Schema version. Must be '4.0'."
+      "const": "5.0",
+      "description": "Schema version. Must be '5.0'."
     },
     "driverVersion": {
       "oneOf": [
@@ -308,113 +308,50 @@
 
     "attributeHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "attributeId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single attribute ID or '*' wildcard. Mutually exclusive with attributeIds."
-        },
-        "attributeIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple attribute IDs. Mutually exclusive with attributeId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     },
 
     "eventHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "eventId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single event ID or '*' wildcard. Mutually exclusive with eventIds."
-        },
-        "eventIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple event IDs. Mutually exclusive with eventId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     },
 
     "commandHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "commandId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single command ID or '*' wildcard. Mutually exclusive with commandIds."
-        },
-        "commandIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple command IDs. Mutually exclusive with commandId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     }
   }
 }

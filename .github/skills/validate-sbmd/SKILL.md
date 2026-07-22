@@ -35,7 +35,7 @@ python3 scripts/ci/validate_sbmd_v4_specs.py \
 This:
 1. Uses Node.js to evaluate each `.sbmd.js` file in a sandbox
 2. Extracts the `SbmdDriver()` registration object as JSON (functions → `true`)
-3. Validates the JSON against `sbmd-spec-schema-v4.0.json`
+3. Validates the JSON against `sbmd-spec-schema-v5.0.json`
 
 The validator evaluates each `.sbmd.js` file, extracts the `SbmdDriver()` registration object, and validates it against the JSON schema.
 
@@ -44,7 +44,7 @@ The validator evaluates each `.sbmd.js` file, extracts the `SbmdDriver()` regist
 | Item | Location |
 |------|----------|
 | SBMD spec files | `core/deviceDrivers/matter/sbmd/specs/*.sbmd.js` |
-| JSON schema | `core/deviceDrivers/matter/sbmd/schema/sbmd-spec-schema-v4.0.json` |
+| JSON schema | `core/deviceDrivers/matter/sbmd/schema/sbmd-spec-schema-v5.0.json` |
 | TypeScript definitions (editor tooling only — not used by the validator) | `core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts` |
 | Validation script | `scripts/ci/validate_sbmd_v4_specs.py` |
 | Extraction harness | `scripts/ci/sbmd_extract_registration.js` |

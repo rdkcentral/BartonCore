@@ -62,6 +62,8 @@ extern "C" {
 #include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
 #include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>
 #include <app/server/Dnssd.h>
+#include <app/util/attribute-storage.h>
+#include <app/util/endpoint-config-api.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/CHIPDeviceControllerFactory.h>
 #include <controller/CommissioningWindowOpener.h>
@@ -618,6 +620,7 @@ CHIP_ERROR Matter::InitCommissioner()
     fabricTable->SetFabricLabel(fabricIndex, labelSpan);
 
     ReturnErrorOnFailure(ConfigureOTAProviderNode());
+    ReturnErrorOnFailure(ConfigureWebRtcRequestorNode());
 
     ReturnLogErrorOnFailure(fabricTable->CommitPendingFabricData());
 
@@ -1125,18 +1128,15 @@ CHIP_ERROR Matter::GetFabricIndex(FabricTable *fabricTable,
     return CHIP_NO_ERROR;
 }
 
-bool Matter::IsAccessibleByOTARequestors()
+bool Matter::HasCaseOperateAclEntryForCluster(chip::ClusterId clusterId)
 {
     icDebug();
 
-    bool result = false;
-
     // This will always return false if the node isn't initialized
-
     if (myFabricId == chip::kUndefinedFabricId || myNodeId == chip::kUndefinedNodeId)
     {
         icWarn("Node isn't initialized");
-        return result;
+        return false;
     }
 
     size_t index = 0;
@@ -1159,37 +1159,53 @@ bool Matter::IsAccessibleByOTARequestors()
             continue;
         }
 
+        LogErrorOnFailure(AccessControlDump(entry));
+
         chip::FabricIndex currFabricIndex;
         chip::Access::Privilege currPrivilege;
         chip::Access::AuthMode currAuthMode;
 
-        LogErrorOnFailure(AccessControlDump(entry));
-
-        if (entry.GetFabricIndex(currFabricIndex) == CHIP_NO_ERROR &&
-            entry.GetPrivilege(currPrivilege) == CHIP_NO_ERROR && entry.GetAuthMode(currAuthMode) == CHIP_NO_ERROR)
+        if (entry.GetFabricIndex(currFabricIndex) != CHIP_NO_ERROR ||
+            entry.GetPrivilege(currPrivilege) != CHIP_NO_ERROR || entry.GetAuthMode(currAuthMode) != CHIP_NO_ERROR)
         {
-            if (currFabricIndex == myFabricIndex && currPrivilege >= chip::Access::Privilege::kOperate &&
-                currAuthMode == chip::Access::AuthMode::kCase)
+            continue;
+        }
+
+        if (currFabricIndex != myFabricIndex || currPrivilege < chip::Access::Privilege::kOperate ||
+            currAuthMode != chip::Access::AuthMode::kCase)
+        {
+            continue;
+        }
+
+        size_t targetCount = 0;
+
+        if (entry.GetTargetCount(targetCount) != CHIP_NO_ERROR)
+        {
+            continue;
+        }
+
+        for (size_t i = 0; i < targetCount; ++i)
+        {
+            Access::AccessControl::Entry::Target target;
+
+            if (entry.GetTarget(i, target) == CHIP_NO_ERROR &&
+                (target.flags & Access::AccessControl::Entry::Target::kCluster) != 0 && target.cluster == clusterId)
             {
-                // OTA Requestors need at least the "operate" privilege over CASE
-                result = true;
-                break;
+                return true;
             }
         }
     }
 
-    return result;
+    return false;
 }
 
-CHIP_ERROR Matter::AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::FabricIndex fabricIndex)
+CHIP_ERROR Matter::AppendCaseOperateAclEntryForCluster(chip::FabricIndex fabricIndex, chip::ClusterId clusterId)
 {
     icDebug();
 
-    CHIP_ERROR err = CHIP_NO_ERROR;
-
     if (fabricIndex == chip::kUndefinedFabricIndex)
     {
-        icError("No such entry on fabric table for fabricId: %" PRIu64, fabricId);
+        icError("No such entry on fabric table");
         return CHIP_ERROR_INVALID_FABRIC_INDEX;
     }
 
@@ -1201,7 +1217,7 @@ CHIP_ERROR Matter::AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::Fa
     icDebug("fabricIndex = %d", fabricIndex);
     chip::Access::AccessControl::Entry::Target target = {
         .flags = chip::Access::AccessControl::Entry::Target::kCluster,
-        .cluster = chip::app::Clusters::OtaSoftwareUpdateProvider::Id,
+        .cluster = clusterId,
     };
 
     chip::Access::AccessControl::Entry entry;
@@ -1213,11 +1229,13 @@ CHIP_ERROR Matter::AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::Fa
 
     LogErrorOnFailure(AccessControlDump(entry));
 
-    err = Access::GetAccessControl().CreateEntry(&subjectDescriptor, fabricIndex, nullptr, entry);
+    CHIP_ERROR err = Access::GetAccessControl().CreateEntry(&subjectDescriptor, fabricIndex, nullptr, entry);
 
     if (err != CHIP_NO_ERROR)
     {
-        icError("Failed to add ACL entry: %" CHIP_ERROR_FORMAT, err.Format());
+        icError("Failed to add ACL entry for cluster 0x%" PRIx32 ": %" CHIP_ERROR_FORMAT,
+                static_cast<uint32_t>(clusterId),
+                err.Format());
         return err;
     }
 
@@ -1228,14 +1246,55 @@ CHIP_ERROR Matter::ConfigureOTAProviderNode()
 {
     icDebug();
 
-    if (IsAccessibleByOTARequestors() == false)
+    if (!HasCaseOperateAclEntryForCluster(chip::app::Clusters::OtaSoftwareUpdateProvider::Id))
     {
         icDebug("Adding ACL entries so that OTA Requestors can poll our node");
-        ReturnErrorOnFailure(AppendOTARequestorsACLEntry(myFabricId, myFabricIndex));
+        ReturnErrorOnFailure(
+            AppendCaseOperateAclEntryForCluster(myFabricIndex, chip::app::Clusters::OtaSoftwareUpdateProvider::Id));
     }
 
     // This functionality will be added back when we support being a Controller
     // chip::app::Clusters::OTAProvider::SetDelegate(otaProviderEndpointId, &otaProvider);
+
+    return CHIP_NO_ERROR;
+}
+
+// Returns true if any endpoint in the running data model hosts the given cluster as a
+// server. This runtime check is necessary for external clusters (not a standard registered
+// cluster server).
+static bool DataModelHostsClusterServer(chip::ClusterId clusterId)
+{
+    uint16_t endpointCount = emberAfEndpointCount();
+
+    for (uint16_t index = 0; index < endpointCount; ++index)
+    {
+        if (emberAfContainsServerFromIndex(index, clusterId))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+CHIP_ERROR Matter::ConfigureWebRtcRequestorNode()
+{
+    icDebug();
+
+    // Only wire up WebRTC peer access if this build's data model actually hosts the
+    // WebRTCTransportRequestor cluster.
+    if (!DataModelHostsClusterServer(chip::app::Clusters::WebRTCTransportRequestor::Id))
+    {
+        icDebug("WebRTCTransportRequestor cluster not configured; skipping WebRTC ACL setup");
+        return CHIP_NO_ERROR;
+    }
+
+    if (!HasCaseOperateAclEntryForCluster(chip::app::Clusters::WebRTCTransportRequestor::Id))
+    {
+        icDebug("Adding ACL entry so commissioned WebRTC peers can invoke our WebRTCTransportRequestor cluster");
+        ReturnErrorOnFailure(
+            AppendCaseOperateAclEntryForCluster(myFabricIndex, chip::app::Clusters::WebRTCTransportRequestor::Id));
+    }
 
     return CHIP_NO_ERROR;
 }
@@ -1610,3 +1669,9 @@ void emberAfThreadBorderRouterManagementClusterInitCallback(EndpointId endpoint)
     }
 }
 #endif // ZCL_USING_THREAD_DIAGNOSTICS_CLUSTER_SERVER
+
+// WebRTCTransportRequestor cluster commands are handled externally via CommandHandlerInterface
+// in SpecBasedMatterDeviceDriver. These stubs satisfy the ZAP-generated init/shutdown callbacks.
+void MatterWebRTCTransportRequestorPluginServerInitCallback() {}
+
+void MatterWebRTCTransportRequestorPluginServerShutdownCallback() {}

@@ -30,7 +30,7 @@
 //
 
 SbmdDriver({
-    schemaVersion: '4.0',
+    schemaVersion: '5.0',
     driverVersion: 1,
     name: 'Light',
 

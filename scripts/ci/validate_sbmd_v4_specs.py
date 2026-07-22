@@ -40,7 +40,7 @@ Usage:
 
 Example:
     validate_sbmd_specs.py schema/ specs/light.sbmd.js specs/door-lock.sbmd.js
-    validate_sbmd_specs.py schema/sbmd-spec-schema-v4.0.json specs/*.sbmd.js
+    validate_sbmd_specs.py schema/sbmd-spec-schema-v5.0.json specs/*.sbmd.js
 """
 
 import sys
