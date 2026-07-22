@@ -41,9 +41,19 @@
 # set -x
 set -e
 
+# Resolve the repository root from this script's own location so the wrapper
+# operates on the working tree it lives in (correct for git worktrees) instead
+# of paths baked into the container environment at launch time. Prepend this
+# tree's Python packages and freshly-built libBartonCore so they take precedence
+# over any stale paths inherited from the environment (e.g. a primary clone).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." &>/dev/null && pwd)"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export LD_LIBRARY_PATH="$REPO_ROOT/build/core${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
 function show_help {
     echo "This is a wrapper script around pytest to ensure the environment is setup correctly."
-    echo "Usage: $0 [-t=<clang|gcc>|--toolchain=<clang|gcc>] [pytest options]"
+    echo "Usage: $0 [-t=<clang|gcc>|--toolchain=<clang|gcc>] [--parallel[=<workers>]] [pytest options]"
     echo ""
     echo "Options:"
     echo "  -t=<clang|gcc>, --toolchain=<clang|gcc>"
@@ -51,9 +61,16 @@ function show_help {
     echo "                           libBartonCore.so. Determines which ASAN runtime"
     echo "                           to preload. If not specified, auto-detects from"
     echo "                           the system default 'cc'."
+    echo "  --parallel[=<workers>]   Run tests in parallel across <workers> pytest-xdist"
+    echo "                           workers. With no value, defaults to min(CPUs/4, 64)"
+    echo "                           -- roughly half the physical cores, since each worker"
+    echo "                           drives Barton plus a matter.js node process. Tests run"
+    echo "                           SERIALLY unless this flag is given, so interactive/"
+    echo "                           individual runs keep readable, interleaved logs."
 }
 
 TOOLCHAIN=""
+PARALLEL_WORKERS=""
 
 # Parse our options, pass the rest through to pytest
 PYTEST_ARGS=()
@@ -61,6 +78,12 @@ for arg in "$@"; do
     case "$arg" in
         -t=*|--toolchain=*)
             TOOLCHAIN="${arg#*=}"
+            ;;
+        --parallel)
+            PARALLEL_WORKERS="default"
+            ;;
+        --parallel=*)
+            PARALLEL_WORKERS="${arg#*=}"
             ;;
         -h|--help)
             show_help
@@ -71,6 +94,40 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+PARALLEL_ARGS=()
+if [[ -n "$PARALLEL_WORKERS" ]]; then
+    if [[ "$PARALLEL_WORKERS" == "default" ]]; then
+        # Scale the default worker count with the machine, capped at 64.
+        #
+        # History: Matter commissioning discovers each virtual device over the
+        # shared mDNS plane (port 5353). The CHIP commissioner keeps a fixed
+        # cache of discovered commissionable nodes; because every commissioner
+        # sees every device's advertisement, concurrent commissionings used to
+        # overflow that cache ("Insufficient space") and discovery would time
+        # out -- which capped reliable parallelism at ~4. That cache was raised
+        # 10 -> 128 (barton patch 0003), which removes the mDNS ceiling: no
+        # overflow is seen even at 64 workers.
+        #
+        # The remaining limit at very high concurrency is soft and CPU-bound:
+        # each worker drives a multi-threaded Barton plus a matter.js node
+        # process (and ASAN), so it realistically needs ~2 physical cores.
+        # Running one worker per logical CPU oversubscribes and makes crypto-heavy
+        # CASE commissioning time out. nproc counts logical CPUs (hyperthreads),
+        # so use a quarter of it -- roughly half the physical cores -- to leave
+        # headroom on machines of any size. Min 1, capped at 64 (only ~58 tests,
+        # so more never helps).
+        PARALLEL_CAP=64
+        CPU_COUNT=$(nproc)
+        PARALLEL_WORKERS=$(( CPU_COUNT / 4 ))
+        (( PARALLEL_WORKERS < 1 )) && PARALLEL_WORKERS=1
+        (( PARALLEL_WORKERS > PARALLEL_CAP )) && PARALLEL_WORKERS=$PARALLEL_CAP
+    fi
+    # Use xdist's loadgroup distribution so tests sharing an xdist_group (e.g. the
+    # zhal mock tests that bind fixed IPC ports 18443/8711) stay on one worker and
+    # never collide.
+    PARALLEL_ARGS=(-n "$PARALLEL_WORKERS" --dist loadgroup)
+fi
 
 # Determine the correct ASAN runtime to preload based on the compiler that
 # built libBartonCore.so. Clang uses libclang_rt.asan; GCC uses libasan.so.
@@ -105,4 +162,4 @@ case "$TOOLCHAIN" in
         ;;
 esac
 
-LD_PRELOAD="$ASAN_LIB" pytest "${PYTEST_ARGS[@]}"
+LD_PRELOAD="$ASAN_LIB" pytest "${PARALLEL_ARGS[@]}" "${PYTEST_ARGS[@]}"

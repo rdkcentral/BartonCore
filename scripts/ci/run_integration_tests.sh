@@ -43,4 +43,4 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-$BARTON_TOP/testing/py_test.sh $BARTON_TOP/testing
+$BARTON_TOP/testing/py_test.sh $BARTON_TOP/testing --parallel

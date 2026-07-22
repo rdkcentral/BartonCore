@@ -111,7 +111,8 @@ RUN pip3 install --upgrade --break-system-packages \
     pygobject-stubs==2.14.0 \
     setuptools==73.0.0 \
     python_stdnum \
-    pytest
+    pytest \
+    pytest-xdist
 
 # pygobject-stubs distributed the stub (pyi) files for standard distribution girs, but we also want its tools so we can make
 # out own stubs. Those don't come with the pip package.
