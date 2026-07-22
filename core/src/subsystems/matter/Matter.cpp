@@ -387,6 +387,15 @@ bool Matter::Start()
 
         serverInitParams.dataModelProvider = app::CodegenDataModelProviderInstance(&storageDelegate);
 
+#ifdef BARTON_CONFIG_MATTER_USE_RANDOM_PORT
+        // Let the OS assign the operational (and UDC) ports so multiple Barton
+        // instances can run concurrently (e.g. parallel integration tests)
+        // without colliding on the fixed CHIP_PORT/CHIP_UDC_PORT. Mirrors the
+        // commissioner factoryParams.listenPort = 0 below.
+        serverInitParams.operationalServicePort = 0;
+        serverInitParams.userDirectedCommissioningPort = 0;
+#endif
+
         if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
         {
             icError("Server::Init failed: %s", err.AsString());
