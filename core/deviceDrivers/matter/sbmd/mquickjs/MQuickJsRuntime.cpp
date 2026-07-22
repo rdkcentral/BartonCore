@@ -36,6 +36,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <system_error>
 
 extern "C" {
 #include <icLog/logging.h>
@@ -215,63 +216,76 @@ namespace barton
         // Mark JS context as live — enables ForceSnapshot and sampler thread
         jsContextReady.store(true, std::memory_order_release);
 
-        // Start the background idle sampler
+        // Start the background idle sampler.  std::thread construction can
+        // throw std::system_error under extreme resource pressure; treat that as
+        // a non-fatal degradation and leave the sampler disabled rather than
+        // propagating an unexpected exception from a bool-returning function.
         samplerShouldStop.store(false, std::memory_order_relaxed);
-        periodicSamplerThread = std::thread([]() {
-            using clock = std::chrono::steady_clock;
 
-            std::unique_lock<std::mutex> lock(samplerCvMutex);
+        try
+        {
+            periodicSamplerThread = std::thread([]() {
+                using clock = std::chrono::steady_clock;
 
-            while (!samplerShouldStop.load(std::memory_order_relaxed))
-            {
-                if (BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS <= 0)
+                std::unique_lock<std::mutex> lock(samplerCvMutex);
+
+                while (!samplerShouldStop.load(std::memory_order_relaxed))
                 {
-                    // Periodic sampling disabled: block until tickle or shutdown
-                    samplerCv.wait(lock);
-
-                    if (samplerShouldStop.load(std::memory_order_relaxed))
+                    if (BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS <= 0)
                     {
-                        return;
+                        // Periodic sampling disabled: block until tickle or shutdown
+                        samplerCv.wait(lock);
+
+                        if (samplerShouldStop.load(std::memory_order_relaxed))
+                        {
+                            return;
+                        }
+
+                        // Tickle or spurious wakeup: continue waiting
+                        continue;
                     }
 
-                    // Tickle or spurious wakeup: continue waiting
-                    continue;
+                    auto deadline =
+                        clock::now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS);
+                    auto lastTickle = tickleSeq.load(std::memory_order_relaxed);
+
+                    while (true)
+                    {
+                        auto status = samplerCv.wait_until(lock, deadline);
+
+                        if (samplerShouldStop.load(std::memory_order_relaxed))
+                        {
+                            return;
+                        }
+
+                        if (status == std::cv_status::timeout)
+                        {
+                            // Idle period elapsed — take a snapshot
+                            lock.unlock();
+                            ForceSnapshot();
+                            lock.lock();
+                            break;
+                        }
+
+                        // Woken early: check if it was a real tickle or spurious
+                        auto curTickle = tickleSeq.load(std::memory_order_relaxed);
+
+                        if (curTickle != lastTickle)
+                        {
+                            // Real tickle: reset the idle timer
+                            break;
+                        }
+
+                        // Spurious wakeup: continue waiting with same deadline
+                    }
                 }
-
-                auto deadline = clock::now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS);
-                auto lastTickle = tickleSeq.load(std::memory_order_relaxed);
-
-                while (true)
-                {
-                    auto status = samplerCv.wait_until(lock, deadline);
-
-                    if (samplerShouldStop.load(std::memory_order_relaxed))
-                    {
-                        return;
-                    }
-
-                    if (status == std::cv_status::timeout)
-                    {
-                        // Idle period elapsed — take a snapshot
-                        lock.unlock();
-                        ForceSnapshot();
-                        lock.lock();
-                        break;
-                    }
-
-                    // Woken early: check if it was a real tickle or spurious
-                    auto curTickle = tickleSeq.load(std::memory_order_relaxed);
-
-                    if (curTickle != lastTickle)
-                    {
-                        // Real tickle: reset the idle timer
-                        break;
-                    }
-
-                    // Spurious wakeup: continue waiting with same deadline
-                }
-            }
-        });
+            });
+        }
+        catch (const std::system_error &e)
+        {
+            icWarn("Failed to start background heap sampler: %s — periodic sampling disabled", e.what());
+            // periodicSamplerThread stays default-constructed (not joinable); sampling disabled
+        }
 
         icInfo("Shared mquickjs context initialized successfully");
 

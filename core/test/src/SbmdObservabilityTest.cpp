@@ -234,6 +234,60 @@ namespace
         return total;
     }
 
+    // Return the "value" of the first counter datapoint that matches ALL of
+    // the supplied attribute key=value pairs.  Returns -1.0 if not found.
+    double GetCounterDatapointValue(const std::string &metricName,
+                                    std::initializer_list<std::pair<const char *, const char *>> attrs)
+    {
+        auto metric = GetMetricJson(metricName);
+
+        if (!metric)
+        {
+            return -1.0;
+        }
+
+        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric.get(), "dataPoints");
+
+        if (!cJSON_IsArray(points))
+        {
+            return -1.0;
+        }
+
+        cJSON *pt = nullptr;
+
+        cJSON_ArrayForEach(pt, points)
+        {
+            cJSON *dpAttrs = cJSON_GetObjectItemCaseSensitive(pt, "attributes");
+
+            if (!cJSON_IsObject(dpAttrs))
+            {
+                continue;
+            }
+
+            bool allMatch = true;
+
+            for (auto [k, v] : attrs)
+            {
+                cJSON *av = cJSON_GetObjectItemCaseSensitive(dpAttrs, k);
+
+                if (!av || !cJSON_IsString(av) || std::string(av->valuestring) != v)
+                {
+                    allMatch = false;
+                    break;
+                }
+            }
+
+            if (allMatch)
+            {
+                cJSON *val = cJSON_GetObjectItemCaseSensitive(pt, "value");
+
+                return cJSON_IsNumber(val) ? val->valuedouble : -1.0;
+            }
+        }
+
+        return -1.0;
+    }
+
     // A minimal valid SBMD driver script that produces a success terminal.
     static constexpr const char *kMinimalDriver = R"(
         function readTestResource(args) { return Sbmd.result().success(); }
@@ -408,21 +462,47 @@ TEST_F(SbmdObservabilityTest, HeapDeltaHistogramPopulated)
     EXPECT_GT(countAfter, countBefore);
 }
 
-// Task 7.7: success outcome counter increments on happy path
+// Task 7.7: success outcome counter increments on happy path, attributed correctly
 TEST_F(SbmdObservabilityTest, SuccessOutcomeCounterIncrements)
 {
-    double countBefore = GetCounterValue("sbmd.handler.outcome");
+    double beforeTotal = GetCounterValue("sbmd.handler.outcome");
+    double beforeAttrib = GetCounterDatapointValue(
+        "sbmd.handler.outcome",
+        {
+            {     "driver",   "test-driver"},
+            {    "op_type",          "read"},
+            {"resource_id", "test.resource"},
+            {    "outcome",       "success"}
+    });
+
     auto result = InvokeRead();
     ASSERT_TRUE(result.has_value());
 
-    double countAfter = GetCounterValue("sbmd.handler.outcome");
-    EXPECT_GT(countAfter, countBefore);
+    double afterTotal = GetCounterValue("sbmd.handler.outcome");
+    EXPECT_GT(afterTotal, beforeTotal);
+
+    double afterAttrib = GetCounterDatapointValue(
+        "sbmd.handler.outcome",
+        {
+            {     "driver",   "test-driver"},
+            {    "op_type",          "read"},
+            {"resource_id", "test.resource"},
+            {    "outcome",       "success"}
+    });
+    EXPECT_GT(afterAttrib, std::max(beforeAttrib, 0.0));
 }
 
-// Task 7.8: exception counter increments when handler throws
+// Task 7.8: exception counter increments when handler throws, attributed correctly
 TEST_F(SbmdObservabilityTest, ExceptionCounterIncrementsOnThrow)
 {
-    double countBefore = GetCounterValue("sbmd.handler.outcome");
+    double beforeTotal = GetCounterValue("sbmd.handler.outcome");
+    double beforeAttrib =
+        GetCounterDatapointValue("sbmd.handler.outcome",
+                                 {
+                                     { "driver", "test-driver"},
+                                     {"op_type",        "read"},
+                                     {"outcome",   "exception"}
+    });
 
     // Load a driver that throws and invoke it
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -449,8 +529,69 @@ TEST_F(SbmdObservabilityTest, ExceptionCounterIncrementsOnThrow)
     // Should have returned nullopt (exception path)
     EXPECT_FALSE(result.has_value());
 
-    double countAfter = GetCounterValue("sbmd.handler.outcome");
-    EXPECT_GT(countAfter, countBefore);
+    double afterTotal = GetCounterValue("sbmd.handler.outcome");
+    EXPECT_GT(afterTotal, beforeTotal);
+
+    double afterAttrib =
+        GetCounterDatapointValue("sbmd.handler.outcome",
+                                 {
+                                     { "driver", "test-driver"},
+                                     {"op_type",        "read"},
+                                     {"outcome",   "exception"}
+    });
+    EXPECT_GT(afterAttrib, std::max(beforeAttrib, 0.0));
+}
+
+// Error outcome counter increments when handler returns Sbmd.result().error(), attributed correctly
+TEST_F(SbmdObservabilityTest, ErrorOutcomeCounterIncrements)
+{
+    double beforeTotal = GetCounterValue("sbmd.handler.outcome");
+    double beforeAttrib = GetCounterDatapointValue(
+        "sbmd.handler.outcome",
+        {
+            {     "driver",   "test-driver"},
+            {    "op_type",          "read"},
+            {"resource_id", "test.resource"},
+            {    "outcome",         "error"}
+    });
+
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    // A handler that returns an error terminal via the Sbmd result API
+    const char *errorScript = "(function(args) { return Sbmd.result().error('test error'); })";
+    SafeJSValue fn(ctx, JS_Eval(ctx, errorScript, strlen(errorScript), "<test>", JS_EVAL_RETVAL));
+    ASSERT_FALSE(JS_IsException(fn.Get()));
+
+    HandlerContext hctx;
+    hctx.deviceUuid = "test-device";
+    hctx.endpointId = "1";
+    SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, "test.resource", std::nullopt);
+
+    OperationContext opCtx;
+    opCtx.driverName = "test-driver";
+    opCtx.opType = "read";
+    opCtx.resourceId = "test.resource";
+    opCtx.startTime = std::chrono::steady_clock::now();
+
+    auto result = SbmdHandlerInvoker::InvokeHandler(ctx, fn.Get(), args, &opCtx);
+
+    // Error terminal: InvokeHandler returns a parsed result (it IS a valid terminal)
+    ASSERT_TRUE(result.has_value());
+    EXPECT_TRUE(std::holds_alternative<ResultTerminal::Error>(result->terminal.data));
+
+    double afterTotal = GetCounterValue("sbmd.handler.outcome");
+    EXPECT_GT(afterTotal, beforeTotal);
+
+    double afterAttrib = GetCounterDatapointValue(
+        "sbmd.handler.outcome",
+        {
+            {     "driver",   "test-driver"},
+            {    "op_type",          "read"},
+            {"resource_id", "test.resource"},
+            {    "outcome",         "error"}
+    });
+    EXPECT_GT(afterAttrib, std::max(beforeAttrib, 0.0));
 }
 
 // Task 7.13: loading-phase JS exception counter increments on eval failure

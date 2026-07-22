@@ -33,7 +33,7 @@ sbmd.deferred.duration_ms, sbmd.deferred.depth, and sbmd.deferred.in_flight are
 populated correctly in the JSON returned by b_core_client_get_telemetry().
 
 NOTE: A dedicated test-only driver is used here rather than modifying an
-an existing production driver. Changing sendCommand to requestCommand in a driver
+existing production driver. Changing sendCommand to requestCommand in a driver
 introduces new synchronization on the Matter event loop thread and two competing
 timeout deadlines, which is a significant enough change in behavior to make it not
 worthwhile just to test deferred metrics. See deferred-command-test.sbmd.js for details.

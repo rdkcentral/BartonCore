@@ -161,12 +161,16 @@ The SBMD runtime SHALL count deferred operations that exceed their configured `o
 - **WHEN** a deferred operation's `overallDeadline` is exceeded before a device response arrives
 - **THEN** `sbmd.deferred.timeout` counter increments for that driver
 
+> **Note:** Integration test coverage for this scenario is planned as future work (task 9.6). It requires a dedicated test-only driver that arms `requestCommand` with a sub-millisecond `timeoutMs`, which in turn requires new test infrastructure (a new `.sbmd.js` spec file targeting an unused device type and a corresponding fixture).
+
 ### Requirement: Deferred operation max-depth-exceeded counting
 The SBMD runtime SHALL count deferred operations terminated because they reached `MAX_DEFERRAL_DEPTH` (10) using a counter named `sbmd.deferred.max_depth` with attributes `"driver"`, `"op_type"`, and `"resource_id"`.
 
 #### Scenario: Max depth counter increments on depth limit
 - **WHEN** a deferred operation re-arms 10 times and `ContinueDeferredChain` rejects the next re-arm
 - **THEN** `sbmd.deferred.max_depth` counter increments for that driver
+
+> **Note:** Integration test coverage for this scenario is planned as future work (task 9.7). It requires a test-only driver whose response handler unconditionally re-arms with another `requestCommand`, which in turn requires new test infrastructure (a new `.sbmd.js` spec file and a fixture whose virtual device responds at least 11 times).
 
 ### Requirement: Subsystem metrics initialization
 Each instrumented module (`MQuickJsRuntime`, `SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL provide `static void InitializeMetrics()` and `ShutdownMetrics()` functions. `MQuickJsRuntime::InitializeMetrics()` SHALL be called by `SbmdFactory::RegisterDriversFromDirectory` before `MQuickJsRuntime::Initialize()`, so that the `sbmd.js.exception{phase="init"}` counter is live for exceptions that occur during initialization. The remaining three `InitializeMetrics()` calls (`SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL be made after `MQuickJsRuntime::Initialize()` succeeds. The corresponding `ShutdownMetrics()` calls SHALL be made in the subsystem shutdown path. `SbmdFactory::ShutdownMetrics()` is a non-static instance method (called via `SbmdFactory::Instance().ShutdownMetrics()`) so that it can reset the `runtimeReady` flag alongside the metric handles, allowing metrics to be re-initialized correctly on a subsystem restart. `MQuickJsRuntime::InitializeMetrics()` SHALL be idempotent: a second call before a matching `ShutdownMetrics()` SHALL be a no-op, preventing handle leaks on initialization retry paths (e.g., when `MQuickJsRuntime::Initialize()` fails and `RegisterDriversFromDirectory` is retried while `runtimeReady` is still `false`).

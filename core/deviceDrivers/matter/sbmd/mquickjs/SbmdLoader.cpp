@@ -37,7 +37,6 @@
 #include <algorithm>
 #include <cinttypes>
 #include <cstring>
-#include <filesystem>
 #include <string>
 
 extern "C" {

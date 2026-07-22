@@ -57,7 +57,6 @@ extern "C" {
 
 #include <subsystems/matter/Matter.h>
 
-#include <filesystem>
 #include <lib/support/Base64.h>
 
 using namespace barton;
