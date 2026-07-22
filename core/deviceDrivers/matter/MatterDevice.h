@@ -155,11 +155,14 @@ namespace barton
 
         /**
          * Get the cached cluster feature maps.
-         * @return Map of cluster ID to feature map value.
+         * @return A copy of the map of cluster ID to feature map value. Returned by value (under
+         *         the cache mutex) so the caller gets a stable snapshot that cannot be invalidated
+         *         by a concurrent UpdateCachedFeatureMaps().
          */
         std::map<uint32_t, uint32_t> GetCachedClusterFeatureMaps() const
         {
             std::lock_guard<std::mutex> lock(cachedClusterFeatureMapsMutex);
+
             return cachedClusterFeatureMaps;
         }
 
