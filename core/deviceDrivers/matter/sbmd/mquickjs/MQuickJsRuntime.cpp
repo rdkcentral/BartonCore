@@ -649,8 +649,9 @@ namespace barton
         if (usage.heap_used > static_cast<size_t>(peakHeapRecorded))
         {
             peakHeapRecorded = static_cast<int64_t>(usage.heap_used);
-            observabilityGaugeRecord(heapPeakGauge, peakHeapRecorded);
         }
+
+        observabilityGaugeRecord(heapPeakGauge, peakHeapRecorded);
 
         observabilityGaugeRecord(gcRootsGauge, static_cast<int64_t>(gcRootCount));
     }
