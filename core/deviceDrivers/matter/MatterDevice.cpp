@@ -365,8 +365,15 @@ void MatterDevice::UpdateCachedFeatureMaps()
         }
     }
 
-    cachedClusterFeatureMaps = std::move(clusterFeatureMaps);
-    icDebug("Updated cached feature maps for device %s (%zu clusters)", deviceId.c_str(), cachedClusterFeatureMaps.size());
+    size_t cachedCount = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(cachedClusterFeatureMapsMutex);
+        cachedClusterFeatureMaps = std::move(clusterFeatureMaps);
+        cachedCount = cachedClusterFeatureMaps.size();
+    }
+
+    icDebug("Updated cached feature maps for device %s (%zu clusters)", deviceId.c_str(), cachedCount);
 }
 
 
