@@ -55,4 +55,4 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing"
+"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" --parallel

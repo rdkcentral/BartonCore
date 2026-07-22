@@ -98,7 +98,7 @@ def resource_update_listener(client, resource_id, transform=None):
     return queue
 
 
-def wait_for_resource_value(queue, expected_value, timeout=10):
+def wait_for_resource_value(queue, expected_value, timeout=30):
     """Drain events from the queue until we get the expected value or time out.
 
     This handles spurious initial subscription events that may arrive before

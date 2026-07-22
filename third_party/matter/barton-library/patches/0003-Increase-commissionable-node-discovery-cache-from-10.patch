@@ -1,0 +1,46 @@
+From 511a229b2081344bdb5597158ea1450158d1462c Mon Sep 17 00:00:00 2001
+From: BartonCore <dev@bartoncore>
+Date: Wed, 22 Jul 2026 17:45:46 +0000
+Subject: [PATCH] Increase commissionable-node discovery cache from 10 to 128
+
+The controller keeps a fixed-size cache of discovered commissionable nodes
+(kMaxCommissionableNodes / CHIP_DEVICE_CONFIG_MAX_DISCOVERED_NODES = 10). When
+many devices advertise on the shared mDNS plane concurrently (e.g. parallel
+integration tests), the cache fills with foreign nodes and the target device's
+advertisement is dropped ("Insufficient space"), so discovery times out.
+Raise the cache to 128 so a commissioner can absorb concurrent advertisements
+and still find its target.
+---
+ src/controller/CHIPDeviceController.h   | 2 +-
+ src/include/platform/CHIPDeviceConfig.h | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/controller/CHIPDeviceController.h b/src/controller/CHIPDeviceController.h
+index bd530b87..65199fb7 100644
+--- a/src/controller/CHIPDeviceController.h
++++ b/src/controller/CHIPDeviceController.h
+@@ -432,7 +432,7 @@ protected:
+     FabricTable::AdvertiseIdentity mAdvertiseIdentity = FabricTable::AdvertiseIdentity::Yes;
+ 
+     // TODO(cecille): Make this configuarable.
+-    static constexpr int kMaxCommissionableNodes = 10;
++    static constexpr int kMaxCommissionableNodes = 128;
+     Dnssd::CommissionNodeData mCommissionableNodes[kMaxCommissionableNodes];
+     DeviceControllerSystemState * mSystemState = nullptr;
+ 
+diff --git a/src/include/platform/CHIPDeviceConfig.h b/src/include/platform/CHIPDeviceConfig.h
+index 94c255ce..f6ddddc4 100644
+--- a/src/include/platform/CHIPDeviceConfig.h
++++ b/src/include/platform/CHIPDeviceConfig.h
+@@ -851,7 +851,7 @@ static_assert(CHIP_DEVICE_CONFIG_BLE_EXT_ADVERTISING_INTERVAL_MIN <= CHIP_DEVICE
+  * Maximum number of CHIP Commissioners or Commissionable Nodes that can be discovered
+  */
+ #ifndef CHIP_DEVICE_CONFIG_MAX_DISCOVERED_NODES
+-#define CHIP_DEVICE_CONFIG_MAX_DISCOVERED_NODES 10
++#define CHIP_DEVICE_CONFIG_MAX_DISCOVERED_NODES 128
+ #endif
+ 
+ /**
+-- 
+2.43.0
+
