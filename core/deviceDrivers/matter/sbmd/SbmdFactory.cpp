@@ -270,6 +270,8 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                     JS_GetMemoryUsage(ctx, &usageAfter, 0);
                 }
 
+                auto loadEnd = std::chrono::steady_clock::now();
+
                 // Create the SpecBasedMatterDeviceDriver wrapper
                 auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(sbmdDriver.get());
 
@@ -283,8 +285,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 // Store the driver for lifetime management
                 drivers.push_back(std::move(sbmdDriver));
 
-                double loadDurationMs =
-                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStart).count();
+                double loadDurationMs = std::chrono::duration<double, std::milli>(loadEnd - loadStart).count();
                 observabilityHistogramRecordWithAttrs(
                     driverLoadDurationHisto, loadDurationMs, "driver", driverStem.c_str(), nullptr);
                 double heapDelta =

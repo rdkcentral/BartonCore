@@ -224,6 +224,20 @@ namespace barton
 
             while (!samplerShouldStop.load(std::memory_order_relaxed))
             {
+                if (BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS <= 0)
+                {
+                    // Periodic sampling disabled: block until tickle or shutdown
+                    samplerCv.wait(lock);
+
+                    if (samplerShouldStop.load(std::memory_order_relaxed))
+                    {
+                        return;
+                    }
+
+                    // Tickle or spurious wakeup: continue waiting
+                    continue;
+                }
+
                 auto deadline = clock::now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS);
                 auto lastTickle = tickleSeq.load(std::memory_order_relaxed);
 
@@ -283,11 +297,21 @@ namespace barton
             periodicSamplerThread.join();
         }
 
-        if (ctx)
+        // Hold the JS mutex while freeing the context to prevent a
+        // use-after-free race: a ForceSnapshot() caller that passed the
+        // jsContextReady early-exit check (before it was cleared above) may
+        // still be trying to acquire the mutex.  Holding it here ensures that
+        // any such in-flight call either completes before we free ctx, or sees
+        // ctx == nullptr afterward and exits cleanly.
         {
-            JS_SetGCCallback(ctx, nullptr, nullptr);
-            JS_FreeContext(ctx);
-            ctx = nullptr;
+            std::lock_guard<std::mutex> lock(mutex);
+
+            if (ctx)
+            {
+                JS_SetGCCallback(ctx, nullptr, nullptr);
+                JS_FreeContext(ctx);
+                ctx = nullptr;
+            }
         }
 
         if (memBuffer)
