@@ -40,10 +40,10 @@ sudo service dbus start
 JOBS=$(nproc)
 (( JOBS > 1 )) && JOBS=$((JOBS - 1))
 (( JOBS < 1 )) && JOBS=1
-cmake --build $REPO_ROOT/build --parallel "$JOBS" --target install
+cmake --build "$REPO_ROOT/build" --parallel "$JOBS" --target install
 
 # Install matter.js virtual device dependencies
-npm --prefix $REPO_ROOT/testing/mocks/devices/matterjs ci
+npm --prefix "$REPO_ROOT/testing/mocks/devices/matterjs" ci
 
 echo ""
 echo "***********************************"
@@ -51,4 +51,4 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-$REPO_ROOT/testing/py_test.sh $REPO_ROOT/testing
+"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing"
