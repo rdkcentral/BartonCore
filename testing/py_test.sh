@@ -41,6 +41,20 @@
 # set -x
 set -e
 
+# Resolve the repository root from this script's own location so the wrapper
+# always operates on the working tree it lives in. This is what makes the
+# script correct for git worktrees: it does not depend on BARTON_TOP, which is
+# baked into docker/.env at container-launch time and points at whichever
+# checkout provisioned the container (typically the primary clone).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." &>/dev/null && pwd)"
+
+# Ensure this tree's Python packages (testing.*) take precedence over any stale
+# path inherited from the environment (e.g. BARTON_PYTHONPATH from docker/.env).
+# The subprocess-per-test runner in testing/conftest.py copies os.environ into
+# each child pytest, so this propagates to the isolated test processes too.
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+
 function show_help {
     echo "This is a wrapper script around pytest to ensure the environment is setup correctly."
     echo "Usage: $0 [-t=<clang|gcc>|--toolchain=<clang|gcc>] [pytest options]"

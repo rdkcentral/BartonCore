@@ -28,14 +28,22 @@
 
 set -e
 
+# Resolve the repository root from this script's own location so CI operates on
+# the working tree it lives in. This keeps the script correct for git worktrees
+# instead of relying on BARTON_TOP, which is baked into docker/.env at
+# container-launch time and points at whichever checkout provisioned the
+# container (typically the primary clone).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+
 sudo service dbus start
 JOBS=$(nproc)
 (( JOBS > 1 )) && JOBS=$((JOBS - 1))
 (( JOBS < 1 )) && JOBS=1
-cmake --build $BARTON_TOP/build --parallel "$JOBS" --target install
+cmake --build $REPO_ROOT/build --parallel "$JOBS" --target install
 
 # Install matter.js virtual device dependencies
-npm --prefix $BARTON_TOP/testing/mocks/devices/matterjs ci
+npm --prefix $REPO_ROOT/testing/mocks/devices/matterjs ci
 
 echo ""
 echo "***********************************"
@@ -43,4 +51,4 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-$BARTON_TOP/testing/py_test.sh $BARTON_TOP/testing
+$REPO_ROOT/testing/py_test.sh $REPO_ROOT/testing
