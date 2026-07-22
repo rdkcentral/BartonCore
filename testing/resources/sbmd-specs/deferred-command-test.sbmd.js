@@ -123,7 +123,8 @@ SbmdDriver({
  */
 function seedIsOn(args) {
     var tlvBase64 = args.supplements.attributes.onOff;
-    var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : false;
+    var decoded = (tlvBase64 != null) ? Sbmd.Tlv.decode(tlvBase64) : null;
+    var value = (decoded != null) ? decoded : false;
 
     return Sbmd.result()
         .dataModel.updateResource(args.endpointId, RES_IS_ON, value ? 'true' : 'false')
