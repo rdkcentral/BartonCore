@@ -440,12 +440,13 @@ TEST_F(SbmdObservabilityTest, ForceSnapshotPopulatesHeapHistogram)
 TEST_F(SbmdObservabilityTest, HandlerDurationHistogramPopulated)
 {
     int64_t countBefore = GetHistogramCount("sbmd.handler.duration_ms");
+    double sumBefore = GetHistogramSum("sbmd.handler.duration_ms");
     auto result = InvokeRead();
     ASSERT_TRUE(result.has_value());
 
     int64_t countAfter = GetHistogramCount("sbmd.handler.duration_ms");
     EXPECT_GT(countAfter, countBefore);
-    EXPECT_GE(GetHistogramSum("sbmd.handler.duration_ms"), 0.0);
+    EXPECT_GT(GetHistogramSum("sbmd.handler.duration_ms"), sumBefore);
 }
 
 TEST_F(SbmdObservabilityTest, HeapDeltaHistogramPopulated)

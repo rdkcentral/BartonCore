@@ -66,8 +66,8 @@ def test_driver_load_cost_metrics_populated(default_environment):
     )
     dur_dps = dur_metric.get("dataPoints", [])
     assert len(dur_dps) >= 1, "sbmd.driver.load.duration_ms has no datapoints"
-    assert dur_dps[0]["count"] >= 1
-    assert dur_dps[0]["sum"] > 0, (
+    assert sum(dp["count"] for dp in dur_dps) >= 1
+    assert sum(dp["sum"] for dp in dur_dps) > 0, (
         "sbmd.driver.load.duration_ms sum should be positive (loading takes non-zero time)"
     )
 
@@ -78,7 +78,7 @@ def test_driver_load_cost_metrics_populated(default_environment):
     )
     heap_dps = heap_metric.get("dataPoints", [])
     assert len(heap_dps) >= 1, "sbmd.driver.load.heap_bytes has no datapoints"
-    assert heap_dps[0]["count"] >= 1
+    assert sum(dp["count"] for dp in heap_dps) >= 1
 
 
 def test_registered_driver_count_correct(default_environment):
