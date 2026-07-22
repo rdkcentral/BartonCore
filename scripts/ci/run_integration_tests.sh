@@ -33,9 +33,13 @@ set -e
 # instead of relying on BARTON_TOP, which is baked into docker/.env at
 # container-launch time and points at whichever checkout provisioned the
 # container (typically the primary clone).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." 2>/dev/null && pwd -P)"
 
+if [[ -z "$REPO_ROOT" || ! -f "$REPO_ROOT/CMakeLists.txt" ]]; then
+    echo "Error: failed to resolve repository root from script location." >&2
+    exit 1
+fi
 sudo service dbus start
 JOBS=$(nproc)
 (( JOBS > 1 )) && JOBS=$((JOBS - 1))
