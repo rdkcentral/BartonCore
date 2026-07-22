@@ -386,7 +386,7 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
             if (JS_IsString(ctx, msgVal.Get()))
             {
                 JSCStringBuf buf;
-                    const char *msgStr = JS_ToCString(ctx, msgVal.Get(), &buf);
+                const char *msgStr = JS_ToCString(ctx, msgVal.Get(), &buf);
                 if (msgStr)
                 {
                     exMsg = msgStr;
