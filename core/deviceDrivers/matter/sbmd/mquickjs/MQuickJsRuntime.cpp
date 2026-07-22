@@ -572,15 +572,21 @@ namespace barton
 
     void MQuickJsRuntime::ShutdownMetrics()
     {
-        // Unregister the GC callback so no further invocations fire against
-        // the now-released metric handles.
-        if (ctx)
+        // Unregister the GC callback under the JS mutex so that no in-flight
+        // GC cycle can fire against the metric handles after they are released.
         {
-            JS_SetGCCallback(ctx, nullptr, nullptr);
+            std::lock_guard<std::mutex> lock(mutex);
+
+            if (ctx)
+            {
+                JS_SetGCCallback(ctx, nullptr, nullptr);
+            }
         }
 
-        observabilityHistogramRelease(heapUsedHisto);
-        heapUsedHisto = nullptr;
+        // Release all handles with heapUsedHisto last: it is the idempotence
+        // guard in InitializeMetrics(), so clearing it first would open a
+        // window where a concurrent re-init could run while other handles are
+        // still live.
         observabilityGaugeRelease(heapArenaGauge);
         heapArenaGauge = nullptr;
         observabilityGaugeRelease(heapFreeGauge);
@@ -597,6 +603,8 @@ namespace barton
         gcDurationHisto = nullptr;
         observabilityGaugeRelease(gcRootsGauge);
         gcRootsGauge = nullptr;
+        observabilityHistogramRelease(heapUsedHisto);
+        heapUsedHisto = nullptr;
     }
 
     void MQuickJsRuntime::ForceSnapshot()

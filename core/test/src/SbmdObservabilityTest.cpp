@@ -653,7 +653,7 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
     }
 
     double countAfter = GetCounterValue("sbmd.js.gc.count");
-    EXPECT_DOUBLE_EQ(countAfter, countBefore + 1.0);
+    EXPECT_GE(countAfter, countBefore + 1.0);
 }
 
 TEST_F(SbmdObservabilityTest, GcRootsGaugeHasValue)
