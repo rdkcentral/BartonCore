@@ -43,6 +43,12 @@ unreachable from a process that never reached READY_FOR_DEVICE_OPERATION.
 import json
 from pathlib import Path
 
+import pytest
+
+pytestmark = [
+    pytest.mark.requires_matterjs,
+]
+
 
 # ---------------------------------------------------------------------------
 # Tests
