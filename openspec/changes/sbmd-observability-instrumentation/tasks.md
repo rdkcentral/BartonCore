@@ -29,7 +29,7 @@
 - [x] 4.1 In `RegisterDriversFromDirectory`, capture `steady_clock::now()` as `loadStart` immediately before acquiring the JS mutex (so mutex-wait time is included in the load cost metric); capture `heap_used` via `JS_GetMemoryUsage` inside the `lock_guard` before calling `SbmdLoader::LoadDriver` — file I/O happens earlier and is excluded from the metric
 - [x] 4.2 Capture end time and `heap_used` after `sbmdDriver->Activate(ctx)` succeeds; record `durationMs` and `heapDelta` to `SbmdFactory`'s `sbmd.driver.load.duration_ms` and `sbmd.driver.load.heap_bytes` handles with the `"driver"` attribute
 - [x] 4.3 `SbmdFactory::InitializeMetrics()` is called as part of the startup sequence in task 1.2; ensure it runs before the driver load loop begins
-- [x] 4.4 At each `allRegistered = false; continue` branch, increment `SbmdFactory`'s `sbmd.driver.load.failure` counter with the clean filename stem (e.g., `"door-lock"`, derived via `DriverStemFromPath(path)` — a free function in `SbmdDriver.h` that strips both `.js` and `.sbmd` extensions) as the `"driver"` attribute and the appropriate `"reason"` string
+- [x] 4.4 At each `allRegistered = false; continue` branch, increment `SbmdFactory`'s `sbmd.driver.load.failure` counter with the clean filename stem (e.g., `"door-lock"`, derived via `driverStemFromPath(path)` — a free function in `SbmdDriver.h` that strips both `.js` and `.sbmd` extensions) as the `"driver"` attribute and the appropriate `"reason"` string
 - [x] 4.5 After the loading loop, record `count` to `SbmdFactory`'s `sbmd.driver.registered.count` gauge
 
 ## 5. SpecBasedMatterDeviceDriver — deferred operation instrumentation

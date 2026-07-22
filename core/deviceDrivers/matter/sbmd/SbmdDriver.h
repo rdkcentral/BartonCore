@@ -55,7 +55,7 @@ namespace barton
      * Extract the clean driver name from a .sbmd.js file path by stripping the double extension.
      * e.g. "/path/to/door-lock.sbmd.js" → "door-lock"
      */
-    inline std::string DriverStemFromPath(const std::string &filePath)
+    inline std::string driverStemFromPath(const std::string &filePath)
     {
         return std::filesystem::path(filePath).stem().stem().string();
     }

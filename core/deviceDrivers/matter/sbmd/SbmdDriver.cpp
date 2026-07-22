@@ -146,7 +146,7 @@ namespace barton
 
     std::string SbmdDriver::GetDriverStem() const
     {
-        return DriverStemFromPath(registration->filePath);
+        return driverStemFromPath(registration->filePath);
     }
 
     const SbmdDispatchTable &SbmdDriver::GetAttributeDispatch() const

@@ -192,7 +192,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
             }
 
             // Clean driver name for metric attributes: strip the .sbmd.js double extension
-            std::string driverStem = DriverStemFromPath(entry.path().string());
+            std::string driverStem = driverStemFromPath(entry.path().string());
 
             try
             {
