@@ -2386,17 +2386,17 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
 void SpecBasedMatterDeviceDriver::InitializeMetrics()
 {
     deferredTimeoutCounter = observabilityCounterCreate(
-        "sbmd.deferred.timeout", "Number of deferred operations that exceeded the overall deadline", "{timeout}");
+        "sbmd.deferred.timeout", "Number of deferred operations that exceeded the overall deadline", "1");
     deferralMaxDepthCounter = observabilityCounterCreate(
-        "sbmd.deferred.max_depth", "Number of deferred operations that hit MAX_DEFERRAL_DEPTH", "{event}");
-    deferredInFlightGauge = observabilityGaugeCreate(
-        "sbmd.deferred.in_flight", "Number of deferred operations currently in flight", "{operation}");
+        "sbmd.deferred.max_depth", "Number of deferred operations that hit MAX_DEFERRAL_DEPTH", "1");
+    deferredInFlightGauge =
+        observabilityGaugeCreate("sbmd.deferred.in_flight", "Number of deferred operations currently in flight", "1");
     deferredDurationHisto =
         observabilityHistogramCreate("sbmd.deferred.duration_ms",
                                      "Total wall-clock duration of a deferred operation from start to completion",
                                      "ms");
     deferralDepthHisto = observabilityHistogramCreate(
-        "sbmd.deferred.depth", "Deferral depth at which a deferred operation completed", "{deferral}");
+        "sbmd.deferred.depth", "Deferral depth at which a deferred operation completed", "1");
 }
 
 void SpecBasedMatterDeviceDriver::ShutdownMetrics()

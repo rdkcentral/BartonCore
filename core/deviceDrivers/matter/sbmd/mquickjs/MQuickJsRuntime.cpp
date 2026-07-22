@@ -562,12 +562,12 @@ namespace barton
             "sbmd.js.heap.peak_bytes", "All-time peak heap bytes observed since last init", "By");
         mutexWaitHisto = observabilityHistogramCreate(
             "sbmd.js.mutex.wait_ms", "Time spent waiting to acquire the JS mutex before a handler call", "ms");
-        jsExceptionCounter = observabilityCounterCreate(
-            "sbmd.js.exception", "Number of JavaScript exceptions encountered", "{exception}");
-        gcCountCounter = observabilityCounterCreate("sbmd.js.gc.count", "Number of GC cycles completed", "{cycle}");
+        jsExceptionCounter =
+            observabilityCounterCreate("sbmd.js.exception", "Number of JavaScript exceptions encountered", "1");
+        gcCountCounter = observabilityCounterCreate("sbmd.js.gc.count", "Number of GC cycles completed", "1");
         gcDurationHisto = observabilityHistogramCreate("sbmd.js.gc.duration_ms", "Duration of each GC cycle", "ms");
         gcRootsGauge = observabilityGaugeCreate(
-            "sbmd.js.gc_roots", "Live GC roots registered on the JS context (push/pop + add/delete lists)", "{root}");
+            "sbmd.js.gc_roots", "Live GC roots registered on the JS context (push/pop + add/delete lists)", "1");
     }
 
     void MQuickJsRuntime::ShutdownMetrics()

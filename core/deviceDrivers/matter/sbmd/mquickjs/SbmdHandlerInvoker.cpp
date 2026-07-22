@@ -546,8 +546,8 @@ namespace barton
             "sbmd.handler.duration_ms", "Time from JS_Call entry to return for each handler invocation", "ms");
         heapDeltaHisto = observabilityHistogramCreate(
             "sbmd.handler.heap_delta_bytes", "Change in heap_used across a single handler call", "By");
-        handlerOutcomeCounter = observabilityCounterCreate(
-            "sbmd.handler.outcome", "Count of handler invocations by outcome", "{invocation}");
+        handlerOutcomeCounter =
+            observabilityCounterCreate("sbmd.handler.outcome", "Count of handler invocations by outcome", "1");
     }
 
     void SbmdHandlerInvoker::ShutdownMetrics()

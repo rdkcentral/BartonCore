@@ -324,15 +324,15 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
 void SbmdFactory::InitializeMetrics()
 {
     driverLoadFailureCounter =
-        observabilityCounterCreate("sbmd.driver.load.failure", "Number of SBMD driver load failures", "{failure}");
+        observabilityCounterCreate("sbmd.driver.load.failure", "Number of SBMD driver load failures", "1");
     driverLoadDurationHisto = observabilityHistogramCreate(
         "sbmd.driver.load.duration_ms", "Time to load and activate each SBMD driver", "ms");
     driverLoadHeapDeltaHisto = observabilityHistogramCreate(
         "sbmd.driver.load.heap_bytes",
         "Change in heap_used from before LoadDriver to after Activate for each SBMD driver",
         "By");
-    registeredDriversGauge = observabilityGaugeCreate(
-        "sbmd.driver.registered.count", "Number of SBMD drivers successfully registered", "{driver}");
+    registeredDriversGauge =
+        observabilityGaugeCreate("sbmd.driver.registered.count", "Number of SBMD drivers successfully registered", "1");
 }
 
 void SbmdFactory::ShutdownMetrics()
