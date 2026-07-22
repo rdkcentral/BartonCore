@@ -80,7 +80,7 @@ SbmdDriver({
         onOff: {
             clusterId: CL_ONOFF,
             attributeId: ATTR_ON_OFF,
-            type: 'boolean'
+            type: 'bool'
         }
     },
 
