@@ -211,9 +211,19 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 }
 
                 auto fileSize = file.tellg();
+
+                if (fileSize < 0)
+                {
+                    icError("Failed to determine size of SBMD driver: %s", entry.path().c_str());
+                    observabilityCounterAddWithAttrs(
+                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "file_read", nullptr);
+                    allRegistered = false;
+                    continue;
+                }
+
                 file.seekg(0, std::ios::beg);
                 std::string source(static_cast<size_t>(fileSize), '\0');
-                file.read(source.data(), fileSize);
+                file.read(source.data(), static_cast<std::streamsize>(fileSize));
 
                 if (!file)
                 {
