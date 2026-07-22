@@ -36,6 +36,7 @@
 #include "matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 #endif
 
+#include <algorithm>
 #include <app/ConcreteAttributePath.h>
 #include <cinttypes>
 #include <lib/core/TLVReader.h>
@@ -529,6 +530,14 @@ std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const 
         {
             bitmask |= RESOURCE_MODE_EXECUTABLE;
         }
+        else if (mode == "dynamic" || mode == "emitEvents")
+        {
+            // Both are enabled by default (see the initial bitmask). Accept them as explicit
+            // no-ops so specs that list these default-on modes register successfully. Contradictory
+            // combinations with their opt-out counterparts ("static"/"noEvents") are rejected at
+            // spec-validation time by the schema's modes constraint, so no runtime resolution is
+            // needed here.
+        }
         else if (mode == "static")
         {
             bitmask &= ~(RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE);
@@ -544,6 +553,11 @@ std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const 
         else if (mode == "sensitive")
         {
             bitmask |= RESOURCE_MODE_SENSITIVE;
+        }
+        else if (mode == "volatile")
+        {
+            // Caching policy (CACHING_POLICY_NEVER) is applied separately in
+            // DoRegisterDriverResources; this mode contributes no access bit.
         }
         else
         {
@@ -641,8 +655,17 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
             // Resources without explicit read handlers are updated via attribute subscriptions,
             // so use CACHING_POLICY_ALWAYS to return the DB-cached value on read.
             // Resources with explicit read handlers use CACHING_POLICY_NEVER so the driver is called.
+            // The 'volatile' mode also forces CACHING_POLICY_NEVER so that, for a resource that emits
+            // events, updateResource delivers an event on every call (no value-change suppression) even
+            // when the value is unchanged. CACHING_POLICY_NEVER also means updateResource does not
+            // persist the value (or dateOfLastSyncMillis) to the device DB, and readable resources are
+            // served from the driver rather than the DB cache. 'volatile' is therefore intended for
+            // event-only signaling resources and should not be applied to subscription-backed state
+            // resources whose reads rely on the DB-cached value.
+            bool isVolatile =
+                std::find(resource.modes.begin(), resource.modes.end(), "volatile") != resource.modes.end();
             ResourceCachingPolicy cachingPolicy =
-                resource.read.has_value() ? CACHING_POLICY_NEVER : CACHING_POLICY_ALWAYS;
+                (resource.read.has_value() || isVolatile) ? CACHING_POLICY_NEVER : CACHING_POLICY_ALWAYS;
 
             // Seed initial value if there's a seed handler
             const char *initialValue = nullptr;
