@@ -422,14 +422,12 @@ std::unique_ptr<SbmdDriver> SbmdObservabilityTest::testDriver;
 // Tests
 // ---------------------------------------------------------------------------
 
-// Task 7.4: arena size gauge recorded at init
 TEST_F(SbmdObservabilityTest, ArenaSizeGaugeRecordedAtInit)
 {
     double arena = GetGaugeValue("sbmd.js.heap.arena_bytes");
     EXPECT_DOUBLE_EQ(arena, 512.0 * 1024.0);
 }
 
-// Task 7.3: ForceSnapshot records heap observation
 TEST_F(SbmdObservabilityTest, ForceSnapshotPopulatesHeapHistogram)
 {
     int64_t countBefore = GetHistogramCount("sbmd.js.heap.used_bytes");
@@ -439,7 +437,6 @@ TEST_F(SbmdObservabilityTest, ForceSnapshotPopulatesHeapHistogram)
     EXPECT_GT(countAfter, countBefore);
 }
 
-// Task 7.5: handler duration histogram populated after handler invocation
 TEST_F(SbmdObservabilityTest, HandlerDurationHistogramPopulated)
 {
     int64_t countBefore = GetHistogramCount("sbmd.handler.duration_ms");
@@ -451,7 +448,6 @@ TEST_F(SbmdObservabilityTest, HandlerDurationHistogramPopulated)
     EXPECT_GE(GetHistogramSum("sbmd.handler.duration_ms"), 0.0);
 }
 
-// Task 7.6: heap delta histogram populated after handler invocation
 TEST_F(SbmdObservabilityTest, HeapDeltaHistogramPopulated)
 {
     int64_t countBefore = GetHistogramCount("sbmd.handler.heap_delta_bytes");
@@ -462,7 +458,6 @@ TEST_F(SbmdObservabilityTest, HeapDeltaHistogramPopulated)
     EXPECT_GT(countAfter, countBefore);
 }
 
-// Task 7.7: success outcome counter increments on happy path, attributed correctly
 TEST_F(SbmdObservabilityTest, SuccessOutcomeCounterIncrements)
 {
     double beforeTotal = GetCounterValue("sbmd.handler.outcome");
@@ -492,7 +487,6 @@ TEST_F(SbmdObservabilityTest, SuccessOutcomeCounterIncrements)
     EXPECT_GT(afterAttrib, std::max(beforeAttrib, 0.0));
 }
 
-// Task 7.8: exception counter increments when handler throws, attributed correctly
 TEST_F(SbmdObservabilityTest, ExceptionCounterIncrementsOnThrow)
 {
     double beforeTotal = GetCounterValue("sbmd.handler.outcome");
@@ -594,7 +588,6 @@ TEST_F(SbmdObservabilityTest, ErrorOutcomeCounterIncrements)
     EXPECT_GT(afterAttrib, std::max(beforeAttrib, 0.0));
 }
 
-// Task 7.13: loading-phase JS exception counter increments on eval failure
 TEST_F(SbmdObservabilityTest, LoadingPhaseExceptionCounterIncrements)
 {
     double countBefore = GetCounterValue("sbmd.js.exception");
@@ -612,9 +605,9 @@ TEST_F(SbmdObservabilityTest, LoadingPhaseExceptionCounterIncrements)
     EXPECT_GT(countAfter, countBefore);
 }
 
-// Task 7.12: mutex wait histogram populated — hold the JS mutex on a background
-// thread to create real contention, then measure elapsed wait on the main thread
-// and call RecordMutexWait directly (same pattern used in production code).
+// Hold the JS mutex on a background thread to create real contention, then
+// measure elapsed wait on the main thread and call RecordMutexWait directly
+// (same pattern used in production code).
 TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
 {
     int64_t countBefore = GetHistogramCount("sbmd.js.mutex.wait_ms");
@@ -647,7 +640,6 @@ TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
     EXPECT_GT(countAfter, countBefore);
 }
 
-// Task 8.8: explicit JS_GC() call increments sbmd.js.gc.count by one
 TEST_F(SbmdObservabilityTest, GcCountIncrements)
 {
     double countBefore = GetCounterValue("sbmd.js.gc.count");
@@ -663,7 +655,6 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
     EXPECT_DOUBLE_EQ(countAfter, countBefore + 1.0);
 }
 
-// Task 8.9: sbmd.js.gc_roots gauge is > 0 after driver load (SafeJSValue objects live)
 TEST_F(SbmdObservabilityTest, GcRootsGaugeHasValue)
 {
     MQuickJsRuntime::ForceSnapshot();
