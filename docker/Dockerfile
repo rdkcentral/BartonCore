@@ -357,6 +357,19 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     rsync \
     bash-completion
 
+# Disable debuginfod for the container. LeakSanitizer runs at the exit of every
+# (subprocess-isolated) integration test and symbolizes suppressed system-library
+# leaks (python3, libcrypto, etc.) via llvm-symbolizer. gdb (installed above) pulls in
+# libdebuginfod-common, whose /etc/profile.d/debuginfod.sh points DEBUGINFOD_URLS at
+# https://debuginfod.ubuntu.com. When that server is unreachable from the container,
+# every symbolizer lookup blocks on the TCP connect timeout, adding minutes of near-idle
+# wall time to each test. Local debug info is sufficient to symbolize our own leaks, so
+# turn the network fetches off. We must both set an explicit empty value AND remove the
+# profile.d injector: its guard is `[ -z "$DEBUGINFOD_URLS" ]`, which treats an empty
+# value the same as unset and would re-populate the URL in every login shell.
+ENV DEBUGINFOD_URLS=""
+RUN rm -f /etc/profile.d/debuginfod.sh /etc/profile.d/debuginfod.csh
+
 RUN pip3 install --upgrade --break-system-packages \
     stack-pr
 
