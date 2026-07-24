@@ -32,6 +32,7 @@
 #include "MQuickJsRuntime.h"
 #include "SbmdJsUtil.h"
 #include "matter/sbmd/SafeJSValue.h"
+#include "matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
 
 #include "matter/sbmd/SbmdDriver.h"
 #include <algorithm>
@@ -478,7 +479,7 @@ namespace barton
             std::string msg = GetExceptionString(ctx);
             icError("Failed to evaluate driver %s: %s", filePath.c_str(), msg.c_str());
             std::string stem = driverStemFromPath(filePath);
-            MQuickJsRuntime::RecordJsException("loading", stem.c_str());
+            MQuickJsRuntimeMetrics::RecordJsException("loading", stem.c_str());
             MQuickJsRuntime::LogMemoryUsage("driver-eval-failed", IC_LOG_ERROR, true);
             // Reset registration in case SbmdDriver() was called before the error
             ResetRegistration(ctx);

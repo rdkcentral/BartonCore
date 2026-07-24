@@ -33,6 +33,8 @@
  */
 
 #include "deviceDrivers/matter/sbmd/SbmdDriver.h"
+#include "deviceDrivers/matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
+#include "deviceDrivers/matter/sbmd/metrics/MetricsRegistry.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
@@ -331,8 +333,9 @@ public:
         // Initialize observability backend first
         observabilityInit();
 
-        // Initialize metrics BEFORE the JS runtime (per task 1.2 ordering)
-        MQuickJsRuntime::InitializeMetrics();
+        // Initialize all self-registered metric providers before the JS runtime
+        // so exception counters are live for init-phase exceptions.
+        MetricsRegistry::initializeAll();
 
         ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
 
@@ -343,8 +346,6 @@ public:
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
-
-        SbmdHandlerInvoker::InitializeMetrics();
 
         // Load the test driver
         {
@@ -361,8 +362,7 @@ public:
         testDriver.reset();
 
         MQuickJsRuntime::Shutdown();
-        SbmdHandlerInvoker::ShutdownMetrics();
-        MQuickJsRuntime::ShutdownMetrics();
+        MetricsRegistry::shutdownAll();
         observabilityShutdown();
     }
 
@@ -431,7 +431,7 @@ TEST_F(SbmdObservabilityTest, ArenaSizeGaugeRecordedAtInit)
 TEST_F(SbmdObservabilityTest, ForceSnapshotPopulatesHeapHistogram)
 {
     int64_t countBefore = GetHistogramCount("sbmd.js.heap.used_bytes");
-    MQuickJsRuntime::ForceSnapshot();
+    MQuickJsRuntimeMetrics::ForceSnapshot();
     int64_t countAfter = GetHistogramCount("sbmd.js.heap.used_bytes");
 
     EXPECT_GT(countAfter, countBefore);
@@ -632,7 +632,7 @@ TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         double waitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        MQuickJsRuntime::RecordMutexWait(waitMs);
+        MQuickJsRuntimeMetrics::RecordMutexWait(waitMs);
     }
 
     holder.join();
@@ -658,7 +658,7 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
 
 TEST_F(SbmdObservabilityTest, GcRootsGaugeHasValue)
 {
-    MQuickJsRuntime::ForceSnapshot();
+    MQuickJsRuntimeMetrics::ForceSnapshot();
     double roots = GetGaugeValue("sbmd.js.gc_roots");
     EXPECT_GT(roots, 0.0);
 }

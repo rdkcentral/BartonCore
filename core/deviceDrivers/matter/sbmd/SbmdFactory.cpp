@@ -29,11 +29,11 @@
 
 #include "SbmdFactory.h"
 #include "SpecBasedMatterDeviceDriver.h"
-#include "../MatterDriverFactory.h"
+#include "matter/MatterDriverFactory.h"
+#include "matter/sbmd/metrics/SbmdFactoryMetrics.h"
 
 #include "mquickjs/MQuickJsRuntime.h"
 #include "mquickjs/SbmdBundleLoader.h"
-#include "mquickjs/SbmdHandlerInvoker.h"
 #include "mquickjs/SbmdLoader.h"
 
 #include <chrono>
@@ -48,12 +48,6 @@ extern "C" {
 }
 
 using namespace barton;
-
-// Observability metric handles
-ObservabilityCounter *SbmdFactory::driverLoadFailureCounter = nullptr;
-ObservabilityHistogram *SbmdFactory::driverLoadDurationHisto = nullptr;
-ObservabilityHistogram *SbmdFactory::driverLoadHeapDeltaHisto = nullptr;
-ObservabilityGauge *SbmdFactory::registeredDriversGauge = nullptr;
 
 bool SbmdFactory::RegisterDrivers()
 {
@@ -135,8 +129,6 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
     // InjectCaptureFunction may acquire it internally.
     if (!runtimeReady)
     {
-        MQuickJsRuntime::InitializeMetrics();
-
         if (!MQuickJsRuntime::IsInitialized())
         {
             if (!MQuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
@@ -168,9 +160,6 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         }
 
         runtimeReady = true;
-        SbmdHandlerInvoker::InitializeMetrics();
-        SbmdFactory::InitializeMetrics();
-        SpecBasedMatterDeviceDriver::InitializeMetrics();
         icInfo("mquickjs runtime initialized for SBMD drivers");
     }
 
@@ -204,8 +193,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (!file.is_open())
                 {
                     icError("Failed to open SBMD driver: %s", entry.path().c_str());
-                    observabilityCounterAddWithAttrs(
-                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "file_read", nullptr);
+                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "file_read");
                     allRegistered = false;
                     continue;
                 }
@@ -215,8 +203,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (fileSize < 0)
                 {
                     icError("Failed to determine size of SBMD driver: %s", entry.path().c_str());
-                    observabilityCounterAddWithAttrs(
-                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "file_read", nullptr);
+                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "file_read");
                     allRegistered = false;
                     continue;
                 }
@@ -228,8 +215,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (!file)
                 {
                     icError("Failed to read SBMD driver: %s", entry.path().c_str());
-                    observabilityCounterAddWithAttrs(
-                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "file_read", nullptr);
+                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "file_read");
                     allRegistered = false;
                     continue;
                 }
@@ -249,8 +235,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (!registration)
                 {
                     icError("Failed to load SBMD driver: %s", entry.path().c_str());
-                    observabilityCounterAddWithAttrs(
-                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "eval_failed", nullptr);
+                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "eval_failed");
                     allRegistered = false;
                     continue;
                 }
@@ -266,13 +251,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                     if (!sbmdDriver->Activate(ctx))
                     {
                         icError("Failed to activate SBMD driver: %s", entry.path().c_str());
-                        observabilityCounterAddWithAttrs(driverLoadFailureCounter,
-                                                         1,
-                                                         "driver",
-                                                         driverStem.c_str(),
-                                                         "reason",
-                                                         "activation_failed",
-                                                         nullptr);
+                        SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "activation_failed");
                         allRegistered = false;
                         continue;
                     }
@@ -296,12 +275,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 drivers.push_back(std::move(sbmdDriver));
 
                 double loadDurationMs = std::chrono::duration<double, std::milli>(loadEnd - loadStart).count();
-                observabilityHistogramRecordWithAttrs(
-                    driverLoadDurationHisto, loadDurationMs, "driver", driverStem.c_str(), nullptr);
                 double heapDelta =
                     static_cast<double>(usageAfter.heap_used) - static_cast<double>(usageBefore.heap_used);
-                observabilityHistogramRecordWithAttrs(
-                    driverLoadHeapDeltaHisto, heapDelta, "driver", driverStem.c_str(), nullptr);
+                SbmdFactoryMetrics::RecordDriverLoadSuccess(loadDurationMs, heapDelta, driverStem.c_str());
 
                 icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
             }
@@ -318,32 +294,10 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         allRegistered = false;
     }
 
-    observabilityGaugeRecord(registeredDriversGauge, static_cast<int64_t>(drivers.size()));
+    SbmdFactoryMetrics::RecordRegisteredDriverCount(static_cast<int64_t>(drivers.size()));
 }
 
-void SbmdFactory::InitializeMetrics()
+void SbmdFactory::Reset()
 {
-    driverLoadFailureCounter =
-        observabilityCounterCreate("sbmd.driver.load.failure", "Number of SBMD driver load failures", "1");
-    driverLoadDurationHisto = observabilityHistogramCreate(
-        "sbmd.driver.load.duration_ms", "Time to load and activate each SBMD driver", "ms");
-    driverLoadHeapDeltaHisto = observabilityHistogramCreate(
-        "sbmd.driver.load.heap_bytes",
-        "Change in heap_used from before LoadDriver to after Activate for each SBMD driver",
-        "By");
-    registeredDriversGauge =
-        observabilityGaugeCreate("sbmd.driver.registered.count", "Number of SBMD drivers successfully registered", "1");
-}
-
-void SbmdFactory::ShutdownMetrics()
-{
-    observabilityCounterRelease(driverLoadFailureCounter);
-    driverLoadFailureCounter = nullptr;
-    observabilityHistogramRelease(driverLoadDurationHisto);
-    driverLoadDurationHisto = nullptr;
-    observabilityHistogramRelease(driverLoadHeapDeltaHisto);
-    driverLoadHeapDeltaHisto = nullptr;
-    observabilityGaugeRelease(registeredDriversGauge);
-    registeredDriversGauge = nullptr;
     runtimeReady = false;
 }

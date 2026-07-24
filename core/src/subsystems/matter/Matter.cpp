@@ -102,9 +102,8 @@ extern "C" {
 #include "AccessControlDelegate.h"
 #include "ThreadBorderRouterManagementDelegate.h"
 #include "matter/sbmd/SbmdFactory.h"
-#include "matter/sbmd/SpecBasedMatterDeviceDriver.h"
+#include "matter/sbmd/metrics/MetricsRegistry.h"
 #include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
-#include "matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
@@ -182,6 +181,11 @@ namespace
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
 {
     MatterDriverFactory::Instance();
+
+    // Initialize SBMD observability metrics before the JS runtime starts so
+    // exception counters are live for init-phase exceptions.
+    MetricsRegistry::initializeAll();
+
     if(!SbmdFactory::Instance().RegisterDrivers())
     {
         icError("FATAL: Failed to register SBMD drivers. Matter subsystem cannot continue.");
@@ -511,10 +515,8 @@ bool Matter::Stop()
     MQuickJsRuntime::Shutdown();
 
     // Shut down SBMD observability metric handles
-    SpecBasedMatterDeviceDriver::ShutdownMetrics();
-    SbmdFactory::Instance().ShutdownMetrics();
-    SbmdHandlerInvoker::ShutdownMetrics();
-    MQuickJsRuntime::ShutdownMetrics();
+    SbmdFactory::Instance().Reset();
+    MetricsRegistry::shutdownAll();
 
     return true;
 }

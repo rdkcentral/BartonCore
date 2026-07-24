@@ -23,27 +23,38 @@ This design covers how to wire the observability API into the SBMD runtime witho
 
 ## Decisions
 
-### Decision 1: Distributed metric ownership
+### Decision 1: Self-registering per-subsystem metrics classes + `MetricsRegistry`
 
-Metric handles (histograms, gauges, counters) are private static members of the module that records them. Each module provides `static void InitializeMetrics()` and `static void ShutdownMetrics()` functions. `SbmdFactory::RegisterDriversFromDirectory` calls `MQuickJsRuntime::InitializeMetrics()` **before** `MQuickJsRuntime::Initialize()` so that the `sbmd.js.exception` counter is live for init-phase exceptions; the remaining three `InitializeMetrics()` calls are made after `MQuickJsRuntime::Initialize()` succeeds.
+Each SBMD subsystem's metrics live in a dedicated class inside `core/deviceDrivers/matter/sbmd/metrics/`. Each class owns its own handles, `InitializeMetrics()` / `ShutdownMetrics()`, and recording methods:
 
-| Module | Metric handles owned |
+| Class | Metrics covered |
 |---|---|
-| `MQuickJsRuntime` | `sbmd.js.heap.*`, `sbmd.js.mutex.wait_ms`, `sbmd.js.exception` |
-| `SbmdHandlerInvoker` | `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, `sbmd.handler.outcome` |
-| `SbmdFactory` | `sbmd.driver.load.*`, `sbmd.driver.registered.count` |
-| `SpecBasedMatterDeviceDriver` | `sbmd.deferred.*` |
+| `MQuickJsRuntimeMetrics` | `sbmd.js.heap.*`, `sbmd.js.mutex.wait_ms`, `sbmd.js.exception`, `sbmd.js.gc.*`, `sbmd.js.gc_roots` |
+| `SbmdHandlerInvokerMetrics` | `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, `sbmd.handler.outcome` |
+| `SbmdFactoryMetrics` | `sbmd.driver.load.*`, `sbmd.driver.registered.count` |
+| `SpecBasedMatterDeviceDriverMetrics` | `sbmd.deferred.*` |
 
-**Cross-module recording:** One case requires cross-module calls:
-- `sbmd.js.mutex.wait_ms` is measured at every mutex acquisition site in `SpecBasedMatterDeviceDriver` — `HandleResourceOp`, the attribute/event handler paths, and the deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`). `sbmd.js.heap.*` pool health metrics are recorded from `SbmdHandlerInvoker::InvokeHandler`, and `sbmd.js.exception` is recorded from `SbmdLoader` and `SbmdBundleLoader`. All three sets of handles live in `MQuickJsRuntime`, which exposes `static void RecordMutexWait(double ms)`, `static void RecordJsException(const char *phase, const char *driver)`, and `static void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)` (requires caller to hold the JS mutex; caller is responsible for calling `JS_GetGCRootCount(ctx)` while holding the mutex and passing the result).
+Each class self-registers with `MetricsRegistry` at static-initialization time (before `main()`) via a file-scope static in its `.cpp`:
 
-All five `sbmd.handler.outcome` outcome values — `"success"`, `"exception"`, `"timeout"`, `"stack_overflow"`, and `"error"` — are recorded exclusively within `SbmdHandlerInvoker::InvokeHandler`. `"error"` is emitted after `SbmdResultExecutor::Parse()` returns when the terminal is `ResultTerminal::Error`; `"success"` is emitted for all other parseable terminals. If `Parse()` returns `std::nullopt` (malformed driver result), no outcome is recorded. This ensures each invocation contributes exactly one outcome record. `SpecBasedMatterDeviceDriver::ExecuteTerminal` and `ContinueDeferredChain` do NOT call `RecordOutcomeError`.
+```cpp
+// Example from MQuickJsRuntimeMetrics.cpp
+static bool s_registered = (MetricsRegistry::registerProvider({
+    MQuickJsRuntimeMetrics::InitializeMetrics,
+    MQuickJsRuntimeMetrics::ShutdownMetrics
+}), true);
+```
 
-**`SbmdFactory::ShutdownMetrics()` is a non-static instance method** (called via `SbmdFactory::Instance().ShutdownMetrics()`) rather than a static function. This allows it to reset the `runtimeReady` flag alongside the metric handles, so that a subsequent `RegisterDrivers()` call after a subsystem restart correctly re-enters the initialization block and re-creates all metric handles. All other modules' `ShutdownMetrics()` functions remain static.
+`MetricsRegistry` (`metrics/MetricsRegistry.h/.cpp`) is a Meyer's-singleton registry with a `Provider` struct holding `std::function<void()> initialize` and `std::function<void()> shutdown`. `Matter::Matter()` calls `MetricsRegistry::initializeAll()` **before** `SbmdFactory::RegisterDrivers()`, ensuring all handles are live for init-phase JS exceptions. `Matter::Stop()` calls `MetricsRegistry::shutdownAll()` after `MQuickJsRuntime::Shutdown()`, releasing handles in LIFO registration order.
 
-**`MQuickJsRuntime::InitializeMetrics()` is idempotent.** Because it is called before `MQuickJsRuntime::Initialize()` and `runtimeReady` is only set to `true` after all initialization steps succeed, a failure between `InitializeMetrics()` and `runtimeReady = true` leaves `runtimeReady = false`. A subsequent retry would call `InitializeMetrics()` again with handles still live from the first attempt. To prevent double-registration and handle leaks, `InitializeMetrics()` checks `heapUsedHisto` (the first handle it creates and the last released in `ShutdownMetrics()`) and returns immediately if it is already non-null. The other three modules' `InitializeMetrics()` functions are called only after `runtimeReady = true`, so they are not exposed to this retry path and do not need the same guard.
+**Cross-module recording:** Monitoring code is separated from the monitored class. `MQuickJsRuntime` and `SbmdBundleLoader` call `MQuickJsRuntimeMetrics::RecordJsException(...)`. `SbmdHandlerInvoker::InvokeHandler` calls `MQuickJsRuntimeMetrics::RecordHeapSnapshot(...)`, `MQuickJsRuntimeMetrics::TickleSampler()`, `SbmdHandlerInvokerMetrics::RecordInvocation(...)`, and `SbmdHandlerInvokerMetrics::RecordOutcome(...)`. `SpecBasedMatterDeviceDriver` calls `MQuickJsRuntimeMetrics::RecordMutexWait(...)` and `SpecBasedMatterDeviceDriverMetrics::RecordDeferred*(...)`. `SbmdFactory` calls `SbmdFactoryMetrics::RecordDriverLoad*(...)` and `SbmdFactoryMetrics::RecordRegisteredDriverCount(...)`.
 
-**Why not create instruments inline at each call site?** Instrument creation has overhead and the observability spec requires a handle to persist for the lifetime of measurements. Handles are created once in `InitializeMetrics()` and persist until `ShutdownMetrics()`.
+All five `sbmd.handler.outcome` outcome values — `"success"`, `"exception"`, `"timeout"`, `"stack_overflow"`, and `"error"` — are recorded exclusively within `SbmdHandlerInvoker::InvokeHandler`. `"error"` is emitted after `SbmdResultExecutor::Parse()` returns when the terminal is `ResultTerminal::Error`; `"success"` is emitted for all other parseable terminals. If `Parse()` returns `std::nullopt` (malformed driver result), no outcome is recorded. `SpecBasedMatterDeviceDriver::ExecuteTerminal` and `ContinueDeferredChain` do NOT record outcomes.
+
+**`SbmdFactory::Reset()` is a non-static instance method** (called via `SbmdFactory::Instance().Reset()`) that resets only the `runtimeReady` flag. All metric handle teardown is performed by `MetricsRegistry::shutdownAll()`.
+
+**`InitializeMetrics()` is idempotent in each class.** Each implementation checks its first handle for non-null and returns immediately on a retry path, preventing handle leaks when initialization fails between `MetricsRegistry::initializeAll()` and `runtimeReady = true`.
+
+**Why not create instruments inline at each call site?** Instrument creation has overhead and the observability spec requires a handle to persist for the lifetime of measurements. Handles are created once in each class's `InitializeMetrics()` and persist until `ShutdownMetrics()`.
 
 ### Decision 2: `SbmdHandlerInvoker::InvokeHandler` invocation context parameter
 
@@ -75,7 +86,7 @@ All existing callers compile unchanged (null default). **Two distinct calling pa
 
 Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths:
 
-**In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes`/`gc_roots` gauges) using the `JSMemoryUsage` struct already captured by the post-`JS_Call` `JS_GetMemoryUsage` call and the `gcRootCount` from `JS_GetGCRootCount(ctx)` — both computed by the caller while the mutex is held. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
+**In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntimeMetrics::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes`/`gc_roots` gauges) using the `JSMemoryUsage` struct already captured by the post-`JS_Call` `JS_GetMemoryUsage` call and the `gcRootCount` from `JS_GetGCRootCount(ctx)` — both computed by the caller while the mutex is held. `InvokeHandler` then calls `MQuickJsRuntimeMetrics::TickleSampler()` to notify the idle thread to reset its timer.
 
 **Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_until` returns before the deadline, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: call `wait_until` again with the same absolute deadline (not a fresh `wait_for`) so that only the remaining time is consumed, not a full new period. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
 
@@ -84,11 +95,11 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 - In-activity-only: misses the idle baseline, which reveals slow leaks and steady-state overhead between bursts.
 - Hybrid: busy systems capture pool health on every invocation and the background thread rarely fires; idle systems rely on the background timer for baseline captures. The tickle mechanism prevents the background thread from taking a redundant snapshot right after a burst of activity.
 
-**`MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)`** records the provided `JSMemoryUsage` data and GC root count to the pool health instruments. Requires the caller to hold the JS mutex. The caller is responsible for reading `JS_GetGCRootCount(ctx)` while holding the mutex and passing the result as `gcRootCount` — this avoids a TOCTOU race with `Shutdown()` that would arise from calling `JS_GetGCRootCount` inside `RecordHeapSnapshot` after the caller releases the mutex. Called from `InvokeHandler` and from `ForceSnapshot()` with a freshly read struct and root count.
+**`MQuickJsRuntimeMetrics::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)`** records the provided `JSMemoryUsage` data and GC root count to the pool health instruments. Requires the caller to hold the JS mutex. The caller is responsible for reading `JS_GetGCRootCount(ctx)` while holding the mutex and passing the result as `gcRootCount` — this avoids a TOCTOU race with `Shutdown()` that would arise from calling `JS_GetGCRootCount` inside `RecordHeapSnapshot` after the caller releases the mutex. Called from `InvokeHandler` and from `ForceSnapshot()` with a freshly read struct and root count.
 
-**`MQuickJsRuntime::ForceSnapshot()`** is a public synchronous function that acquires the JS mutex, calls `RecordHeapSnapshot` (which advances `sbmd.js.heap.peak_bytes` only if the current value exceeds the recorded peak), releases the mutex, and calls `TickleSampler()`. It SHALL silently no-op — without acquiring the JS mutex — if `!jsContextReady`. `GetSharedContext()` MUST NOT be used for this check: calling it without the mutex held is a data race, and calling it with the mutex held defeats the purpose of a lock-free early-exit; instead, `jsContextReady` is a dedicated `std::atomic<bool>` set to `true` (with `memory_order_release`) at the end of `Initialize()` and cleared to `false` at the start of `Shutdown()`, providing a safe lock-free early-exit path. Used in unit tests and available for on-demand telemetry. Any snapshot from any path resets the idle timer.
+**`MQuickJsRuntimeMetrics::ForceSnapshot()`** is a public synchronous function that acquires the JS mutex, calls `RecordHeapSnapshot` (which advances `sbmd.js.heap.peak_bytes` only if the current value exceeds the recorded peak), releases the mutex, and calls `TickleSampler()`. It SHALL silently no-op — without acquiring the JS mutex — if `!jsContextReady`. `GetSharedContext()` MUST NOT be used for this check: calling it without the mutex held is a data race, and calling it with the mutex held defeats the purpose of a lock-free early-exit; instead, `jsContextReady` is a dedicated `std::atomic<bool>` set to `true` (with `memory_order_release`) at the end of `Initialize()` and cleared to `false` at the start of `Shutdown()`, providing a safe lock-free early-exit path. Used in unit tests and available for on-demand telemetry. Any snapshot from any path resets the idle timer.
 
-**`MQuickJsRuntime::TickleSampler()`** notifies the background thread's condition variable (`samplerCv`) to reset its idle timer. Atomically increments `tickleSeq` then calls `samplerCv.notify_one()` — both *without* acquiring `samplerCvMutex`. The atomic increment is the mechanism by which the idle thread distinguishes a real tickle from a spurious wakeup (see below); `notify_one()` without the lock is the standard C++ idiom since only the waiter needs it. Avoiding the lock in `TickleSampler()` also prevents a lock-ordering deadlock: the idle thread can hold `samplerCvMutex` while calling `ForceSnapshot()` (which acquires the JS mutex), so `TickleSampler()` — called while holding the JS mutex — must never acquire `samplerCvMutex`. Safe to call from any context including while holding the JS mutex.
+**`MQuickJsRuntimeMetrics::TickleSampler()`** notifies the background thread's condition variable (`samplerCv`) to reset its idle timer. Atomically increments `tickleSeq` then calls `samplerCv.notify_one()` — both *without* acquiring `samplerCvMutex`. The atomic increment is the mechanism by which the idle thread distinguishes a real tickle from a spurious wakeup (see below); `notify_one()` without the lock is the standard C++ idiom since only the waiter needs it. Avoiding the lock in `TickleSampler()` also prevents a lock-ordering deadlock: the idle thread can hold `samplerCvMutex` while calling `ForceSnapshot()` (which acquires the JS mutex), so `TickleSampler()` — called while holding the JS mutex — must never acquire `samplerCvMutex`. Safe to call from any context including while holding the JS mutex.
 
 ```
 InvokeHandler (JS mutex held by caller):     Idle background thread:
@@ -131,7 +142,7 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 
 ### Decision 6: Testing strategy
 
-**Unit tests** (`core/test/src/SbmdObservabilityTest.cpp`): The existing SBMD GTest suite already uses a real mquickjs runtime (`MQuickJsRuntime::Initialize(512 * 1024)` in `SetUpTestSuite`). The new test file follows the same pattern, calling `MQuickJsRuntime::InitializeMetrics()` first (before `MQuickJsRuntime::Initialize()`), then the remaining three `InitializeMetrics()` calls after `Initialize()` succeeds, per the Decision 1 ordering. Tests invoke handlers via `SbmdHandlerInvoker::InvokeHandler`, then call `observabilityDumpJson()` and parse the JSON to assert:
+**Unit tests** (`core/test/src/SbmdObservabilityTest.cpp`): The existing SBMD GTest suite already uses a real mquickjs runtime (`MQuickJsRuntime::Initialize(512 * 1024)` in `SetUpTestSuite`). The new test file follows the `MetricsRegistry` registry pattern: `MetricsRegistry::initializeAll()` is called before `MQuickJsRuntime::Initialize(512 * 1024)`. `MQuickJsRuntimeMetrics` and `SbmdHandlerInvokerMetrics` self-register at static-init time via their `.cpp` file-scope statics and are compiled into the test binary. `SbmdFactoryMetrics` and `SpecBasedMatterDeviceDriverMetrics` are omitted because those monitored classes pull in Matter SDK symbols unavailable in unit-test builds. Tests invoke handlers via `SbmdHandlerInvoker::InvokeHandler`, then call `observabilityDumpJson()` and parse the JSON to assert:
 - Observation count increased (wiring is correct)
 - Duration > 0 (timing is working)
 - Heap delta is within a plausible range
@@ -145,22 +156,57 @@ Using `requestCommand` in the production door-lock driver was considered but def
 
 **TODO**: A future production SBMD driver that naturally uses `requestCommand` can replace the test-only driver for the deferred-metrics integration tests.
 
-**Heap sampler in tests**: Tests call `MQuickJsRuntime::ForceSnapshot()` directly rather than waiting for the background thread. This avoids time-dependent test flakiness entirely.
+**Heap sampler in tests**: Tests call `MQuickJsRuntimeMetrics::ForceSnapshot()` directly rather than waiting for the background thread. This avoids time-dependent test flakiness entirely.
+
+### Decision 7: Compile-time opt-out via `BCORE_SBMD_METRICS`
+
+A `BCORE_SBMD_METRICS` ON/OFF CMake option (default ON, compiled definition `BARTON_CONFIG_SBMD_METRICS`) allows completely disabling all SBMD metrics overhead at compile time. When OFF:
+
+- Each metrics header wraps its real class declaration in `#ifdef BARTON_CONFIG_SBMD_METRICS` and provides an empty inline stub class in the `#else` branch; all callers require zero source changes
+- Each metrics `.cpp` wraps its entire body in `#ifdef BARTON_CONFIG_SBMD_METRICS`; the files compile to empty translation units and the inline stubs resolve all call sites
+- The sampler thread is never started (`StartSampler()` / `StopSampler()` are empty stubs)
+- The timing measurements in `AcquireJsMutex()` are guarded with `#ifdef BARTON_CONFIG_SBMD_METRICS` so clock reads are eliminated even in unoptimized builds
+- `MetricsRegistry::initializeAll()` and `shutdownAll()` are empty inline stubs; no providers are ever registered
+
+When `BCORE_OBSERVABILITY_BACKEND=none`, the observability backend API calls are already no-ops (via `observabilityNoop.c`), but the SBMD metrics infrastructure — sampler thread, timing measurements — still runs. Setting `BCORE_SBMD_METRICS=OFF` eliminates that remaining overhead for a true zero-cost build.
 
 ## Component diagram
 
 ```
 core/deviceDrivers/matter/sbmd/
 │
-├── mquickjs/
-│   ├── MQuickJsRuntime.cpp                  ← heap metrics, ForceSnapshot(), RecordHeapSnapshot(const JSMemoryUsage &, size_t gcRootCount),
-│   │                                        RecordMutexWait(), RecordJsException(), TickleSampler();
-│   │                                        in-activity + idle sampling
-│   └── SbmdHandlerInvoker.cpp               ← invocation/outcome metrics, RecordOutcomeError();
-│                                            InvokeHandler extended
+├── metrics/                                 ← all metric classes (new subdirectory)
+│   ├── MetricsRegistry.h/.cpp               ← Meyer's-singleton Provider registry;
+│   │                                        initializeAll() / shutdownAll() (LIFO)
+│   ├── MQuickJsRuntimeMetrics.h/.cpp        ← handles + recording for sbmd.js.*;
+│   │                                        ForceSnapshot, TickleSampler, RecordHeapSnapshot,
+│   │                                        RecordArenaSize, RecordMutexWait, RecordJsException,
+│   │                                        GCCallback; background sampler thread
+│   ├── SbmdHandlerInvokerMetrics.h/.cpp     ← handles + recording for sbmd.handler.*;
+│   │                                        RecordInvocation, RecordOutcome
+│   ├── SbmdFactoryMetrics.h/.cpp            ← handles + recording for sbmd.driver.*;
+│   │                                        RecordDriverLoadFailure, RecordDriverLoadSuccess,
+│   │                                        RecordRegisteredDriverCount
+│   └── SpecBasedMatterDeviceDriverMetrics.h/.cpp
+│                                            ← handles + recording for sbmd.deferred.*;
+│                                            RecordDeferredStart, RecordDeferredTimeout,
+│                                            RecordDeferredMaxDepth, RecordDeferredComplete
 │
-├── SbmdFactory.cpp                          ← driver load metrics
-└── SpecBasedMatterDeviceDriver.cpp          ← deferred op metrics; PendingOperation.operationCtx (OperationContext)
+├── mquickjs/
+│   ├── MQuickJsRuntime.cpp                  ← calls MQuickJsRuntimeMetrics recording methods;
+│   │                                        starts/stops sampler; registers GCCallback
+│   └── SbmdHandlerInvoker.cpp               ← calls MQuickJsRuntimeMetrics + SbmdHandlerInvokerMetrics;
+│                                            InvokeHandler extended with OperationContext
+│
+├── SbmdFactory.cpp                          ← calls SbmdFactoryMetrics::RecordDriverLoad*;
+│                                            Reset() resets runtimeReady only
+└── SpecBasedMatterDeviceDriver.cpp          ← calls MQuickJsRuntimeMetrics::RecordMutexWait;
+                                             calls SpecBasedMatterDeviceDriverMetrics::RecordDeferred*;
+                                             PendingOperation.operationCtx (OperationContext)
+
+core/src/subsystems/matter/
+└── Matter.cpp                               ← MetricsRegistry::initializeAll() before RegisterDrivers();
+                                             MetricsRegistry::shutdownAll() after Reset()
 ```
 
 ## Risks / Trade-offs

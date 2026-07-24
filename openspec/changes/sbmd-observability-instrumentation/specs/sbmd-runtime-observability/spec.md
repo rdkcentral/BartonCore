@@ -27,10 +27,10 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recordin
 - **THEN** `sbmd.js.heap.peak_bytes` reflects the highest value observed, never decreasing
 
 ### Requirement: Force snapshot API
-The system SHALL provide a `MQuickJsRuntime::ForceSnapshot()` public static function that synchronously samples heap stats, adds one observation to the `sbmd.js.heap.used_bytes` histogram, updates `sbmd.js.heap.free_bytes` with the current `usage.free_size`, advances `sbmd.js.heap.peak_bytes` only if the current `usage.heap_used` exceeds the previously recorded peak (maintaining the high-water mark guarantee), and calls `TickleSampler()` to reset the idle thread's timer. This function SHALL be callable without holding the JS mutex (it acquires it internally). `ForceSnapshot()` SHALL silently no-op — without acquiring the JS mutex or calling `JS_GetMemoryUsage` — if called before `MQuickJsRuntime::Initialize()` has succeeded. This check MUST be thread-safe: implementations SHALL use a dedicated `std::atomic<bool> jsContextReady` flag (set to `true` with `memory_order_release` at the end of `Initialize()` and cleared to `false` at the start of `Shutdown()`) rather than calling `GetSharedContext()`, which requires the JS mutex to already be held and therefore cannot be used for a lock-free early-exit guard. The system SHALL also provide `MQuickJsRuntime::TickleSampler()`, which notifies the idle background thread to reset its sleep timer without taking a snapshot. The idle background thread SHALL use `ForceSnapshot()` when its idle timer expires.
+The system SHALL provide a `MQuickJsRuntimeMetrics::ForceSnapshot()` public static function that synchronously samples heap stats, adds one observation to the `sbmd.js.heap.used_bytes` histogram, updates `sbmd.js.heap.free_bytes` with the current `usage.free_size`, advances `sbmd.js.heap.peak_bytes` only if the current `usage.heap_used` exceeds the previously recorded peak (maintaining the high-water mark guarantee), and calls `TickleSampler()` to reset the idle thread's timer. This function SHALL be callable without holding the JS mutex (it acquires it internally). `ForceSnapshot()` SHALL silently no-op — without acquiring the JS mutex or calling `JS_GetMemoryUsage` — if called before `MQuickJsRuntime::Initialize()` has succeeded. This check MUST be thread-safe: implementations SHALL use a dedicated `std::atomic<bool> jsContextReady` flag in `MQuickJsRuntime` (set to `true` with `memory_order_release` at the end of `Initialize()` and cleared to `false` at the start of `Shutdown()`) rather than calling `GetSharedContext()`, which requires the JS mutex to already be held and therefore cannot be used for a lock-free early-exit guard. The system SHALL also provide `MQuickJsRuntimeMetrics::TickleSampler()`, which notifies the idle background thread to reset its sleep timer without taking a snapshot. The idle background thread SHALL use `ForceSnapshot()` when its idle timer expires.
 
 #### Scenario: ForceSnapshot produces an immediate observation
-- **WHEN** `MQuickJsRuntime::ForceSnapshot()` is called
+- **WHEN** `MQuickJsRuntimeMetrics::ForceSnapshot()` is called
 - **THEN** `sbmd.js.heap.used_bytes` observation count increases by one
 
 ### Requirement: Per-invocation heap delta tracking
@@ -56,7 +56,7 @@ The SBMD runtime SHALL record the wall-clock duration of each JS handler invocat
 - **THEN** `sbmd.handler.duration_ms` still records the elapsed duration for that invocation
 
 ### Requirement: Handler invocation outcome tracking
-The SBMD runtime SHALL count handler invocation outcomes using a counter named `sbmd.handler.outcome` with attributes `"driver"`, `"op_type"`, `"resource_id"` (omitted for attribute/event handler invocations where `resourceId` is `nullptr`), and `"outcome"`. Valid outcome values are: `"success"` (handler returned a non-error terminal), `"exception"` (JS exception thrown, not a timeout), `"timeout"` (script execution deadline exceeded), `"stack_overflow"` (JS_StackCheck failed before call), and `"error"` (handler returned a ResultTerminal::Error). Each invocation SHALL produce exactly one outcome record. The counter SHALL be incremented via `SbmdHandlerInvoker::RecordOutcomeError(driver, opType, resourceId, outcome)` — from `InvokeHandler` for all five outcomes: `"stack_overflow"` and `"exception"`/`"timeout"` before Parse is called; `"error"` or `"success"` after `SbmdResultExecutor::Parse()` returns, based on the terminal type (`"error"` when the terminal is `ResultTerminal::Error`, `"success"` for all other terminals). If `Parse()` returns `std::nullopt` (malformed driver result), no outcome is recorded. `RecordOutcomeError` SHALL include the `"resource_id"` attribute only when `resourceId` is non-null, allowing attribute/event handler call sites to pass `nullptr` to omit it.
+The SBMD runtime SHALL count handler invocation outcomes using a counter named `sbmd.handler.outcome` with attributes `"driver"`, `"op_type"`, `"resource_id"` (omitted for attribute/event handler invocations where `resourceId` is `nullptr`), and `"outcome"`. Valid outcome values are: `"success"` (handler returned a non-error terminal), `"exception"` (JS exception thrown, not a timeout), `"timeout"` (script execution deadline exceeded), `"stack_overflow"` (JS_StackCheck failed before call), and `"error"` (handler returned a ResultTerminal::Error). Each invocation SHALL produce exactly one outcome record. The counter SHALL be incremented via `SbmdHandlerInvokerMetrics::RecordOutcome(driver, opType, resourceId, outcome)` — from `InvokeHandler` for all five outcomes: `"stack_overflow"` and `"exception"`/`"timeout"` before Parse is called; `"error"` or `"success"` after `SbmdResultExecutor::Parse()` returns, based on the terminal type (`"error"` when the terminal is `ResultTerminal::Error`, `"success"` for all other terminals). If `Parse()` returns `std::nullopt` (malformed driver result), no outcome is recorded. `RecordOutcome` SHALL include the `"resource_id"` attribute only when `resourceId` is non-null, allowing attribute/event handler call sites to pass `nullptr` to omit it.
 
 #### Scenario: Success outcome counted
 - **WHEN** a JS handler invocation returns a non-error terminal (Success, SendCommand, WriteAttribute, RequestCommand, or ReadAttribute)
@@ -79,7 +79,7 @@ The SBMD runtime SHALL count handler invocation outcomes using a counter named `
 - **THEN** `sbmd.handler.outcome` counter for `outcome="error"` increments by one
 
 ### Requirement: JS mutex wait time tracking
-The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point a call to `std::lock_guard<std::mutex>(MQuickJsRuntime::GetMutex())` begins until the mutex is acquired, in all code paths that acquire the mutex for handler invocation.
+The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point mutex acquisition begins until the lock is held, in all code paths that acquire the mutex for handler invocation. The measurement is centralized in the `AcquireJsMutex()` helper in `SpecBasedMatterDeviceDriver.cpp`.
 
 #### Scenario: Mutex wait recorded on contention
 - **WHEN** two threads attempt to invoke SBMD handlers concurrently
@@ -137,14 +137,14 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.deferred.in_flight` represen
 - **THEN** `sbmd.deferred.in_flight` gauge decrements back toward zero
 
 ### Requirement: Deferred operation total duration tracking
-The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` using `observabilityHistogramRecordWithAttrs` with attributes `"driver"`, `"op_type"` (from `pending.operationCtx.opType`), and `"resource_id"` (from `pending.operationCtx.resourceId`); use an empty string for any nullptr field. Duration includes device round-trip time.
+The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` using `observabilityHistogramRecordWithAttrs` with attributes `"driver"`, `"op_type"` (from `pending.operationCtx.opType`), and `"resource_id"` (from `pending.operationCtx.resourceId`, omitted when null or empty). Duration includes device round-trip time.
 
 #### Scenario: Total duration includes device round-trip
 - **WHEN** a deferred operation completes after a device response
 - **THEN** `sbmd.deferred.duration_ms` records a value greater than the JS execution time alone
 
 ### Requirement: Deferral depth distribution tracking
-The SBMD runtime SHALL record the deferral depth at completion of each deferred operation as a histogram named `sbmd.deferred.depth` using `observabilityHistogramRecordWithAttrs` with attributes `"driver"`, `"op_type"`, and `"resource_id"` (use empty string for any nullptr field). Depth 0 means the operation resolved after one round-trip; depth N means the operation re-armed N times.
+The SBMD runtime SHALL record the deferral depth at completion of each deferred operation as a histogram named `sbmd.deferred.depth` using `observabilityHistogramRecordWithAttrs` with attributes `"driver"`, `"op_type"`, and `"resource_id"` (omitted when null or empty). Depth 0 means the operation resolved after one round-trip; depth N means the operation re-armed N times.
 
 #### Scenario: Single round-trip records depth zero
 - **WHEN** a deferred operation resolves after one device response
@@ -173,14 +173,14 @@ The SBMD runtime SHALL count deferred operations terminated because they reached
 > **Note:** Integration test coverage for this scenario is planned as future work (task 9.7). It requires a test-only driver whose response handler unconditionally re-arms with another `requestCommand`, which in turn requires new test infrastructure (a new `.sbmd.js` spec file and a fixture whose virtual device responds at least 11 times).
 
 ### Requirement: Subsystem metrics initialization
-Each instrumented module (`MQuickJsRuntime`, `SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL provide `static void InitializeMetrics()` and `ShutdownMetrics()` functions. `MQuickJsRuntime::InitializeMetrics()` SHALL be called by `SbmdFactory::RegisterDriversFromDirectory` before `MQuickJsRuntime::Initialize()`, so that the `sbmd.js.exception{phase="init"}` counter is live for exceptions that occur during initialization. The remaining three `InitializeMetrics()` calls (`SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL be made after `MQuickJsRuntime::Initialize()` succeeds. The corresponding `ShutdownMetrics()` calls SHALL be made in the subsystem shutdown path. `SbmdFactory::ShutdownMetrics()` is a non-static instance method (called via `SbmdFactory::Instance().ShutdownMetrics()`) so that it can reset the `runtimeReady` flag alongside the metric handles, allowing metrics to be re-initialized correctly on a subsystem restart. `MQuickJsRuntime::InitializeMetrics()` SHALL be idempotent: a second call before a matching `ShutdownMetrics()` SHALL be a no-op, preventing handle leaks on initialization retry paths (e.g., when `MQuickJsRuntime::Initialize()` fails and `RegisterDriversFromDirectory` is retried while `runtimeReady` is still `false`).
+Each SBMD metrics class (`MQuickJsRuntimeMetrics`, `SbmdHandlerInvokerMetrics`, `SbmdFactoryMetrics`, `SpecBasedMatterDeviceDriverMetrics`) SHALL self-register with `MetricsRegistry` at static-initialization time via a file-scope static in its `.cpp`. `Matter::Matter()` SHALL call `MetricsRegistry::initializeAll()` **before** `SbmdFactory::RegisterDrivers()`, so that all handles — including the `sbmd.js.exception{phase="init"}` counter — are live for init-phase exceptions. The corresponding `MetricsRegistry::shutdownAll()` SHALL be called in the subsystem shutdown path after `MQuickJsRuntime::Shutdown()` and `SbmdFactory::Instance().ShutdownMetrics()`. `SbmdFactory::ShutdownMetrics()` is a non-static instance method that resets only the `runtimeReady` flag; metric handle teardown is performed exclusively by `MetricsRegistry::shutdownAll()`. Each `InitializeMetrics()` SHALL be idempotent: a second call before a matching `ShutdownMetrics()` SHALL be a no-op (checked via the first handle being non-null), preventing handle leaks on initialization retry paths.
 
 #### Scenario: Metrics available after initialization
-- **WHEN** all four `InitializeMetrics()` calls complete
-- **THEN** `MQuickJsRuntime::ForceSnapshot()` and all recording functions operate without error
+- **WHEN** `MetricsRegistry::initializeAll()` completes
+- **THEN** `MQuickJsRuntimeMetrics::ForceSnapshot()` and all recording functions operate without error
 
 #### Scenario: Recording before initialization is safe
-- **WHEN** a recording function is called before its module's `InitializeMetrics()`
+- **WHEN** a recording function is called before `MetricsRegistry::initializeAll()`
 - **THEN** the call is silently ignored without crashing
 
 ### Requirement: GC cycle count tracking
@@ -198,10 +198,10 @@ The SBMD runtime SHALL record the duration of each GC cycle as a histogram named
 - **THEN** `sbmd.js.gc.duration_ms` gains one observation with a non-negative value
 
 ### Requirement: GC root list size tracking
-The SBMD runtime SHALL maintain a gauge named `sbmd.js.gc_roots` reflecting the total number of live GC roots currently registered on the JS context via `JS_PushGCRef` (push/pop stack) and `JS_AddGCRef` (add/delete list), as returned by `JS_GetGCRootCount()`. The gauge SHALL be updated with each call to `MQuickJsRuntime::RecordHeapSnapshot()` (both in-activity and idle captures). A monotonically growing gauge value indicates GC root leaks from any source — `SafeJSValue` misuse, direct `JSValue` usage, or other root registrations.
+The SBMD runtime SHALL maintain a gauge named `sbmd.js.gc_roots` reflecting the total number of live GC roots currently registered on the JS context via `JS_PushGCRef` (push/pop stack) and `JS_AddGCRef` (add/delete list), as returned by `JS_GetGCRootCount()`. The gauge SHALL be updated with each call to `MQuickJsRuntimeMetrics::RecordHeapSnapshot()` (both in-activity and idle captures). A monotonically growing gauge value indicates GC root leaks from any source — `SafeJSValue` misuse, direct `JSValue` usage, or other root registrations.
 
 #### Scenario: GC root count reflects live roots
-- **WHEN** `MQuickJsRuntime::RecordHeapSnapshot()` is called with live `SafeJSValue` objects held
+- **WHEN** `MQuickJsRuntimeMetrics::RecordHeapSnapshot()` is called with live `SafeJSValue` objects held
 - **THEN** `sbmd.js.gc_roots` gauge records a value greater than zero
 
 #### Scenario: GC root count is stable after driver teardown

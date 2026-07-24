@@ -33,10 +33,6 @@
 #include <string>
 #include <vector>
 
-extern "C" {
-#include "observability/observabilityMetrics.h"
-}
-
 namespace barton
 {
     class SbmdFactory
@@ -56,16 +52,10 @@ namespace barton
         bool RegisterDrivers();
 
         /**
-         * Initialize all metric handles owned by SbmdFactory.
+         * Reset factory state so that a subsequent RegisterDrivers() call
+         * re-initializes the JS runtime correctly.
          */
-        static void InitializeMetrics();
-
-        /**
-         * Release all metric handles owned by SbmdFactory and reset runtime
-         * state so that a subsequent RegisterDrivers() call re-initializes
-         * metrics correctly.
-         */
-        void ShutdownMetrics();
+        void Reset();
 
     private:
         SbmdFactory() = default;
@@ -88,11 +78,5 @@ namespace barton
          * have been initialized for driver loading.
          */
         bool runtimeReady = false;
-
-        // Observability metric handles
-        static ObservabilityCounter *driverLoadFailureCounter;
-        static ObservabilityHistogram *driverLoadDurationHisto;
-        static ObservabilityHistogram *driverLoadHeapDeltaHisto;
-        static ObservabilityGauge *registeredDriversGauge;
     };
 } //namespace barton

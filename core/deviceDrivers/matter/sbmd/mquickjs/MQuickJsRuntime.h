@@ -29,20 +29,14 @@
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <string>
-#include <thread>
 
 extern "C" {
 #include <icLog/logging.h>
 #include <mquickjs/mquickjs.h>
-}
-
-extern "C" {
-#include "observability/observabilityMetrics.h"
 }
 
 namespace barton
@@ -166,76 +160,21 @@ namespace barton
         static std::chrono::steady_clock::time_point GetDeadline();
 
         /**
-         * Mark that the script interrupt handler fired (deadline exceeded).
-         *
-         * Called exclusively from ScriptInterruptHandler when it returns 1.
-         * Must not be called from any other context.
-         */
-        static void RecordInterrupt();
-
-        /**
          * Return whether the interrupt handler has fired since the last SetDeadline call.
          *
          * @return true if ScriptInterruptHandler fired for the current JS_Call
          */
         static bool WasInterrupted();
 
-        // ----------------------------------------------------------------
-        // Observability
-        // ----------------------------------------------------------------
-
         /**
-         * Initialize all metric handles owned by MQuickJsRuntime.
-         * Must be called before MQuickJsRuntime::Initialize() so that
-         * sbmd.js.exception is live for init-phase exceptions.
-         */
-        static void InitializeMetrics();
-
-        /**
-         * Release all metric handles owned by MQuickJsRuntime.
-         */
-        static void ShutdownMetrics();
-
-        /**
-         * Synchronously sample heap stats and record pool health metrics.
-         * Acquires the JS mutex internally. Callable without holding the mutex.
+         * Return true when the JS context is live and accepting snapshots.
          *
-         * No-ops silently if the JS context does not exist yet (checked via the
-         * jsContextReady atomic flag) or if metric handles are not initialized.
+         * Set to true (memory_order_release) at the end of Initialize(), cleared
+         * to false (memory_order_release) at the start of Shutdown(). Used by
+         * MQuickJsRuntimeMetrics::ForceSnapshot() as a lock-free early-exit guard
+         * so it does not acquire the JS mutex when the context is down.
          */
-        static void ForceSnapshot();
-
-        /**
-         * Notify the idle background sampler to reset its timer.
-         * Atomically increments tickleSeq and wakes the sampler CV.
-         * Safe to call from any context, including while holding the JS mutex.
-         */
-        static void TickleSampler();
-
-        /**
-         * Record pool health metrics from an already-captured JSMemoryUsage struct.
-         * Must be called while holding GetMutex(): protects the non-atomic
-         * peakHeapRecorded member from concurrent reads/writes.
-         * @param usage      Pre-captured memory usage (via JS_GetMemoryUsage).
-         * @param gcRootCount GC root count at the time of capture (via JS_GetGCRootCount).
-         *                   Must be captured while holding GetMutex().
-         * Null-checks handles and no-ops silently if called before InitializeMetrics().
-         */
-        static void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
-
-        /**
-         * Record a JS mutex wait duration in milliseconds.
-         * Null-checks handle; safe to call before InitializeMetrics().
-         */
-        static void RecordMutexWait(double ms);
-
-        /**
-         * Record a JS exception event.
-         * @param phase  "init" or "loading"
-         * @param driver Filename stem (loading phase), or nullptr (init phase:
-         *               the "driver" attribute is omitted entirely, not set to "")
-         */
-        static void RecordJsException(const char *phase, const char *driver);
+        static bool IsContextReady();
 
     private:
         static uint8_t *memBuffer;
@@ -247,31 +186,13 @@ namespace barton
         static std::chrono::steady_clock::time_point deadline;
         static std::atomic<bool> scriptInterruptFired;
 
-        // Observability — metric handles
-        static ObservabilityHistogram *heapUsedHisto;
-        static ObservabilityGauge *heapArenaGauge;
-        static ObservabilityGauge *heapFreeGauge;
-        static ObservabilityGauge *heapPeakGauge;
-        static ObservabilityHistogram *mutexWaitHisto;
-        static ObservabilityCounter *jsExceptionCounter;
-        static ObservabilityCounter *gcCountCounter;
-        static ObservabilityHistogram *gcDurationHisto;
-        static ObservabilityGauge *gcRootsGauge;
-
-        // GC instrumentation callback (registered via JS_SetGCCallback)
-        static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
-
-        // Time point of the most recent GC cycle start (for duration measurement)
-        static std::chrono::steady_clock::time_point gcStartTime;
-
-        // Idle sampler thread state
-        static std::thread periodicSamplerThread;
-        static std::atomic<bool> samplerShouldStop;
+        // jsContextReady: set true at end of Initialize(), cleared at start of
+        // Shutdown(). Used by MQuickJsRuntimeMetrics as a lock-free early-exit
+        // guard in ForceSnapshot().
         static std::atomic<bool> jsContextReady;
-        static std::atomic<uint64_t> tickleSeq;
-        static std::condition_variable samplerCv;
-        static std::mutex samplerCvMutex;
-        static int64_t peakHeapRecorded;
+
+        // Called exclusively from ScriptInterruptHandler when it returns 1.
+        static void RecordInterrupt();
     };
 
 } // namespace barton

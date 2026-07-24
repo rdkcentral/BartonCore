@@ -33,6 +33,8 @@
 #include "SbmdResultExecutor.h"
 #include "SbmdWireContract.h"
 #include "matter/sbmd/SafeJSValue.h"
+#include "matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
+#include "matter/sbmd/metrics/SbmdHandlerInvokerMetrics.h"
 
 #include <string>
 #include <variant>
@@ -59,11 +61,6 @@ extern bool deviceServiceSetMetadata(const char *uri, const char *value);
 
 namespace barton
 {
-    // Observability metric handles
-    ObservabilityHistogram *SbmdHandlerInvoker::handlerDurationHisto = nullptr;
-    ObservabilityHistogram *SbmdHandlerInvoker::heapDeltaHisto = nullptr;
-    ObservabilityCounter *SbmdHandlerInvoker::handlerOutcomeCounter = nullptr;
-
     SafeJSValue SbmdHandlerInvoker::BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx)
     {
         // Root args for the whole build: subsequent allocations (JS_NewString, JS_NewObject)
@@ -185,10 +182,12 @@ namespace barton
         if (JS_StackCheck(ctx, 3)) // args, handler, this
         {
             icError("stack overflow before handler call");
-            RecordOutcomeError(opCtx ? opCtx->driverName.c_str() : nullptr,
-                               opCtx ? opCtx->opType.c_str() : nullptr,
-                               (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr,
-                               "stack_overflow");
+            SbmdHandlerInvokerMetrics::RecordOutcome(opCtx ? opCtx->driverName.c_str() : nullptr,
+                                                     opCtx ? opCtx->opType.c_str() : nullptr,
+                                                     (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str()
+                                                                                           : nullptr,
+                                                     "stack_overflow");
+
             return std::nullopt;
         }
 
@@ -224,39 +223,12 @@ namespace barton
         const char *outOpType = opCtx ? opCtx->opType.c_str() : nullptr;
         const char *outResourceId = (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr;
 
-        // Record duration and heap-delta histograms.
-        // Both histograms use the same attribute set, so share one lambda.
-        auto recordHisto = [&](ObservabilityHistogram *histo, double value) {
-            if (!opCtx)
-            {
-                observabilityHistogramRecord(histo, value);
-                return;
-            }
-
-            if (outResourceId)
-            {
-                observabilityHistogramRecordWithAttrs(histo,
-                                                      value,
-                                                      "driver",
-                                                      outDriver ? outDriver : "",
-                                                      "op_type",
-                                                      outOpType ? outOpType : "",
-                                                      "resource_id",
-                                                      outResourceId,
-                                                      nullptr);
-            }
-            else
-            {
-                observabilityHistogramRecordWithAttrs(
-                    histo, value, "driver", outDriver ? outDriver : "", "op_type", outOpType ? outOpType : "", nullptr);
-            }
-        };
-        recordHisto(handlerDurationHisto, durationMs);
-        recordHisto(heapDeltaHisto, heapDelta);
+        // Record duration and heap-delta histograms
+        SbmdHandlerInvokerMetrics::RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
 
         // Update running heap snapshot (ctx is live; caller holds JS mutex)
-        MQuickJsRuntime::RecordHeapSnapshot(usageAfter, JS_GetGCRootCount(ctx));
-        MQuickJsRuntime::TickleSampler();
+        MQuickJsRuntimeMetrics::RecordHeapSnapshot(usageAfter, JS_GetGCRootCount(ctx));
+        MQuickJsRuntimeMetrics::TickleSampler();
 
         if (JS_IsException(result))
         {
@@ -265,7 +237,8 @@ namespace barton
             icError("handler threw exception: %s", err.c_str());
 
             // Distinguish timeout from handler exception
-            RecordOutcomeError(outDriver, outOpType, outResourceId, interrupted ? "timeout" : "exception");
+            SbmdHandlerInvokerMetrics::RecordOutcome(
+                outDriver, outOpType, outResourceId, interrupted ? "timeout" : "exception");
 
             return std::nullopt;
         }
@@ -275,7 +248,8 @@ namespace barton
         if (parsed.has_value())
         {
             bool isError = std::holds_alternative<ResultTerminal::Error>(parsed->terminal.data);
-            RecordOutcomeError(outDriver, outOpType, outResourceId, isError ? "error" : "success");
+            SbmdHandlerInvokerMetrics::RecordOutcome(
+                outDriver, outOpType, outResourceId, isError ? "error" : "success");
         }
 
         return parsed;
@@ -538,71 +512,6 @@ namespace barton
         }
 
         return args;
-    }
-
-    void SbmdHandlerInvoker::InitializeMetrics()
-    {
-        handlerDurationHisto = observabilityHistogramCreate(
-            "sbmd.handler.duration_ms", "Time from JS_Call entry to return for each handler invocation", "ms");
-        heapDeltaHisto = observabilityHistogramCreate(
-            "sbmd.handler.heap_delta_bytes", "Change in heap_used across a single handler call", "By");
-        handlerOutcomeCounter =
-            observabilityCounterCreate("sbmd.handler.outcome", "Count of handler invocations by outcome", "1");
-    }
-
-    void SbmdHandlerInvoker::ShutdownMetrics()
-    {
-        observabilityHistogramRelease(handlerDurationHisto);
-        handlerDurationHisto = nullptr;
-        observabilityHistogramRelease(heapDeltaHisto);
-        heapDeltaHisto = nullptr;
-        observabilityCounterRelease(handlerOutcomeCounter);
-        handlerOutcomeCounter = nullptr;
-    }
-
-    void SbmdHandlerInvoker::RecordOutcomeError(const char *driver,
-                                                const char *opType,
-                                                const char *resourceId,
-                                                const char *outcome)
-    {
-        if (!handlerOutcomeCounter)
-        {
-            return;
-        }
-
-        if (driver || opType || resourceId)
-        {
-            if (resourceId)
-            {
-                observabilityCounterAddWithAttrs(handlerOutcomeCounter,
-                                                 1,
-                                                 "driver",
-                                                 driver ? driver : "",
-                                                 "op_type",
-                                                 opType ? opType : "",
-                                                 "resource_id",
-                                                 resourceId,
-                                                 "outcome",
-                                                 outcome,
-                                                 nullptr);
-            }
-            else
-            {
-                observabilityCounterAddWithAttrs(handlerOutcomeCounter,
-                                                 1,
-                                                 "driver",
-                                                 driver ? driver : "",
-                                                 "op_type",
-                                                 opType ? opType : "",
-                                                 "outcome",
-                                                 outcome,
-                                                 nullptr);
-            }
-        }
-        else
-        {
-            observabilityCounterAddWithAttrs(handlerOutcomeCounter, 1, "outcome", outcome, nullptr);
-        }
     }
 
 } // namespace barton

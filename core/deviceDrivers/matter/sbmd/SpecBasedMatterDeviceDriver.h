@@ -42,10 +42,6 @@
 #include <transport/SessionHolder.h>
 #include <unordered_map>
 
-extern "C" {
-#include "observability/observabilityMetrics.h"
-}
-
 namespace barton
 {
     /**
@@ -94,16 +90,6 @@ namespace barton
     {
     public:
         SpecBasedMatterDeviceDriver(SbmdDriver *driver);
-
-        /**
-         * Initialize all metric handles owned by SpecBasedMatterDeviceDriver.
-         */
-        static void InitializeMetrics();
-
-        /**
-         * Release all metric handles owned by SpecBasedMatterDeviceDriver.
-         */
-        static void ShutdownMetrics();
 
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
@@ -414,12 +400,5 @@ namespace barton
         uint64_t nextPendingId = 1;
 
         friend class TestableSpecBasedMatterDeviceDriver;
-
-        // Observability metric handles (static — shared across all driver instances)
-        static ObservabilityCounter *deferredTimeoutCounter;
-        static ObservabilityCounter *deferralMaxDepthCounter;
-        static ObservabilityGauge *deferredInFlightGauge;
-        static ObservabilityHistogram *deferredDurationHisto;
-        static ObservabilityHistogram *deferralDepthHisto;
     };
 } // namespace barton
