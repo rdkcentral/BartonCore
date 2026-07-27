@@ -47,12 +47,16 @@
 #include <json/json.h>
 
 extern "C" {
+#include <icLog/logging.h>
+#include <icTypes/icLinkedList.h>
 #include <openssl/evp.h>
 #include <openssl/objects.h>
 #include <openssl/pem.h>
 #include <openssl/pkcs7.h>
 #include <openssl/x509.h>
-#include <icLog/logging.h>
+#include <stdlib.h>
+#include <string.h>
+#include <urlHelper/urlHelper.h>
 
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProps.h"
@@ -196,8 +200,6 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
 {
     VerifyOrReturnError(!mAuthorizationToken.empty(), CHIP_ERROR_INCORRECT_STATE);
 
-    CurlEasy curl = CurlEasy(curl_easy_init(), curl_easy_cleanup);
-
     std::string host;
 
     switch (mApiEnv)
@@ -214,71 +216,78 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
     std::stringstream url;
     url << "https://" << host << "/v1/certifier/certificate";
 
-    curl_easy_setopt(curl.get(), CURLOPT_URL, url.str().c_str());
-
     std::string request = CreateNOCRequest(csr, fabricId, nodeId);
-    std::stringbuf responseData;
 
     VerifyOrReturnError(!request.empty(), CHIP_ERROR_INTERNAL);
 
     std::string satCRT = CreateSATCRT(mAuthorizationToken);
+    std::string authorizationHeader = "Authorization: Bearer " + satCRT;
     std::stringstream trackingId;
     trackingId << "x-xpki-tracking-id: " << CreateCRTNonce();
 
-    struct curl_slist * headers = nullptr;
-    headers                     = curl_slist_append(headers, "Content-Type: application/json");
-    // FIXME: create mutator for this
-    headers = curl_slist_append(headers, "x-xpki-source: matter-commissioner");
-    headers = curl_slist_append(headers, trackingId.str().c_str());
+    auto destroyHeaders = [](icLinkedList *list) { linkedListDestroy(list, free); };
+    std::unique_ptr<icLinkedList, decltype(destroyHeaders)> headers(linkedListCreate(), destroyHeaders);
 
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, request.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl.get(), CURLOPT_FAILONERROR, false);
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPAUTH, CURLAUTH_BEARER);
-    curl_easy_setopt(curl.get(), CURLOPT_XOAUTH2_BEARER, satCRT.c_str());
+    VerifyOrReturnError(headers != nullptr, CHIP_ERROR_NO_MEMORY);
 
-    curl_easy_setopt(
-        curl.get(), CURLOPT_WRITEFUNCTION, (curl_write_callback)[](char * ptr, size_t size, size_t nmemb, void * userdata)->size_t {
-            auto outbuf = static_cast<std::stringbuf *>(userdata);
-            return outbuf->sputn(ptr, size * nmemb);
-        });
+    for (const std::string &headerValue : std::initializer_list<std::string>{
+             "Content-Type: application/json",
+             "x-xpki-source: matter-commissioner", // FIXME: create mutator for this
+             trackingId.str(),
+             authorizationHeader})
+    {
+        char *h = strdup(headerValue.c_str());
+        VerifyOrReturnError(h != nullptr, CHIP_ERROR_NO_MEMORY);
 
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, (void *) &responseData);
+        if (!linkedListAppend(headers.get(), h))
+        {
+            free(h);
+
+            return CHIP_ERROR_NO_MEMORY;
+        }
+    }
 
     ChipLogProgress(Controller, "Sending HTTP request to certifier.");
 
-    CURLcode res = curl_easy_perform(curl.get());
-    curl_slist_free_all(headers);
-    headers = nullptr;
+    long httpCode = 0;
+    std::unique_ptr<char, decltype(&free)> responseBody(
+        urlHelperExecuteRequestHeaders(
+            url.str().c_str(), &httpCode, request.c_str(), headers.get(), nullptr, nullptr, 0, SSL_VERIFY_BOTH, true),
+        free);
 
-    auto responseBody = responseData.str();
-
-    if (res != CURLE_OK)
+    if (httpCode == 0 && responseBody == nullptr)
     {
-        ChipLogError(Controller, "Failed to request operational certificate. cURL error '%s'", curl_easy_strerror(res));
+        ChipLogError(Controller, "Failed to request operational certificate. No HTTP response received.");
 
         return CHIP_ERROR_INTERNAL;
     }
 
-    long httpCode;
-    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpCode);
-
-    if (httpCode >= 400)
+    if (httpCode >= 400 && httpCode < 500)
     {
-        ChipLogError(Controller, "Certifier: HTTP %ld \n8<---\n%s\n8<---\n", httpCode, responseBody.c_str());
+        ChipLogError(Controller, "Certifier: HTTP %ld (client error) \n8<---\n%s\n8<---\n", httpCode,
+                     responseBody != nullptr ? responseBody.get() : "");
 
         return CHIP_ERROR_INTERNAL;
     }
-    else
+
+    if (httpCode >= 500)
     {
-        ChipLogProgress(Controller, "Certifier HTTP transaction complete.");
+        ChipLogError(Controller, "Certifier: HTTP %ld (server error) \n8<---\n%s\n8<---\n", httpCode,
+                     responseBody != nullptr ? responseBody.get() : "");
+
+        return CHIP_ERROR_INTERNAL;
     }
+
+    ChipLogProgress(Controller, "Certifier HTTP transaction complete.");
+
+    const char *responseRawJson = responseBody.get();
+
+    VerifyOrReturnError(responseRawJson != nullptr, CHIP_ERROR_INTERNAL);
 
     Json::CharReaderBuilder builder;
     const std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
     Json::Value responseDoc;
     Json::String err;
-    const char * responseRawJson = responseBody.c_str();
 
     if (!reader->parse(responseRawJson, responseRawJson + strlen(responseRawJson), &responseDoc, &err))
     {

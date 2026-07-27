@@ -30,7 +30,6 @@
  *
  * Provides:
  *   - TestableMatterDevice  — friend subclass that exposes private members
- *   - MockSbmdScript        — GMock implementation of SbmdScript
  *   - ChipPlatformEnvironment — GTest Environment that initialises CHIP memory
  *
  * Each test binary must register ChipPlatformEnvironment once:
@@ -68,9 +67,6 @@ namespace barton
         // ── Endpoint-map test helpers ──────────────────────────────────────
 
         std::map<uint32_t, chip::EndpointId> &GetSbmdEndpointMap() { return sbmdEndpointMap; }
-        const std::map<std::string, ResourceBinding> &GetReadBindings() { return resourceReadBindings; }
-        const std::map<std::string, ResourceBinding> &GetWriteBindings() { return resourceWriteBindings; }
-        const std::map<std::string, ResourceBinding> &GetExecuteBindings() { return resourceExecuteBindings; }
 
         CacheCallback *GetCacheCallback()
         {
@@ -89,27 +85,6 @@ namespace barton
         chip::app::ClusterStateCache *GetClusterStateCache()
         {
             return deviceDataCache ? deviceDataCache->clusterStateCache.get() : nullptr;
-        }
-
-        /**
-         * Directly insert an attribute read binding into the fast lookup map.
-         * Used by tests to set up multi-binding fan-out scenarios without going
-         * through the full BindResourceReadInfo() path.
-         */
-        void InsertReadableAttributeBinding(const chip::app::ConcreteAttributePath &path,
-                                            const std::string &uri,
-                                            const SbmdAttribute &attr)
-        {
-            ResourceBinding binding;
-            binding.type = ResourceBinding::Type::Attribute;
-            binding.attributePath = path;
-            binding.attribute = attr;
-
-            AttributeReadBinding readBinding;
-            readBinding.uri = uri;
-            readBinding.binding = std::move(binding);
-
-            readableAttributeLookup.emplace(path, std::move(readBinding));
         }
 
         /**
@@ -308,75 +283,6 @@ namespace barton
             cb.OnReportEnd();
         }
 
-        // ── Event test helpers ─────────────────────────────────────────────
-
-        /**
-         * Directly insert an event binding into the event lookup map.
-         * Bypasses BindResourceEventInfo() which requires a fully-resolved
-         * endpoint map; allows tests to focus on OnEventData() behavior.
-         */
-        void InsertEventBinding(chip::EndpointId endpointId,
-                                chip::ClusterId clusterId,
-                                chip::EventId eventId,
-                                const std::string &uri,
-                                const SbmdEvent &event)
-        {
-            EventPath path {endpointId, clusterId, eventId};
-            EventBinding binding;
-            binding.uri = uri;
-            binding.event = event;
-            eventLookup[path] = std::move(binding);
-        }
-    };
-
-    /**
-     * Mock SbmdScript for use in MatterDevice unit tests.
-     */
-    class MockSbmdScript : public SbmdScript
-    {
-    public:
-        using SbmdScript::SbmdScript;
-
-        MOCK_METHOD(void, SetClusterFeatureMaps, ((const std::map<uint32_t, uint32_t> &) ), (override));
-        MOCK_METHOD(bool,
-                    AddAttributeReadMapper,
-                    (const SbmdAttribute &attributeInfo, const std::string &script),
-                    (override));
-        MOCK_METHOD(bool,
-                    AddCommandExecuteResponseMapper,
-                    (const SbmdCommand &commandInfo, const std::string &script),
-                    (override));
-        MOCK_METHOD(ScriptResult,
-                    MapAttributeRead,
-                    (const SbmdAttribute &attributeInfo, chip::TLV::TLVReader &reader),
-                    (override));
-        MOCK_METHOD(ScriptResult,
-                    MapCommandExecuteResponse,
-                    (const SbmdCommand &commandInfo, chip::TLV::TLVReader &reader),
-                    (override));
-        MOCK_METHOD(bool, AddWriteMapper, (const std::string &resourceKey, const std::string &script), (override));
-        MOCK_METHOD(bool,
-                    AddExecuteMapper,
-                    (const std::string &resourceKey,
-                     const std::string &script,
-                     const std::optional<std::string> &responseScript),
-                    (override));
-        MOCK_METHOD(ScriptResult,
-                    MapWrite,
-                    (const std::string &resourceKey,
-                     const std::string &endpointId,
-                     const std::string &resourceId,
-                     const std::string &inValue),
-                    (override));
-        MOCK_METHOD(ScriptResult,
-                    MapExecute,
-                    (const std::string &resourceKey,
-                     const std::string &endpointId,
-                     const std::string &resourceId,
-                     const std::string &inValue),
-                    (override));
-        MOCK_METHOD(bool, AddEventMapper, (const SbmdEvent &eventInfo, const std::string &script), (override));
-        MOCK_METHOD(ScriptResult, MapEvent, (const SbmdEvent &eventInfo, chip::TLV::TLVReader &reader), (override));
     };
 
 } // namespace barton

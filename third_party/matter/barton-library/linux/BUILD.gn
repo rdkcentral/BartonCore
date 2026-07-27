@@ -32,6 +32,7 @@ import("//build_overrides/chip.gni")
 
 import("//build/chip/tools.gni")
 import("//src/app/chip_data_model.gni")
+import("//src/tracing/tracing_args.gni")
 
 project_dir = "./.."
 
@@ -49,6 +50,13 @@ static_library("barton") {
     "//src/setup_payload",
     "//src/lib/support/jsontlv",
   ]
+
+  # Developer feature: the JSON tracing backend is only available (and only
+  # linkable) when the SDK is built with tracing support. Gated so a default
+  # library build links nothing extra. See build-matter.sh -t / build.sh -t.
+  if (matter_enable_tracing_support) {
+    public_deps += [ "//src/tracing/json" ]
+  }
 
   output_name = "libBartonMatter"
   complete_static_lib = true

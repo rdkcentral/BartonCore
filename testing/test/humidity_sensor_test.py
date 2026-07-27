@@ -38,7 +38,9 @@ from testing.utils.barton_utils import (
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.requires_matterjs
+pytestmark = [
+    pytest.mark.requires_matterjs,
+]
 
 
 def test_commission_humidity_sensor(

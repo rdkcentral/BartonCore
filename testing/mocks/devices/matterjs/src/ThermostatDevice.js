@@ -33,23 +33,26 @@
  * Can be run directly:  node ThermostatDevice.js --passcode ... --discriminator ...
  */
 
-import { pathToFileURL } from "node:url";
-import { Endpoint } from "@matter/main";
-import { ThermostatDevice as MatterThermostatDevice, ThermostatRequirements } from "@matter/main/devices";
-import { Thermostat } from "@matter/main/clusters";
-import { VirtualDevice } from "./VirtualDevice.js";
-import { parseArgs } from "./parseArgs.js";
+import {pathToFileURL} from 'node:url';
+import {Endpoint} from '@matter/main';
+import {
+    ThermostatDevice as MatterThermostatDevice,
+    ThermostatRequirements
+} from '@matter/main/devices';
+import {Thermostat} from '@matter/main/clusters';
+import {VirtualDevice} from './VirtualDevice.js';
+import {parseArgs} from './parseArgs.js';
 
 export class ThermostatDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
-            deviceName: "Virtual Thermostat",
-            ...options,
+            deviceName: 'Virtual Thermostat',
+            ...options
         });
 
-        this.registerOperation("setTemperature", (params) => this.handleSetTemperature(params));
-        this.registerOperation("setSystemMode", (params) => this.handleSetSystemMode(params));
-        this.registerOperation("getState", () => this.handleGetState());
+        this.registerOperation('setTemperature', (params) => this.handleSetTemperature(params));
+        this.registerOperation('setSystemMode', (params) => this.handleSetSystemMode(params));
+        this.registerOperation('getState', () => this.handleGetState());
     }
 
     getDeviceType() {
@@ -57,12 +60,14 @@ export class ThermostatDevice extends VirtualDevice {
     }
 
     getDeviceTypeDefinition() {
-        return MatterThermostatDevice.with(ThermostatRequirements.ThermostatServer.with("Heating", "Cooling", "AutoMode"));
+        return MatterThermostatDevice.with(
+            ThermostatRequirements.ThermostatServer.with('Heating', 'Cooling', 'AutoMode')
+        );
     }
 
     getEndpointConfig() {
         return {
-            id: "thermostat-ep1",
+            id: 'thermostat-ep1',
             thermostat: {
                 localTemperature: 2100,
                 occupiedHeatingSetpoint: 2000,
@@ -73,8 +78,8 @@ export class ThermostatDevice extends VirtualDevice {
                 absMaxCoolSetpointLimit: 3200,
                 controlSequenceOfOperation: Thermostat.ControlSequenceOfOperation.CoolingAndHeating,
                 systemMode: Thermostat.SystemMode.Off,
-                minSetpointDeadBand: 10,
-            },
+                minSetpointDeadBand: 10
+            }
         };
     }
 
@@ -86,14 +91,14 @@ export class ThermostatDevice extends VirtualDevice {
         const temperature = params.temperature;
 
         if (temperature === undefined || temperature === null) {
-            throw new Error("temperature parameter required");
+            throw new Error('temperature parameter required');
         }
 
         await this.endpoints[0].act(async (agent) => {
             agent.thermostat.state.localTemperature = temperature;
         });
 
-        return { localTemperature: temperature };
+        return {localTemperature: temperature};
     }
 
     async handleSetSystemMode(params) {
@@ -103,7 +108,7 @@ export class ThermostatDevice extends VirtualDevice {
             off: Thermostat.SystemMode.Off,
             auto: Thermostat.SystemMode.Auto,
             cool: Thermostat.SystemMode.Cool,
-            heat: Thermostat.SystemMode.Heat,
+            heat: Thermostat.SystemMode.Heat
         };
 
         const modeValue = modeMap[mode];
@@ -116,7 +121,7 @@ export class ThermostatDevice extends VirtualDevice {
             agent.thermostat.state.systemMode = modeValue;
         });
 
-        return { systemMode: mode };
+        return {systemMode: mode};
     }
 
     async handleGetState() {
@@ -126,13 +131,13 @@ export class ThermostatDevice extends VirtualDevice {
             const tstat = agent.thermostat.state;
 
             const modeNames = {
-                [Thermostat.SystemMode.Off]: "off",
-                [Thermostat.SystemMode.Auto]: "auto",
-                [Thermostat.SystemMode.Cool]: "cool",
-                [Thermostat.SystemMode.Heat]: "heat",
-                [Thermostat.SystemMode.EmergencyHeat]: "emergencyHeat",
-                [Thermostat.SystemMode.Precooling]: "precooling",
-                [Thermostat.SystemMode.FanOnly]: "fanOnly",
+                [Thermostat.SystemMode.Off]: 'off',
+                [Thermostat.SystemMode.Auto]: 'auto',
+                [Thermostat.SystemMode.Cool]: 'cool',
+                [Thermostat.SystemMode.Heat]: 'heat',
+                [Thermostat.SystemMode.EmergencyHeat]: 'emergencyHeat',
+                [Thermostat.SystemMode.Precooling]: 'precooling',
+                [Thermostat.SystemMode.FanOnly]: 'fanOnly'
             };
 
             state = {
@@ -143,7 +148,7 @@ export class ThermostatDevice extends VirtualDevice {
                 absMinHeatSetpointLimit: tstat.absMinHeatSetpointLimit,
                 absMaxHeatSetpointLimit: tstat.absMaxHeatSetpointLimit,
                 absMinCoolSetpointLimit: tstat.absMinCoolSetpointLimit,
-                absMaxCoolSetpointLimit: tstat.absMaxCoolSetpointLimit,
+                absMaxCoolSetpointLimit: tstat.absMaxCoolSetpointLimit
             };
         });
 

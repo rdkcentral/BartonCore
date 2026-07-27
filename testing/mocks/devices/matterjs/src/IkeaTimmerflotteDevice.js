@@ -44,32 +44,30 @@
  * Can be run directly:  node IkeaTimmerflotteDevice.js --passcode ... --discriminator ...
  */
 
-import {Endpoint} from "@matter/main";
+import {Endpoint} from '@matter/main';
 import {
     HumiditySensorDevice,
     HumiditySensorRequirements,
     TemperatureSensorDevice,
-    TemperatureSensorRequirements,
-} from "@matter/main/devices";
-import {pathToFileURL} from "node:url";
+    TemperatureSensorRequirements
+} from '@matter/main/devices';
+import {pathToFileURL} from 'node:url';
 
-import {parseArgs} from "./parseArgs.js";
-import {VirtualDevice} from "./VirtualDevice.js";
+import {parseArgs} from './parseArgs.js';
+import {VirtualDevice} from './VirtualDevice.js';
 
-export class IkeaTimmerflotteDevice extends VirtualDevice
-{
-    constructor(options = {})
-    {
+export class IkeaTimmerflotteDevice extends VirtualDevice {
+    constructor(options = {}) {
         super({
-            deviceName: "Virtual Ikea Timmerflotte Sensor",
-            vendorId: 0x117C,
+            deviceName: 'Virtual Ikea Timmerflotte Sensor',
+            vendorId: 0x117c,
             productId: 0x8005,
-            ...options,
+            ...options
         });
 
-        this.registerOperation("setTemperature", (params) => this.handleSetTemperature(params));
-        this.registerOperation("setHumidity", (params) => this.handleSetHumidity(params));
-        this.registerOperation("getState", () => this.handleGetState());
+        this.registerOperation('setTemperature', (params) => this.handleSetTemperature(params));
+        this.registerOperation('setHumidity', (params) => this.handleSetHumidity(params));
+        this.registerOperation('getState', () => this.handleGetState());
     }
 
     // productDescription.deviceType is used for commissioning advertisements — it
@@ -77,65 +75,66 @@ export class IkeaTimmerflotteDevice extends VirtualDevice
     // Matter spec only allows a single value here, so for a multi-endpoint device we
     // pick 0x0302 (temperature sensor) as the primary. This matches what the SDK
     // would infer automatically from the first child endpoint.
-    getDeviceType() { return 0x0302; }
+    getDeviceType() {
+        return 0x0302;
+    }
 
-    createEndpoints()
-    {
+    createEndpoints() {
         const tempEndpoint = new Endpoint(
             TemperatureSensorDevice.with(
-                TemperatureSensorRequirements.TemperatureMeasurementServer,
-                ),
+                TemperatureSensorRequirements.TemperatureMeasurementServer
+            ),
             {
-                id: "temperature-ep1",
+                id: 'temperature-ep1',
                 temperatureMeasurement: {
-                                         measuredValue: 2550,
-                                         minMeasuredValue: -4000,
-                                         maxMeasuredValue: 12500,
-                                         },
-        },
+                    measuredValue: 2550,
+                    minMeasuredValue: -4000,
+                    maxMeasuredValue: 12500
+                }
+            }
         );
 
         const humidityEndpoint = new Endpoint(
-            HumiditySensorDevice.with(
-                HumiditySensorRequirements.RelativeHumidityMeasurementServer,
-                ),
+            HumiditySensorDevice.with(HumiditySensorRequirements.RelativeHumidityMeasurementServer),
             {
-                id: "humidity-ep2",
+                id: 'humidity-ep2',
                 relativeHumidityMeasurement: {
-                                              measuredValue: 5000,
-                                              minMeasuredValue: 0,
-                                              maxMeasuredValue: 10000,
-                                              },
-        },
+                    measuredValue: 5000,
+                    minMeasuredValue: 0,
+                    maxMeasuredValue: 10000
+                }
+            }
         );
 
         return [tempEndpoint, humidityEndpoint];
     }
 
-    async handleSetTemperature({value})
-    {
-        await this.endpoints[0].act(async (agent) => { agent.temperatureMeasurement.state.measuredValue = value; });
+    async handleSetTemperature({value}) {
+        await this.endpoints[0].act(async (agent) => {
+            agent.temperatureMeasurement.state.measuredValue = value;
+        });
 
         return {measuredValue: value};
     }
 
-    async handleSetHumidity({value})
-    {
-        await this.endpoints[1].act(
-            async (agent) => { agent.relativeHumidityMeasurement.state.measuredValue = value; });
+    async handleSetHumidity({value}) {
+        await this.endpoints[1].act(async (agent) => {
+            agent.relativeHumidityMeasurement.state.measuredValue = value;
+        });
 
         return {measuredValue: value};
     }
 
-    async handleGetState()
-    {
+    async handleGetState() {
         let temperature, humidity;
 
-        await this.endpoints[0].act(
-            async (agent) => { temperature = agent.temperatureMeasurement.state.measuredValue; });
+        await this.endpoints[0].act(async (agent) => {
+            temperature = agent.temperatureMeasurement.state.measuredValue;
+        });
 
-        await this.endpoints[1].act(
-            async (agent) => { humidity = agent.relativeHumidityMeasurement.state.measuredValue; });
+        await this.endpoints[1].act(async (agent) => {
+            humidity = agent.relativeHumidityMeasurement.state.measuredValue;
+        });
 
         return {temperature, humidity};
     }
@@ -145,8 +144,7 @@ export class IkeaTimmerflotteDevice extends VirtualDevice
 const thisUrl = pathToFileURL(process.argv[1]).href;
 
 // Entry point when run directly
-if (import.meta.url === thisUrl)
-{
+if (import.meta.url === thisUrl) {
     const config = parseArgs(process.argv);
     const device = new IkeaTimmerflotteDevice(config);
     await device.start();

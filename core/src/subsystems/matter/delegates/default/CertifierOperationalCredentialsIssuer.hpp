@@ -29,12 +29,12 @@
 #include <crypto/CHIPCryptoPAL.h>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <lib/core/PeerId.h>
 #include <lib/support/DLLUtil.h>
 #include <string>
 
 extern "C" {
-#include <curl/curl.h>
 #include <openssl/bn.h>
 #include <openssl/ecdsa.h>
 #include <openssl/pkcs7.h>
@@ -62,7 +62,6 @@ namespace barton
                                                    MutableByteSpan &noc) override;
 
     private:
-        using CurlEasy = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
         using Pkcs7 = std::unique_ptr<PKCS7, decltype(&PKCS7_free)>;
 
         /**

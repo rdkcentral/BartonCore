@@ -83,6 +83,13 @@ extern "C" {
 #include <setup_payload/SetupPayload.h>
 #include <transport/SessionMessageDelegate.h>
 
+#include <platform/Linux/KeyValueStoreManagerImpl.h>
+
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+#include <tracing/json/json_tracing.h>
+#include <tracing/registry.h>
+#endif
+
 #include <lib/support/TestGroupData.h>
 
 #include <lib/core/NodeId.h>
@@ -164,6 +171,13 @@ namespace
     std::optional<ThreadBorderRouterManagement::ServerInstance> threadBorderRouterManagementServer;
     EndpointId threadBorderRouterManagementServerEndpointId = UINT16_MAX;
 #endif // ZCL_USING_THREAD_BORDER_ROUTER_MANAGEMENT_CLUSTER_SERVER
+
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+    // Developer-only Matter message trace backend. Emits every inbound/outbound
+    // Matter message (hex + fully-decoded TLV) as a JSON record via ChipLog.
+    // Registered in Matter::Init() and unregistered in Matter::StackThreadProc().
+    chip::Tracing::Json::JsonBackend matterMessageTraceBackend;
+#endif
 } // namespace
 
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
@@ -192,13 +206,16 @@ void EventHandler(const DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
     icDebug("EventType=%" PRIx16, event->Type);
 }
 
-bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
+bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, const std::string &configDir)
 {
     icDebug();
 
     bool result = true;
 
     CHIP_ERROR err = CHIP_NO_ERROR;
+
+    // Resolve effective config directory: use caller-supplied path, fall back to compile-time default.
+    std::string effectiveConfigDir = configDir.empty() ? CHIP_BARTON_CONF_DIR : configDir;
 
     myNodeId = LoadOrGenerateLocalNodeId();
     if (!IsOperationalNodeId(myNodeId))
@@ -208,7 +225,21 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     }
     icDebug("Local node ID: 0x%" PRIx64, myNodeId);
 
-    mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
+    if (mkdir_p(effectiveConfigDir.c_str(), 0700) != 0)
+    {
+        icError("Failed to create config directory: %s", effectiveConfigDir.c_str());
+        return false;
+    }
+
+    // Also ensure the compile-time config directory exists. The Matter SDK's
+    // PosixConfig storage objects (chip_factory.ini, chip_config.ini,
+    // chip_counters.ini) are static globals that always use the compile-time
+    // paths and cannot be redirected at runtime.
+    if (mkdir_p(CHIP_BARTON_CONF_DIR, 0700) != 0)
+    {
+        icError("Failed to create compile-time config directory: %s", CHIP_BARTON_CONF_DIR);
+        return false;
+    }
 
     myFabricId = accountId;
 
@@ -222,11 +253,34 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
         return false;
     }
 
+    // Pre-initialize the KVS with the runtime path before InitChipStack.
+    // ChipLinuxStorage::Init() has an mInitialized guard, so the first Init() wins.
+    // This ensures PosixConfig::Init() (called by InitChipStack) will skip its
+    // compile-time CHIP_CONFIG_KVS_PATH since the KVS is already initialized.
+    std::string kvsPath = effectiveConfigDir + "/" + KV_STORAGE_NAMESPACE;
+    icInfo("Pre-initializing KVS at: %s", kvsPath.c_str());
+
+    if ((err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgrImpl().Init(kvsPath.c_str())) != CHIP_NO_ERROR)
+    {
+        icError("KeyValueStoreMgr pre-init failed: %s", err.AsString());
+        return false;
+    }
+
     if ((err = chip::DeviceLayer::PlatformMgr().InitChipStack()) != CHIP_NO_ERROR)
     {
         icError("InitChipStack failed: %s", err.AsString());
         return false;
     }
+
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+    // Developer feature: register the SDK-wide Matter message trace backend. Every
+    // inbound/outbound Matter message is logged (hex + fully-decoded TLV) as a JSON
+    // record via ChipLog. Unregistered in StackThreadProc() once the event loop stops.
+    // WARNING: this is high volume and will noticeably slow the stack; it is gated
+    // behind BCORE_MATTER_MESSAGE_TRACING and intended for debugging only.
+    icWarn("Matter message tracing is ENABLED (developer feature). Expect verbose, high-volume logging.");
+    chip::Tracing::Register(matterMessageTraceBackend);
+#endif
 
     if (!GetBartonDeviceInstanceInfoProvider().ValidateProperties())
     {
@@ -464,6 +518,11 @@ void Matter::StackThreadProc()
     chip::DeviceLayer::PlatformMgr().RunEventLoop();
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+    // Backends MUST be unregistered before exit, with the Matter stack lock held.
+    chip::Tracing::Unregister(matterMessageTraceBackend);
+#endif
 
     auto &server = chip::Server::GetInstance();
     server.Shutdown();
@@ -1378,10 +1437,53 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
 
     if (nodeId == 0)
     {
+        // This is the local node ("us"), so the onboarding payload must carry our own identity: vendor id,
+        // product id, and commissioning flow. Vendor id and product id come from the DeviceInstanceInfoProvider,
+        // the same source the SDK uses for the DNS-SD TXT record and onboarding codes.
+        if (DeviceLayer::GetDeviceInstanceInfoProvider()->GetVendorId(setupPayload.vendorID) != CHIP_NO_ERROR)
+        {
+            icError("Failed to get vendor id from DeviceInstanceInfoProvider");
+            return false;
+        }
+
+        if (DeviceLayer::GetDeviceInstanceInfoProvider()->GetProductId(setupPayload.productID) != CHIP_NO_ERROR)
+        {
+            icError("Failed to get product id from DeviceInstanceInfoProvider");
+            return false;
+        }
+
+        // The commissioning flow (standard/user-action-required/custom) is Barton configuration; the Matter SDK
+        // provides no source for it (it is not part of the DNS-SD TXT record and has no provider/config hook).
+        // Default to standard when the property is unset or invalid.
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        uint8_t commissioningFlowValue = b_core_property_provider_get_property_as_uint8(
+            propertyProvider,
+            B_CORE_BARTON_MATTER_COMMISSIONING_FLOW,
+            static_cast<uint8_t>(CommissioningFlow::kStandard));
+
+        switch (static_cast<CommissioningFlow>(commissioningFlowValue))
+        {
+            case CommissioningFlow::kStandard:
+            case CommissioningFlow::kUserActionRequired:
+            case CommissioningFlow::kCustom:
+                setupPayload.commissioningFlow = static_cast<CommissioningFlow>(commissioningFlowValue);
+                break;
+            default:
+                icWarn("Invalid commissioning flow value %" PRIu8 " configured; defaulting to standard",
+                       commissioningFlowValue);
+                setupPayload.commissioningFlow = CommissioningFlow::kStandard;
+                break;
+        }
+
         success = OpenLocalCommissioningWindow(discriminator, timeoutSecs, setupPayload);
     }
     else
     {
+        // TODO: This opens a commissioning window on a *remote* device, so the onboarding payload should
+        // report that device's vendor id, product id, and commissioning flow rather than ours. We do not
+        // currently have those values for the remote device, so vendor id, product id, and commissioning
+        // flow are left as zeros. This assumes the standard commissioning flow, which allows zeros for
+        // those three fields.
         chip::DeviceLayer::PlatformMgr().LockChipStack();
 
         success = CHIP_NO_ERROR == Controller::AutoCommissioningWindowOpener::OpenCommissioningWindow(

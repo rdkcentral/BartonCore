@@ -450,7 +450,7 @@ bool QuickJsRuntime::FreezeGlobalObject(const char *name)
     // Check if freeze operation left an exception (indicates a problem we should fix)
     if (CheckAndClearPendingException(ctx_, nullptr))
     {
-        icError("SbmdUtils freeze operation left a pending exception - this is a bug");
+        icError("Sbmd freeze operation left a pending exception - this is a bug");
         return false;
     }
 

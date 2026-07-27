@@ -37,62 +37,63 @@
  * Can be run directly:  node HumiditySensorDevice.js --passcode ... --discriminator ...
  */
 
-import {Endpoint} from "@matter/main";
+import {Endpoint} from '@matter/main';
 import {
     HumiditySensorDevice as MatterHumiditySensorDevice,
-    HumiditySensorRequirements,
-} from "@matter/main/devices";
-import {pathToFileURL} from "node:url";
+    HumiditySensorRequirements
+} from '@matter/main/devices';
+import {pathToFileURL} from 'node:url';
 
-import {parseArgs} from "./parseArgs.js";
-import {VirtualDevice} from "./VirtualDevice.js";
+import {parseArgs} from './parseArgs.js';
+import {VirtualDevice} from './VirtualDevice.js';
 
-export class HumiditySensorDevice extends VirtualDevice
-{
-    constructor(options = {})
-    {
+export class HumiditySensorDevice extends VirtualDevice {
+    constructor(options = {}) {
         super({
-            deviceName: "Virtual Humidity Sensor",
-            ...options,
+            deviceName: 'Virtual Humidity Sensor',
+            ...options
         });
 
-        this.registerOperation("setHumidity", (params) => this.handleSetHumidity(params));
-        this.registerOperation("getState", () => this.handleGetState());
+        this.registerOperation('setHumidity', (params) => this.handleSetHumidity(params));
+        this.registerOperation('getState', () => this.handleGetState());
     }
 
-    getDeviceType() { return 0x0307; }
+    getDeviceType() {
+        return 0x0307;
+    }
 
-    createEndpoints()
-    {
-        return [new Endpoint(
-            MatterHumiditySensorDevice.with(
-                HumiditySensorRequirements.RelativeHumidityMeasurementServer,
+    createEndpoints() {
+        return [
+            new Endpoint(
+                MatterHumiditySensorDevice.with(
+                    HumiditySensorRequirements.RelativeHumidityMeasurementServer
                 ),
-            {
-                id: "humidity-ep1",
-                relativeHumidityMeasurement: {
-                                              measuredValue: 5000,
-                                              minMeasuredValue: 0,
-                                              maxMeasuredValue: 10000,
-                                              },
-        },
-            )];
+                {
+                    id: 'humidity-ep1',
+                    relativeHumidityMeasurement: {
+                        measuredValue: 5000,
+                        minMeasuredValue: 0,
+                        maxMeasuredValue: 10000
+                    }
+                }
+            )
+        ];
     }
 
-    async handleSetHumidity({value})
-    {
-        await this.endpoints[0].act(
-            async (agent) => { agent.relativeHumidityMeasurement.state.measuredValue = value; });
+    async handleSetHumidity({value}) {
+        await this.endpoints[0].act(async (agent) => {
+            agent.relativeHumidityMeasurement.state.measuredValue = value;
+        });
 
         return {measuredValue: value};
     }
 
-    async handleGetState()
-    {
+    async handleGetState() {
         let humidity;
 
-        await this.endpoints[0].act(
-            async (agent) => { humidity = agent.relativeHumidityMeasurement.state.measuredValue; });
+        await this.endpoints[0].act(async (agent) => {
+            humidity = agent.relativeHumidityMeasurement.state.measuredValue;
+        });
 
         return {humidity};
     }
@@ -102,8 +103,7 @@ export class HumiditySensorDevice extends VirtualDevice
 const thisUrl = pathToFileURL(process.argv[1]).href;
 
 // Entry point when run directly
-if (import.meta.url === thisUrl)
-{
+if (import.meta.url === thisUrl) {
     const config = parseArgs(process.argv);
     const device = new HumiditySensorDevice(config);
     await device.start();

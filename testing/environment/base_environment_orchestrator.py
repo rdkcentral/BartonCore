@@ -106,11 +106,13 @@ class BaseEnvironmentOrchestrator(ABC):
         # Must match what's compiled with barton matter sdk
         self._barton_storage_path = str(Path.home()) + "/.brtn-ds"
         self._matter_storage_path = self._barton_storage_path + "/matter"
-        # SBMD specs directory relative to workspace root
+        # SBMD specs directories relative to workspace root
         workspace_root = Path(__file__).parent.parent.parent
-        self._sbmd_dirs = str(
+        production_specs = str(
             workspace_root / "core" / "deviceDrivers" / "matter" / "sbmd" / "specs"
         )
+        test_specs = str(workspace_root / "testing" / "resources" / "sbmd-specs")
+        self._sbmd_dirs = production_specs + ";" + test_specs
         self._init_client()
         self._configure_client()
 

@@ -36,29 +36,32 @@
  *   3. Call registerOperation() to register side-band operations
  */
 
-import "@matter/nodejs";
-import { ServerNode, Environment, Logger } from "@matter/main";
-import { SessionManager } from "@matter/protocol";
-import http from "node:http";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import '@matter/nodejs';
+import {ServerNode, Environment, Logger} from '@matter/main';
+import {SessionManager} from '@matter/protocol';
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // Redirect all matter.js logging to stderr so stdout is clean for the ready signal
 Logger.destinations.default.write = (_level, line) => {
     // Format objects properly instead of [object Object]
-    const formatted = typeof line === "string" ? line : JSON.stringify(line, (_, v) => typeof v === "bigint" ? v.toString() + "n" : v);
-    process.stderr.write(formatted + "\n");
+    const formatted =
+        typeof line === 'string'
+            ? line
+            : JSON.stringify(line, (_, v) => (typeof v === 'bigint' ? v.toString() + 'n' : v));
+    process.stderr.write(formatted + '\n');
 };
 
 export class VirtualDevice {
     constructor({
-        deviceName = "Virtual Device",
+        deviceName = 'Virtual Device',
         vendorId = 0xfff1,
         productId = 0x8000,
         passcode = 20202021,
         discriminator = 3840,
-        port = 0,
+        port = 0
     } = {}) {
         this.deviceName = deviceName;
         this.vendorId = vendorId;
@@ -70,13 +73,13 @@ export class VirtualDevice {
         this.serverNode = null;
         this.httpServer = null;
         this.endpoints = [];
-        this.storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "matterjs-device-"));
+        this.storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'matterjs-device-'));
         // Fixed at construction time so they remain consistent across goOffline/comeOnline cycles
         this.serialNumber = `BCORE-TEST-${Date.now()}`;
         this.uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-        this.registerOperation("goOffline", () => this.handleGoOffline());
-        this.registerOperation("comeOnline", (params) => this.handleComeOnline(params));
+        this.registerOperation('goOffline', () => this.handleGoOffline());
+        this.registerOperation('comeOnline', (params) => this.handleComeOnline(params));
     }
 
     /**
@@ -84,33 +87,33 @@ export class VirtualDevice {
      */
     _createServerNodeConfig() {
         return {
-            id: this.deviceName.replace(/\s+/g, "-").toLowerCase(),
+            id: this.deviceName.replace(/\s+/g, '-').toLowerCase(),
             network: {
                 port: this.port,
                 subscriptionOptions: {
                     maxInterval: 3000,
                     minInterval: 1000,
-                    randomizationWindow: 0,
-                },
+                    randomizationWindow: 0
+                }
             },
             commissioning: {
                 passcode: this.passcode,
-                discriminator: this.discriminator,
+                discriminator: this.discriminator
             },
             productDescription: {
                 name: this.deviceName,
-                deviceType: this.getDeviceType(),
+                deviceType: this.getDeviceType()
             },
             basicInformation: {
-                vendorName: "BartonCore Test",
+                vendorName: 'BartonCore Test',
                 vendorId: this.vendorId,
                 nodeLabel: this.deviceName,
                 productName: this.deviceName,
                 productLabel: this.deviceName,
                 productId: this.productId,
                 serialNumber: this.serialNumber,
-                uniqueId: this.uniqueId,
-            },
+                uniqueId: this.uniqueId
+            }
         };
     }
 
@@ -128,7 +131,7 @@ export class VirtualDevice {
      * @returns {Endpoint[]} Array of matter.js Endpoints for this device
      */
     createEndpoints() {
-        throw new Error("Subclasses must implement createEndpoints()");
+        throw new Error('Subclasses must implement createEndpoints()');
     }
 
     /**
@@ -138,7 +141,7 @@ export class VirtualDevice {
     async start() {
         // Configure matter.js to use our temp storage directory
         const env = Environment.default;
-        env.vars.set("path.root", this.storageDir);
+        env.vars.set('path.root', this.storageDir);
         this.serverNode = await ServerNode.create(this._createServerNodeConfig());
 
         // Create and add device endpoint(s)
@@ -163,17 +166,17 @@ export class VirtualDevice {
             sidebandPort,
             matterPort,
             passcode: this.passcode,
-            discriminator: this.discriminator,
+            discriminator: this.discriminator
         });
-        process.stdout.write(readySignal + "\n");
+        process.stdout.write(readySignal + '\n');
 
         // Set up graceful shutdown
         const shutdown = async () => {
             await this.stop();
             process.exit(0);
         };
-        process.on("SIGTERM", shutdown);
-        process.on("SIGINT", shutdown);
+        process.on('SIGTERM', shutdown);
+        process.on('SIGINT', shutdown);
     }
 
     /**
@@ -191,20 +194,20 @@ export class VirtualDevice {
     startSidebandServer() {
         return new Promise((resolve, reject) => {
             this.httpServer = http.createServer(async (req, res) => {
-                if (req.method === "POST" && req.url === "/sideband") {
+                if (req.method === 'POST' && req.url === '/sideband') {
                     await this.handleSidebandRequest(req, res);
                 } else {
-                    res.writeHead(404, { "Content-Type": "application/json" });
-                    res.end(JSON.stringify({ success: false, error: "Not found" }));
+                    res.writeHead(404, {'Content-Type': 'application/json'});
+                    res.end(JSON.stringify({success: false, error: 'Not found'}));
                 }
             });
 
-            this.httpServer.listen(0, "127.0.0.1", () => {
+            this.httpServer.listen(0, '127.0.0.1', () => {
                 const port = this.httpServer.address().port;
                 resolve(port);
             });
 
-            this.httpServer.on("error", reject);
+            this.httpServer.on('error', reject);
         });
     }
 
@@ -212,7 +215,7 @@ export class VirtualDevice {
      * Handle an incoming side-band HTTP request.
      */
     async handleSidebandRequest(req, res) {
-        let body = "";
+        let body = '';
 
         for await (const chunk of req) {
             body += chunk;
@@ -223,36 +226,34 @@ export class VirtualDevice {
         try {
             parsed = JSON.parse(body);
         } catch (error) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: `Invalid JSON: ${error.message}` }));
+            res.writeHead(400, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({success: false, error: `Invalid JSON: ${error.message}`}));
             return;
         }
 
-        const { operation, params } = parsed;
+        const {operation, params} = parsed;
 
         if (!operation) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: "Missing 'operation' field" }));
+            res.writeHead(400, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({success: false, error: "Missing 'operation' field"}));
             return;
         }
 
         const handler = this.operations.get(operation);
 
         if (!handler) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(
-                JSON.stringify({ success: false, error: `Unknown operation: ${operation}` }),
-            );
+            res.writeHead(400, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({success: false, error: `Unknown operation: ${operation}`}));
             return;
         }
 
         try {
             const result = await handler(params || {});
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: true, result }));
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({success: true, result}));
         } catch (error) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: error.message }));
+            res.writeHead(500, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({success: false, error: error.message}));
         }
     }
 
@@ -276,7 +277,7 @@ export class VirtualDevice {
             }
         }
 
-        return { offline: true };
+        return {offline: true};
     }
 
     /**
@@ -285,7 +286,7 @@ export class VirtualDevice {
      * update device state (e.g., attribute values) before Barton reconnects.
      */
     async handleComeOnline() {
-        return { online: true };
+        return {online: true};
     }
 
     /**
@@ -304,7 +305,7 @@ export class VirtualDevice {
 
         // Clean up temp storage
         if (this.storageDir) {
-            fs.rmSync(this.storageDir, { recursive: true, force: true });
+            fs.rmSync(this.storageDir, {recursive: true, force: true});
         }
     }
 }

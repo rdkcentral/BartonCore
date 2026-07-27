@@ -94,7 +94,7 @@ A pre-commit hook at `hooks/pre-commit` automatically runs clang-format on stage
 ./hooks/install.sh
 ```
 
-The hook calls `hooks/clang-format-hooks/git-pre-commit-format` which formats only the staged diff.
+The hook calls `hooks/format-hooks/clang-format/git-pre-commit-format` which formats only the staged diff (C/C++). JavaScript SBMD drivers are formatted separately by Prettier via lint-staged (see `.lintstagedrc.json` and `.prettierrc.yaml`).
 
 ## Key clang-format Settings
 

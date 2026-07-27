@@ -38,7 +38,6 @@
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "matter/MatterDevice.h"
-#include "sbmd/SbmdSpec.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include "subsystems/matter/Matter.h"
 #include <forward_list>
@@ -303,7 +302,6 @@ namespace barton
             void *driverContext;    // the context provided to the driver for the operation
             char **value;           // output value pointer
             const char *resourceId; // optional; in case we want to keep track of the resource being updated
-            SbmdMapper *mapper;     // the mapper to use for this read (SBMD drivers only)
         };
 
         /**

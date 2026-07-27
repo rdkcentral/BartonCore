@@ -89,6 +89,21 @@ icDeviceResource *deviceServiceGetResourceById(const char *deviceUuid, const cha
  */
 icDeviceResource *deviceServiceFindDeviceResourceById(icDevice *device, const char *resourceId);
 
+/*
+ * Update the value of a resource on a device, notifying watchers when the value
+ * changes. Used by device drivers to update a resource for one of their devices.
+ *
+ * If endpointId is NULL, the resource is updated on the root device itself
+ * (a device-level resource); otherwise it is updated on the named endpoint.
+ *
+ * @param deviceUuid - the universally unique identifier for the device
+ * @param endpointId - the id of the endpoint owning the resource, or NULL for a
+ *                     device-level (root device) resource
+ * @param resourceId - the unique id of the resource to update
+ * @param newValue   - the new resource value
+ * @param metadata   - optional metadata to attach to the resource-updated event,
+ *                     or NULL for none
+ */
 void updateResource(const char *deviceUuid,
                     const char *endpointId,
                     const char *resourceId,

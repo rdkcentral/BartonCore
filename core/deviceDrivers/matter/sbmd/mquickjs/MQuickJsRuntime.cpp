@@ -29,6 +29,8 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "MQuickJsRuntime.h"
+#include "SbmdJsUtil.h"
+#include "matter/sbmd/SafeJSValue.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -46,58 +48,44 @@ extern const JSSTDLibraryDef js_stdlib;
 
 namespace barton
 {
+    using namespace mquickjs;
 
-// Static member initialization
-uint8_t *MQuickJsRuntime::memBuffer = nullptr;
-size_t MQuickJsRuntime::memSize = 0;
-JSContext *MQuickJsRuntime::ctx = nullptr;
-std::mutex MQuickJsRuntime::mutex;
-bool MQuickJsRuntime::initialized = false;
-size_t MQuickJsRuntime::peakHeapUsed = 0;
-std::chrono::steady_clock::time_point MQuickJsRuntime::deadline {};
-namespace
-{
-    /**
-     * Extract mquickjs exception as a string.
-     */
-    std::string GetExceptionString(JSContext *ctx)
+    // Static member initialization
+    uint8_t *MQuickJsRuntime::memBuffer = nullptr;
+    size_t MQuickJsRuntime::memSize = 0;
+    JSContext *MQuickJsRuntime::ctx = nullptr;
+    std::mutex MQuickJsRuntime::mutex;
+    bool MQuickJsRuntime::initialized = false;
+    size_t MQuickJsRuntime::peakHeapUsed = 0;
+    std::chrono::steady_clock::time_point MQuickJsRuntime::deadline {};
+
+    namespace
     {
-        JSValue ex = JS_GetException(ctx);
-
-        JSCStringBuf buf;
-        const char *str = JS_ToCString(ctx, ex, &buf);
-        if (str)
+        /**
+         * Interrupt handler for script execution timeout.
+         *
+         * Called periodically by the mquickjs engine during bytecode execution.
+         * Returns non-zero to abort the running script when the deadline has passed.
+         * When no deadline is active (epoch value), always returns 0.
+         */
+        int ScriptInterruptHandler(JSContext * /*ctx*/, void * /*opaque*/)
         {
-            return std::string(str);
-        }
-        return "unknown error";
-    }
+            auto currentDeadline = MQuickJsRuntime::GetDeadline();
 
-    /**
-     * Interrupt handler for script execution timeout.
-     *
-     * Called periodically by the mquickjs engine during bytecode execution.
-     * Returns non-zero to abort the running script when the deadline has passed.
-     * When no deadline is active (epoch value), always returns 0.
-     */
-    int ScriptInterruptHandler(JSContext * /*ctx*/, void * /*opaque*/)
-    {
-        auto currentDeadline = MQuickJsRuntime::GetDeadline();
+            // No deadline set, allow script to run uninterrupted
+            if (currentDeadline == std::chrono::steady_clock::time_point {})
+            {
+                return 0;
+            }
 
-        // No deadline set, allow script to run uninterrupted
-        if (currentDeadline == std::chrono::steady_clock::time_point {})
-        {
+            if (std::chrono::steady_clock::now() > currentDeadline)
+            {
+                icError("SBMD script execution timeout: script exceeded the configured time limit");
+                return 1;
+            }
+
             return 0;
         }
-
-        if (std::chrono::steady_clock::now() > currentDeadline)
-        {
-            icError("SBMD script execution timeout: script exceeded the configured time limit");
-            return 1;
-        }
-
-        return 0;
-    }
 
 } // anonymous namespace
 
@@ -234,15 +222,18 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
         return false;
     }
 
-    JSValue pendingEx = JS_GetException(ctx);
+    JSValue pendingExRaw = JS_GetException(ctx);
 
     // JS_GetException returns JS_NULL or JS_UNDEFINED when no exception is pending
-    bool hasException = !JS_IsNull(pendingEx) && !JS_IsUndefined(pendingEx) && !JS_IsUninitialized(pendingEx);
+    bool hasException = !JS_IsNull(pendingExRaw) && !JS_IsUndefined(pendingExRaw) && !JS_IsUninitialized(pendingExRaw);
 
     if (!hasException)
     {
         return false;
     }
+
+    // Root the exception across property reads/conversions; mquickjs can relocate unrooted JSValues.
+    SafeJSValue pendingEx(ctx, pendingExRaw);
 
     // Extract exception message if caller wants it
     if (outExceptionMsg)
@@ -250,23 +241,23 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
         std::string exMsg;
 
         // Try ToCString for string exceptions
-        if (JS_IsString(ctx, pendingEx))
+        if (JS_IsString(ctx, pendingEx.Get()))
         {
             JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, pendingEx, &buf);
+            const char *str = JS_ToCString(ctx, pendingEx.Get(), &buf);
             if (str)
             {
                 exMsg = str;
             }
         }
-        else if (JS_IsPtr(pendingEx))
+        else if (JS_IsPtr(pendingEx.Get()))
         {
             // Try "message" property for Error objects
-            JSValue msgVal = JS_GetPropertyStr(ctx, pendingEx, "message");
-            if (JS_IsString(ctx, msgVal))
+            SafeJSValue msgVal(ctx, JS_GetPropertyStr(ctx, pendingEx.Get(), "message"));
+            if (JS_IsString(ctx, msgVal.Get()))
             {
                 JSCStringBuf buf;
-                const char *msgStr = JS_ToCString(ctx, msgVal, &buf);
+                const char *msgStr = JS_ToCString(ctx, msgVal.Get(), &buf);
                 if (msgStr)
                 {
                     exMsg = msgStr;
@@ -274,11 +265,11 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
             }
 
             // Also try to get stack trace for debugging
-            JSValue stackVal = JS_GetPropertyStr(ctx, pendingEx, "stack");
-            if (JS_IsString(ctx, stackVal))
+            SafeJSValue stackVal(ctx, JS_GetPropertyStr(ctx, pendingEx.Get(), "stack"));
+            if (JS_IsString(ctx, stackVal.Get()))
             {
                 JSCStringBuf buf;
-                const char *stackStr = JS_ToCString(ctx, stackVal, &buf);
+                const char *stackStr = JS_ToCString(ctx, stackVal.Get(), &buf);
                 if (stackStr)
                 {
                     if (!exMsg.empty())
@@ -288,12 +279,28 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
                     exMsg += stackStr;
                 }
             }
+
+            // Pull name/fileName/lineNumber to help localize throws that carry no
+            // useful stack (e.g. exceptions raised from native bindings).
+            for (const char *prop : {"name", "fileName", "lineNumber"})
+            {
+                SafeJSValue propVal(ctx, JS_GetPropertyStr(ctx, pendingEx.Get(), prop));
+                JSCStringBuf buf;
+                const char *propStr = JS_ToCString(ctx, propVal.Get(), &buf);
+                if (propStr)
+                {
+                    exMsg += " | ";
+                    exMsg += prop;
+                    exMsg += "=";
+                    exMsg += propStr;
+                }
+            }
         }
         else
         {
             // Try ToCString as fallback for other types
             JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, pendingEx, &buf);
+            const char *str = JS_ToCString(ctx, pendingEx.Get(), &buf);
             if (str)
             {
                 exMsg = str;

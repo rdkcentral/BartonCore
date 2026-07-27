@@ -593,6 +593,24 @@ static bool getStatusFunc(BCoreClient *client, gint argc, gchar **argv)
     return result;
 }
 
+static bool getTelemetryFunc(BCoreClient *client, gint argc, gchar **argv)
+{
+    (void) argc;
+    (void) argv;
+
+    g_autofree gchar *json = b_core_client_get_telemetry(client);
+
+    if (json == NULL)
+    {
+        emitOutput("No telemetry data available (observability backend may be disabled).\n");
+        return false;
+    }
+
+    emitOutput("%s\n", json);
+
+    return true;
+}
+
 static void dumpResource(BCoreResource *resource, gchar *prefix)
 {
     if (resource == NULL)
@@ -1157,6 +1175,10 @@ Category *buildCoreCategory(void)
 
     // get the status of device service
     command = commandCreate("getStatus", "gs", NULL, "Get the status of device service", 0, 0, getStatusFunc);
+    categoryAddCommand(cat, command);
+
+    // get telemetry metrics
+    command = commandCreate("getTelemetry", "gt", NULL, "Dump all observability metrics as JSON", 0, 0, getTelemetryFunc);
     categoryAddCommand(cat, command);
 
     // dump device

@@ -73,9 +73,12 @@ namespace barton
          *       the fabric ID.
          *
          * @param accountId the active account ID
+         * @param attestationTrustStorePath path to attestation trust store
+         * @param configDir runtime Matter configuration/storage directory.
+         *        When empty, falls back to the compile-time CHIP_BARTON_CONF_DIR.
          * @return true upon success
          */
-        bool Init(uint64_t accountId, std::string &&attestationTrustStorePath);
+        bool Init(uint64_t accountId, std::string &&attestationTrustStorePath, const std::string &configDir = {});
 
         /**
          * Start the Matter interface.

@@ -34,11 +34,11 @@
 export function parseArgs(argv) {
     const args = {};
     const validFlags = new Set([
-        "--passcode",
-        "--discriminator",
-        "--port",
-        "--vendor-id",
-        "--product-id"
+        '--passcode',
+        '--discriminator',
+        '--port',
+        '--vendor-id',
+        '--product-id'
     ]);
 
     for (let i = 2; i < argv.length; i += 2) {
@@ -50,7 +50,7 @@ export function parseArgs(argv) {
 
         const value = argv[i + 1];
 
-        if (value === undefined || value.startsWith("--")) {
+        if (value === undefined || value.startsWith('--')) {
             throw new Error(`Flag ${key} requires a value`);
         }
 
@@ -61,19 +61,19 @@ export function parseArgs(argv) {
         }
 
         switch (key) {
-            case "--passcode":
+            case '--passcode':
                 args.passcode = parsedValue;
                 break;
-            case "--discriminator":
+            case '--discriminator':
                 args.discriminator = parsedValue;
                 break;
-            case "--port":
+            case '--port':
                 args.port = parsedValue;
                 break;
-            case "--vendor-id":
+            case '--vendor-id':
                 args.vendorId = parsedValue;
                 break;
-            case "--product-id":
+            case '--product-id':
                 args.productId = parsedValue;
                 break;
         }

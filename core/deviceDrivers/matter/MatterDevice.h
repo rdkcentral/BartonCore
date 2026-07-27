@@ -27,18 +27,20 @@
 
 #pragma once
 
+#include "app/CommandHandlerInterface.h"
 #include "app/CommandSender.h"
 #include "lib/core/DataModelTypes.h"
 #include "lib/core/TLVReader.h"
-#include "matter/sbmd/SbmdSpec.h"
-#include "matter/sbmd/SbmdScript.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include <forward_list>
+#include <functional>
 #include <future>
 #include <map>
+#include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
-#include <optional>
+#include <vector>
 
 extern "C" {
 #include <device/icDeviceResource.h>
@@ -72,192 +74,111 @@ namespace barton
 
         const std::string &GetDeviceId() const { return deviceId; }
 
-        void SetScript(std::unique_ptr<SbmdScript> newScript)
+        /**
+         * Callback type for attribute change handling.
+         * Receives the endpoint, cluster, and attribute IDs along with a TLV reader positioned
+         * at the attribute value. Called from CacheCallback::OnAttributeChanged when set.
+         */
+        using AttributeCallback = std::function<void(const std::string &deviceId,
+                                                       chip::EndpointId endpointId,
+                                                       chip::ClusterId clusterId,
+                                                       chip::AttributeId attributeId,
+                                                       chip::TLV::TLVReader &reader)>;
+
+        /**
+         * Callback type for event data handling.
+         * Receives the endpoint, cluster, and event IDs along with a TLV reader positioned
+         * at the event data. Called from CacheCallback::OnEventData when set.
+         */
+        using EventCallback = std::function<void(const std::string &deviceId,
+                                                 chip::EndpointId endpointId,
+                                                 chip::ClusterId clusterId,
+                                                 chip::EventId eventId,
+                                                 chip::TLV::TLVReader &reader)>;
+
+        /**
+         * Set an attribute callback. When set, CacheCallback::OnAttributeChanged will
+         * dispatch attribute data through this callback.
+         */
+        void SetAttributeCallback(AttributeCallback callback)
         {
-            script = std::move(newScript);
+            attributeCallback = std::move(callback);
         }
+
+        /**
+         * Callback type for incoming (server-side) command handling.
+         * Receives the endpoint, cluster, and command IDs along with a TLV reader positioned
+         * at the command payload. Called from IncomingCommandHandler::InvokeCommand when set.
+         */
+        using CommandCallback = std::function<void(const std::string &deviceId,
+                                                   chip::EndpointId endpointId,
+                                                   chip::ClusterId clusterId,
+                                                   chip::CommandId commandId,
+                                                   chip::TLV::TLVReader &reader)>;
+
+        /**
+         * Set an event callback. When set, CacheCallback::OnEventData will
+         * call this to dispatch event data to the driver.
+         */
+        void SetEventCallback(EventCallback callback) { eventCallback = std::move(callback); }
+
+        /**
+         * Set a command callback for incoming (server-side) commands.
+         * When set, IncomingCommandHandler::InvokeCommand will call this.
+         */
+        void SetCommandCallback(CommandCallback callback) { commandCallback = std::move(callback); }
+
+        /**
+         * Register a CommandHandlerInterface for the given cluster so that incoming
+         * commands on that cluster are routed to the commandCallback.
+         * Uses Optional<EndpointId>::Missing() to handle all endpoints.
+         *
+         * @param clusterId The Matter cluster ID to handle incoming commands for.
+         */
+        void RegisterIncomingCommandHandler(chip::ClusterId clusterId);
+
+        /**
+         * Unregister all incoming command handlers previously registered via
+         * RegisterIncomingCommandHandler. Called from the destructor.
+         */
+        void UnregisterIncomingCommandHandlers();
 
         /**
          * Set the list of cluster IDs to get feature maps from.
          * These are specified in the SBMD spec's matterMeta.featureClusters.
-         * If the device cache is already available, also updates the cached feature maps.
          */
         void SetFeatureClusters(std::vector<uint32_t> clusters)
         {
             featureClusters = std::move(clusters);
-            // If we already have a script and cache, update feature maps now
-            if (script && deviceDataCache)
-            {
-                UpdateCachedFeatureMaps();
-            }
         }
+
+        /**
+         * Get the cached cluster feature maps.
+         * @return Map of cluster ID to feature map value.
+         */
+        const std::map<uint32_t, uint32_t> &GetCachedClusterFeatureMaps() const
+        {
+            return cachedClusterFeatureMaps;
+        }
+
+        /**
+         * Compute feature maps for all configured featureClusters and cache them.
+         * Normally invoked when the cache subscription is established, but may be called
+         * explicitly once the priming report has populated the cache (e.g. after the device's
+         * CacheCallback is registered, which can happen after the subscription was established).
+         */
+        void UpdateCachedFeatureMaps();
 
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache() const { return deviceDataCache; }
 
         /**
          * Build the SBMD-endpoint-to-Matter-endpoint mapping by matching device type lists
          * from the Descriptor cluster against the provided device types.
-         * Must be called before resource binding.
          *
          * @param driverSupportedDeviceTypes The Matter device type IDs to match against.
          * @return True if at least one matching endpoint was found, false otherwise.
          */
         bool ResolveEndpointMap(const std::vector<uint16_t> &driverSupportedDeviceTypes);
-
-        /**
-         * Bind a resource URI for read operations.
-         * Can bind either an attribute or command based on what's in the mapper.
-         *
-         * @param uri The resource URI
-         * @param mapper The mapper containing read configuration
-         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
-         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
-         * resources).
-         * @return True if binding was successful, false otherwise.
-         */
-        bool BindResourceReadInfo(const char *uri,
-                                  const SbmdMapper &mapper,
-                                  std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
-
-        /**
-         * Bind a resource URI for write operations.
-         * The script returns full operation details (invoke/write) including cluster/command/attribute IDs.
-         *
-         * @param uri The resource URI
-         * @param resourceKey The resource key for script lookup (endpointId:resourceId)
-         * @param endpointId The endpoint ID (may be empty for device-level resources)
-         * @param resourceId The resource identifier
-         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
-         *                         When nullopt, falls back to GetEndpointForCluster at exec time
-         *                         (useful for device-level resources).
-         * @return True if binding was successful, false otherwise.
-         */
-        bool BindWriteInfo(const char *uri,
-                           const std::string &resourceKey,
-                           const std::string &endpointId,
-                           const std::string &resourceId,
-                           std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
-
-        /**
-         * Bind a resource URI for execute operations.
-         * The script returns full operation details (invoke) including cluster/command IDs.
-         *
-         * @param uri The resource URI
-         * @param resourceKey The resource key for script lookup (endpointId:resourceId)
-         * @param endpointId The endpoint ID (may be empty for device-level resources)
-         * @param resourceId The resource identifier
-         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
-         *                         When nullopt, falls back to GetEndpointForCluster at exec time
-         *                         (useful for device-level resources).
-         * @return True if binding was successful, false otherwise.
-         */
-        bool BindExecuteInfo(const char *uri,
-                             const std::string &resourceKey,
-                             const std::string &endpointId,
-                             const std::string &resourceId,
-                             std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
-
-        /**
-         * Bind a resource URI for event-driven updates.
-         * When the specified event is received, the event mapper script will convert
-         * the event data to a resource value and update the resource.
-         *
-         * @param uri The resource URI
-         * @param event The event information
-         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
-         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
-         * resources).
-         * @return True if binding was successful, false otherwise.
-         */
-        bool BindResourceEventInfo(const char *uri,
-                                   const SbmdEvent &event,
-                                   std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
-
-        /**
-         * Bind a resource URI for seedFrom operations.
-         * The seedFrom attribute is read from the cache once at configure and synchronize time
-         * to provide the initial value for an event-driven resource. It is NOT registered in
-         * readableAttributeLookup — it never triggers on live subscription callbacks.
-         *
-         * @param uri The resource URI
-         * @param mapper The mapper containing the seedFrom attribute (seedFromAttribute must be set)
-         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
-         *                         When nullopt, falls back to GetEndpointForCluster.
-         * @return True if binding was successful, false otherwise.
-         */
-        bool BindResourceSeedFromInfo(const char *uri,
-                                      const SbmdMapper &mapper,
-                                      std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
-
-        /**
-         * Compute the seeded value for a resource from the device data cache without writing it
-         * anywhere. Returns the mapped string value if the seedFrom binding exists and the
-         * attribute is present in cache; returns std::nullopt otherwise.
-         *
-         * @param uri The resource URI
-         * @return The computed seed value, or std::nullopt if unavailable
-         */
-        std::optional<std::string> ReadSeedValueFromAttribute(const char *uri);
-
-        /**
-         * Read the seedFrom attribute for a resource from the device data cache and update
-         * the resource value via updateResource(). Called at synchronize time.
-         * Does nothing if no seedFrom binding exists for the URI or the attribute is not in cache.
-         *
-         * @param uri The resource URI
-         */
-        void SeedResourceFromAttribute(const char *uri);
-
-        /**
-         * Handle a resource read request by looking up the binding and executing the script.
-         * If the related attribute data is in the cache, this is a synchronous operation.
-         * Otherwise, it may involve an asynchronous read from the device [NOT YET IMPLEMENTED].
-         *
-         * @param promises Forward list of promises to fulfill on completion
-         * @param resource The device resource to read
-         * @param[out] value The output string value after script execution
-         * @param exchangeMgr The exchange manager for Matter communication
-         * @param sessionHandle The session handle for the device
-         */
-        void HandleResourceRead(std::forward_list<std::promise<bool>> &promises,
-                                icDeviceResource *resource,
-                                char **value,
-                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                const chip::SessionHandle &sessionHandle);
-
-        /**
-         * Handle a resource write request by looking up the binding and executing the script.
-         *
-         * @param promises Forward list of promises to fulfill on completion
-         * @param resource The device resource to read
-         * @param previousValue The previous string value before the write
-         * @param newValue The new string value to write
-         * @param exchangeMgr The exchange manager for Matter communication
-         * @param sessionHandle The session handle for the device
-         */
-        void HandleResourceWrite(std::forward_list<std::promise<bool>> &promises,
-                                 icDeviceResource *resource,
-                                 const char *previousValue,
-                                 const char *newValue,
-                                 chip::Messaging::ExchangeManager &exchangeMgr,
-                                 const chip::SessionHandle &sessionHandle);
-
-        /**
-         * Handle a resource execute request by looking up the binding and executing the script.
-         *
-         * @param promises Forward list of promises to fulfill on completion
-         * @param resource The device resource to execute
-         * @param arg The input argument string
-         * @param[out] response The output response string
-         * @param exchangeMgr The exchange manager for Matter communication
-         * @param sessionHandle The session handle for the device
-         */
-        void HandleResourceExecute(std::forward_list<std::promise<bool>> &promises,
-                                   icDeviceResource *resource,
-                                   const char *arg,
-                                   char **response,
-                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                   const chip::SessionHandle &sessionHandle);
 
         //WriteClient::Callback overrides
         /**
@@ -338,6 +259,55 @@ namespace barton
     private:
         // Allow test subclass to access private members for testing
         friend class TestableMatterDevice;
+        friend class SpecBasedMatterDeviceDriver;
+
+        /**
+         * Send a command to the device using pre-encoded TLV data.
+         */
+        bool SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                chip::ClusterId clusterId,
+                                chip::CommandId commandId,
+                                std::optional<uint16_t> timedInvokeTimeoutMs,
+                                chip::EndpointId endpointId,
+                                const uint8_t *tlvBuffer,
+                                size_t encodedLength,
+                                chip::Messaging::ExchangeManager &exchangeMgr,
+                                const chip::SessionHandle &sessionHandle,
+                                const char *uri,
+                                char **response);
+
+        /**
+         * Send a command with deferred callbacks instead of promise-based completion.
+         * Used by requestCommand terminals where the driver manages the promise.
+         *
+         * @param onResponse Called on successful response with path and optional data TLV.
+         * @param onError Called when the command fails (path error or transport error).
+         * @return true if the command was successfully initiated.
+         */
+        bool SendCommandWithCallbacks(chip::ClusterId clusterId,
+                                      chip::CommandId commandId,
+                                      std::optional<uint16_t> timedInvokeTimeoutMs,
+                                      chip::EndpointId endpointId,
+                                      const uint8_t *tlvBuffer,
+                                      size_t encodedLength,
+                                      chip::Messaging::ExchangeManager &exchangeMgr,
+                                      const chip::SessionHandle &sessionHandle,
+                                      std::function<void(const chip::app::ConcreteCommandPath &,
+                                                         chip::TLV::TLVReader *)> onResponse,
+                                      std::function<void(CHIP_ERROR)> onError);
+
+        /**
+         * Write an attribute to the device using pre-encoded TLV data.
+         */
+        bool WriteAttributeFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                   chip::EndpointId endpointId,
+                                   chip::ClusterId clusterId,
+                                   chip::AttributeId attributeId,
+                                   const uint8_t *tlvBuffer,
+                                   size_t encodedLength,
+                                   chip::Messaging::ExchangeManager &exchangeMgr,
+                                   const chip::SessionHandle &sessionHandle,
+                                   const char *uri);
 
         /**
          * Synchronously get attribute data from the cache as a TLVReader.
@@ -415,12 +385,6 @@ namespace barton
         bool GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap);
 
         /**
-         * Compute feature maps for all configured featureClusters and pass them to the script.
-         * Called when subscription is established and cluster data is available.
-         */
-        void UpdateCachedFeatureMaps();
-
-        /**
          * @brief Call to ensure a driver operation is considered failed, e.g.,
          *        when no promises have been made. This does nothing
          *        when promises have been stored in the Matter SDK for a pending
@@ -465,146 +429,32 @@ namespace barton
             MatterDevice *device;
         };
 
-        struct ResourceBinding
-        {
-            enum class Type
-            {
-                Attribute,
-                Command,
-                ScriptOnly // For write/execute mappers - script returns full operation details
-            };
-            Type type;
-
-            // For Attribute type
-            chip::app::ConcreteAttributePath attributePath;
-            std::optional<SbmdAttribute> attribute;
-
-            // For Command type
-            std::optional<SbmdCommand> command;
-
-            // For ScriptOnly type - resource identity for script lookup
-            std::string resourceKey;
-            std::string endpointId;
-            std::string resourceId;
-
-            // Pre-resolved Matter endpoint for ScriptOnly bindings.
-            // For endpoint-level ScriptOnly bindings, this is set at bind time using the
-            // endpoint map when the sbmdEndpointIndex can be resolved. There is currently
-            // no cluster lookup at bind time.
-            // For device-level ScriptOnly bindings this is always std::nullopt, and for
-            // endpoint-level bindings it may also be std::nullopt when the index cannot
-            // be resolved; both cases are expected and valid.
-            std::optional<chip::EndpointId> resolvedEndpointId;
-        };
-
-        // Hash function for ConcreteAttributePath to enable fast lookup
-        struct AttributePathHash
-        {
-            std::size_t operator()(const chip::app::ConcreteAttributePath &path) const
-            {
-                std::size_t result = std::hash<chip::EndpointId> {}(path.mEndpointId);
-                result ^= std::hash<chip::ClusterId> {}(path.mClusterId) + 0x9e3779b9 + (result << 6) + (result >> 2);
-                result ^=
-                    std::hash<chip::AttributeId> {}(path.mAttributeId) + 0x9e3779b9 + (result << 6) + (result >> 2);
-                return result;
-            }
-        };
-
-        // Equality function for ConcreteAttributePath
-        struct AttributePathEqual
-        {
-            bool operator()(const chip::app::ConcreteAttributePath &lhs,
-                            const chip::app::ConcreteAttributePath &rhs) const
-            {
-                return lhs.mEndpointId == rhs.mEndpointId && lhs.mClusterId == rhs.mClusterId &&
-                       lhs.mAttributeId == rhs.mAttributeId;
-            }
-        };
-
-        // Structure to hold URI and binding info for fast attribute lookup
-        struct AttributeReadBinding
-        {
-            std::string uri;
-            ResourceBinding binding;
-        };
-
-        // EventPath structure for event lookup
-        struct EventPath
-        {
-            chip::EndpointId endpointId;
-            chip::ClusterId clusterId;
-            chip::EventId eventId;
-
-            bool operator==(const EventPath &other) const
-            {
-                return endpointId == other.endpointId && clusterId == other.clusterId && eventId == other.eventId;
-            }
-        };
-
-        // Hash function for EventPath to enable fast lookup
-        struct EventPathHash
-        {
-            std::size_t operator()(const EventPath &path) const
-            {
-                std::size_t result = std::hash<chip::EndpointId> {}(path.endpointId);
-                result ^= std::hash<chip::ClusterId> {}(path.clusterId) + 0x9e3779b9 + (result << 6) + (result >> 2);
-                result ^= std::hash<chip::EventId> {}(path.eventId) + 0x9e3779b9 + (result << 6) + (result >> 2);
-                return result;
-            }
-        };
-
-        // Structure to hold URI and binding info for fast event lookup
-        struct EventBinding
-        {
-            std::string uri;
-            SbmdEvent event;
-        };
-
         /**
-         * Send a command to the device using pre-encoded TLV data.
-         * Common helper used by both write-command and execute-command paths.
-         *
-         * @param promises Forward list of promises to fulfill on completion
-         * @param command The command definition with cluster info and optional timed invoke timeout
-         * @param endpointId The endpoint to send the command to
-         * @param tlvBuffer Buffer containing the TLV-encoded command arguments
-         * @param encodedLength Length of the encoded TLV data
-         * @param exchangeMgr The exchange manager for Matter communication
-         * @param sessionHandle The session handle for the device
-         * @param uri The resource URI (for logging)
-         * @param response Optional pointer to store command response (nullptr for write operations)
-         * @return True if command was successfully initiated, false otherwise
+         * Implements CommandHandlerInterface for a single cluster, routing
+         * incoming commands to the owning MatterDevice's commandCallback.
          */
-        bool SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
-                                const SbmdCommand &command,
-                                chip::EndpointId endpointId,
-                                const uint8_t *tlvBuffer,
-                                size_t encodedLength,
-                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                const chip::SessionHandle &sessionHandle,
-                                const char *uri,
-                                char **response);
+        class IncomingCommandHandler : public chip::app::CommandHandlerInterface
+        {
+        public:
+            IncomingCommandHandler(MatterDevice *device, chip::ClusterId clusterId);
+            ~IncomingCommandHandler() override;
+
+            void InvokeCommand(HandlerContext &handlerContext) override;
+
+        private:
+            MatterDevice *device;
+        };
 
         std::string deviceId;
         std::shared_ptr<DeviceDataCache> deviceDataCache;
-        std::unique_ptr<SbmdScript> script; //add this in a SbmdDevice subclass or move all drivers completely to SBMD
+        AttributeCallback attributeCallback;
+        EventCallback eventCallback;
+        CommandCallback commandCallback;
         std::unique_ptr<CacheCallback> cacheCallback;
-        std::vector<uint32_t> featureClusters; // Cluster IDs to get feature maps from (from SBMD spec)
-        std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index → resolved Matter EndpointId
-        std::map<std::string, ResourceBinding> resourceReadBindings;
-        std::map<std::string, ResourceBinding> resourceWriteBindings;
-        std::map<std::string, ResourceBinding> resourceExecuteBindings;
-        std::map<std::string, ResourceBinding> resourceSeedFromBindings;
-        // Fast O(1) lookup for readable attributes in OnAttributeData callback
-        // Uses a multimap because multiple resources may read from the same attribute
-        // when different SBMD resources are backed by a shared Matter attribute path.
-        std::unordered_multimap<chip::app::ConcreteAttributePath,
-                                AttributeReadBinding,
-                                AttributePathHash,
-                                AttributePathEqual>
-            readableAttributeLookup;
-        // Fast O(1) lookup for events in OnEventData callback
-        std::unordered_map<EventPath, EventBinding, EventPathHash> eventLookup;
+        std::vector<std::unique_ptr<IncomingCommandHandler>> incomingCommandHandlers;
+        std::vector<uint32_t> featureClusters;
+        std::map<uint32_t, uint32_t> cachedClusterFeatureMaps;
+        std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index -> resolved Matter EndpointId
 
         // Context for tracking active write operations
         struct WriteContext
@@ -618,10 +468,16 @@ namespace barton
         // Context for tracking active command operations
         struct CommandContext
         {
-            std::promise<bool> *commandPromise;
+            std::promise<bool> *commandPromise = nullptr;
             std::unique_ptr<chip::app::CommandSender> commandSender;
-            SbmdCommand commandInfo; // For response mapping
-            char **response;         // Pointer to store response string
+            char **response = nullptr;
+
+            // Deferred mode: when set, OnResponse/OnError call these instead of resolving the promise
+            std::function<void(const chip::app::ConcreteCommandPath &,
+                               chip::TLV::TLVReader *)> deferredOnResponse;
+            std::function<void(CHIP_ERROR)> deferredOnError;
+
+            bool IsDeferred() const { return deferredOnResponse != nullptr; }
         };
         std::map<chip::app::CommandSender *, CommandContext> activeCommandContexts;
     };

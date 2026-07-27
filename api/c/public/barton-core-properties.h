@@ -200,6 +200,18 @@ G_BEGIN_DECLS
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "setupPasscode"
 
 /**
+ * MATTER_COMMISSIONING_FLOW: (value "barton.matter.commissioningFlow")
+ *
+ * The commissioning flow advertised in the Matter device's onboarding payload
+ * (QR code and manual setup code). Valid values match the Matter Commissioning
+ * Flow field: 0 = Standard, 1 = User Action Required, 2 = Custom.
+ * This property is optional; when unset it defaults to Standard (0).
+ * Property Value Type: uint8
+ */
+#define B_CORE_BARTON_MATTER_COMMISSIONING_FLOW                                                              \
+    B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "commissioningFlow"
+
+/**
  * MATTER_SPAKE2P_ITERATION_COUNT: (value "barton.matter.spake2pIterationCount")
  *
  * The iteration count for the Matter device's spake2p verifier.

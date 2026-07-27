@@ -39,6 +39,7 @@
 #include "event/deviceEventProducer.h"
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icLinkedListFuncs.h"
+#include "observability/observability.h"
 
 #ifdef BARTON_CONFIG_ZIGBEE
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"
@@ -189,6 +190,26 @@ BCoreStatus *b_core_client_get_status(BCoreClient *self)
 
     scoped_DeviceServiceStatus *status = deviceServiceGetStatus();
     return convertDeviceServiceStatusToGObject(status);
+}
+
+gchar *b_core_client_get_telemetry(BCoreClient *self)
+{
+    g_return_val_if_fail(self != NULL, NULL);
+
+    char *json = observabilityDumpJson();
+
+    if (json == NULL)
+    {
+        return NULL;
+    }
+
+    /* Transfer ownership to glib — observabilityDumpJson uses malloc,
+     * but the public API contract says g_free(). Copy into g_strdup
+     * and free the original. */
+    gchar *result = g_strdup(json);
+    free(json);
+
+    return result;
 }
 
 static gboolean doDiscovery(BCoreClient *self,
