@@ -160,6 +160,15 @@ namespace barton
         static std::chrono::steady_clock::time_point GetDeadline();
 
         /**
+         * Mark that the script interrupt handler fired (deadline exceeded).
+         *
+         * Public only because ScriptInterruptHandler is a C-compatible callback in an
+         * anonymous namespace and cannot be a friend. Do not call this from anywhere
+         * other than ScriptInterruptHandler.
+         */
+        static void RecordInterrupt();
+
+        /**
          * Return whether the interrupt handler has fired since the last SetDeadline call.
          *
          * @return true if ScriptInterruptHandler fired for the current JS_Call
@@ -190,9 +199,6 @@ namespace barton
         // Shutdown(). Used by MQuickJsRuntimeMetrics as a lock-free early-exit
         // guard in ForceSnapshot().
         static std::atomic<bool> jsContextReady;
-
-        // Called exclusively from ScriptInterruptHandler when it returns 1.
-        static void RecordInterrupt();
     };
 
 } // namespace barton
