@@ -45,90 +45,83 @@ namespace barton
     /**
      * Observability metrics for the mquickjs JS runtime: heap pool health,
      * GC activity, mutex contention, and JS exceptions.
-     *
-     * Self-registers with MetricsRegistry at static-initialization time.
-     * InitializeMetrics() / ShutdownMetrics() are called by MetricsRegistry
-     * — do not call them directly.
      */
     class MQuickJsRuntimeMetrics
     {
-    public:
-        static void InitializeMetrics();
-        static void ShutdownMetrics();
+        friend class MQuickJsRuntime;
+
 
         /**
          * Start the background idle heap sampler.
          * No-op if BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS <= 0.
-         * Called by MQuickJsRuntime::Initialize() after jsContextReady = true.
          */
-        static void StartSampler();
+        void StartSampler();
 
         /**
          * Stop and join the background idle heap sampler.
-         * Called by MQuickJsRuntime::Shutdown() before freeing the JS context.
          */
-        static void StopSampler();
+        void StopSampler();
 
         /**
          * Synchronously sample heap stats and record pool health metrics.
          * Acquires the JS mutex internally. No-op if context not ready or
          * handles not initialized.
          */
-        static void ForceSnapshot();
+        void ForceSnapshot();
 
         /**
          * Reset the idle sampler timer without waiting for the full period.
          * Safe to call while holding the JS mutex.
          */
-        static void TickleSampler();
+        void TickleSampler();
 
         /**
          * Record pool health metrics from an already-captured JSMemoryUsage.
          * Must be called while holding MQuickJsRuntime::GetMutex().
          */
-        static void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
+        void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
 
         /**
-         * Record the arena size gauge (called once at MQuickJsRuntime::Initialize
-         * time with the configured memory-pool size).
+         * Record the arena size gauge (called once at initialization time
+         * with the configured memory-pool size).
          */
-        static void RecordArenaSize(int64_t bytes);
+        void RecordArenaSize(int64_t bytes);
 
         /** Record a JS mutex wait duration in milliseconds. */
-        static void RecordMutexWait(double ms);
+        void RecordMutexWait(double ms);
 
         /**
          * Record a JS exception event.
          * @param phase  "init" or "loading"
          * @param driver Filename stem, or nullptr to omit the "driver" attribute
          */
-        static void RecordJsException(const char *phase, const char *driver);
+        void RecordJsException(const char *phase, const char *driver);
 
         /**
-         * GC instrumentation callback — registered with JS_SetGCCallback.
-         * Called by the mquickjs engine at GC start (isEnd == 0) and end
-         * (isEnd == 1).
+         * GC instrumentation callback — registered with JS_SetGCCallback with
+         * this instance as opaque. Called by the mquickjs engine at GC start
+         * (isEnd == 0) and end (isEnd == 1).
          */
         static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
+        void InitInstruments();
 
-    private:
-        static ObservabilityHistogram *heapUsedHisto;
-        static ObservabilityGauge *heapArenaGauge;
-        static ObservabilityGauge *heapFreeGauge;
-        static ObservabilityGauge *heapPeakGauge;
-        static ObservabilityHistogram *mutexWaitHisto;
-        static ObservabilityCounter *jsExceptionCounter;
-        static ObservabilityCounter *gcCountCounter;
-        static ObservabilityHistogram *gcDurationHisto;
-        static ObservabilityGauge *gcRootsGauge;
+        ObservabilityHistogram *heapUsedHisto = nullptr;
+        ObservabilityGauge *heapArenaGauge = nullptr;
+        ObservabilityGauge *heapFreeGauge = nullptr;
+        ObservabilityGauge *heapPeakGauge = nullptr;
+        ObservabilityHistogram *mutexWaitHisto = nullptr;
+        ObservabilityCounter *jsExceptionCounter = nullptr;
+        ObservabilityCounter *gcCountCounter = nullptr;
+        ObservabilityHistogram *gcDurationHisto = nullptr;
+        ObservabilityGauge *gcRootsGauge = nullptr;
 
-        static std::thread periodicSamplerThread;
-        static std::atomic<bool> samplerShouldStop;
-        static std::atomic<uint64_t> tickleSeq;
-        static std::condition_variable samplerCv;
-        static std::mutex samplerCvMutex;
-        static std::chrono::steady_clock::time_point gcStartTime;
-        static int64_t peakHeapRecorded;
+        std::thread periodicSamplerThread;
+        std::atomic<bool> samplerShouldStop {false};
+        std::atomic<uint64_t> tickleSeq {0};
+        std::condition_variable samplerCv;
+        std::mutex samplerCvMutex;
+        std::chrono::steady_clock::time_point gcStartTime;
+        int64_t peakHeapRecorded = 0;
     };
 
 } // namespace barton
@@ -139,17 +132,23 @@ namespace barton
 {
     class MQuickJsRuntimeMetrics
     {
-    public:
-        static void InitializeMetrics() {}
-        static void ShutdownMetrics() {}
-        static void StartSampler() {}
-        static void StopSampler() {}
-        static void ForceSnapshot() {}
-        static void TickleSampler() {}
-        static void RecordHeapSnapshot(const JSMemoryUsage &, size_t) {}
-        static void RecordArenaSize(int64_t) {}
-        static void RecordMutexWait(double) {}
-        static void RecordJsException(const char *, const char *) {}
+        friend class MQuickJsRuntime;
+
+        void StartSampler() {}
+
+        void StopSampler() {}
+
+        void ForceSnapshot() {}
+
+        void TickleSampler() {}
+
+        void RecordHeapSnapshot(const JSMemoryUsage &, size_t) {}
+
+        void RecordArenaSize(int64_t) {}
+
+        void RecordMutexWait(double) {}
+
+        void RecordJsException(const char *, const char *) {}
         static void GCCallback(JSContext *, int, void *) noexcept {}
     };
 } // namespace barton

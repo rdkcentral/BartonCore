@@ -38,6 +38,7 @@
 #include "../SbmdRegistration.h"
 #include "SbmdResultExecutor.h"
 #include "matter/sbmd/SafeJSValue.h"
+#include "matter/sbmd/metrics/SbmdHandlerInvokerMetrics.h"
 
 #include <chrono>
 #include <functional>
@@ -359,6 +360,8 @@ namespace barton
          * Build the common base args object with deviceUuid, endpointId, clusterFeatureMaps.
          */
         static SafeJSValue BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx);
+
+        static SbmdHandlerInvokerMetrics metrics;
     };
 
 } // namespace barton

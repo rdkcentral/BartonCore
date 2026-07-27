@@ -39,6 +39,8 @@ extern "C" {
 #include <mquickjs/mquickjs.h>
 }
 
+#include "matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
+
 namespace barton
 {
     /**
@@ -63,6 +65,15 @@ namespace barton
     class MQuickJsRuntime
     {
     public:
+        /**
+         * Return the singleton instance.
+         */
+        static MQuickJsRuntime &GetInstance()
+        {
+            static MQuickJsRuntime instance;
+            return instance;
+        }
+
         /**
          * Initialize the shared mquickjs context.
          *
@@ -185,20 +196,58 @@ namespace barton
          */
         static bool IsContextReady();
 
+        /**
+         * Record a JS mutex wait duration in milliseconds.
+         * Called from AcquireJsMutex() in SpecBasedMatterDeviceDriver.cpp.
+         */
+        static void RecordMutexWait(double ms);
+
+        /**
+         * Record a JS exception event.
+         * Called from SbmdBundleLoader.cpp when a script eval fails.
+         * @param phase  "init" or "loading"
+         * @param driver Filename stem, or nullptr to omit the "driver" attribute
+         */
+        static void RecordJsException(const char *phase, const char *driver);
+
+        /**
+         * Record pool health metrics from an already-captured JSMemoryUsage.
+         * Called from SbmdHandlerInvoker.cpp after each handler invocation.
+         */
+        static void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
+
+        /**
+         * Reset the idle sampler timer without waiting for the full period.
+         * Called from SbmdHandlerInvoker.cpp after each handler invocation.
+         */
+        static void TickleSampler();
+
+        /**
+         * Synchronously sample heap stats and record pool health metrics.
+         * Delegates to the metrics member. Called from unit tests.
+         */
+        static void ForceSnapshot();
+
     private:
-        static uint8_t *memBuffer;
-        static size_t memSize;
-        static JSContext *ctx;
-        static std::mutex mutex;
-        static bool initialized;
-        static size_t peakHeapUsed;
-        static std::chrono::steady_clock::time_point deadline;
-        static std::atomic<bool> scriptInterruptFired;
+        MQuickJsRuntime() = default;
+        ~MQuickJsRuntime() = default;
+        MQuickJsRuntime(const MQuickJsRuntime &) = delete;
+        MQuickJsRuntime &operator=(const MQuickJsRuntime &) = delete;
+
+        uint8_t *memBuffer = nullptr;
+        size_t memSize = 0;
+        JSContext *ctx = nullptr;
+        std::mutex mutex;
+        bool initialized = false;
+        size_t peakHeapUsed = 0;
+        std::chrono::steady_clock::time_point deadline;
+        std::atomic<bool> scriptInterruptFired {false};
 
         // jsContextReady: set true at end of Initialize(), cleared at start of
-        // Shutdown(). Used by MQuickJsRuntimeMetrics as a lock-free early-exit
-        // guard in ForceSnapshot().
-        static std::atomic<bool> jsContextReady;
+        // Shutdown(). Used by metrics.ForceSnapshot() as a lock-free early-exit guard.
+        std::atomic<bool> jsContextReady {false};
+
+        MQuickJsRuntimeMetrics metrics;
     };
 
 } // namespace barton

@@ -163,11 +163,10 @@ if (BCORE_MATTER)
 
     # Metrics implementations required by any test that compiles MQuickJsRuntime.cpp,
     # SbmdBundleLoader.cpp, SbmdHandlerInvoker.cpp, or SbmdLoader.cpp directly.
-    # MetricsRegistry, MQuickJsRuntimeMetrics, and SbmdHandlerInvokerMetrics are
-    # included; SbmdFactoryMetrics and SpecBasedMatterDeviceDriverMetrics are omitted
+    # MQuickJsRuntimeMetrics and SbmdHandlerInvokerMetrics are included;
+    # SbmdFactoryMetrics and SpecBasedMatterDeviceDriverMetrics are omitted
     # because the tests do not compile those monitored classes directly.
     set(SBMD_METRICS_SRC
-        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/metrics/MetricsRegistry.cpp
         ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/metrics/MQuickJsRuntimeMetrics.cpp
         ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/metrics/SbmdHandlerInvokerMetrics.cpp
     )

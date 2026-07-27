@@ -25,7 +25,6 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "MQuickJsRuntimeMetrics.h"
-#include "MetricsRegistry.h"
 #include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
 
 #include <system_error>
@@ -39,37 +38,13 @@ namespace barton
 
 #ifdef BARTON_CONFIG_SBMD_METRICS
 
-    // ── Static member initialization ─────────────────────────────────────────
+    // ── Handle initialization ──────────────────────────────────────────────────
 
-    ObservabilityHistogram *MQuickJsRuntimeMetrics::heapUsedHisto = nullptr;
-    ObservabilityGauge *MQuickJsRuntimeMetrics::heapArenaGauge = nullptr;
-    ObservabilityGauge *MQuickJsRuntimeMetrics::heapFreeGauge = nullptr;
-    ObservabilityGauge *MQuickJsRuntimeMetrics::heapPeakGauge = nullptr;
-    ObservabilityHistogram *MQuickJsRuntimeMetrics::mutexWaitHisto = nullptr;
-    ObservabilityCounter *MQuickJsRuntimeMetrics::jsExceptionCounter = nullptr;
-    ObservabilityCounter *MQuickJsRuntimeMetrics::gcCountCounter = nullptr;
-    ObservabilityHistogram *MQuickJsRuntimeMetrics::gcDurationHisto = nullptr;
-    ObservabilityGauge *MQuickJsRuntimeMetrics::gcRootsGauge = nullptr;
-    std::chrono::steady_clock::time_point MQuickJsRuntimeMetrics::gcStartTime {};
-    std::thread MQuickJsRuntimeMetrics::periodicSamplerThread;
-    std::atomic<bool> MQuickJsRuntimeMetrics::samplerShouldStop {false};
-    std::atomic<uint64_t> MQuickJsRuntimeMetrics::tickleSeq {0};
-    std::condition_variable MQuickJsRuntimeMetrics::samplerCv;
-    std::mutex MQuickJsRuntimeMetrics::samplerCvMutex;
-    int64_t MQuickJsRuntimeMetrics::peakHeapRecorded = 0;
-
-    // Self-register with MetricsRegistry before main().
-    static bool s_registered = (MetricsRegistry::registerProvider({MQuickJsRuntimeMetrics::InitializeMetrics,
-                                                                   MQuickJsRuntimeMetrics::ShutdownMetrics}),
-                                true);
-
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
-
-    void MQuickJsRuntimeMetrics::InitializeMetrics()
+    void MQuickJsRuntimeMetrics::InitInstruments()
     {
         if (heapUsedHisto != nullptr)
         {
-            return; // Already initialized — guard against double-init on retry paths
+            return;
         }
 
         heapUsedHisto = observabilityHistogramCreate(
@@ -91,29 +66,6 @@ namespace barton
         peakHeapRecorded = 0;
     }
 
-    void MQuickJsRuntimeMetrics::ShutdownMetrics()
-    {
-        observabilityGaugeRelease(heapArenaGauge);
-        heapArenaGauge = nullptr;
-        observabilityGaugeRelease(heapFreeGauge);
-        heapFreeGauge = nullptr;
-        observabilityGaugeRelease(heapPeakGauge);
-        heapPeakGauge = nullptr;
-        observabilityHistogramRelease(mutexWaitHisto);
-        mutexWaitHisto = nullptr;
-        observabilityCounterRelease(jsExceptionCounter);
-        jsExceptionCounter = nullptr;
-        observabilityCounterRelease(gcCountCounter);
-        gcCountCounter = nullptr;
-        observabilityHistogramRelease(gcDurationHisto);
-        gcDurationHisto = nullptr;
-        observabilityGaugeRelease(gcRootsGauge);
-        gcRootsGauge = nullptr;
-        // heapUsedHisto released last — serves as the idempotence sentinel
-        observabilityHistogramRelease(heapUsedHisto);
-        heapUsedHisto = nullptr;
-    }
-
     // ── Sampler ───────────────────────────────────────────────────────────────
 
     void MQuickJsRuntimeMetrics::StartSampler()
@@ -127,7 +79,7 @@ namespace barton
 
         try
         {
-            periodicSamplerThread = std::thread([]() {
+            periodicSamplerThread = std::thread([this]() {
                 using clock = std::chrono::steady_clock;
 
                 std::unique_lock<std::mutex> lock(samplerCvMutex);
@@ -189,10 +141,7 @@ namespace barton
             return;
         }
 
-        if (!heapUsedHisto || !heapFreeGauge || !heapPeakGauge || !gcRootsGauge)
-        {
-            return;
-        }
+        InitInstruments(); // lazy init — instruments created on first call
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -222,11 +171,7 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)
     {
-        if (!heapUsedHisto)
-        {
-            return;
-        }
-
+        InitInstruments(); // lazy init — instruments created on first call
         observabilityHistogramRecord(heapUsedHisto, static_cast<double>(usage.heap_used));
         observabilityGaugeRecord(heapFreeGauge, static_cast<int64_t>(usage.free_size));
 
@@ -241,30 +186,19 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::RecordArenaSize(int64_t bytes)
     {
-        if (!heapArenaGauge)
-        {
-            return;
-        }
-
+        InitInstruments(); // lazy init — instruments created on first call
         observabilityGaugeRecord(heapArenaGauge, bytes);
     }
 
     void MQuickJsRuntimeMetrics::RecordMutexWait(double ms)
     {
-        if (!mutexWaitHisto)
-        {
-            return;
-        }
-
+        InitInstruments(); // lazy init — instruments created on first call
         observabilityHistogramRecord(mutexWaitHisto, ms);
     }
 
     void MQuickJsRuntimeMetrics::RecordJsException(const char *phase, const char *driver)
     {
-        if (!jsExceptionCounter)
-        {
-            return;
-        }
+        InitInstruments(); // lazy init — instruments created on first call
 
         if (driver)
         {
@@ -276,27 +210,30 @@ namespace barton
         }
     }
 
-    void MQuickJsRuntimeMetrics::GCCallback(JSContext * /*ctx*/, int isEnd, void * /*opaque*/) noexcept
+    void MQuickJsRuntimeMetrics::GCCallback(JSContext * /*ctx*/, int isEnd, void *opaque) noexcept
     {
+        auto *metrics = static_cast<MQuickJsRuntimeMetrics *>(opaque);
+
+        if (!metrics)
+        {
+            return;
+        }
+
+        metrics->InitInstruments(); // lazy init — instruments created on first call
+
         if (isEnd == 0)
         {
-            gcStartTime = std::chrono::steady_clock::now();
+            metrics->gcStartTime = std::chrono::steady_clock::now();
 
             return;
         }
 
-        if (gcCountCounter)
-        {
-            observabilityCounterAdd(gcCountCounter, 1);
-        }
+        observabilityCounterAdd(metrics->gcCountCounter, 1);
 
-        if (gcDurationHisto)
-        {
-            auto elapsed = std::chrono::steady_clock::now() - gcStartTime;
-            double ms = std::chrono::duration<double, std::milli>(elapsed).count();
+        auto elapsed = std::chrono::steady_clock::now() - metrics->gcStartTime;
+        double ms = std::chrono::duration<double, std::milli>(elapsed).count();
 
-            observabilityHistogramRecord(gcDurationHisto, ms);
-        }
+        observabilityHistogramRecord(metrics->gcDurationHisto, ms);
     }
 
 } // namespace barton

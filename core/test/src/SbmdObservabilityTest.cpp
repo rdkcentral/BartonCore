@@ -33,8 +33,6 @@
  */
 
 #include "deviceDrivers/matter/sbmd/SbmdDriver.h"
-#include "deviceDrivers/matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
-#include "deviceDrivers/matter/sbmd/metrics/MetricsRegistry.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
@@ -333,10 +331,6 @@ public:
         // Initialize observability backend first
         observabilityInit();
 
-        // Initialize all self-registered metric providers before the JS runtime
-        // so exception counters are live for init-phase exceptions.
-        MetricsRegistry::initializeAll();
-
         ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
 
         auto *ctx = MQuickJsRuntime::GetSharedContext();
@@ -362,7 +356,6 @@ public:
         testDriver.reset();
 
         MQuickJsRuntime::Shutdown();
-        MetricsRegistry::shutdownAll();
         observabilityShutdown();
     }
 
@@ -431,7 +424,7 @@ TEST_F(SbmdObservabilityTest, ArenaSizeGaugeRecordedAtInit)
 TEST_F(SbmdObservabilityTest, ForceSnapshotPopulatesHeapHistogram)
 {
     int64_t countBefore = GetHistogramCount("sbmd.js.heap.used_bytes");
-    MQuickJsRuntimeMetrics::ForceSnapshot();
+    MQuickJsRuntime::ForceSnapshot();
     int64_t countAfter = GetHistogramCount("sbmd.js.heap.used_bytes");
 
     EXPECT_GT(countAfter, countBefore);
@@ -632,7 +625,7 @@ TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         double waitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        MQuickJsRuntimeMetrics::RecordMutexWait(waitMs);
+        MQuickJsRuntime::RecordMutexWait(waitMs);
     }
 
     holder.join();
@@ -658,7 +651,7 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
 
 TEST_F(SbmdObservabilityTest, GcRootsGaugeHasValue)
 {
-    MQuickJsRuntimeMetrics::ForceSnapshot();
+    MQuickJsRuntime::ForceSnapshot();
     double roots = GetGaugeValue("sbmd.js.gc_roots");
     EXPECT_GT(roots, 0.0);
 }

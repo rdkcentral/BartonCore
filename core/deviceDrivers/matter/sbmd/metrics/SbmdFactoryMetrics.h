@@ -34,31 +34,26 @@ namespace barton
     /**
      * Observability metrics for SbmdFactory: driver load durations, heap
      * impact, failure counts, and registered-driver gauge.
-     *
-     * Self-registers with MetricsRegistry at static-initialization time.
-     * InitializeMetrics() / ShutdownMetrics() are called by MetricsRegistry
-     * — do not call them directly.
      */
     class SbmdFactoryMetrics
     {
-    public:
-        static void InitializeMetrics();
-        static void ShutdownMetrics();
+        friend class SbmdFactory;
+
 
         /** Record a driver load failure. */
-        static void RecordDriverLoadFailure(const char *driver, const char *reason);
+        void RecordDriverLoadFailure(const char *driver, const char *reason);
 
         /** Record a successful driver load. */
-        static void RecordDriverLoadSuccess(double durationMs, double heapDelta, const char *driver);
+        void RecordDriverLoadSuccess(double durationMs, double heapDelta, const char *driver);
 
         /** Record the current registered-driver count. */
-        static void RecordRegisteredDriverCount(int64_t count);
+        void RecordRegisteredDriverCount(int64_t count);
+        void InitInstruments();
 
-    private:
-        static ObservabilityCounter *driverLoadFailureCounter;
-        static ObservabilityHistogram *driverLoadDurationHisto;
-        static ObservabilityHistogram *driverLoadHeapDeltaHisto;
-        static ObservabilityGauge *registeredDriversGauge;
+        ObservabilityCounter *driverLoadFailureCounter = nullptr;
+        ObservabilityHistogram *driverLoadDurationHisto = nullptr;
+        ObservabilityHistogram *driverLoadHeapDeltaHisto = nullptr;
+        ObservabilityGauge *registeredDriversGauge = nullptr;
     };
 
 } // namespace barton
@@ -69,12 +64,13 @@ namespace barton
 {
     class SbmdFactoryMetrics
     {
-    public:
-        static void InitializeMetrics() {}
-        static void ShutdownMetrics() {}
-        static void RecordDriverLoadFailure(const char *, const char *) {}
-        static void RecordDriverLoadSuccess(double, double, const char *) {}
-        static void RecordRegisteredDriverCount(int64_t) {}
+        friend class SbmdFactory;
+
+        void RecordDriverLoadFailure(const char *, const char *) {}
+
+        void RecordDriverLoadSuccess(double, double, const char *) {}
+
+        void RecordRegisteredDriverCount(int64_t) {}
     };
 } // namespace barton
 

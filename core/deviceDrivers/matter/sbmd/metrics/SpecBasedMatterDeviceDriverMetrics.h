@@ -35,44 +35,39 @@ namespace barton
      * Observability metrics for SpecBasedMatterDeviceDriver: deferred
      * operation in-flight counts, depths, durations, timeouts, and
      * max-depth overflows.
-     *
-     * Self-registers with MetricsRegistry at static-initialization time.
-     * InitializeMetrics() / ShutdownMetrics() are called by MetricsRegistry
-     * — do not call them directly.
      */
     class SpecBasedMatterDeviceDriverMetrics
     {
-    public:
-        static void InitializeMetrics();
-        static void ShutdownMetrics();
+        friend class SpecBasedMatterDeviceDriver;
+
 
         /** Record the in-flight gauge after a new deferred op is registered. */
-        static void RecordDeferredStart(int64_t inFlight);
+        void RecordDeferredStart(int64_t inFlight);
 
         /** Record a deferred op overall-deadline timeout. */
-        static void RecordDeferredTimeout(const char *driver, const char *opType, const char *resourceId);
+        void RecordDeferredTimeout(const char *driver, const char *opType, const char *resourceId);
 
         /** Record a deferred op max-deferral-depth overflow. */
-        static void RecordDeferredMaxDepth(const char *driver, const char *opType, const char *resourceId);
+        void RecordDeferredMaxDepth(const char *driver, const char *opType, const char *resourceId);
 
         /**
          * Record a completed deferred operation.
          * @param resourceId    nullptr to omit the "resource_id" attribute
          * @param inFlightAfter pendingOperations size after removal
          */
-        static void RecordDeferredComplete(double durationMs,
-                                           double depth,
-                                           const char *driver,
-                                           const char *opType,
-                                           const char *resourceId,
-                                           int64_t inFlightAfter);
+        void RecordDeferredComplete(double durationMs,
+                                    double depth,
+                                    const char *driver,
+                                    const char *opType,
+                                    const char *resourceId,
+                                    int64_t inFlightAfter);
+        void InitInstruments();
 
-    private:
-        static ObservabilityCounter *deferredTimeoutCounter;
-        static ObservabilityCounter *deferralMaxDepthCounter;
-        static ObservabilityGauge *deferredInFlightGauge;
-        static ObservabilityHistogram *deferredDurationHisto;
-        static ObservabilityHistogram *deferralDepthHisto;
+        ObservabilityCounter *deferredTimeoutCounter = nullptr;
+        ObservabilityCounter *deferralMaxDepthCounter = nullptr;
+        ObservabilityGauge *deferredInFlightGauge = nullptr;
+        ObservabilityHistogram *deferredDurationHisto = nullptr;
+        ObservabilityHistogram *deferralDepthHisto = nullptr;
     };
 
 } // namespace barton
@@ -83,13 +78,15 @@ namespace barton
 {
     class SpecBasedMatterDeviceDriverMetrics
     {
-    public:
-        static void InitializeMetrics() {}
-        static void ShutdownMetrics() {}
-        static void RecordDeferredStart(int64_t) {}
-        static void RecordDeferredTimeout(const char *, const char *, const char *) {}
-        static void RecordDeferredMaxDepth(const char *, const char *, const char *) {}
-        static void RecordDeferredComplete(double, double, const char *, const char *, const char *, int64_t) {}
+        friend class SpecBasedMatterDeviceDriver;
+
+        void RecordDeferredStart(int64_t) {}
+
+        void RecordDeferredTimeout(const char *, const char *, const char *) {}
+
+        void RecordDeferredMaxDepth(const char *, const char *, const char *) {}
+
+        void RecordDeferredComplete(double, double, const char *, const char *, const char *, int64_t) {}
     };
 } // namespace barton
 

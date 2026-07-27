@@ -22,25 +22,12 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "SpecBasedMatterDeviceDriverMetrics.h"
-#include "MetricsRegistry.h"
 
 #ifdef BARTON_CONFIG_SBMD_METRICS
 
 namespace barton
 {
-    ObservabilityCounter *SpecBasedMatterDeviceDriverMetrics::deferredTimeoutCounter = nullptr;
-    ObservabilityCounter *SpecBasedMatterDeviceDriverMetrics::deferralMaxDepthCounter = nullptr;
-    ObservabilityGauge *SpecBasedMatterDeviceDriverMetrics::deferredInFlightGauge = nullptr;
-    ObservabilityHistogram *SpecBasedMatterDeviceDriverMetrics::deferredDurationHisto = nullptr;
-    ObservabilityHistogram *SpecBasedMatterDeviceDriverMetrics::deferralDepthHisto = nullptr;
-
-    // Self-register with MetricsRegistry before main().
-    static bool s_registered =
-        (MetricsRegistry::registerProvider({SpecBasedMatterDeviceDriverMetrics::InitializeMetrics,
-                                            SpecBasedMatterDeviceDriverMetrics::ShutdownMetrics}),
-         true);
-
-    void SpecBasedMatterDeviceDriverMetrics::InitializeMetrics()
+    void SpecBasedMatterDeviceDriverMetrics::InitInstruments()
     {
         if (deferredTimeoutCounter != nullptr)
         {
@@ -61,28 +48,9 @@ namespace barton
             "sbmd.deferred.depth", "Deferral depth at which a deferred operation completed", "1");
     }
 
-    void SpecBasedMatterDeviceDriverMetrics::ShutdownMetrics()
-    {
-        observabilityCounterRelease(deferralMaxDepthCounter);
-        deferralMaxDepthCounter = nullptr;
-        observabilityGaugeRelease(deferredInFlightGauge);
-        deferredInFlightGauge = nullptr;
-        observabilityHistogramRelease(deferredDurationHisto);
-        deferredDurationHisto = nullptr;
-        observabilityHistogramRelease(deferralDepthHisto);
-        deferralDepthHisto = nullptr;
-        // deferredTimeoutCounter released last — serves as the idempotence sentinel
-        observabilityCounterRelease(deferredTimeoutCounter);
-        deferredTimeoutCounter = nullptr;
-    }
-
     void SpecBasedMatterDeviceDriverMetrics::RecordDeferredStart(int64_t inFlight)
     {
-        if (!deferredInFlightGauge)
-        {
-            return;
-        }
-
+        InitInstruments(); // lazy init — instruments created on first call
         observabilityGaugeRecord(deferredInFlightGauge, inFlight);
     }
 
@@ -90,10 +58,7 @@ namespace barton
                                                                    const char *opType,
                                                                    const char *resourceId)
     {
-        if (!deferredTimeoutCounter)
-        {
-            return;
-        }
+        InitInstruments(); // lazy init — instruments created on first call
 
         if (resourceId)
         {
@@ -110,10 +75,7 @@ namespace barton
                                                                     const char *opType,
                                                                     const char *resourceId)
     {
-        if (!deferralMaxDepthCounter)
-        {
-            return;
-        }
+        InitInstruments(); // lazy init — instruments created on first call
 
         if (resourceId)
         {
@@ -133,6 +95,8 @@ namespace barton
                                                                     const char *resourceId,
                                                                     int64_t inFlightAfter)
     {
+        InitInstruments(); // lazy init — instruments created on first call
+
         auto recordHisto = [&](ObservabilityHistogram *histo, double value) {
             if (!histo)
             {
@@ -153,10 +117,7 @@ namespace barton
         recordHisto(deferredDurationHisto, durationMs);
         recordHisto(deferralDepthHisto, depth);
 
-        if (deferredInFlightGauge)
-        {
-            observabilityGaugeRecord(deferredInFlightGauge, inFlightAfter);
-        }
+        observabilityGaugeRecord(deferredInFlightGauge, inFlightAfter);
     }
 
 } // namespace barton

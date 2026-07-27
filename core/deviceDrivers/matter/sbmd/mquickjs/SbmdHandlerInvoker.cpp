@@ -33,8 +33,6 @@
 #include "SbmdResultExecutor.h"
 #include "SbmdWireContract.h"
 #include "matter/sbmd/SafeJSValue.h"
-#include "matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
-#include "matter/sbmd/metrics/SbmdHandlerInvokerMetrics.h"
 
 #include <string>
 #include <variant>
@@ -61,6 +59,8 @@ extern bool deviceServiceSetMetadata(const char *uri, const char *value);
 
 namespace barton
 {
+    SbmdHandlerInvokerMetrics SbmdHandlerInvoker::metrics;
+
     SafeJSValue SbmdHandlerInvoker::BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx)
     {
         // Root args for the whole build: subsequent allocations (JS_NewString, JS_NewObject)
@@ -182,19 +182,22 @@ namespace barton
         if (JS_StackCheck(ctx, 3)) // args, handler, this
         {
             icError("stack overflow before handler call");
-            SbmdHandlerInvokerMetrics::RecordOutcome(opCtx ? opCtx->driverName.c_str() : nullptr,
-                                                     opCtx ? opCtx->opType.c_str() : nullptr,
-                                                     (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str()
-                                                                                           : nullptr,
-                                                     "stack_overflow");
+#ifdef BARTON_CONFIG_SBMD_METRICS
+            metrics.RecordOutcome(opCtx ? opCtx->driverName.c_str() : nullptr,
+                                  opCtx ? opCtx->opType.c_str() : nullptr,
+                                  (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr,
+                                  "stack_overflow");
+#endif
 
             return std::nullopt;
         }
 
+#ifdef BARTON_CONFIG_SBMD_METRICS
         // Capture pre-call heap state
         JSMemoryUsage usageBefore = {};
         JS_GetMemoryUsage(ctx, &usageBefore, 0);
         auto callStart = std::chrono::steady_clock::now();
+#endif
 
         // Stack order for JS_Call: arg, func, this
         JS_PushArg(ctx, args.Get());
@@ -207,9 +210,12 @@ namespace barton
 
         JSValue result = JS_Call(ctx, 1);
 
+#ifdef BARTON_CONFIG_SBMD_METRICS
         bool interrupted = MQuickJsRuntime::WasInterrupted();
+#endif
         MQuickJsRuntime::ClearDeadline();
 
+#ifdef BARTON_CONFIG_SBMD_METRICS
         // Capture post-call state
         JSMemoryUsage usageAfter = {};
         JS_GetMemoryUsage(ctx, &usageAfter, 0);
@@ -224,11 +230,12 @@ namespace barton
         const char *outResourceId = (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr;
 
         // Record duration and heap-delta histograms
-        SbmdHandlerInvokerMetrics::RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
+        metrics.RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
 
         // Update running heap snapshot (ctx is live; caller holds JS mutex)
-        MQuickJsRuntimeMetrics::RecordHeapSnapshot(usageAfter, JS_GetGCRootCount(ctx));
-        MQuickJsRuntimeMetrics::TickleSampler();
+        MQuickJsRuntime::RecordHeapSnapshot(usageAfter, JS_GetGCRootCount(ctx));
+        MQuickJsRuntime::TickleSampler();
+#endif
 
         if (JS_IsException(result))
         {
@@ -236,9 +243,10 @@ namespace barton
             MQuickJsRuntime::CheckAndClearPendingException(ctx, &err);
             icError("handler threw exception: %s", err.c_str());
 
+#ifdef BARTON_CONFIG_SBMD_METRICS
             // Distinguish timeout from handler exception
-            SbmdHandlerInvokerMetrics::RecordOutcome(
-                outDriver, outOpType, outResourceId, interrupted ? "timeout" : "exception");
+            metrics.RecordOutcome(outDriver, outOpType, outResourceId, interrupted ? "timeout" : "exception");
+#endif
 
             return std::nullopt;
         }
@@ -247,9 +255,10 @@ namespace barton
 
         if (parsed.has_value())
         {
+#ifdef BARTON_CONFIG_SBMD_METRICS
             bool isError = std::holds_alternative<ResultTerminal::Error>(parsed->terminal.data);
-            SbmdHandlerInvokerMetrics::RecordOutcome(
-                outDriver, outOpType, outResourceId, isError ? "error" : "success");
+            metrics.RecordOutcome(outDriver, outOpType, outResourceId, isError ? "error" : "success");
+#endif
         }
 
         return parsed;

@@ -30,6 +30,7 @@
 #include "../MatterDevice.h"
 #include "../MatterDeviceDriver.h"
 #include "SbmdDriver.h"
+#include "metrics/SpecBasedMatterDeviceDriverMetrics.h"
 #include "mquickjs/SbmdHandlerInvoker.h"
 #include "mquickjs/SbmdResultExecutor.h"
 #include <chrono>
@@ -141,6 +142,7 @@ namespace barton
     private:
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
+        static SpecBasedMatterDeviceDriverMetrics metrics;
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);

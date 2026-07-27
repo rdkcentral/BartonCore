@@ -30,7 +30,6 @@
 #include "SbmdFactory.h"
 #include "SpecBasedMatterDeviceDriver.h"
 #include "matter/MatterDriverFactory.h"
-#include "matter/sbmd/metrics/SbmdFactoryMetrics.h"
 
 #include "mquickjs/MQuickJsRuntime.h"
 #include "mquickjs/SbmdBundleLoader.h"
@@ -51,6 +50,12 @@ using namespace barton;
 
 bool SbmdFactory::RegisterDrivers()
 {
+    if (!drivers.empty())
+    {
+        icDebug("SBMD drivers already registered; skipping");
+        return true;
+    }
+
     bool allRegistered = true;
 
     g_autofree gchar *sbmdDirs = deviceServiceConfigurationGetSbmdDirs();
@@ -193,7 +198,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (!file.is_open())
                 {
                     icError("Failed to open SBMD driver: %s", entry.path().c_str());
-                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "file_read");
+#ifdef BARTON_CONFIG_SBMD_METRICS
+                    metrics.RecordDriverLoadFailure(driverStem.c_str(), "file_read");
+#endif
                     allRegistered = false;
                     continue;
                 }
@@ -203,7 +210,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (fileSize < 0)
                 {
                     icError("Failed to determine size of SBMD driver: %s", entry.path().c_str());
-                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "file_read");
+#ifdef BARTON_CONFIG_SBMD_METRICS
+                    metrics.RecordDriverLoadFailure(driverStem.c_str(), "file_read");
+#endif
                     allRegistered = false;
                     continue;
                 }
@@ -215,19 +224,25 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (!file)
                 {
                     icError("Failed to read SBMD driver: %s", entry.path().c_str());
-                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "file_read");
+#ifdef BARTON_CONFIG_SBMD_METRICS
+                    metrics.RecordDriverLoadFailure(driverStem.c_str(), "file_read");
+#endif
                     allRegistered = false;
                     continue;
                 }
 
                 // Load the driver registration under the JS mutex
+#ifdef BARTON_CONFIG_SBMD_METRICS
                 auto loadStart = std::chrono::steady_clock::now();
-                std::unique_ptr<SbmdRegistration> registration;
                 JSMemoryUsage usageBefore = {};
+#endif
+                std::unique_ptr<SbmdRegistration> registration;
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
                     auto *ctx = MQuickJsRuntime::GetSharedContext();
+#ifdef BARTON_CONFIG_SBMD_METRICS
                     JS_GetMemoryUsage(ctx, &usageBefore, 0);
+#endif
                     registration =
                         SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
                 }
@@ -235,14 +250,18 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 if (!registration)
                 {
                     icError("Failed to load SBMD driver: %s", entry.path().c_str());
-                    SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "eval_failed");
+#ifdef BARTON_CONFIG_SBMD_METRICS
+                    metrics.RecordDriverLoadFailure(driverStem.c_str(), "eval_failed");
+#endif
                     allRegistered = false;
                     continue;
                 }
 
                 // Create the driver and activate it
                 auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
+#ifdef BARTON_CONFIG_SBMD_METRICS
                 JSMemoryUsage usageAfter = {};
+#endif
 
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -251,15 +270,21 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                     if (!sbmdDriver->Activate(ctx))
                     {
                         icError("Failed to activate SBMD driver: %s", entry.path().c_str());
-                        SbmdFactoryMetrics::RecordDriverLoadFailure(driverStem.c_str(), "activation_failed");
+#ifdef BARTON_CONFIG_SBMD_METRICS
+                        metrics.RecordDriverLoadFailure(driverStem.c_str(), "activation_failed");
+#endif
                         allRegistered = false;
                         continue;
                     }
 
+#ifdef BARTON_CONFIG_SBMD_METRICS
                     JS_GetMemoryUsage(ctx, &usageAfter, 0);
+#endif
                 }
 
+#ifdef BARTON_CONFIG_SBMD_METRICS
                 auto loadEnd = std::chrono::steady_clock::now();
+#endif
 
                 // Create the SpecBasedMatterDeviceDriver wrapper
                 auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(sbmdDriver.get());
@@ -274,10 +299,12 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 // Store the driver for lifetime management
                 drivers.push_back(std::move(sbmdDriver));
 
+#ifdef BARTON_CONFIG_SBMD_METRICS
                 double loadDurationMs = std::chrono::duration<double, std::milli>(loadEnd - loadStart).count();
                 double heapDelta =
                     static_cast<double>(usageAfter.heap_used) - static_cast<double>(usageBefore.heap_used);
-                SbmdFactoryMetrics::RecordDriverLoadSuccess(loadDurationMs, heapDelta, driverStem.c_str());
+                metrics.RecordDriverLoadSuccess(loadDurationMs, heapDelta, driverStem.c_str());
+#endif
 
                 icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
             }
@@ -294,10 +321,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         allRegistered = false;
     }
 
-    SbmdFactoryMetrics::RecordRegisteredDriverCount(static_cast<int64_t>(drivers.size()));
-}
-
-void SbmdFactory::Reset()
-{
-    runtimeReady = false;
+#ifdef BARTON_CONFIG_SBMD_METRICS
+    metrics.RecordRegisteredDriverCount(static_cast<int64_t>(drivers.size()));
+#endif
 }

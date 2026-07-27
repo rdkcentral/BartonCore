@@ -32,38 +32,33 @@ namespace barton
     /**
      * Observability metrics for SbmdHandlerInvoker: per-invocation timing,
      * heap impact, and outcome counts.
-     *
-     * Self-registers with MetricsRegistry at static-initialization time.
-     * InitializeMetrics() / ShutdownMetrics() are called by MetricsRegistry
-     * — do not call them directly.
      */
     class SbmdHandlerInvokerMetrics
     {
-    public:
-        static void InitializeMetrics();
-        static void ShutdownMetrics();
+        friend class SbmdHandlerInvoker;
+
 
         /**
          * Record handler invocation timing and heap impact.
          * @param resourceId  nullptr to omit the "resource_id" attribute
          */
-        static void RecordInvocation(double durationMs,
-                                     double heapDelta,
-                                     const char *driver,
-                                     const char *opType,
-                                     const char *resourceId);
+        void RecordInvocation(double durationMs,
+                              double heapDelta,
+                              const char *driver,
+                              const char *opType,
+                              const char *resourceId);
 
         /**
          * Record a handler outcome (success, exception, timeout, stack_overflow,
          * error).
          * @param resourceId  nullptr to omit the "resource_id" attribute
          */
-        static void RecordOutcome(const char *driver, const char *opType, const char *resourceId, const char *outcome);
+        void RecordOutcome(const char *driver, const char *opType, const char *resourceId, const char *outcome);
+        void InitInstruments();
 
-    private:
-        static ObservabilityHistogram *handlerDurationHisto;
-        static ObservabilityHistogram *handlerHeapDeltaHisto;
-        static ObservabilityCounter *handlerOutcomeCounter;
+        ObservabilityHistogram *handlerDurationHisto = nullptr;
+        ObservabilityHistogram *handlerHeapDeltaHisto = nullptr;
+        ObservabilityCounter *handlerOutcomeCounter = nullptr;
     };
 
 } // namespace barton
@@ -74,11 +69,11 @@ namespace barton
 {
     class SbmdHandlerInvokerMetrics
     {
-    public:
-        static void InitializeMetrics() {}
-        static void ShutdownMetrics() {}
-        static void RecordInvocation(double, double, const char *, const char *, const char *) {}
-        static void RecordOutcome(const char *, const char *, const char *, const char *) {}
+        friend class SbmdHandlerInvoker;
+
+        void RecordInvocation(double, double, const char *, const char *, const char *) {}
+
+        void RecordOutcome(const char *, const char *, const char *, const char *) {}
     };
 } // namespace barton
 

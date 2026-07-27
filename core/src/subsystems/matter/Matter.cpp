@@ -102,7 +102,6 @@ extern "C" {
 #include "AccessControlDelegate.h"
 #include "ThreadBorderRouterManagementDelegate.h"
 #include "matter/sbmd/SbmdFactory.h"
-#include "matter/sbmd/metrics/MetricsRegistry.h"
 #include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
@@ -184,7 +183,6 @@ Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric
 
     // Initialize SBMD observability metrics before the JS runtime starts so
     // exception counters are live for init-phase exceptions.
-    MetricsRegistry::initializeAll();
 
     if(!SbmdFactory::Instance().RegisterDrivers())
     {
@@ -513,10 +511,6 @@ bool Matter::Stop()
     // Stop the SBMD JS runtime -- joins the background heap sampler thread before
     // the metric handles it uses are released below.
     MQuickJsRuntime::Shutdown();
-
-    // Shut down SBMD observability metric handles
-    SbmdFactory::Instance().Reset();
-    MetricsRegistry::shutdownAll();
 
     return true;
 }

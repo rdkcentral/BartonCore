@@ -22,23 +22,12 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "SbmdFactoryMetrics.h"
-#include "MetricsRegistry.h"
 
 #ifdef BARTON_CONFIG_SBMD_METRICS
 
 namespace barton
 {
-    ObservabilityCounter *SbmdFactoryMetrics::driverLoadFailureCounter = nullptr;
-    ObservabilityHistogram *SbmdFactoryMetrics::driverLoadDurationHisto = nullptr;
-    ObservabilityHistogram *SbmdFactoryMetrics::driverLoadHeapDeltaHisto = nullptr;
-    ObservabilityGauge *SbmdFactoryMetrics::registeredDriversGauge = nullptr;
-
-    // Self-register with MetricsRegistry before main().
-    static bool s_registered = (MetricsRegistry::registerProvider(
-                                    {SbmdFactoryMetrics::InitializeMetrics, SbmdFactoryMetrics::ShutdownMetrics}),
-                                true);
-
-    void SbmdFactoryMetrics::InitializeMetrics()
+    void SbmdFactoryMetrics::InitInstruments()
     {
         if (driverLoadFailureCounter != nullptr)
         {
@@ -55,49 +44,22 @@ namespace barton
             "sbmd.driver.registered.count", "Number of SBMD drivers successfully registered", "1");
     }
 
-    void SbmdFactoryMetrics::ShutdownMetrics()
-    {
-        observabilityHistogramRelease(driverLoadDurationHisto);
-        driverLoadDurationHisto = nullptr;
-        observabilityHistogramRelease(driverLoadHeapDeltaHisto);
-        driverLoadHeapDeltaHisto = nullptr;
-        observabilityGaugeRelease(registeredDriversGauge);
-        registeredDriversGauge = nullptr;
-        // driverLoadFailureCounter released last — serves as the idempotence sentinel
-        observabilityCounterRelease(driverLoadFailureCounter);
-        driverLoadFailureCounter = nullptr;
-    }
-
     void SbmdFactoryMetrics::RecordDriverLoadFailure(const char *driver, const char *reason)
     {
-        if (!driverLoadFailureCounter)
-        {
-            return;
-        }
-
+        InitInstruments(); // lazy init — instruments created on first call
         observabilityCounterAddWithAttrs(driverLoadFailureCounter, 1, "driver", driver, "reason", reason, nullptr);
     }
 
     void SbmdFactoryMetrics::RecordDriverLoadSuccess(double durationMs, double heapDelta, const char *driver)
     {
-        if (driverLoadDurationHisto)
-        {
-            observabilityHistogramRecordWithAttrs(driverLoadDurationHisto, durationMs, "driver", driver, nullptr);
-        }
-
-        if (driverLoadHeapDeltaHisto)
-        {
-            observabilityHistogramRecordWithAttrs(driverLoadHeapDeltaHisto, heapDelta, "driver", driver, nullptr);
-        }
+        InitInstruments(); // lazy init — instruments created on first call
+        observabilityHistogramRecordWithAttrs(driverLoadDurationHisto, durationMs, "driver", driver, nullptr);
+        observabilityHistogramRecordWithAttrs(driverLoadHeapDeltaHisto, heapDelta, "driver", driver, nullptr);
     }
 
     void SbmdFactoryMetrics::RecordRegisteredDriverCount(int64_t count)
     {
-        if (!registeredDriversGauge)
-        {
-            return;
-        }
-
+        InitInstruments(); // lazy init — instruments created on first call
         observabilityGaugeRecord(registeredDriversGauge, count);
     }
 

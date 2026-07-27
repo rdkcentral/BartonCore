@@ -22,22 +22,12 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "SbmdHandlerInvokerMetrics.h"
-#include "MetricsRegistry.h"
 
 #ifdef BARTON_CONFIG_SBMD_METRICS
 
 namespace barton
 {
-    ObservabilityHistogram *SbmdHandlerInvokerMetrics::handlerDurationHisto = nullptr;
-    ObservabilityHistogram *SbmdHandlerInvokerMetrics::handlerHeapDeltaHisto = nullptr;
-    ObservabilityCounter *SbmdHandlerInvokerMetrics::handlerOutcomeCounter = nullptr;
-
-    // Self-register with MetricsRegistry before main().
-    static bool s_registered = (MetricsRegistry::registerProvider({SbmdHandlerInvokerMetrics::InitializeMetrics,
-                                                                   SbmdHandlerInvokerMetrics::ShutdownMetrics}),
-                                true);
-
-    void SbmdHandlerInvokerMetrics::InitializeMetrics()
+    void SbmdHandlerInvokerMetrics::InitInstruments()
     {
         if (handlerDurationHisto != nullptr)
         {
@@ -52,23 +42,14 @@ namespace barton
             observabilityCounterCreate("sbmd.handler.outcome", "Count of handler invocations by outcome", "1");
     }
 
-    void SbmdHandlerInvokerMetrics::ShutdownMetrics()
-    {
-        observabilityHistogramRelease(handlerHeapDeltaHisto);
-        handlerHeapDeltaHisto = nullptr;
-        observabilityCounterRelease(handlerOutcomeCounter);
-        handlerOutcomeCounter = nullptr;
-        // handlerDurationHisto released last — serves as the idempotence sentinel
-        observabilityHistogramRelease(handlerDurationHisto);
-        handlerDurationHisto = nullptr;
-    }
-
     void SbmdHandlerInvokerMetrics::RecordInvocation(double durationMs,
                                                      double heapDelta,
                                                      const char *driver,
                                                      const char *opType,
                                                      const char *resourceId)
     {
+        InitInstruments(); // lazy init — instruments created on first call
+
         auto recordHisto = [&](ObservabilityHistogram *histo, double value) {
             if (!histo)
             {
@@ -110,10 +91,7 @@ namespace barton
                                                   const char *resourceId,
                                                   const char *outcome)
     {
-        if (!handlerOutcomeCounter)
-        {
-            return;
-        }
+        InitInstruments(); // lazy init — instruments created on first call
 
         if (driver || opType || resourceId)
         {

@@ -28,6 +28,7 @@
 #pragma once
 
 #include "SbmdDriver.h"
+#include "metrics/SbmdFactoryMetrics.h"
 
 #include <memory>
 #include <string>
@@ -51,11 +52,6 @@ namespace barton
          */
         bool RegisterDrivers();
 
-        /**
-         * Reset factory state so that a subsequent RegisterDrivers() call
-         * re-initializes the JS runtime correctly.
-         */
-        void Reset();
 
     private:
         SbmdFactory() = default;
@@ -78,5 +74,7 @@ namespace barton
          * have been initialized for driver loading.
          */
         bool runtimeReady = false;
+
+        SbmdFactoryMetrics metrics;
     };
 } //namespace barton

@@ -29,9 +29,6 @@
 
 #include "SpecBasedMatterDeviceDriver.h"
 #include "matter/sbmd/SbmdDriver.h"
-#include "matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
-#include "matter/sbmd/metrics/SpecBasedMatterDeviceDriverMetrics.h"
-
 #if defined(BCORE_USE_MQUICKJS)
 #include "matter/sbmd/SafeJSValue.h"
 #include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
@@ -205,13 +202,15 @@ namespace
 #endif
         std::unique_lock<std::mutex> lock(MQuickJsRuntime::GetMutex());
 #ifdef BARTON_CONFIG_SBMD_METRICS
-        MQuickJsRuntimeMetrics::RecordMutexWait(
+        MQuickJsRuntime::RecordMutexWait(
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
 #endif
 
         return lock;
     }
 } // namespace
+
+SpecBasedMatterDeviceDriverMetrics SpecBasedMatterDeviceDriver::metrics;
 
 SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
@@ -1254,7 +1253,7 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
         return;
     }
 
-    SpecBasedMatterDeviceDriverMetrics::RecordDeferredStart(static_cast<int64_t>(pendingOperations.size()));
+    metrics.RecordDeferredStart(static_cast<int64_t>(pendingOperations.size()));
     PendingOperation &stored = it->second;
 
     // Move the deferred callbacks (held alive by Parse) into the stable map node under the mutex.
@@ -1416,7 +1415,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     if (std::chrono::steady_clock::now() > pending.overallDeadline)
     {
         icWarn("Deferred operation %" PRIu64 " exceeded overall deadline", pendingId);
-        SpecBasedMatterDeviceDriverMetrics::RecordDeferredTimeout(
+        metrics.RecordDeferredTimeout(
             pending.operationCtx.driverName.c_str(),
             pending.operationCtx.opType.c_str(),
             pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str());
@@ -1548,7 +1547,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         icError("Deferred operation %" PRIu64 " exceeded max deferral depth (%u)",
                 pendingId,
                 PendingOperation::MAX_DEFERRAL_DEPTH);
-        SpecBasedMatterDeviceDriverMetrics::RecordDeferredMaxDepth(
+        metrics.RecordDeferredMaxDepth(
             pending.operationCtx.driverName.c_str(),
             pending.operationCtx.opType.c_str(),
             pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str());
@@ -1899,12 +1898,12 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
     const char *opTypeAttr = pending.operationCtx.opType.c_str();
     const char *resourceAttr =
         pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str();
-    SpecBasedMatterDeviceDriverMetrics::RecordDeferredComplete(durationMs,
-                                                               static_cast<double>(pending.deferralDepth),
-                                                               driverAttr,
-                                                               opTypeAttr,
-                                                               resourceAttr,
-                                                               static_cast<int64_t>(pendingOperations.size()) - 1);
+    metrics.RecordDeferredComplete(durationMs,
+                                   static_cast<double>(pending.deferralDepth),
+                                   driverAttr,
+                                   opTypeAttr,
+                                   resourceAttr,
+                                   static_cast<int64_t>(pendingOperations.size()) - 1);
 
     // Resolve the parking promise
     if (pending.parkingPromise != nullptr)
