@@ -232,9 +232,12 @@ namespace
             hctx.clusterFeatureMaps = featureMaps;
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-            JSValue handler = FindResourceHandler(endpointId, resourceId);
+            // Root the handler: BuildResourceArgs/PrefetchSupplements/AddSupplements below allocate,
+            // and mquickjs's moving GC can relocate an unrooted function object, leaving a raw JSValue
+            // snapshot stale. SafeJSValue::Get() always yields the current (relocated) function.
+            SafeJSValue handler(Ctx(), FindResourceHandler(endpointId, resourceId));
 
-            if (JS_IsUndefined(handler))
+            if (JS_IsUndefined(handler.Get()))
             {
                 ADD_FAILURE() << "No execute handler for " << endpointId << "/" << resourceId;
                 return std::nullopt;
@@ -273,7 +276,7 @@ namespace
 
             SbmdHandlerInvoker::AddSupplements(Ctx(), args, supplements, fetched);
 
-            return SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+            return SbmdHandlerInvoker::InvokeHandler(Ctx(), handler.Get(), args);
         }
 
         /**
@@ -289,9 +292,11 @@ namespace
             auto hctx = MakeContext();
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-            JSValue handler = FindCommandHandler(handlerName);
+            // Root the handler (see InvokeExecuteHandler): the arg/supplement building below allocates
+            // and can relocate an unrooted function object under mquickjs's moving GC.
+            SafeJSValue handler(Ctx(), FindCommandHandler(handlerName));
 
-            if (JS_IsUndefined(handler))
+            if (JS_IsUndefined(handler.Get()))
             {
                 ADD_FAILURE() << "No command handler named '" << handlerName << "'";
                 return std::nullopt;
@@ -323,7 +328,7 @@ namespace
 
             SbmdHandlerInvoker::AddSupplements(Ctx(), args, supplements, fetched);
 
-            return SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+            return SbmdHandlerInvoker::InvokeHandler(Ctx(), handler.Get(), args);
         }
 
         /**
