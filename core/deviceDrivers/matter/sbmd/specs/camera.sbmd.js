@@ -43,10 +43,13 @@
 //
 //   createSession  [execute]  — Allocates a new session and returns a sessionId.
 //   stream         [execute]  — Starts streaming for a given sessionId. Returns a
-//                               JSON object { protocol, entryPoint } identifying
-//                               the active protocol and the resource URI on the
-//                               protocol-specific endpoint the client uses next.
-//   takePicture    [execute]  — Captures a snapshot (not yet implemented).
+//                               JSON string encoding { protocol, entryPoint } that
+//                               identifies the active protocol and the resource URI on
+//                               the protocol-specific endpoint the client uses next.
+//                               (SBMD execute success values are strings, so structured
+//                               results are conveyed as a JSON string.)
+//   takePicture    [execute]  — Captures a snapshot for a given sessionId (not yet
+//                               implemented).
 //   destroySession [execute]  — Tears down a session and releases resources.
 //
 // The abstract endpoint carries no protocol-specific signaling and no status
@@ -56,7 +59,7 @@
 // Client Flow
 // -----------
 //   1. Execute createSession         → receive sessionId
-//   2. Execute stream with sessionId → receive { protocol, entryPoint }
+//   2. Execute stream with sessionId → receive JSON string { protocol, entryPoint }
 //   3. Follow entryPoint to the protocol-specific endpoint
 //      (e.g., /<id>/ep/webrtc/r/localSdp). Any negotiation details live on that
 //      endpoint, not in the abstract stream result; for WebRTC the client reads
@@ -79,8 +82,8 @@
 // The camera endpoint does not know or care which streaming protocol is in use.
 // The protocol identifier (e.g., "webrtc", "direct") is stored per session and
 // returned by the stream execute so clients can identify the technology.
-// Currently, this driver hardcodes PROTO_WEBRTC for Matter cameras. Other camera
-// technologies would have their own SBMD drivers that create the same abstract
+// Currently, this driver hardcodes PROTO_WEBRTC for Matter cameras. Cameras using
+// other technologies would have their own drivers that create the same abstract
 // camera endpoint with a different protocol identifier.
 //
 // See also: openspec/changes/archive/2026-05-04-camera-architecture-redesign/
@@ -109,6 +112,10 @@ SbmdDriver({
         CMD_VIDEO_STREAM_ALLOCATE: 0x03,
         CMD_VIDEO_STREAM_ALLOCATE_RESP: 0x04,
 
+        // CameraAVStreamManagement StreamUsageEnum value requested when allocating a stream and
+        // soliciting/providing an offer. 3 = LiveView.
+        STREAM_USAGE_LIVE_VIEW: 3,
+
         // WebRTCTransportProvider commands (outgoing — sent to camera)
         CMD_SOLICIT_OFFER: 0x00,
         CMD_SOLICIT_OFFER_RESP: 0x01,
@@ -117,6 +124,9 @@ SbmdDriver({
         CMD_PROVIDE_ANSWER: 0x04,
         CMD_PROVIDE_ICE: 0x05,
         CMD_END_SESSION: 0x06,
+
+        // WebRTCEndReasonEnum used in the EndSession command's reason field. 2 = UserHangup.
+        WEBRTC_END_REASON_USER_HANGUP: 2,
 
         // Global attribute: AcceptedCommandList (0xFFF9) — used to pick the signaling flow.
         ATTR_ACCEPTED_COMMAND_LIST: 0xfff9,
@@ -160,7 +170,7 @@ SbmdDriver({
         ONE_HOUR_SECS: 3600
     },
 
-    barton: {deviceClass: 'camera', deviceClassVersion: 1},
+    barton: {deviceClass: 'camera', deviceClassVersion: 2},
 
     matter: {
         deviceTypes: [0x0142],
@@ -177,7 +187,7 @@ SbmdDriver({
             clusterId: CL_WEBRTC_TRANSPORT_REQUESTOR,
             commandId: CMD_ICE_CANDIDATES
         },
-        incomingEnd: {clusterId: CL_WEBRTC_TRANSPORT_REQUESTOR, commandId: CMD_END},
+        incomingEndSession: {clusterId: CL_WEBRTC_TRANSPORT_REQUESTOR, commandId: CMD_END},
         providerAcceptedCommands: {
             clusterId: CL_WEBRTC_TRANSPORT_PROVIDER,
             attributeId: ATTR_ACCEPTED_COMMAND_LIST
@@ -207,7 +217,14 @@ SbmdDriver({
                     }
                 },
 
-                takePicture: {type: 'function', execute: executeTakePicture},
+                takePicture: {
+                    type: 'function',
+
+                    execute: {
+                        supplements: {transientData: [TD_SESSIONS]},
+                        handler: executeTakePicture
+                    }
+                },
 
                 destroySession: {
                     type: 'function',
@@ -286,10 +303,10 @@ SbmdDriver({
             supplements: {transientData: [TD_SESSIONS]},
             handler: handleIncomingIceCandidates
         },
-        handleIncomingEnd: {
-            aliases: ['incomingEnd'],
+        handleIncomingEndSession: {
+            aliases: ['incomingEndSession'],
             supplements: {transientData: [TD_SESSIONS]},
-            handler: handleIncomingEnd
+            handler: handleIncomingEndSession
         }
     }
 });
@@ -314,6 +331,17 @@ function parseSessions(sessionsJson) {
     } catch (e) {
         return null;
     }
+}
+
+function findStreamingSessionId(sessions) {
+    // Return the id of the (single) session in the 'streaming' state, or null if there is none.
+    for (var id in sessions) {
+        if (sessions[id].state === 'streaming') {
+            return id;
+        }
+    }
+
+    return null;
 }
 
 function executeCreateSession(args) {
@@ -373,17 +401,17 @@ function pickNegotiationRole(args) {
         }
     }
 
+    var role = ROLE_ANSWERER;
+
     if (Array.isArray(accepted)) {
         if (accepted.indexOf(CMD_SOLICIT_OFFER) !== -1) {
-            return ROLE_ANSWERER;
-        }
-
-        if (accepted.indexOf(CMD_PROVIDE_OFFER) !== -1) {
-            return ROLE_OFFERER;
+            role = ROLE_ANSWERER;
+        } else if (accepted.indexOf(CMD_PROVIDE_OFFER) !== -1) {
+            role = ROLE_OFFERER;
         }
     }
 
-    return ROLE_ANSWERER;
+    return role;
 }
 
 function readNegotiationRole(args) {
@@ -420,10 +448,11 @@ function executeStream(args) {
     var deviceId = args.deviceUuid;
     var entryPoint = '/' + deviceId + '/ep/webrtc/r/localSdp';
 
-    // The abstract stream result only names the active protocol and where to begin signaling.
-    // Everything protocol-specific — including the WebRTC negotiation role (read from
-    // ep/webrtc r/negotiationRole) and the ProvideOffer/SolicitOffer/ProvideAnswer commands — stays
-    // on the webrtc endpoint, so this command carries no WebRTC concepts.
+    // The abstract stream result names the active protocol and the entry-point resource where
+    // signaling begins. The entry point necessarily references the protocol-specific endpoint
+    // (here ep/webrtc r/localSdp), but the negotiation details — the WebRTC role (read from
+    // ep/webrtc r/negotiationRole) and the ProvideOffer/SolicitOffer/ProvideAnswer commands — live
+    // on that endpoint rather than in this abstract result.
     var streamInfo = {
         protocol: sessions[sessionId].protocol,
         entryPoint: entryPoint
@@ -439,7 +468,8 @@ function executeStream(args) {
 }
 
 function executeTakePicture(args) {
-    // TODO: implement snapshot capture via CameraAvStreamManagement
+    // TODO: implement snapshot capture via CameraAvStreamManagement. The session's transient data
+    // is supplied via TD_SESSIONS (see the resource registration) once implemented.
     return Sbmd.result().error('takePicture not yet implemented');
 }
 
@@ -484,7 +514,7 @@ function executeDestroySession(args) {
             reason: {tag: 1, type: 'enum8'}
         };
         var endPayload = Sbmd.Tlv.encodeStruct(
-            {webRTCSessionID: webRTCSessionID, reason: 2},
+            {webRTCSessionID: webRTCSessionID, reason: WEBRTC_END_REASON_USER_HANGUP},
             endSchema
         );
 
@@ -507,14 +537,7 @@ function executeLocalSdp(args) {
     }
 
     // Find the active streaming session
-    var sessionId = null;
-
-    for (var id in sessions) {
-        if (sessions[id].state === 'streaming') {
-            sessionId = id;
-            break;
-        }
-    }
+    var sessionId = findStreamingSessionId(sessions);
 
     if (!sessionId) {
         return Sbmd.result().error('No active streaming session');
@@ -550,6 +573,10 @@ function executeLocalSdp(args) {
 }
 
 function sendProvideAnswer(sessions, sessionId, sdp) {
+    if (!sdp) {
+        return Sbmd.result().error('SDP string required');
+    }
+
     var webRTCSessionID = sessions[sessionId].webRTCSessionID;
 
     if (webRTCSessionID === undefined || webRTCSessionID === null) {
@@ -610,7 +637,7 @@ function buildVideoStreamAllocatePayload(featureMap) {
     // conservative bit-rate ceiling, and the spec-recommended 4s key-frame
     // interval (expressed in milliseconds).
     var allocData = {
-        streamUsage: 3,
+        streamUsage: STREAM_USAGE_LIVE_VIEW,
         videoCodec: 0,
         minFrameRate: 30,
         maxFrameRate: 30,
@@ -673,7 +700,7 @@ function handleVideoStreamAllocateResponse(args) {
         {
             webRTCSessionID: null,
             sdp: ctx.sdp,
-            streamUsage: 3,
+            streamUsage: STREAM_USAGE_LIVE_VIEW,
             originatingEndpointID: WEBRTC_REQUESTOR_ENDPOINT_ID,
             videoStreamID: videoStreamID
         },
@@ -733,7 +760,7 @@ function handleAllocateForSolicit(args) {
     };
     var solicitPayload = Sbmd.Tlv.encodeStruct(
         {
-            streamUsage: 3,
+            streamUsage: STREAM_USAGE_LIVE_VIEW,
             originatingEndpointID: WEBRTC_REQUESTOR_ENDPOINT_ID,
             videoStreamID: videoStreamID
         },
@@ -815,92 +842,64 @@ function handleProvideOfferError(args) {
 }
 
 function executeLocalIceCandidates(args) {
-    var step = 'start';
+    var input = args.resource.input;
+
+    if (!input) {
+        return Sbmd.result().error('ICE candidates JSON array required');
+    }
+
+    var candidates;
 
     try {
-        step = 'read-input';
-        var input = args.resource.input;
-
-        if (!input) {
-            return Sbmd.result().error('ICE candidates JSON array required');
-        }
-
-        step = 'json-parse';
-        var candidates;
-
-        try {
-            candidates = JSON.parse(input.toString());
-        } catch (e) {
-            return Sbmd.result().error('Invalid JSON: ' + e.message);
-        }
-
-        step = 'is-array';
-
-        if (!Array.isArray(candidates)) {
-            return Sbmd.result().error('Input must be a JSON array of ICE candidate strings');
-        }
-
-        step = 'parse-sessions';
-        var sessionsJson = args.supplements.transientData[TD_SESSIONS];
-        var sessions = parseSessions(sessionsJson);
-
-        if (sessions === null) {
-            return Sbmd.result().error('No active sessions');
-        }
-
-        step = 'find-session';
-        // Find the active streaming session with a webRTCSessionID
-        var webRTCSessionID = null;
-
-        for (var id in sessions) {
-            if (sessions[id].state === 'streaming' && sessions[id].webRTCSessionID !== undefined) {
-                webRTCSessionID = sessions[id].webRTCSessionID;
-                break;
-            }
-        }
-
-        if (webRTCSessionID === null) {
-            return Sbmd.result().error('No active WebRTC session');
-        }
-
-        step = 'build-structs';
-        // Build ICECandidateStruct array: each element has {candidate, SDPMid, SDPMLineIndex}
-        var iceCandidateStructs = [];
-
-        for (var i = 0; i < candidates.length; i++) {
-            iceCandidateStructs.push({0: candidates[i], 1: null, 2: null});
-        }
-
-        step = 'encode';
-        var schema = {
-            webRTCSessionID: {tag: 0, type: 'uint16'},
-            ICECandidates: {tag: 1, type: 'array'}
-        };
-
-        var tlvBase64 = Sbmd.Tlv.encodeStruct(
-            {webRTCSessionID: webRTCSessionID, ICECandidates: iceCandidateStructs},
-            schema
-        );
-
-        step = 'send';
-
-        return Sbmd.result().device.sendCommand(
-            CL_WEBRTC_TRANSPORT_PROVIDER,
-            CMD_PROVIDE_ICE,
-            tlvBase64
-        );
-    } catch (topErr) {
-        return Sbmd.result().error(
-            'DIAG-STEP[' +
-                step +
-                ']: ' +
-                (topErr && topErr.message) +
-                ' | name=' +
-                (topErr && topErr.name) +
-                ' | line=' +
-                (topErr && topErr.lineNumber)
-        );
+        candidates = JSON.parse(input.toString());
+    } catch (e) {
+        return Sbmd.result().error('Invalid JSON: ' + e.message);
     }
+
+    if (!Array.isArray(candidates)) {
+        return Sbmd.result().error('Input must be a JSON array of ICE candidate strings');
+    }
+
+    var sessionsJson = args.supplements.transientData[TD_SESSIONS];
+    var sessions = parseSessions(sessionsJson);
+
+    if (sessions === null) {
+        return Sbmd.result().error('No active sessions');
+    }
+
+    // Find the active streaming session with a webRTCSessionID.
+    var sessionId = findStreamingSessionId(sessions);
+    var webRTCSessionID =
+        sessionId !== null && sessions[sessionId].webRTCSessionID !== undefined
+            ? sessions[sessionId].webRTCSessionID
+            : null;
+
+    if (webRTCSessionID === null) {
+        return Sbmd.result().error('No active WebRTC session');
+    }
+
+    // Build ICECandidateStruct array: each element has {candidate, SDPMid, SDPMLineIndex}
+    var iceCandidateStructs = [];
+
+    for (var i = 0; i < candidates.length; i++) {
+        iceCandidateStructs.push({0: candidates[i], 1: null, 2: null});
+    }
+
+    var schema = {
+        webRTCSessionID: {tag: 0, type: 'uint16'},
+        ICECandidates: {tag: 1, type: 'array'}
+    };
+
+    var tlvBase64 = Sbmd.Tlv.encodeStruct(
+        {webRTCSessionID: webRTCSessionID, ICECandidates: iceCandidateStructs},
+        schema
+    );
+
+    return Sbmd.result().device.sendCommand(
+        CL_WEBRTC_TRANSPORT_PROVIDER,
+        CMD_PROVIDE_ICE,
+        tlvBase64
+    );
 }
 
 // =============================================================================
@@ -928,12 +927,19 @@ function handleIncomingOffer(args) {
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
 
-    // Find the active streaming session and associate the Matter session ID
-    for (var id in sessions) {
-        if (sessions[id].state === 'streaming') {
-            sessions[id].webRTCSessionID = webRTCSessionID;
-            break;
-        }
+    if (sessions === null) {
+        // Corrupt session data: reset it, but still surface the remote SDP to the client.
+        return Sbmd.result()
+            .storage.setTransientData(TD_SESSIONS, '', 0)
+            .dataModel.updateResource(EP_WEBRTC, 'remoteSdp', sdp.toString())
+            .success();
+    }
+
+    // Find the active streaming session and associate the Matter session ID.
+    var sessionId = findStreamingSessionId(sessions);
+
+    if (sessionId) {
+        sessions[sessionId].webRTCSessionID = webRTCSessionID;
     }
 
     return Sbmd.result()
@@ -965,11 +971,10 @@ function handleIncomingAnswer(args) {
     var sessions = parseSessions(sessionsJson);
 
     if (sessions && webRTCSessionID !== undefined && webRTCSessionID !== null) {
-        for (var id in sessions) {
-            if (sessions[id].state === 'streaming') {
-                sessions[id].webRTCSessionID = webRTCSessionID;
-                break;
-            }
+        var answerSessionId = findStreamingSessionId(sessions);
+
+        if (answerSessionId) {
+            sessions[answerSessionId].webRTCSessionID = webRTCSessionID;
         }
     }
 
@@ -1009,7 +1014,7 @@ function handleIncomingIceCandidates(args) {
         .success();
 }
 
-function handleIncomingEnd(args) {
+function handleIncomingEndSession(args) {
     var tlvBase64 = args.command.tlvBase64;
     var reason = 12; // UnknownReason default
 
@@ -1026,14 +1031,19 @@ function handleIncomingEnd(args) {
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
 
-    var sessionId = null;
-
-    for (var id in sessions) {
-        if (sessions[id].state === 'streaming') {
-            sessionId = id;
-            break;
-        }
+    if (sessions === null) {
+        // Corrupt session data: reset it, but still emit the ended event to the client.
+        return Sbmd.result()
+            .storage.setTransientData(TD_SESSIONS, '', 0)
+            .dataModel.updateResource(EP_WEBRTC, 'webrtcError', WEBRTC_ERROR_ENDED, {
+                sessionId: 'unknown',
+                reason: reason,
+                detail: 'WebRTC session ended by camera (reason: ' + reason + ')'
+            })
+            .success();
     }
+
+    var sessionId = findStreamingSessionId(sessions);
 
     if (sessionId) {
         delete sessions[sessionId];

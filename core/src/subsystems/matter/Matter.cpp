@@ -1184,6 +1184,13 @@ bool Matter::HasCaseOperateAclEntryForCluster(chip::ClusterId clusterId)
             continue;
         }
 
+        // An ACL entry with no targets applies to all clusters on all endpoints,
+        // so it grants operate access to the requested cluster.
+        if (targetCount == 0)
+        {
+            return true;
+        }
+
         for (size_t i = 0; i < targetCount; ++i)
         {
             Access::AccessControl::Entry::Target target;

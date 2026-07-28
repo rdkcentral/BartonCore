@@ -288,6 +288,7 @@ if (BCORE_MATTER)
     bcore_add_cpp_test(
         NAME testSbmdHandlerInvoker
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdHandlerInvokerTest.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDriverTestSupport.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
@@ -327,6 +328,7 @@ if (BCORE_MATTER)
     bcore_add_cpp_test(
         NAME testSbmdCameraWebrtc
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdCameraWebrtcTest.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDriverTestSupport.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp

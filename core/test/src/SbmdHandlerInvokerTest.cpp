@@ -26,196 +26,34 @@
  * result parsing, and non-terminal op execution.
  */
 
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
+#include "SbmdDriverTestBase.h"
+
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 
 #include <gtest/gtest.h>
 #include <string>
-#include <vector>
-
-extern "C" {
-#include <cjson/cJSON.h>
-#include <mquickjs/mquickjs.h>
-}
 
 using namespace barton;
-
-// ============================================================================
-// Test stubs for C APIs called by ExecuteOps
-// ============================================================================
+using namespace barton::test;
 
 namespace
 {
-    struct UpdateResourceCall
-    {
-        std::string deviceUuid;
-        std::string endpointId;
-        std::string resourceId;
-        std::string value;
-        std::string metadata; // JSON string, empty if null
-    };
-
-    struct SetMetadataCall
-    {
-        std::string deviceUuid;
-        std::string endpointId;
-        std::string key;
-        std::string value;
-    };
-
-    struct SetPersistentDataCall
-    {
-        std::string uri;
-        std::string value;
-    };
-
-    std::vector<UpdateResourceCall> g_updateResourceCalls;
-    std::vector<SetMetadataCall> g_setMetadataCalls;
-    std::vector<SetPersistentDataCall> g_setPersistentDataCalls;
-} // namespace
-
-extern "C" {
-void updateResource(const char *deviceUuid,
-                    const char *endpointId,
-                    const char *resourceId,
-                    const char *newValue,
-                    void *metadata)
-{
-    std::string metaStr;
-
-    if (metadata != nullptr)
-    {
-        char *printed = cJSON_PrintUnformatted(static_cast<cJSON *>(metadata));
-
-        if (printed != nullptr)
-        {
-            metaStr = printed;
-            free(printed);
-        }
-    }
-
-    g_updateResourceCalls.push_back({deviceUuid ? deviceUuid : "",
-                                     endpointId ? endpointId : "",
-                                     resourceId ? resourceId : "",
-                                     newValue ? newValue : "",
-                                     metaStr});
-}
-
-void setMetadata(const char *deviceUuid, const char *endpointId, const char *name, const char *value)
-{
-    g_setMetadataCalls.push_back(
-        {deviceUuid ? deviceUuid : "", endpointId ? endpointId : "", name ? name : "", value ? value : ""});
-}
-
-bool deviceServiceSetMetadata(const char *uri, const char *value)
-{
-    g_setPersistentDataCalls.push_back({uri ? uri : "", value ? value : ""});
-
-    return true;
-}
-}
-
-namespace
-{
-    // Test helper mirroring the pre-split AddSupplements(fetchers...) signature:
-    // resolves the declared supplements via PrefetchSupplements, then attaches
-    // them with AddSupplements. Keeps these tests exercising the full
-    // fetch-then-attach path through the two-phase seam.
-    template<typename AttrFetcher, typename ResFetcher, typename PersistFetcher, typename TransientFetcher>
-    void FetchAndAddSupplements(JSContext *ctx,
-                                SafeJSValue &args,
-                                const SbmdSupplements &supplements,
-                                AttrFetcher attrFetcher,
-                                ResFetcher resFetcher,
-                                PersistFetcher persistFetcher,
-                                TransientFetcher transientFetcher)
-    {
-        FetchedSupplements fetched = SbmdHandlerInvoker::PrefetchSupplements(
-            supplements, attrFetcher, resFetcher, persistFetcher, transientFetcher);
-        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements, fetched);
-    }
-
-    class SbmdHandlerInvokerTest : public ::testing::Test
+    class SbmdHandlerInvokerTest : public SbmdDriverTestBase
     {
     protected:
-        static void SetUpTestSuite()
-        {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
-            ASSERT_NE(ctx, nullptr);
-            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
-            ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
-        }
+        static void SetUpTestSuite() { InitRuntime(); }
 
-        static void TearDownTestSuite() { MQuickJsRuntime::Shutdown(); }
-
-        void SetUp() override
-        {
-            g_updateResourceCalls.clear();
-            g_setMetadataCalls.clear();
-            g_setPersistentDataCalls.clear();
-        }
-
-        JSContext *Ctx() { return MQuickJsRuntime::GetSharedContext(); }
+        static void TearDownTestSuite() { ShutdownRuntime(); }
 
         HandlerContext MakeContext()
         {
-            HandlerContext hctx;
-            hctx.deviceUuid = "test-device-uuid";
-            hctx.endpointId = "1";
-            hctx.clusterFeatureMaps = {
-                {6, 0x01},
-                {8, 0x03}
-            };
-
-            return hctx;
-        }
-
-        /**
-         * Evaluate a JS expression and return it as a function JSValue.
-         */
-        JSValue EvalFunc(const char *expr)
-        {
-            auto *ctx = Ctx();
-
-            return JS_Eval(ctx, expr, strlen(expr), "<test>", JS_EVAL_RETVAL);
-        }
-
-        /**
-         * Get a string property from a JSValue object.
-         */
-        std::string GetStringProp(JSValue obj, const char *name)
-        {
-            auto *ctx = Ctx();
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return "";
-            }
-
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, val, &buf);
-
-            return str ? std::string(str) : "";
-        }
-
-        uint32_t GetUint32Prop(JSValue obj, const char *name)
-        {
-            auto *ctx = Ctx();
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val))
-            {
-                return 0;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
+            return SbmdDriverTestBase::MakeContext("test-device-uuid",
+                                                   "1",
+                                                   {
+                                                       {6, 0x01},
+                                                       {8, 0x03}
+            });
         }
     };
 

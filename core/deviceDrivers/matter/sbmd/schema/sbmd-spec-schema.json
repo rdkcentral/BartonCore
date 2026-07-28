@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "sbmd-spec-schema-v5.0.json",
-  "title": "SBMD v5.0 Registration Schema",
-  "description": "JSON Schema for the SbmdDriver() registration object in .sbmd.js spec files (schema version 5.0). Functions are represented as `true` after extraction.",
+  "$id": "sbmd-spec-schema.json",
+  "title": "SBMD Registration Schema",
+  "description": "JSON Schema for the SbmdDriver() registration object in .sbmd.js spec files. Functions are represented as `true` after extraction.",
   "type": "object",
   "required": ["schemaVersion", "driverVersion", "name", "constants", "barton", "matter"],
   "additionalProperties": false,
@@ -10,7 +10,7 @@
     "schemaVersion": {
       "type": "string",
       "const": "5.0",
-      "description": "Schema version. Must be '5.0'."
+      "description": "Schema version. Must be '5.0'; see schema/CHANGELOG.md for the version history."
     },
     "driverVersion": {
       "oneOf": [

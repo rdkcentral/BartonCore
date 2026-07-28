@@ -44,7 +44,7 @@ supported device type adds too much friction to the goal of broad device support
 
 SBMD addresses this by using textual specification files that map between Matter
 types and Barton resources, enabling new device type support without rebuilding or
-redeploying firmware. Each driver is a single `.sbmd.js` file (schema version 5)
+redeploying firmware. Each driver is a single `.sbmd.js` file
 where the full driver — metadata, resources, and handler logic — is expressed
 in JavaScript.
 
@@ -174,7 +174,7 @@ function myHandler(args) { ... }
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `schemaVersion` | string | yes | Schema version. Currently `"5.0"`. |
+| `schemaVersion` | string | yes | Schema version; validated against the current schema. See `schema/CHANGELOG.md` for the version history. |
 | `driverVersion` | string | yes | Driver-specific version string. |
 | `name` | string | yes | Human-readable driver name. |
 | `constants` | object | yes | Named constants (see [4.2](#42-constants)). |
