@@ -141,14 +141,18 @@ namespace
          * Call a handler function with an empty args object and parse the result.
          * Caller must hold the mutex.
          */
-        std::optional<ParsedResult> CallHandler(JSValue handler)
+        std::optional<ParsedResult> CallHandler(JSValue handlerRaw)
         {
             auto *ctx = Ctx();
 
-            // Create empty args object: ({})
-            JSValue args = JS_Eval(ctx, "({})", 4, "<test>", JS_EVAL_RETVAL);
+            // Root the handler and args: mquickjs's moving GC relocates objects on each allocation
+            // (JS_Eval, JS_StackCheck), so raw JSValues held across those calls go stale.
+            SafeJSValue handler(ctx, handlerRaw);
 
-            if (JS_IsException(args))
+            // Create empty args object: ({})
+            SafeJSValue args(ctx, JS_Eval(ctx, "({})", 4, "<test>", JS_EVAL_RETVAL));
+
+            if (JS_IsException(args.Get()))
             {
                 MQuickJsRuntime::CheckAndClearPendingException(ctx);
                 return std::nullopt;
@@ -159,8 +163,8 @@ namespace
                 return std::nullopt;
             }
 
-            JS_PushArg(ctx, args);
-            JS_PushArg(ctx, handler);
+            JS_PushArg(ctx, args.Get());
+            JS_PushArg(ctx, handler.Get());
             JS_PushArg(ctx, JS_NULL);
 
             JSValue result = JS_Call(ctx, 1);
@@ -262,7 +266,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto result = CallHandler(reg.endpoints[0].resources[0].write->handler);
+            auto result = CallHandler(reg.endpoints[0].resources[0].write->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
 
@@ -293,7 +297,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto result = CallHandler(reg.attributeHandlers[0].handler);
+            auto result = CallHandler(reg.attributeHandlers[0].Fn());
             ASSERT_TRUE(result.has_value());
 
             // Should have updateResource op then success terminal
@@ -426,7 +430,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto result = CallHandler(reg.endpoints[0].resources[0].write->handler);
+            auto result = CallHandler(reg.endpoints[0].resources[0].write->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
         }
@@ -479,7 +483,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto result = CallHandler(reg.commandHandlers[0].handler);
+            auto result = CallHandler(reg.commandHandlers[0].Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_EQ(result->ops.size(), 1u);
             ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(result->ops[0].data));
@@ -658,7 +662,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto result = CallHandler(reg.endpoints[0].resources[0].write->handler);
+            auto result = CallHandler(reg.endpoints[0].resources[0].write->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
 
@@ -724,7 +728,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto result = CallHandler(reg.endpoints[0].resources[0].read->handler);
+            auto result = CallHandler(reg.endpoints[0].resources[0].read->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data));
 
@@ -793,7 +797,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto result = CallHandler(reg.endpoints[0].resources[0].read->handler);
+            auto result = CallHandler(reg.endpoints[0].resources[0].read->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data));
 

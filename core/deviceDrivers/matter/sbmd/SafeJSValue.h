@@ -177,13 +177,24 @@ namespace barton
          */
         SafeJSValue AddObject(const char *key)
         {
-            JS_SetPropertyStr(ctx, Get(), key, JS_NewObject(ctx)); // create + attach in one step
-
 #if defined(BCORE_USE_MQUICKJS)
+            // Create the child in its own statement first. Performing the allocation inside the
+            // JS_SetPropertyStr(...) argument list is unsafe under mquickjs's moving GC: JS_NewObject
+            // may relocate *this*, and because C++ leaves argument evaluation order unspecified, the
+            // parent handle Get() can be computed before that allocation and passed stale. mquickjs
+            // has no reference counting, so JS_SetPropertyStr does not consume a reference and it is
+            // safe to keep the child rooted across the attach.
+            SafeJSValue child(ctx, JS_NewObject(ctx));
+            JS_SetPropertyStr(ctx, Get(), key, child.Get());
+
             // *this is rooted, so Get() is current. Re-read the child to obtain a current handle,
             // then root it in its own slot so the returned wrapper is never a stale snapshot.
             return SafeJSValue(ctx, JS_GetPropertyStr(ctx, Get(), key));
 #elif defined(BCORE_USE_QUICKJS)
+            // quickjs is reference counted and never relocates, and JS_SetPropertyStr consumes the
+            // freshly created (+1) reference, so create-and-attach in one step is correct here.
+            JS_SetPropertyStr(ctx, Get(), key, JS_NewObject(ctx));
+
             // JS_GetPropertyStr returns an owned (+1) reference; adopt it without an extra dup.
             return SafeJSValue(ctx, JS_GetPropertyStr(ctx, Get(), key), Adopt {});
 #endif
@@ -195,7 +206,17 @@ namespace barton
          * key - the property name to assign.
          * v   - the unsigned 32-bit value to store.
          */
-        void SetUint32(const char *key, uint32_t v) { JS_SetPropertyStr(ctx, Get(), key, JS_NewUint32(ctx, v)); }
+        void SetUint32(const char *key, uint32_t v)
+        {
+#if defined(BCORE_USE_MQUICKJS)
+            // Root the newly-created value across JS_SetPropertyStr(): that call can allocate and
+            // trigger GC, and mquickjs does not scan raw C locals.
+            SafeJSValue value(ctx, JS_NewUint32(ctx, v));
+            JS_SetPropertyStr(ctx, Get(), key, value.Get());
+#elif defined(BCORE_USE_QUICKJS)
+            JS_SetPropertyStr(ctx, Get(), key, JS_NewUint32(ctx, v));
+#endif
+        }
 
         /*
          * Set property `key` on this object to a new int32 JS value.
@@ -203,7 +224,15 @@ namespace barton
          * key - the property name to assign.
          * v   - the signed 32-bit value to store.
          */
-        void SetInt32(const char *key, int32_t v) { JS_SetPropertyStr(ctx, Get(), key, JS_NewInt32(ctx, v)); }
+        void SetInt32(const char *key, int32_t v)
+        {
+#if defined(BCORE_USE_MQUICKJS)
+            SafeJSValue value(ctx, JS_NewInt32(ctx, v));
+            JS_SetPropertyStr(ctx, Get(), key, value.Get());
+#elif defined(BCORE_USE_QUICKJS)
+            JS_SetPropertyStr(ctx, Get(), key, JS_NewInt32(ctx, v));
+#endif
+        }
 
         /*
          * Set property `key` on this object to a new JS string.
@@ -211,7 +240,15 @@ namespace barton
          * key - the property name to assign.
          * v   - the null-terminated C string to store (copied into a JS string).
          */
-        void SetString(const char *key, const char *v) { JS_SetPropertyStr(ctx, Get(), key, JS_NewString(ctx, v)); }
+        void SetString(const char *key, const char *v)
+        {
+#if defined(BCORE_USE_MQUICKJS)
+            SafeJSValue value(ctx, JS_NewString(ctx, v));
+            JS_SetPropertyStr(ctx, Get(), key, value.Get());
+#elif defined(BCORE_USE_QUICKJS)
+            JS_SetPropertyStr(ctx, Get(), key, JS_NewString(ctx, v));
+#endif
+        }
 
         /*
          * Set property `key` on this object to JS null.

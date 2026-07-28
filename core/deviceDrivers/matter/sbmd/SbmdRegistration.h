@@ -85,13 +85,15 @@ namespace barton
         SbmdHandler(SbmdHandler &&) = default;
         SbmdHandler &operator=(SbmdHandler &&) = default;
 
-        // Raw function reference captured at load time. This is a deliberately unheld staging slot:
-        // a loaded-but-not-yet-activated registration owns no held references, so it can be moved,
-        // discarded on a failed activation, or destroyed without needing the runtime mutex. Only
-        // valid transiently after load; the driver promotes it into heldFn when activated.
+        // Raw function reference captured at load time. This is a transient staging slot: the loader
+        // immediately populates heldFn to root the function during extraction (preventing GC from
+        // relocating it while the rest of the driver is parsed), so this raw slot is only valid
+        // briefly and callers must always invoke via Fn(). The held reference persists until the
+        // handler is reset (e.g., driver deactivation).
         JSValue handler = JS_UNDEFINED;
-        // Held function reference. Empty until the driver is activated, then keeps the function alive
-        // until deactivation. SafeJSValue always yields the current function object, so always invoke via Fn().
+        // Held function reference. Populated immediately during load/extraction to keep the function
+        // alive across GC operations. SafeJSValue always yields the current function object, so always
+        // invoke via Fn().
         SafeJSValue heldFn;
         SbmdSupplements supplements;
 

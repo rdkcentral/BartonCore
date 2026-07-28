@@ -167,6 +167,9 @@ bcore_option(NAME BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA
 bcore_option(NAME BCORE_MATTER_ENABLE_OTA_PROVIDER
            DEFINITION BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
            DESCRIPTION "Enable OTA provider for Matter and configure devices with OTA Requestor cluster")
+bcore_option(NAME BCORE_MATTER_MESSAGE_TRACING
+           DEFINITION BARTON_CONFIG_MATTER_MESSAGE_TRACING
+           DESCRIPTION "Developer feature: enable verbose Matter message tracing (inbound/outbound messages logged as JSON via ChipLog). Automatically builds the Matter library with tracing support. Not for production use.")
 bcore_option(NAME BCORE_MATTER_VALIDATE_SCHEMAS
            DEFINITION BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS
            DESCRIPTION "Enable validation of SBMD schemas"

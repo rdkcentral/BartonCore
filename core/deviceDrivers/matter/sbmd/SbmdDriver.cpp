@@ -29,6 +29,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdDriver.h"
+#include "mquickjs/MQuickJsRuntime.h"
 #include "mquickjs/SbmdLoader.h"
 
 extern "C" {
@@ -44,20 +45,28 @@ namespace barton
 
     SbmdDriver::~SbmdDriver()
     {
-        // Held-reference cleanup contract:
-        // The handler references held while activated belong to the JSContext used to activate this
-        // driver. They can only be released via ReleaseHandlers (through Deactivate), which requires that
-        // JSContext to still be alive. The destructor deliberately does NOT release them because it has
-        // no access to the JSContext and cannot assume it still exists. Callers are therefore responsible
-        // for invoking Deactivate() before destroying an activated driver; reaching this destructor while
-        // still activated leaks the references (and is reported below).
+        // Handler references are rooted (as GC roots) at extraction/activation time, so even a
+        // loaded-but-never-activated registration can still own roots here.
         if (registration && registration->activated)
         {
             icWarn("driver '%s' destroyed while still activated", registration->name.c_str());
+        }
 
-            // Abandon the held references without releasing them: releasing here would touch a
-            // context we cannot assume is still alive. Leaking matches the historical behaviour.
-            VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
+        // Clear held roots while holding the runtime mutex when the shared context is alive.
+        // If the context is already gone, detach so SafeJSValue destructors do not call JS_DeleteGCRef
+        // on a dead context.
+        if (registration)
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+            if (MQuickJsRuntime::GetSharedContext() == nullptr)
+            {
+                VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
+            }
+            else
+            {
+                VisitHandlers([](SbmdHandler &entry) { entry.heldFn = SafeJSValue {}; });
+            }
         }
     }
 
@@ -152,6 +161,14 @@ namespace barton
 
     void SbmdDriver::HoldIfValid(JSContext *ctx, SbmdHandler &entry)
     {
+        // Handlers are rooted at extraction time, so heldFn is normally already valid here. Keep
+        // that root rather than re-holding from the raw handler slot, which may have gone stale
+        // after GC relocations during extraction.
+        if (entry.heldFn.HasValue())
+        {
+            return;
+        }
+
         if (JS_IsUndefined(entry.handler))
         {
             entry.heldFn = SafeJSValue {};

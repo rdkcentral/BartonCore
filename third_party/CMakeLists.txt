@@ -51,8 +51,13 @@ if (BCORE_MATTER AND NOT BCORE_MATTER_SKIP_SDK)
             set(MATTER_ASAN_ARG "-a")
         endif()
 
+        # Forward Matter message tracing arg to building matter (developer feature)
+        if (BCORE_MATTER_MESSAGE_TRACING)
+            set(MATTER_TRACING_ARG "-t")
+        endif()
+
         # TODO: This config directory should be the same as what is available at runtime via providers. Perhaps this should be a public build option
-        set(MATTER_BUILD_COMMAND ./build-matter.sh -c $ENV{HOME}/.brtn-ds/matter ${MATTER_SSP_ARG} ${MATTER_ASAN_ARG})
+        set(MATTER_BUILD_COMMAND ./build-matter.sh -c $ENV{HOME}/.brtn-ds/matter ${MATTER_SSP_ARG} ${MATTER_ASAN_ARG} ${MATTER_TRACING_ARG})
 
         execute_process(
             COMMAND ${MATTER_BUILD_COMMAND}

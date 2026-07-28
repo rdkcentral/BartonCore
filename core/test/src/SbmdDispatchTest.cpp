@@ -487,13 +487,17 @@ namespace
             return std::make_unique<SbmdDriver>(std::move(reg), source);
         }
 
-        std::optional<ParsedResult> CallHandler(JSValue handler)
+        std::optional<ParsedResult> CallHandler(JSValue handlerRaw)
         {
             auto *ctx = Ctx();
 
-            JSValue args = JS_Eval(ctx, "({})", 4, "<test>", JS_EVAL_RETVAL);
+            // Root the handler and args: mquickjs's moving GC relocates objects on each allocation
+            // (JS_Eval, JS_StackCheck), so raw JSValues held across those calls go stale.
+            SafeJSValue handler(ctx, handlerRaw);
 
-            if (JS_IsException(args))
+            SafeJSValue args(ctx, JS_Eval(ctx, "({})", 4, "<test>", JS_EVAL_RETVAL));
+
+            if (JS_IsException(args.Get()))
             {
                 MQuickJsRuntime::CheckAndClearPendingException(ctx);
                 return std::nullopt;
@@ -504,8 +508,8 @@ namespace
                 return std::nullopt;
             }
 
-            JS_PushArg(ctx, args);
-            JS_PushArg(ctx, handler);
+            JS_PushArg(ctx, args.Get());
+            JS_PushArg(ctx, handler.Get());
             JS_PushArg(ctx, JS_NULL);
 
             JSValue result = JS_Call(ctx, 1);
@@ -652,7 +656,7 @@ namespace
         // Call it and verify the result
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto parsed = CallHandler(results[0]->handler->handler);
+            auto parsed = CallHandler(results[0]->handler->Fn());
             ASSERT_TRUE(parsed.has_value());
             ASSERT_EQ(parsed->ops.size(), 1u);
             ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(parsed->ops[0].data));
@@ -817,7 +821,7 @@ namespace
             hctx.deviceUuid = "test-device";
             hctx.endpointId = "1";
             SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0xFFF10000, 0, "AQID");
-            auto parsed = SbmdHandlerInvoker::InvokeHandler(Ctx(), results[0]->handler->handler, args);
+            auto parsed = SbmdHandlerInvoker::InvokeHandler(Ctx(), results[0]->handler->Fn(), args);
 
             ASSERT_TRUE(parsed.has_value());
             ASSERT_EQ(parsed->ops.size(), 2u);

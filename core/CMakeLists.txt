@@ -429,6 +429,12 @@ if (BCORE_GEN_GIR)
         elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             set(ASAN_LD_PRELOAD "LD_PRELOAD=$(gcc -print-file-name=libasan.so)")
         endif()
+
+        # The pygobject-stubs generator imports the instrumented BartonCore
+        # library and exits immediately. In ASAN builds, LSAN teardown can hang
+        # during that short-lived import-only path, so disable leak detection
+        # for this post-install helper just as we already do for GIR generation.
+        set(ASAN_STUBS_ENV "LSAN_OPTIONS=detect_leaks=0")
     endif()
 
     configure_file(gen_pygobject_stubs.in gen_pygobject_stubs @ONLY)

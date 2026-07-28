@@ -165,7 +165,11 @@ namespace barton
     std::optional<ParsedResult>
     SbmdHandlerInvoker::InvokeHandler(JSContext *ctx, JSValue handler, const SafeJSValue &args)
     {
-        if (JS_IsUndefined(handler))
+        // Root the handler function: JS_StackCheck below may allocate (grow the JS stack) and the
+        // moving GC would then relocate an unrooted handler, leaving the pushed argument stale.
+        SafeJSValue handlerRooted(ctx, handler);
+
+        if (JS_IsUndefined(handlerRooted.Get()))
         {
             icError("handler is undefined");
             return std::nullopt;
@@ -180,7 +184,7 @@ namespace barton
 
         // Stack order for JS_Call: arg, func, this
         JS_PushArg(ctx, args.Get());
-        JS_PushArg(ctx, handler);
+        JS_PushArg(ctx, handlerRooted.Get());
         JS_PushArg(ctx, JS_NULL);
 
         // Arm the execution timeout
@@ -368,6 +372,9 @@ namespace barton
                                                              const std::string &tlvBase64,
                                                              JSValue handlerContext)
     {
+        // Root handlerContext: the arg-building allocations below can relocate it under the
+        // moving GC before it is attached.
+        SafeJSValue handlerContextRooted(ctx, handlerContext);
         SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
         SafeJSValue response = args.AddObject(SBMD_KEY_RESPONSE);
@@ -383,9 +390,9 @@ namespace barton
             response.SetNull(SBMD_KEY_DATA);
         }
 
-        if (!JS_IsUndefined(handlerContext))
+        if (!JS_IsUndefined(handlerContextRooted.Get()))
         {
-            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContext);
+            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContextRooted.Get());
         }
         else
         {
@@ -402,6 +409,7 @@ namespace barton
                                                                    const std::string &tlvBase64,
                                                                    JSValue handlerContext)
     {
+        SafeJSValue handlerContextRooted(ctx, handlerContext);
         SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
         SafeJSValue attribute = args.AddObject(SBMD_KEY_ATTRIBUTE);
@@ -409,9 +417,9 @@ namespace barton
         attribute.SetUint32(SBMD_KEY_ATTRIBUTE_ID, attributeId);
         attribute.SetString(SBMD_KEY_VALUE, tlvBase64.c_str());
 
-        if (!JS_IsUndefined(handlerContext))
+        if (!JS_IsUndefined(handlerContextRooted.Get()))
         {
-            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContext);
+            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContextRooted.Get());
         }
         else
         {
@@ -428,6 +436,7 @@ namespace barton
                                                            int32_t matterCode,
                                                            JSValue handlerContext)
     {
+        SafeJSValue handlerContextRooted(ctx, handlerContext);
         SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
         SafeJSValue error = args.AddObject(SBMD_KEY_ERROR);
@@ -443,9 +452,9 @@ namespace barton
             error.SetNull(SBMD_KEY_MATTER_CODE);
         }
 
-        if (!JS_IsUndefined(handlerContext))
+        if (!JS_IsUndefined(handlerContextRooted.Get()))
         {
-            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContext);
+            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContextRooted.Get());
         }
         else
         {

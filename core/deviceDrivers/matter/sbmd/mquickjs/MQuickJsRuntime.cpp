@@ -30,6 +30,7 @@
 
 #include "MQuickJsRuntime.h"
 #include "SbmdJsUtil.h"
+#include "matter/sbmd/SafeJSValue.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -221,15 +222,18 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
         return false;
     }
 
-    JSValue pendingEx = JS_GetException(ctx);
+    JSValue pendingExRaw = JS_GetException(ctx);
 
     // JS_GetException returns JS_NULL or JS_UNDEFINED when no exception is pending
-    bool hasException = !JS_IsNull(pendingEx) && !JS_IsUndefined(pendingEx) && !JS_IsUninitialized(pendingEx);
+    bool hasException = !JS_IsNull(pendingExRaw) && !JS_IsUndefined(pendingExRaw) && !JS_IsUninitialized(pendingExRaw);
 
     if (!hasException)
     {
         return false;
     }
+
+    // Root the exception across property reads/conversions; mquickjs can relocate unrooted JSValues.
+    SafeJSValue pendingEx(ctx, pendingExRaw);
 
     // Extract exception message if caller wants it
     if (outExceptionMsg)
@@ -237,23 +241,23 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
         std::string exMsg;
 
         // Try ToCString for string exceptions
-        if (JS_IsString(ctx, pendingEx))
+        if (JS_IsString(ctx, pendingEx.Get()))
         {
             JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, pendingEx, &buf);
+            const char *str = JS_ToCString(ctx, pendingEx.Get(), &buf);
             if (str)
             {
                 exMsg = str;
             }
         }
-        else if (JS_IsPtr(pendingEx))
+        else if (JS_IsPtr(pendingEx.Get()))
         {
             // Try "message" property for Error objects
-            JSValue msgVal = JS_GetPropertyStr(ctx, pendingEx, "message");
-            if (JS_IsString(ctx, msgVal))
+            SafeJSValue msgVal(ctx, JS_GetPropertyStr(ctx, pendingEx.Get(), "message"));
+            if (JS_IsString(ctx, msgVal.Get()))
             {
                 JSCStringBuf buf;
-                const char *msgStr = JS_ToCString(ctx, msgVal, &buf);
+                const char *msgStr = JS_ToCString(ctx, msgVal.Get(), &buf);
                 if (msgStr)
                 {
                     exMsg = msgStr;
@@ -261,11 +265,11 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
             }
 
             // Also try to get stack trace for debugging
-            JSValue stackVal = JS_GetPropertyStr(ctx, pendingEx, "stack");
-            if (JS_IsString(ctx, stackVal))
+            SafeJSValue stackVal(ctx, JS_GetPropertyStr(ctx, pendingEx.Get(), "stack"));
+            if (JS_IsString(ctx, stackVal.Get()))
             {
                 JSCStringBuf buf;
-                const char *stackStr = JS_ToCString(ctx, stackVal, &buf);
+                const char *stackStr = JS_ToCString(ctx, stackVal.Get(), &buf);
                 if (stackStr)
                 {
                     if (!exMsg.empty())
@@ -280,9 +284,9 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
             // useful stack (e.g. exceptions raised from native bindings).
             for (const char *prop : {"name", "fileName", "lineNumber"})
             {
-                JSValue propVal = JS_GetPropertyStr(ctx, pendingEx, prop);
+                SafeJSValue propVal(ctx, JS_GetPropertyStr(ctx, pendingEx.Get(), prop));
                 JSCStringBuf buf;
-                const char *propStr = JS_ToCString(ctx, propVal, &buf);
+                const char *propStr = JS_ToCString(ctx, propVal.Get(), &buf);
                 if (propStr)
                 {
                     exMsg += " | ";
@@ -296,7 +300,7 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
         {
             // Try ToCString as fallback for other types
             JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, pendingEx, &buf);
+            const char *str = JS_ToCString(ctx, pendingEx.Get(), &buf);
             if (str)
             {
                 exMsg = str;

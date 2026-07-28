@@ -542,7 +542,11 @@ bool matterSubsystemOpenCommissioningWindow(const char *nodeId, uint16_t timeout
 
     if (nodeId != nullptr)
     {
-        if (!stringToUint64(nodeId, &_nodeId))
+        // Node IDs are represented as bare (non-prefixed) hexadecimal strings throughout the
+        // reference app (see matterCategory.c openCommissioningWindow, which formats via %016llx).
+        // Parse explicitly as base 16 so hex digits (a-f) are accepted; stringToUint64 uses base 0
+        // and would misinterpret a non-0x-prefixed hex string as decimal and reject it.
+        if (!stringToUnsignedNumberWithinRange(nodeId, &_nodeId, 16, 0, UINT64_MAX))
         {
             icError("Invalid nodeId");
             return false;

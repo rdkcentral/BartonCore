@@ -30,12 +30,13 @@
 set -e
 
 help() {
-    echo "Usage: $0 [-h] [-o <dir>] [-c <dir>] [-s] [-a]"
+    echo "Usage: $0 [-h] [-o <dir>] [-c <dir>] [-s] [-a] [-t]"
     echo "  -h  Display help"
     echo "  -o  Output directory"
     echo "  -c  Matter configuration directory"
     echo "  -s  Build with stack smash protection"
     echo "  -a  Build with address sanitizer"
+    echo "  -t  Build with Matter message tracing support (developer feature)"
 }
 
 MY_DIR=$(dirname $(readlink -f $0))
@@ -47,8 +48,9 @@ OUT_DIR=$MY_DIR/out
 MATTER_CONF_DIR="/tmp"
 BUILD_WITH_STACK_SMASH_PROTECTION=false
 BUILD_WITH_SANITIZER=false
+BUILD_WITH_MESSAGE_TRACING=false
 
-while getopts ":ho:c:sa" option; do
+while getopts ":ho:c:sat" option; do
     case $option in
     h)
         help
@@ -65,6 +67,9 @@ while getopts ":ho:c:sa" option; do
         ;;
     a)
         BUILD_WITH_SANITIZER=true
+        ;;
+    t)
+        BUILD_WITH_MESSAGE_TRACING=true
         ;;
     esac
 done
@@ -118,6 +123,14 @@ echo "Generating BartonProjectConfig"
 python3 $MY_DIR/configure_project_config.py $MY_DIR/BartonProjectConfig.h.in $PROJECT_CONFIG_DIR/BartonProjectConfig.h "CHIP_BARTON_CONF_DIR=$MATTER_CONF_DIR" "BARTON_CORE_VERSION=$BARTON_CORE_VERSION"
 
 GN_ARGS="chip_project_config_include_dirs=$PROJECT_INCLUDE_DIRS target_cflags_c=$CFLAGS target_cflags_cc=$CXXFLAGS target_ldflags=$LDFLAGS"
+
+# Developer feature: enable SDK-wide Matter message tracing. This links the JSON
+# tracing backend and turns on full hex + decoded-TLV payload logging. Off by
+# default; must be matched by BCORE_MATTER_MESSAGE_TRACING in the core build.
+if [ "$BUILD_WITH_MESSAGE_TRACING" = true ]; then
+    echo "Building Matter with message tracing support (developer feature)"
+    GN_ARGS+=" matter_enable_tracing_support=true matter_log_json_payload_hex=true matter_log_json_payload_decode_full=true matter_trace_config=\"//src/tracing/none\""
+fi
 
 echo "Running: gn --root=$CHIP_ROOT --root-target=$MY_DIR --dotfile=$MY_DIR/.gn gen --check --fail-on-unused-arg --args=\"$GN_ARGS\" $OUT_DIR"
 gn --root=$CHIP_ROOT --root-target=$MY_DIR --dotfile=$MY_DIR/.gn gen --check --fail-on-unused-arg --args="$GN_ARGS" $OUT_DIR
