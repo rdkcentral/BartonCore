@@ -23,9 +23,9 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 """
-SBMD v4 Specification Validator
+SBMD Specification Validator
 
-Validates .sbmd.js driver files against the SBMD v4 JSON Schema.
+Validates .sbmd.js driver files against the SBMD JSON Schema.
 
 The validator uses Node.js to evaluate each .sbmd.js file in a sandbox,
 extract the SbmdDriver() registration object as JSON (with functions
