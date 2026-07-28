@@ -83,34 +83,32 @@ namespace barton
 
 bool MQuickJsRuntime::Initialize(size_t memorySize)
 {
-    auto &rt = GetInstance();
-
-    if (rt.initialized)
+    if (initialized)
     {
         icDebug("Shared mquickjs context already initialized");
         return true;
     }
 
     icInfo("Initializing shared mquickjs context for SBMD scripts (%zu bytes)...", memorySize);
-    rt.peakHeapUsed = 0;
+    peakHeapUsed = 0;
 
     // Allocate the memory buffer for the mquickjs context
-    rt.memBuffer = static_cast<uint8_t *>(malloc(memorySize));
-    if (!rt.memBuffer)
+    memBuffer = static_cast<uint8_t *>(malloc(memorySize));
+    if (!memBuffer)
     {
         icError("Failed to allocate %zu bytes for mquickjs context", memorySize);
         return false;
     }
-    rt.memSize = memorySize;
+    memSize = memorySize;
 
     // Create the context with pre-allocated memory and default stdlib
-    rt.ctx = JS_NewContext(rt.memBuffer, rt.memSize, &js_stdlib);
-    if (!rt.ctx)
+    ctx = JS_NewContext(memBuffer, memSize, &js_stdlib);
+    if (!ctx)
     {
         icError("Failed to create shared mquickjs context");
-        free(rt.memBuffer);
-        rt.memBuffer = nullptr;
-        rt.memSize = 0;
+        free(memBuffer);
+        memBuffer = nullptr;
+        memSize = 0;
         return false;
     }
 
@@ -133,63 +131,64 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     )";
     bool polyfillFailed = false;
     {
-        SafeJSValue urlResult(rt.ctx,
-                              JS_Eval(rt.ctx, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_REPL));
+        SafeJSValue urlResult(ctx, JS_Eval(ctx, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_REPL));
         polyfillFailed = JS_IsException(urlResult.Get());
     }
 
     if (polyfillFailed)
     {
-        icError("Failed to install URL polyfill: %s", GetExceptionString(rt.ctx).c_str());
-        rt.metrics.RecordJsException("init", nullptr);
+        icError("Failed to install URL polyfill: %s", GetExceptionString(ctx).c_str());
+        metrics.RecordJsException("init", nullptr);
         {
-            std::lock_guard<std::mutex> lock(rt.mutex);
+            std::lock_guard<std::mutex> lock(mutex);
             LogMemoryUsage("polyfill-failed", IC_LOG_ERROR, true);
         }
-        JS_FreeContext(rt.ctx);
-        rt.ctx = nullptr;
-        free(rt.memBuffer);
-        rt.memBuffer = nullptr;
-        rt.memSize = 0;
+        JS_FreeContext(ctx);
+        ctx = nullptr;
+        free(memBuffer);
+        memBuffer = nullptr;
+        memSize = 0;
         return false;
     }
 
     // Check if polyfill installation left an exception
     std::string exMsg;
-    if (CheckAndClearPendingException(rt.ctx, &exMsg))
+    if (CheckAndClearPendingException(ctx, &exMsg))
     {
         icError("Polyfill installation left a pending exception: %s - this is a bug", exMsg.c_str());
-        rt.metrics.RecordJsException("init", nullptr);
+        metrics.RecordJsException("init", nullptr);
     }
 
-    rt.initialized = true;
+    initialized = true;
 
     // Install the script execution timeout interrupt handler
-    JS_SetInterruptHandler(rt.ctx, ScriptInterruptHandler);
+    JS_SetInterruptHandler(ctx, ScriptInterruptHandler);
     icDebug("Script execution interrupt handler installed");
 
     // Install the GC instrumentation callback (passes the metrics instance as opaque)
-    JS_SetGCCallback(rt.ctx, &MQuickJsRuntimeMetrics::GCCallback, &rt.metrics);
+#ifdef BARTON_CONFIG_SBMD_METRICS
+    JS_SetGCCallback(ctx, &MQuickJsRuntimeMetrics::GCCallback, &metrics);
+#endif
 
     {
-        std::lock_guard<std::mutex> lock(rt.mutex);
+        std::lock_guard<std::mutex> lock(mutex);
         LogMemoryUsage("post-init (context + stdlib + polyfills)", IC_LOG_DEBUG);
 
         // Record the arena size as a one-time gauge (arena is fixed after allocation)
         JSMemoryUsage arenaUsage = {};
 
-        if (JS_GetMemoryUsage(rt.ctx, &arenaUsage, 0) == 0)
+        if (JS_GetMemoryUsage(ctx, &arenaUsage, 0) == 0)
         {
-            rt.metrics.RecordArenaSize(static_cast<int64_t>(arenaUsage.arena_size));
-            rt.metrics.RecordHeapSnapshot(arenaUsage, 0);
+            metrics.RecordArenaSize(static_cast<int64_t>(arenaUsage.arena_size));
+            metrics.RecordHeapSnapshot(arenaUsage, 0);
         }
     }
 
     // Mark JS context as live — enables ForceSnapshot and the sampler thread
-    rt.jsContextReady.store(true, std::memory_order_release);
+    jsContextReady.store(true, std::memory_order_release);
 
     // Start the background idle sampler (no-op when sample period is disabled)
-    rt.metrics.StartSampler();
+    metrics.StartSampler();
 
     icInfo("Shared mquickjs context initialized successfully");
 
@@ -198,9 +197,7 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
 
 void MQuickJsRuntime::Shutdown()
 {
-    auto &rt = GetInstance();
-
-    if (!rt.initialized)
+    if (!initialized)
     {
         return;
     }
@@ -208,8 +205,8 @@ void MQuickJsRuntime::Shutdown()
     icInfo("Shutting down shared mquickjs context...");
 
     // Stop the sampler before freeing the context
-    rt.jsContextReady.store(false, std::memory_order_release);
-    rt.metrics.StopSampler();
+    jsContextReady.store(false, std::memory_order_release);
+    metrics.StopSampler();
 
     // Hold the JS mutex while freeing the context to prevent a
     // use-after-free race: a ForceSnapshot() caller that passed the
@@ -218,40 +215,42 @@ void MQuickJsRuntime::Shutdown()
     // any such in-flight call either completes before we free ctx, or sees
     // ctx == nullptr afterward and exits cleanly.
     {
-        std::lock_guard<std::mutex> lock(rt.mutex);
+        std::lock_guard<std::mutex> lock(mutex);
 
-        if (rt.ctx)
+        if (ctx)
         {
-            JS_SetGCCallback(rt.ctx, nullptr, nullptr);
-            JS_FreeContext(rt.ctx);
-            rt.ctx = nullptr;
+#ifdef BARTON_CONFIG_SBMD_METRICS
+            JS_SetGCCallback(ctx, nullptr, nullptr);
+#endif
+            JS_FreeContext(ctx);
+            ctx = nullptr;
         }
     }
 
-    if (rt.memBuffer)
+    if (memBuffer)
     {
-        free(rt.memBuffer);
-        rt.memBuffer = nullptr;
-        rt.memSize = 0;
+        free(memBuffer);
+        memBuffer = nullptr;
+        memSize = 0;
     }
 
-    rt.initialized = false;
+    initialized = false;
     icInfo("Shared mquickjs context shutdown complete");
 }
 
 JSContext *MQuickJsRuntime::GetSharedContext()
 {
-    return GetInstance().ctx;
+    return ctx;
 }
 
 std::mutex &MQuickJsRuntime::GetMutex()
 {
-    return GetInstance().mutex;
+    return mutex;
 }
 
 bool MQuickJsRuntime::IsInitialized()
 {
-    return GetInstance().initialized;
+    return initialized;
 }
 
 bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg)
@@ -360,9 +359,7 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
 
 void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bool walkHeap)
 {
-    auto &rt = GetInstance();
-
-    if (!rt.ctx)
+    if (!ctx)
     {
         return;
     }
@@ -370,7 +367,7 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
     int flags = walkHeap ? JS_MEMUSAGE_WALK_HEAP : 0;
     JSMemoryUsage usage = {};
 
-    if (JS_GetMemoryUsage(rt.ctx, &usage, flags) != 0)
+    if (JS_GetMemoryUsage(ctx, &usage, flags) != 0)
     {
         icWarn("Failed to get mquickjs memory usage at '%s'", label);
         return;
@@ -388,9 +385,9 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
             netHeapUsed = usage.heap_used - usage.heap_free_blocks;
         }
 
-        if (netHeapUsed > rt.peakHeapUsed)
+        if (netHeapUsed > peakHeapUsed)
         {
-            rt.peakHeapUsed = netHeapUsed;
+            peakHeapUsed = netHeapUsed;
         }
 
         icLogMsg(__FILE__,
@@ -410,7 +407,7 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
                  usage.stack_used,
                  usage.free_size,
                  usage.overhead,
-                 rt.peakHeapUsed);
+                 peakHeapUsed);
     }
     else
     {
@@ -434,59 +431,58 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
 
 void MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::time_point value)
 {
-    auto &rt = GetInstance();
-    rt.scriptInterruptFired.store(false, std::memory_order_relaxed);
-    rt.deadline = value;
+    scriptInterruptFired.store(false, std::memory_order_relaxed);
+    deadline = value;
 }
 
 void MQuickJsRuntime::ClearDeadline()
 {
-    GetInstance().deadline = std::chrono::steady_clock::time_point {};
+    deadline = std::chrono::steady_clock::time_point {};
 }
 
 std::chrono::steady_clock::time_point MQuickJsRuntime::GetDeadline()
 {
-    return GetInstance().deadline;
+    return deadline;
 }
 
 void MQuickJsRuntime::RecordInterrupt()
 {
-    GetInstance().scriptInterruptFired.store(true, std::memory_order_relaxed);
+    scriptInterruptFired.store(true, std::memory_order_relaxed);
 }
 
 bool MQuickJsRuntime::WasInterrupted()
 {
-    return GetInstance().scriptInterruptFired.load(std::memory_order_relaxed);
+    return scriptInterruptFired.load(std::memory_order_relaxed);
 }
 
 bool MQuickJsRuntime::IsContextReady()
 {
-    return GetInstance().jsContextReady.load(std::memory_order_acquire);
+    return jsContextReady.load(std::memory_order_acquire);
 }
 
 void MQuickJsRuntime::RecordMutexWait(double ms)
 {
-    GetInstance().metrics.RecordMutexWait(ms);
+    metrics.RecordMutexWait(ms);
 }
 
 void MQuickJsRuntime::RecordJsException(const char *phase, const char *driver)
 {
-    GetInstance().metrics.RecordJsException(phase, driver);
+    metrics.RecordJsException(phase, driver);
 }
 
 void MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)
 {
-    GetInstance().metrics.RecordHeapSnapshot(usage, gcRootCount);
+    metrics.RecordHeapSnapshot(usage, gcRootCount);
 }
 
 void MQuickJsRuntime::TickleSampler()
 {
-    GetInstance().metrics.TickleSampler();
+    metrics.TickleSampler();
 }
 
 void MQuickJsRuntime::ForceSnapshot()
 {
-    GetInstance().metrics.ForceSnapshot();
+    metrics.ForceSnapshot();
 }
 
 } // namespace barton

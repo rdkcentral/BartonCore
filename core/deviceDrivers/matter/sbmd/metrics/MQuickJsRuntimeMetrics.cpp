@@ -40,13 +40,8 @@ namespace barton
 
     // ── Handle initialization ──────────────────────────────────────────────────
 
-    void MQuickJsRuntimeMetrics::InitInstruments()
+    MQuickJsRuntimeMetrics::MQuickJsRuntimeMetrics()
     {
-        if (heapUsedHisto != nullptr)
-        {
-            return;
-        }
-
         heapUsedHisto = observabilityHistogramCreate(
             "sbmd.js.heap.used_bytes", "Distribution of mquickjs heap bytes in use at each handler invocation", "By");
         heapArenaGauge =
@@ -63,7 +58,6 @@ namespace barton
         gcDurationHisto = observabilityHistogramCreate("sbmd.js.gc.duration_ms", "Duration of each GC cycle", "ms");
         gcRootsGauge = observabilityGaugeCreate(
             "sbmd.js.gc_roots", "Live GC roots registered on the JS context (push/pop + add/delete lists)", "1");
-        peakHeapRecorded = 0;
     }
 
     // ── Sampler ───────────────────────────────────────────────────────────────
@@ -141,8 +135,6 @@ namespace barton
             return;
         }
 
-        InitInstruments(); // lazy init — instruments created on first call
-
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             JSContext *ctx = MQuickJsRuntime::GetSharedContext();
@@ -171,7 +163,6 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)
     {
-        InitInstruments(); // lazy init — instruments created on first call
         observabilityHistogramRecord(heapUsedHisto, static_cast<double>(usage.heap_used));
         observabilityGaugeRecord(heapFreeGauge, static_cast<int64_t>(usage.free_size));
 
@@ -186,20 +177,16 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::RecordArenaSize(int64_t bytes)
     {
-        InitInstruments(); // lazy init — instruments created on first call
         observabilityGaugeRecord(heapArenaGauge, bytes);
     }
 
     void MQuickJsRuntimeMetrics::RecordMutexWait(double ms)
     {
-        InitInstruments(); // lazy init — instruments created on first call
         observabilityHistogramRecord(mutexWaitHisto, ms);
     }
 
     void MQuickJsRuntimeMetrics::RecordJsException(const char *phase, const char *driver)
     {
-        InitInstruments(); // lazy init — instruments created on first call
-
         if (driver)
         {
             observabilityCounterAddWithAttrs(jsExceptionCounter, 1, "phase", phase, "driver", driver, nullptr);
@@ -219,8 +206,6 @@ namespace barton
             return;
         }
 
-        metrics->InitInstruments(); // lazy init — instruments created on first call
-
         if (isEnd == 0)
         {
             metrics->gcStartTime = std::chrono::steady_clock::now();
@@ -236,6 +221,6 @@ namespace barton
         observabilityHistogramRecord(metrics->gcDurationHisto, ms);
     }
 
-} // namespace barton
-
 #endif // BARTON_CONFIG_SBMD_METRICS
+
+} // namespace barton

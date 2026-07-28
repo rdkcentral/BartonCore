@@ -27,13 +27,8 @@
 
 namespace barton
 {
-    void SpecBasedMatterDeviceDriverMetrics::InitInstruments()
+    SpecBasedMatterDeviceDriverMetrics::SpecBasedMatterDeviceDriverMetrics()
     {
-        if (deferredTimeoutCounter != nullptr)
-        {
-            return;
-        }
-
         deferredTimeoutCounter = observabilityCounterCreate(
             "sbmd.deferred.timeout", "Number of deferred operations that exceeded the overall deadline", "1");
         deferralMaxDepthCounter = observabilityCounterCreate(
@@ -50,7 +45,6 @@ namespace barton
 
     void SpecBasedMatterDeviceDriverMetrics::RecordDeferredStart(int64_t inFlight)
     {
-        InitInstruments(); // lazy init — instruments created on first call
         observabilityGaugeRecord(deferredInFlightGauge, inFlight);
     }
 
@@ -58,8 +52,6 @@ namespace barton
                                                                    const char *opType,
                                                                    const char *resourceId)
     {
-        InitInstruments(); // lazy init — instruments created on first call
-
         if (resourceId)
         {
             observabilityCounterAddWithAttrs(
@@ -75,8 +67,6 @@ namespace barton
                                                                     const char *opType,
                                                                     const char *resourceId)
     {
-        InitInstruments(); // lazy init — instruments created on first call
-
         if (resourceId)
         {
             observabilityCounterAddWithAttrs(
@@ -95,8 +85,6 @@ namespace barton
                                                                     const char *resourceId,
                                                                     int64_t inFlightAfter)
     {
-        InitInstruments(); // lazy init — instruments created on first call
-
         auto recordHisto = [&](ObservabilityHistogram *histo, double value) {
             if (!histo)
             {

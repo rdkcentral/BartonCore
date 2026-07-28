@@ -25,32 +25,28 @@ This design covers how to wire the observability API into the SBMD runtime witho
 
 ### Decision 1: Instance-based per-subsystem metrics classes owned by their monitored classes
 
-Each SBMD subsystem's metrics live in a dedicated class inside `core/deviceDrivers/matter/sbmd/metrics/`. Each class owns its own handles and recording methods; instruments are initialized lazily on first use via a private `InitInstruments()` helper:
+Each SBMD subsystem's metrics live in a dedicated class inside `core/deviceDrivers/matter/sbmd/metrics/`. Each class owns its own handles and recording methods; instruments are initialized in the constructor:
 
 | Class | Metrics covered | Ownership |
 |---|---|---|
-| `MQuickJsRuntimeMetrics` | `sbmd.js.heap.*`, `sbmd.js.mutex.wait_ms`, `sbmd.js.exception`, `sbmd.js.gc.*`, `sbmd.js.gc_roots` | Non-static member of `MQuickJsRuntime` singleton |
+| `MQuickJsRuntimeMetrics` | `sbmd.js.heap.*`, `sbmd.js.mutex.wait_ms`, `sbmd.js.exception`, `sbmd.js.gc.*`, `sbmd.js.gc_roots` | `inline static` member of `MQuickJsRuntime` static class |
 | `SbmdHandlerInvokerMetrics` | `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, `sbmd.handler.outcome` | Static member of `SbmdHandlerInvoker` |
 | `SbmdFactoryMetrics` | `sbmd.driver.load.*`, `sbmd.driver.registered.count` | Non-static member of `SbmdFactory` singleton |
 | `SpecBasedMatterDeviceDriverMetrics` | `sbmd.deferred.*` | Static member of `SpecBasedMatterDeviceDriver` (class-wide aggregates) |
 
 All metrics classes are **instance-based** (no static methods or static handles). This aligns with the existing patterns in the codebase — static-only utility classes are an anti-pattern that was not to be continued with new code.
 
-**Access control:** All methods and data members of each metrics class live in the default-private section. A single `friend class [OwnerClass]` declaration grants the owning class exclusive compile-time access, making unauthorized access a compile error rather than a documentation convention.
+**Access control:** Each metrics class uses standard `public`/`private` visibility. Recording methods and the constructor are `public`; instrument handles and internal state are `private`. This allows direct unit testing of any recording method without requiring a friend declaration or proxy.
 
-**Lifecycle:** Metric instruments are initialized lazily — the first recording call in each class triggers `InitInstruments()`, a private idempotent helper that creates all handles for that class and is a no-op thereafter. No explicit initialization call is needed from any owner class. Handles persist for the process lifetime. `RegisterDrivers()` is idempotent: if drivers are already loaded it returns `true` immediately, so a second call is always safe.
+**Lifecycle:** Metric instruments are initialized in each class's constructor, which runs at most once per object lifetime. Handles persist for the process lifetime. `RegisterDrivers()` is idempotent: if drivers are already loaded it returns `true` immediately, so a second call is always safe.
 
-**`MQuickJsRuntime` singleton pattern:** `MQuickJsRuntime` is converted from a static-only class to a Meyer's singleton (`static MQuickJsRuntime &GetInstance()`). All existing public static methods are preserved as static wrappers that call `GetInstance()` internally, so all callers are unchanged. The `metrics` member is a real non-static `MQuickJsRuntimeMetrics` instance owned by the singleton.
+**`MQuickJsRuntime` static class:** `MQuickJsRuntime` is a pure static class: its constructor is deleted, all state is held in `inline static` members (C++17 — no separate `.cpp` definitions required), and all public methods are `static`. The `metrics` member is an `inline static MQuickJsRuntimeMetrics` instance. Full conversion to an instance-based design is deferred to a future effort.
 
-**Cross-module recording:** Calls from modules outside the owning class go through `MQuickJsRuntime` static wrapper methods: `MQuickJsRuntime::RecordJsException(...)`, `MQuickJsRuntime::RecordMutexWait(...)`, `MQuickJsRuntime::RecordHeapSnapshot(...)`, `MQuickJsRuntime::TickleSampler()`, and `MQuickJsRuntime::ForceSnapshot()` — each delegates to `GetInstance().metrics.*`. `SbmdHandlerInvoker` calls these wrappers for runtime metrics and `metrics.RecordInvocation(...)` / `metrics.RecordOutcome(...)` for its own static `metrics` member. `SpecBasedMatterDeviceDriver` calls `MQuickJsRuntime::RecordMutexWait(...)` and `metrics.RecordDeferred*(...)` on its own static `metrics` member. `SbmdFactory` calls `metrics.RecordDriverLoad*(...)` on its own instance member.
+**Cross-module recording:** Calls from modules outside the owning class go through `MQuickJsRuntime` static wrapper methods: `MQuickJsRuntime::RecordJsException(...)`, `MQuickJsRuntime::RecordMutexWait(...)`, `MQuickJsRuntime::RecordHeapSnapshot(...)`, `MQuickJsRuntime::TickleSampler()`, and `MQuickJsRuntime::ForceSnapshot()` — each delegates to `metrics.*`. `SbmdHandlerInvoker` calls these wrappers for runtime metrics and `metrics.RecordInvocation(...)` / `metrics.RecordOutcome(...)` for its own static `metrics` member. `SpecBasedMatterDeviceDriver` calls `MQuickJsRuntime::RecordMutexWait(...)` and `metrics.RecordDeferred*(...)` on its own static `metrics` member. `SbmdFactory` calls `metrics.RecordDriverLoad*(...)` on its own instance member.
 
 All five `sbmd.handler.outcome` outcome values — `"success"`, `"exception"`, `"timeout"`, `"stack_overflow"`, and `"error"` — are recorded exclusively within `SbmdHandlerInvoker::InvokeHandler`. `"error"` is emitted after `SbmdResultExecutor::Parse()` returns when the terminal is `ResultTerminal::Error`; `"success"` is emitted for all other parseable terminals. If `Parse()` returns `std::nullopt` (malformed driver result), no outcome is recorded. `SpecBasedMatterDeviceDriver::ExecuteTerminal` and `ContinueDeferredChain` do NOT record outcomes.
 
-**`SbmdFactory::RegisterDrivers()` is idempotent:** if `drivers` is non-empty it returns `true` immediately. `SpecBasedMatterDeviceDriver` wrappers released to `deviceDriverManager` hold raw `SbmdDriver*` pointers for the process lifetime and cannot be safely unregistered, so re-registration is prevented rather than attempted.
-
-**`InitInstruments()` is idempotent in each class.** Each implementation checks its sentinel handle for non-null and returns immediately if instruments are already created, preventing handle leaks.
-
-**Why a private `InitInstruments()` rather than inline creation at each recording call site?** Multiple recording methods share the same set of handles; centralizing creation in a single shared helper avoids duplicating the creation calls. The instruments persist for the process lifetime.
+**`SbmdFactory::RegisterDrivers()` is idempotent:** if `drivers` is non-empty it returns `true` immediately.
 
 ### Decision 2: `SbmdHandlerInvoker::InvokeHandler` invocation context parameter
 
@@ -164,7 +160,7 @@ A `BCORE_SBMD_METRICS` ON/OFF CMake option (default ON, compiled definition `BAR
 - The timing measurements in `AcquireJsMutex()` are guarded with `#ifdef BARTON_CONFIG_SBMD_METRICS` so clock reads are eliminated even in unoptimized builds
 - All measurement overhead in `SbmdHandlerInvoker::InvokeHandler` — pre/post `JS_GetMemoryUsage`, `steady_clock::now()` timing, `JS_GetGCRootCount()`, and `WasInterrupted()` — is guarded with `#ifdef BARTON_CONFIG_SBMD_METRICS`; with metrics disabled the function pays only for `JS_Call` itself and does not reference the patched `JS_GetGCRootCount` symbol
 - All measurement overhead in `SbmdFactory::RegisterDriversFromDirectory` — `loadStart`/`loadEnd` (`steady_clock::now()`), `usageBefore`/`usageAfter` (`JS_GetMemoryUsage`), duration/delta math, and all `metrics.Record*` calls — is guarded with `#ifdef BARTON_CONFIG_SBMD_METRICS`; driver loading itself is unaffected
-- `InitInstruments()` in each metrics class is a no-op stub; all recording methods are empty stubs; no initialization or shutdown calls are needed
+- the constructor in each metrics class is a no-op stub; all recording methods are empty stubs; no initialization or shutdown calls are needed
 
 When `BCORE_OBSERVABILITY_BACKEND=none`, the observability backend API calls are already no-ops (via `observabilityNoop.c`), but the SBMD metrics infrastructure — sampler thread, timing measurements — still runs. Setting `BCORE_SBMD_METRICS=OFF` eliminates that remaining overhead for a true zero-cost build.
 
@@ -174,7 +170,7 @@ When `BCORE_OBSERVABILITY_BACKEND=none`, the observability backend API calls are
 core/deviceDrivers/matter/sbmd/
 │
 ├── metrics/                                 ← all metric classes (new subdirectory)
-│   ├── MQuickJsRuntimeMetrics.h/.cpp        ← instance-based; owned by MQuickJsRuntime singleton;
+│   ├── MQuickJsRuntimeMetrics.h/.cpp        ← instance-based; `inline static` member of `MQuickJsRuntime` static class;
 │   │                                        handles + recording for sbmd.js.*;
 │   │                                        ForceSnapshot, TickleSampler, RecordHeapSnapshot,
 │   │                                        RecordArenaSize, RecordMutexWait, RecordJsException,
@@ -193,8 +189,9 @@ core/deviceDrivers/matter/sbmd/
 │                                            RecordDeferredMaxDepth, RecordDeferredComplete
 │
 ├── mquickjs/
-│   ├── MQuickJsRuntime.h/.cpp               ← Meyer's singleton (GetInstance()); MQuickJsRuntimeMetrics metrics;
-│   │                                        all public methods remain static wrappers calling GetInstance();
+│   ├── MQuickJsRuntime.h/.cpp               ← pure static class (constructor deleted); inline static members;
+│   │                                        inline static MQuickJsRuntimeMetrics metrics;
+│   │                                        all public methods are static;
 │   │                                        static wrappers: RecordJsException, RecordMutexWait,
 │   │                                        RecordHeapSnapshot, TickleSampler, ForceSnapshot;
 │   │                                        Initialize() calls metrics.StartSampler();

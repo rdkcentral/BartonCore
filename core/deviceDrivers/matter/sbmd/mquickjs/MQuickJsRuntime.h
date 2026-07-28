@@ -66,15 +66,6 @@ namespace barton
     {
     public:
         /**
-         * Return the singleton instance.
-         */
-        static MQuickJsRuntime &GetInstance()
-        {
-            static MQuickJsRuntime instance;
-            return instance;
-        }
-
-        /**
          * Initialize the shared mquickjs context.
          *
          * This must be called once during application startup before any
@@ -190,9 +181,7 @@ namespace barton
          * Return true when the JS context is live and accepting snapshots.
          *
          * Set to true (memory_order_release) at the end of Initialize(), cleared
-         * to false (memory_order_release) at the start of Shutdown(). Used by
-         * MQuickJsRuntimeMetrics::ForceSnapshot() as a lock-free early-exit guard
-         * so it does not acquire the JS mutex when the context is down.
+         * to false (memory_order_release) at the start of Shutdown().
          */
         static bool IsContextReady();
 
@@ -204,7 +193,6 @@ namespace barton
 
         /**
          * Record a JS exception event.
-         * Called from SbmdBundleLoader.cpp when a script eval fails.
          * @param phase  "init" or "loading"
          * @param driver Filename stem, or nullptr to omit the "driver" attribute
          */
@@ -212,13 +200,11 @@ namespace barton
 
         /**
          * Record pool health metrics from an already-captured JSMemoryUsage.
-         * Called from SbmdHandlerInvoker.cpp after each handler invocation.
          */
         static void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
 
         /**
          * Reset the idle sampler timer without waiting for the full period.
-         * Called from SbmdHandlerInvoker.cpp after each handler invocation.
          */
         static void TickleSampler();
 
@@ -229,25 +215,22 @@ namespace barton
         static void ForceSnapshot();
 
     private:
-        MQuickJsRuntime() = default;
-        ~MQuickJsRuntime() = default;
-        MQuickJsRuntime(const MQuickJsRuntime &) = delete;
-        MQuickJsRuntime &operator=(const MQuickJsRuntime &) = delete;
+        MQuickJsRuntime() = delete;
 
-        uint8_t *memBuffer = nullptr;
-        size_t memSize = 0;
-        JSContext *ctx = nullptr;
-        std::mutex mutex;
-        bool initialized = false;
-        size_t peakHeapUsed = 0;
-        std::chrono::steady_clock::time_point deadline;
-        std::atomic<bool> scriptInterruptFired {false};
+        inline static uint8_t *memBuffer = nullptr;
+        inline static size_t memSize = 0;
+        inline static JSContext *ctx = nullptr;
+        inline static std::mutex mutex;
+        inline static bool initialized = false;
+        inline static size_t peakHeapUsed = 0;
+        inline static std::chrono::steady_clock::time_point deadline;
+        inline static std::atomic<bool> scriptInterruptFired {false};
 
         // jsContextReady: set true at end of Initialize(), cleared at start of
-        // Shutdown(). Used by metrics.ForceSnapshot() as a lock-free early-exit guard.
-        std::atomic<bool> jsContextReady {false};
+        // Shutdown().
+        inline static std::atomic<bool> jsContextReady {false};
 
-        MQuickJsRuntimeMetrics metrics;
+        inline static MQuickJsRuntimeMetrics metrics;
     };
 
 } // namespace barton

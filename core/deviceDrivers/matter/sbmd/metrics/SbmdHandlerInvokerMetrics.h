@@ -35,8 +35,8 @@ namespace barton
      */
     class SbmdHandlerInvokerMetrics
     {
-        friend class SbmdHandlerInvoker;
-
+    public:
+        SbmdHandlerInvokerMetrics();
 
         /**
          * Record handler invocation timing and heap impact.
@@ -54,8 +54,8 @@ namespace barton
          * @param resourceId  nullptr to omit the "resource_id" attribute
          */
         void RecordOutcome(const char *driver, const char *opType, const char *resourceId, const char *outcome);
-        void InitInstruments();
 
+    private:
         ObservabilityHistogram *handlerDurationHisto = nullptr;
         ObservabilityHistogram *handlerHeapDeltaHisto = nullptr;
         ObservabilityCounter *handlerOutcomeCounter = nullptr;
@@ -69,8 +69,7 @@ namespace barton
 {
     class SbmdHandlerInvokerMetrics
     {
-        friend class SbmdHandlerInvoker;
-
+    public:
         void RecordInvocation(double, double, const char *, const char *, const char *) {}
 
         void RecordOutcome(const char *, const char *, const char *, const char *) {}

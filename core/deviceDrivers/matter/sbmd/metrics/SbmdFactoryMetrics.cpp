@@ -27,13 +27,8 @@
 
 namespace barton
 {
-    void SbmdFactoryMetrics::InitInstruments()
+    SbmdFactoryMetrics::SbmdFactoryMetrics()
     {
-        if (driverLoadFailureCounter != nullptr)
-        {
-            return;
-        }
-
         driverLoadFailureCounter =
             observabilityCounterCreate("sbmd.driver.load.failure", "Number of SBMD driver loads that failed", "1");
         driverLoadDurationHisto = observabilityHistogramCreate(
@@ -46,20 +41,17 @@ namespace barton
 
     void SbmdFactoryMetrics::RecordDriverLoadFailure(const char *driver, const char *reason)
     {
-        InitInstruments(); // lazy init — instruments created on first call
         observabilityCounterAddWithAttrs(driverLoadFailureCounter, 1, "driver", driver, "reason", reason, nullptr);
     }
 
     void SbmdFactoryMetrics::RecordDriverLoadSuccess(double durationMs, double heapDelta, const char *driver)
     {
-        InitInstruments(); // lazy init — instruments created on first call
         observabilityHistogramRecordWithAttrs(driverLoadDurationHisto, durationMs, "driver", driver, nullptr);
         observabilityHistogramRecordWithAttrs(driverLoadHeapDeltaHisto, heapDelta, "driver", driver, nullptr);
     }
 
     void SbmdFactoryMetrics::RecordRegisteredDriverCount(int64_t count)
     {
-        InitInstruments(); // lazy init — instruments created on first call
         observabilityGaugeRecord(registeredDriversGauge, count);
     }
 

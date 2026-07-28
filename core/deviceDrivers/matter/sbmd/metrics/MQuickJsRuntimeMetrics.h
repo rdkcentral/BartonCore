@@ -48,8 +48,8 @@ namespace barton
      */
     class MQuickJsRuntimeMetrics
     {
-        friend class MQuickJsRuntime;
-
+    public:
+        MQuickJsRuntimeMetrics();
 
         /**
          * Start the background idle heap sampler.
@@ -103,8 +103,8 @@ namespace barton
          * (isEnd == 0) and end (isEnd == 1).
          */
         static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
-        void InitInstruments();
 
+    private:
         ObservabilityHistogram *heapUsedHisto = nullptr;
         ObservabilityGauge *heapArenaGauge = nullptr;
         ObservabilityGauge *heapFreeGauge = nullptr;
@@ -132,8 +132,7 @@ namespace barton
 {
     class MQuickJsRuntimeMetrics
     {
-        friend class MQuickJsRuntime;
-
+    public:
         void StartSampler() {}
 
         void StopSampler() {}

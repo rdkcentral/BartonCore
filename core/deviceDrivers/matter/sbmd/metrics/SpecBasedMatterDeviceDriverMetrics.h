@@ -38,8 +38,8 @@ namespace barton
      */
     class SpecBasedMatterDeviceDriverMetrics
     {
-        friend class SpecBasedMatterDeviceDriver;
-
+    public:
+        SpecBasedMatterDeviceDriverMetrics();
 
         /** Record the in-flight gauge after a new deferred op is registered. */
         void RecordDeferredStart(int64_t inFlight);
@@ -61,8 +61,8 @@ namespace barton
                                     const char *opType,
                                     const char *resourceId,
                                     int64_t inFlightAfter);
-        void InitInstruments();
 
+    private:
         ObservabilityCounter *deferredTimeoutCounter = nullptr;
         ObservabilityCounter *deferralMaxDepthCounter = nullptr;
         ObservabilityGauge *deferredInFlightGauge = nullptr;
@@ -78,8 +78,7 @@ namespace barton
 {
     class SpecBasedMatterDeviceDriverMetrics
     {
-        friend class SpecBasedMatterDeviceDriver;
-
+    public:
         void RecordDeferredStart(int64_t) {}
 
         void RecordDeferredTimeout(const char *, const char *, const char *) {}

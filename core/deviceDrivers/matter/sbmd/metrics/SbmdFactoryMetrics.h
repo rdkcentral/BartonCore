@@ -37,8 +37,8 @@ namespace barton
      */
     class SbmdFactoryMetrics
     {
-        friend class SbmdFactory;
-
+    public:
+        SbmdFactoryMetrics();
 
         /** Record a driver load failure. */
         void RecordDriverLoadFailure(const char *driver, const char *reason);
@@ -48,8 +48,8 @@ namespace barton
 
         /** Record the current registered-driver count. */
         void RecordRegisteredDriverCount(int64_t count);
-        void InitInstruments();
 
+    private:
         ObservabilityCounter *driverLoadFailureCounter = nullptr;
         ObservabilityHistogram *driverLoadDurationHisto = nullptr;
         ObservabilityHistogram *driverLoadHeapDeltaHisto = nullptr;
@@ -64,8 +64,7 @@ namespace barton
 {
     class SbmdFactoryMetrics
     {
-        friend class SbmdFactory;
-
+    public:
         void RecordDriverLoadFailure(const char *, const char *) {}
 
         void RecordDriverLoadSuccess(double, double, const char *) {}

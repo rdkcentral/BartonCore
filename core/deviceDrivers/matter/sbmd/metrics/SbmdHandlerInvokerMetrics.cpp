@@ -27,13 +27,8 @@
 
 namespace barton
 {
-    void SbmdHandlerInvokerMetrics::InitInstruments()
+    SbmdHandlerInvokerMetrics::SbmdHandlerInvokerMetrics()
     {
-        if (handlerDurationHisto != nullptr)
-        {
-            return;
-        }
-
         handlerDurationHisto = observabilityHistogramCreate(
             "sbmd.handler.duration_ms", "Time from JS_Call entry to return for each handler invocation", "ms");
         handlerHeapDeltaHisto = observabilityHistogramCreate(
@@ -48,8 +43,6 @@ namespace barton
                                                      const char *opType,
                                                      const char *resourceId)
     {
-        InitInstruments(); // lazy init — instruments created on first call
-
         auto recordHisto = [&](ObservabilityHistogram *histo, double value) {
             if (!histo)
             {
@@ -91,8 +84,6 @@ namespace barton
                                                   const char *resourceId,
                                                   const char *outcome)
     {
-        InitInstruments(); // lazy init — instruments created on first call
-
         if (driver || opType || resourceId)
         {
             if (resourceId)
