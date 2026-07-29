@@ -435,8 +435,17 @@ static gpointer keyframeWorker(gpointer userData)
         self->keyframePending = FALSE;
         g_mutex_unlock(&self->keyframeMutex);
 
-        for (int i = 0; i < 5 && !self->keyframeStop; i++)
+        for (int i = 0; i < 5; i++)
         {
+            g_mutex_lock(&self->keyframeMutex);
+            gboolean stop = self->keyframeStop;
+            g_mutex_unlock(&self->keyframeMutex);
+
+            if (stop)
+            {
+                break;
+            }
+
             requestKeyframe(self);
             g_usleep(250 * 1000);
         }
