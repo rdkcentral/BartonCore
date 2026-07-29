@@ -40,6 +40,10 @@ namespace barton
 
         /**
          * Record handler invocation timing and heap impact.
+         * @param durationMs  wall-clock duration of the JS_Call in milliseconds
+         * @param heapDelta   net heap bytes allocated during the call (may be negative)
+         * @param driver      filename stem of the SBMD driver (e.g. "door-lock")
+         * @param opType      originating operation type — see OperationContext::opType
          * @param resourceId  nullptr to omit the "resource_id" attribute
          */
         void RecordInvocation(double durationMs,
@@ -51,7 +55,10 @@ namespace barton
         /**
          * Record a handler outcome (success, exception, timeout, stack_overflow,
          * error).
+         * @param driver      filename stem of the SBMD driver (e.g. "door-lock")
+         * @param opType      originating operation type — see OperationContext::opType
          * @param resourceId  nullptr to omit the "resource_id" attribute
+         * @param outcome     one of: "success", "exception", "timeout", "stack_overflow", "error"
          */
         void RecordOutcome(const char *driver, const char *opType, const char *resourceId, const char *outcome);
 

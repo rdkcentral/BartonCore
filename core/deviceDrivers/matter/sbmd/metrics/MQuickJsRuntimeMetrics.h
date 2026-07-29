@@ -52,8 +52,13 @@ namespace barton
         MQuickJsRuntimeMetrics();
 
         /**
-         * Start the background idle heap sampler.
-         * No-op if BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS <= 0.
+         * Start the background idle heap sampler thread.
+         *
+         * The thread waits for BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS
+         * milliseconds of inactivity, then calls ForceSnapshot(). Any call to
+         * TickleSampler() (e.g. from InvokeHandler) resets the countdown, so
+         * a snapshot is only taken when no handler activity has occurred for the
+         * full idle period. No-op if BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS <= 0.
          */
         void StartSampler();
 
@@ -101,8 +106,9 @@ namespace barton
 
         /**
          * GC instrumentation callback — registered with JS_SetGCCallback with
-         * this instance as opaque. Called by the mquickjs engine at GC start
-         * (isEnd == 0) and end (isEnd == 1).
+         * this instance as opaque. Records GC cycle frequency (sbmd.js.gc.count)
+         * and per-cycle duration (sbmd.js.gc.duration_ms). Called by the mquickjs
+         * engine at GC start (isEnd == 0) and end (isEnd == 1).
          */
         static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
 

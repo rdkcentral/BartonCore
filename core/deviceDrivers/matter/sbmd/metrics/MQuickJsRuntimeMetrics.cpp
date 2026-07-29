@@ -147,7 +147,13 @@ namespace barton
             }
 
             JSMemoryUsage usage = {};
-            JS_GetMemoryUsage(ctx, &usage, 0);
+
+            if (JS_GetMemoryUsage(ctx, &usage, 0) != 0)
+            {
+                icError("JS_GetMemoryUsage failed — skipping heap snapshot");
+                return;
+            }
+
             MQuickJsRuntime::RecordHeapSnapshot(usage);
         }
 
