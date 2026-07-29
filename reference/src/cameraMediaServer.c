@@ -83,6 +83,8 @@ struct _CameraMediaServer
     GByteArray *initSegment; // cached ftyp + moov, replayed to each new viewer
     gboolean initComplete;   // set once the first fragment (moof/styp) has been seen
     GList *clients;          // GSocketConnection* (owns a ref each), currently streaming
+    GList *pendingClients;   // GSocketConnection* (owns a ref each) waiting for a complete init
+                             // segment; promoted to clients once initComplete is set
 
     // Invoked (on the server thread) when a viewer connects; used to request a keyframe.
     CameraMediaServerOnViewer onViewer;
@@ -173,14 +175,48 @@ static gboolean onIncoming(GSocketService *service, GSocketConnection *conn, GOb
                                   "Cache-Control: no-cache, no-store\r\n"
                                   "Connection: close\r\n\r\n";
 
-        // Copy the init segment under the lock, then write header + init outside it so a slow
-        // socket never blocks the lock. Register as a viewer only after the init is sent, so a
-        // fragment from pushBuffer can never be interleaved ahead of the init bytes.
+        // Send the HTTP header, then the init segment. If the init segment (ftyp + moov) is not
+        // fully muxed yet, defer: register the connection as pending so it receives the complete
+        // init segment the moment it is ready (see cameraMediaServerPushBuffer). This avoids
+        // handing the browser a truncated init segment that it can never finish decoding.
+        gboolean ok = g_output_stream_write_all(out, hdr, strlen(hdr), NULL, NULL, NULL);
+
         g_mutex_lock(&self->mutex);
-        GBytes *init = g_bytes_new(self->initSegment->data, self->initSegment->len);
+        gboolean ready = self->initComplete;
+        GBytes *init = ready ? g_bytes_new(self->initSegment->data, self->initSegment->len) : NULL;
+
+        if (!ready)
+        {
+            self->pendingClients = g_list_prepend(self->pendingClients, g_object_ref(conn));
+        }
+
         g_mutex_unlock(&self->mutex);
 
-        gboolean ok = g_output_stream_write_all(out, hdr, strlen(hdr), NULL, NULL, NULL);
+        if (!ready)
+        {
+            if (!ok)
+            {
+                // Header write failed before the connection could be deferred; drop it.
+                g_mutex_lock(&self->mutex);
+                GList *link = g_list_find(self->pendingClients, conn);
+
+                if (link != NULL)
+                {
+                    self->pendingClients = g_list_delete_link(self->pendingClients, link);
+                    g_object_unref(conn);
+                }
+
+                g_mutex_unlock(&self->mutex);
+
+                return FALSE;
+            }
+
+            emitOutput("[camera-stream] Viewer connected, awaiting init segment\n");
+
+            // Claim the connection: our pending-list ref keeps it alive until it is promoted.
+            return TRUE;
+        }
+
         gsize initLen = 0;
         const guint8 *initData = g_bytes_get_data(init, &initLen);
 
@@ -322,6 +358,8 @@ void cameraMediaServerPushBuffer(CameraMediaServer *self, const guint8 *data, gs
     // it as a live fragment. mp4mux emits box-aligned buffers, so the box type at the buffer
     // start identifies the transition.
     GList *snapshot = NULL;
+    GList *pending = NULL;
+    GBytes *init = NULL;
 
     if (!self->initComplete)
     {
@@ -331,6 +369,12 @@ void cameraMediaServerPushBuffer(CameraMediaServer *self, const guint8 *data, gs
         if (isFragmentStart)
         {
             self->initComplete = TRUE;
+
+            // The init segment is now complete. Take a copy plus the deferred viewers so we can
+            // send it to them below and promote the ones that accept it.
+            init = g_bytes_new(self->initSegment->data, self->initSegment->len);
+            pending = self->pendingClients;
+            self->pendingClients = NULL;
         }
         else
         {
@@ -345,6 +389,38 @@ void cameraMediaServerPushBuffer(CameraMediaServer *self, const guint8 *data, gs
     // block new connections or other viewers.
     snapshot = g_list_copy_deep(self->clients, (GCopyFunc) g_object_ref, NULL);
     g_mutex_unlock(&self->mutex);
+
+    // Deliver the completed init segment to deferred viewers and fold the ones that accept it
+    // into both the active client set and this fragment's write list.
+    if (pending != NULL)
+    {
+        gsize initLen = 0;
+        const guint8 *initData = g_bytes_get_data(init, &initLen);
+
+        for (GList *it = pending; it != NULL; it = it->next)
+        {
+            GSocketConnection *conn = (GSocketConnection *) it->data;
+            GOutputStream *pout = g_io_stream_get_output_stream(G_IO_STREAM(conn));
+
+            if (initLen > 0 && g_output_stream_write_all(pout, initData, initLen, NULL, NULL, NULL))
+            {
+                g_mutex_lock(&self->mutex);
+                self->clients = g_list_prepend(self->clients, g_object_ref(conn));
+                guint viewerCount = g_list_length(self->clients);
+                g_mutex_unlock(&self->mutex);
+
+                snapshot = g_list_prepend(snapshot, g_object_ref(conn));
+                emitOutput("[camera-stream] Viewer connected (%u active)\n", viewerCount);
+            }
+        }
+
+        g_list_free_full(pending, g_object_unref);
+    }
+
+    if (init != NULL)
+    {
+        g_bytes_unref(init);
+    }
 
     GList *failed = NULL;
 
@@ -426,6 +502,16 @@ void cameraMediaServerDestroy(CameraMediaServer *self)
 
     g_list_free(self->clients);
     self->clients = NULL;
+
+    for (GList *it = self->pendingClients; it != NULL; it = it->next)
+    {
+        GSocketConnection *conn = (GSocketConnection *) it->data;
+        g_io_stream_close(G_IO_STREAM(conn), NULL, NULL);
+        g_object_unref(conn);
+    }
+
+    g_list_free(self->pendingClients);
+    self->pendingClients = NULL;
     g_mutex_unlock(&self->mutex);
 
     g_clear_object(&self->service);

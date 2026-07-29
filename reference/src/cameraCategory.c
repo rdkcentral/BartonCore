@@ -45,8 +45,12 @@
 
 // Default HTTP media server bind + port when `--out` is omitted. Forwarded to the host by
 // the dev container (see .devcontainer/devcontainer.json forwardPorts).
-#define CAMERA_DEFAULT_SERVE_HOST "127.0.0.1"
-#define CAMERA_DEFAULT_SERVE_PORT 8088
+#define CAMERA_DEFAULT_SERVE_HOST        "127.0.0.1"
+#define CAMERA_DEFAULT_SERVE_PORT        8088
+
+// The SIGINT handler may only touch an async-signal-safe flag, so the blocking wait loops poll
+// it on this interval to observe Ctrl+C promptly without the handler taking locks.
+#define CAMERA_SIGINT_POLL_INTERVAL_USEC (200 * G_TIME_SPAN_MILLISECOND)
 
 // ============================================================================
 // Shared state between threads
@@ -90,7 +94,9 @@ typedef struct
     FILE *outFile;
 } CameraStreamState;
 
-static volatile CameraStreamState *sigintState = NULL;
+// Set by the SIGINT handler, which must stay async-signal-safe. The blocking wait loops poll
+// this flag rather than relying on the handler to take locks or signal condition variables.
+static volatile sig_atomic_t sigintRequested = 0;
 
 static void sendLocalIceCandidate(CameraDeviceSession *session, const gchar *candidate);
 static void feedRemoteIceCandidates(CameraWebrtcClient *client, const gchar *jsonCandidates);
@@ -105,16 +111,11 @@ static gboolean parseOutputUri(const gchar *uri, gchar **filePathOut, gchar **se
 static void sigintHandler(int sig)
 {
     (void) sig;
-    volatile CameraStreamState *s = sigintState;
 
-    if (s != NULL)
-    {
-        CameraStreamState *state = (CameraStreamState *) s;
-        g_mutex_lock(&state->mutex);
-        state->teardown = TRUE;
-        g_cond_signal(&state->cond);
-        g_mutex_unlock(&state->mutex);
-    }
+    // Only touch an async-signal-safe flag here. Taking the GLib mutex or signaling the
+    // condition variable from a signal handler is undefined behavior; the wait loops poll this
+    // flag instead (see waitForCondition).
+    sigintRequested = 1;
 }
 
 // ============================================================================
@@ -230,13 +231,32 @@ static gboolean waitForCondition(CameraStreamState *state, gboolean *flag, gint 
 
     while (!*flag && !state->teardown && !state->sessionEnded)
     {
-        if (!g_cond_wait_until(&state->cond, &state->mutex, deadline))
+        if (sigintRequested)
         {
-            // Timeout
+            state->teardown = TRUE;
+
+            break;
+        }
+
+        gint64 now = g_get_monotonic_time();
+
+        if (now >= deadline)
+        {
             g_mutex_unlock(&state->mutex);
 
             return FALSE;
         }
+
+        // Wake periodically to poll the async-signal-safe SIGINT flag, since the signal handler
+        // cannot safely take the mutex or signal the condition variable.
+        gint64 wakeup = now + CAMERA_SIGINT_POLL_INTERVAL_USEC;
+
+        if (wakeup > deadline)
+        {
+            wakeup = deadline;
+        }
+
+        g_cond_wait_until(&state->cond, &state->mutex, wakeup);
     }
 
     gboolean result = *flag;
@@ -843,12 +863,13 @@ static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
     g_queue_init(&state.localIceCandidates);
     g_queue_init(&state.remoteIceCandidates);
 
-    // Install signal handler so Ctrl+C requests a graceful teardown
+    // Install signal handler so Ctrl+C requests a graceful teardown. Clear any leftover request
+    // from a previous run before arming the handler for this one.
     struct sigaction oldAction;
     struct sigaction newAction = {0};
     newAction.sa_handler = sigintHandler;
     sigemptyset(&newAction.sa_mask);
-    sigintState = &state;
+    sigintRequested = 0;
     sigaction(SIGINT, &newAction, &oldAction);
 
     bool success = runCameraStream(
@@ -856,7 +877,6 @@ static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
 
     // Restore signal handler
     sigaction(SIGINT, &oldAction, NULL);
-    sigintState = NULL;
 
     cleanupState(&state);
 

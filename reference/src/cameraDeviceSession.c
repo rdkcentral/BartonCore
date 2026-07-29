@@ -40,7 +40,9 @@ struct _CameraDeviceSession
     gchar *sessionId;
     gchar *protocol;   // from the stream execute result
     gchar *entryPoint; // from the stream execute result
-    gchar *role;       // 'offerer' | 'answerer', from the stream execute result
+    gchar *role;       // 'offerer' | 'answerer'; populated lazily from
+                       // /ep/webrtc/r/negotiationRole (see cameraDeviceSessionGetRole), not the
+                       // stream execute result
     gboolean opened;
 };
 
