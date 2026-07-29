@@ -53,7 +53,7 @@ namespace barton
 
         /**
          * Start the background idle heap sampler.
-         * No-op if BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS <= 0.
+         * No-op if BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS <= 0.
          */
         void StartSampler();
 

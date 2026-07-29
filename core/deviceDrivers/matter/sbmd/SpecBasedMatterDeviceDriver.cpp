@@ -197,14 +197,10 @@ namespace
     // Acquire the JS runtime mutex and record the wait duration as a metrics observation.
     std::unique_lock<std::mutex> AcquireJsMutex()
     {
-#ifdef BARTON_CONFIG_SBMD_METRICS
         auto t0 = std::chrono::steady_clock::now();
-#endif
         std::unique_lock<std::mutex> lock(MQuickJsRuntime::GetMutex());
-#ifdef BARTON_CONFIG_SBMD_METRICS
         MQuickJsRuntime::RecordMutexWait(
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
-#endif
 
         return lock;
     }

@@ -80,7 +80,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 
 **In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntimeMetrics::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes`/`gc_roots` gauges) using the `JSMemoryUsage` struct already captured by the post-`JS_Call` `JS_GetMemoryUsage` call and the `gcRootCount` from `JS_GetGCRootCount(ctx)` — both computed by the caller while the mutex is held. `InvokeHandler` then calls `MQuickJsRuntimeMetrics::TickleSampler()` to notify the idle thread to reset its timer.
 
-**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_until` returns before the deadline, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: call `wait_until` again with the same absolute deadline (not a fresh `wait_for`) so that only the remaining time is consumed, not a full new period. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
+**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_until` returns before the deadline, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: call `wait_until` again with the same absolute deadline (not a fresh `wait_for`) so that only the remaining time is consumed, not a full new period. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
 
 **Why two paths rather than either alone?**
 - Periodic-only: on low-traffic systems (e.g., 20% active, 80% idle), most captures reflect idle-state heap; behavior during activity is sampled at most once per interval.
@@ -97,7 +97,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 InvokeHandler (JS mutex held by caller):     Idle background thread:
   → JS_Call                                    loop:
   → JS_GetMemoryUsage                            if samplerShouldStop: exit
-  → record sbmd.handler.*                        deadline = now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS)
+  → record sbmd.handler.*                        deadline = now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS)
   → RecordHeapSnapshot(usage_after, gcRoots) ← pool health  seq = tickleSeq
   → TickleSampler()  ← increments tickleSeq      cv.wait_until(lock, deadline)
                                                if timed_out: ForceSnapshot()
@@ -224,6 +224,6 @@ core/deviceDrivers/matter/sbmd/
 
 ## Open Questions
 
-- **Sample period default**: 30 s is a reasonable default but untested in production. Should `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` be a runtime-configurable property instead of a compile-time CMake option? (Deferred — compile-time is fine for now.)
+- **Sample period default**: 30 s is a reasonable default but untested in production. Should `BCORE_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` be a runtime-configurable property instead of a compile-time CMake option? (Deferred — compile-time is fine for now.)
 - **Integration test simulated device**: does the existing matter.js virtual device infrastructure support triggering a deferred command path deterministically? Needs verification during implementation.
 - **`JS_MEMUSAGE_WALK_HEAP` in dev/Docker builds**: enabling this flag in the mquickjs dev build would give real `heap_free_blocks` data (currently always 0 without it). Walk overhead is unknown — a temporary `sbmd.js.memusage_walk_ms` histogram could be added in dev builds to measure it before deciding whether to enable it in production builds. Deferred pending investigation.

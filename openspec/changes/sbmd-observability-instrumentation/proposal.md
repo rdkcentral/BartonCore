@@ -32,7 +32,7 @@ The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed-size arena (configu
 - **Struct change**: `PendingOperation` gains `OperationContext operationCtx` field (carries driver name, originating op type, resource ID, and start time)
 - **API change**: `SbmdHandlerInvoker::InvokeHandler` gains a single optional `const OperationContext *opCtx = nullptr` parameter; new `OperationContext` struct defined in `SbmdHandlerInvoker.h` (backwards-compatible)
 - **CMake flag**: `BCORE_OBSERVABILITY_BACKEND` must be `memory` (default) for metrics to be recorded; `none` backend silently no-ops all calls — no conditional compilation required at call sites
-- **CMake option**: new `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` option (default 30000, compiled as `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS`) controlling the hybrid heap sampler idle period
+- **CMake option**: new `BCORE_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` option (default 30000, compiled as `BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS`) controlling the hybrid heap sampler idle period
 - **Dependencies**: existing `observabilityMetrics.h` API; no new external dependencies
 - **Tests**: new GTest file `core/test/src/SbmdObservabilityTest.cpp`; new pytest test in `testing/test/`
 

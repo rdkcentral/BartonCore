@@ -179,25 +179,23 @@ namespace barton
             return std::nullopt;
         }
 
+        // Extract context fields once — used for outcome reporting at multiple exit points.
+        const char *outDriver = opCtx ? opCtx->driverName.c_str() : nullptr;
+        const char *outOpType = opCtx ? opCtx->opType.c_str() : nullptr;
+        const char *outResourceId = (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr;
+
         if (JS_StackCheck(ctx, 3)) // args, handler, this
         {
             icError("stack overflow before handler call");
-#ifdef BARTON_CONFIG_SBMD_METRICS
-            metrics.RecordOutcome(opCtx ? opCtx->driverName.c_str() : nullptr,
-                                  opCtx ? opCtx->opType.c_str() : nullptr,
-                                  (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr,
-                                  "stack_overflow");
-#endif
+            metrics.RecordOutcome(outDriver, outOpType, outResourceId, "stack_overflow");
 
             return std::nullopt;
         }
 
-#ifdef BARTON_CONFIG_SBMD_METRICS
         // Capture pre-call heap state
         JSMemoryUsage usageBefore = {};
         JS_GetMemoryUsage(ctx, &usageBefore, 0);
         auto callStart = std::chrono::steady_clock::now();
-#endif
 
         // Stack order for JS_Call: arg, func, this
         JS_PushArg(ctx, args.Get());
@@ -210,24 +208,16 @@ namespace barton
 
         JSValue result = JS_Call(ctx, 1);
 
-#ifdef BARTON_CONFIG_SBMD_METRICS
         bool interrupted = MQuickJsRuntime::WasInterrupted();
-#endif
         MQuickJsRuntime::ClearDeadline();
 
-#ifdef BARTON_CONFIG_SBMD_METRICS
-        // Capture post-call state
+        // Capture post-call state and record metrics
         JSMemoryUsage usageAfter = {};
         JS_GetMemoryUsage(ctx, &usageAfter, 0);
 
-        auto callEnd = std::chrono::steady_clock::now();
-        double durationMs = std::chrono::duration<double, std::milli>(callEnd - callStart).count();
+        double durationMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - callStart).count();
         double heapDelta = static_cast<double>(usageAfter.heap_used) - static_cast<double>(usageBefore.heap_used);
-
-        // Extract context fields once — used for histogram attrs and outcome counter below.
-        const char *outDriver = opCtx ? opCtx->driverName.c_str() : nullptr;
-        const char *outOpType = opCtx ? opCtx->opType.c_str() : nullptr;
-        const char *outResourceId = (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr;
 
         // Record duration and heap-delta histograms
         metrics.RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
@@ -235,7 +225,6 @@ namespace barton
         // Update running heap snapshot (ctx is live; caller holds JS mutex)
         MQuickJsRuntime::RecordHeapSnapshot(usageAfter, JS_GetGCRootCount(ctx));
         MQuickJsRuntime::TickleSampler();
-#endif
 
         if (JS_IsException(result))
         {
@@ -243,10 +232,8 @@ namespace barton
             MQuickJsRuntime::CheckAndClearPendingException(ctx, &err);
             icError("handler threw exception: %s", err.c_str());
 
-#ifdef BARTON_CONFIG_SBMD_METRICS
             // Distinguish timeout from handler exception
             metrics.RecordOutcome(outDriver, outOpType, outResourceId, interrupted ? "timeout" : "exception");
-#endif
 
             return std::nullopt;
         }
@@ -255,10 +242,8 @@ namespace barton
 
         if (parsed.has_value())
         {
-#ifdef BARTON_CONFIG_SBMD_METRICS
             bool isError = std::holds_alternative<ResultTerminal::Error>(parsed->terminal.data);
             metrics.RecordOutcome(outDriver, outOpType, outResourceId, isError ? "error" : "success");
-#endif
         }
 
         return parsed;

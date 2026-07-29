@@ -181,10 +181,13 @@ Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric
 {
     MatterDriverFactory::Instance();
 
-    // Initialize SBMD observability metrics before the JS runtime starts so
-    // exception counters are live for init-phase exceptions.
+    if (!MQuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
+    {
+        icError("FATAL: Failed to initialize SBMD JS runtime.");
+        throw std::runtime_error("Failed to initialize SBMD JS runtime.");
+    }
 
-    if(!SbmdFactory::Instance().RegisterDrivers())
+    if (!SbmdFactory::Instance().RegisterDrivers())
     {
         icError("FATAL: Failed to register SBMD drivers. Matter subsystem cannot continue.");
         throw std::runtime_error("Failed to register SBMD drivers. Check logs for details on duplicate names or other registration errors.");

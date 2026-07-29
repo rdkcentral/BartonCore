@@ -64,7 +64,7 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::StartSampler()
     {
-        if (BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS <= 0)
+        if (BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS <= 0)
         {
             return;
         }
@@ -78,36 +78,39 @@ namespace barton
 
                 std::unique_lock<std::mutex> lock(samplerCvMutex);
 
+                // Each outer iteration is one idle-wait cycle. On activity (tickle) we
+                // restart so the idle timer begins fresh from the moment of last activity.
+                // The loop exits only when stop is requested.
                 while (!samplerShouldStop.load(std::memory_order_relaxed))
                 {
                     auto deadline =
-                        clock::now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS);
+                        clock::now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS);
                     auto lastTickle = tickleSeq.load(std::memory_order_relaxed);
 
-                    while (true)
+                    // Predicate-based wait handles spurious wakeups internally.
+                    // Returns true when the predicate fires (stop requested or activity);
+                    // returns false on timeout.
+                    bool activityOccurred = samplerCv.wait_until(lock, deadline, [&]() {
+                        return samplerShouldStop.load(std::memory_order_relaxed) ||
+                               tickleSeq.load(std::memory_order_relaxed) != lastTickle;
+                    });
+
+                    if (samplerShouldStop.load(std::memory_order_relaxed))
                     {
-                        auto status = samplerCv.wait_until(lock, deadline);
-
-                        if (samplerShouldStop.load(std::memory_order_relaxed))
-                        {
-                            return;
-                        }
-
-                        if (status == std::cv_status::timeout)
-                        {
-                            lock.unlock();
-                            ForceSnapshot();
-                            lock.lock();
-                            break;
-                        }
-
-                        auto curTickle = tickleSeq.load(std::memory_order_relaxed);
-
-                        if (curTickle != lastTickle)
-                        {
-                            break;
-                        }
+                        return;
                     }
+
+                    if (!activityOccurred)
+                    {
+                        // Timeout: no handler activity for the full idle period — take a
+                        // snapshot, then restart the outer loop to arm the next deadline.
+                        lock.unlock();
+                        ForceSnapshot();
+                        lock.lock();
+                    }
+
+                    // Activity (tickle): fall through to restart the outer loop so the
+                    // idle deadline resets from the moment of last activity.
                 }
             });
         }

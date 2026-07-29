@@ -285,8 +285,8 @@ bcore_int_option(NAME BCORE_SBMD_SCRIPT_TIMEOUT_MS
                DESCRIPTION "Maximum execution time in milliseconds for SBMD mapper scripts."
                VALUE 5000)
 
-bcore_int_option(NAME BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS
-               DEFINITION BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS
+bcore_int_option(NAME BCORE_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS
+               DEFINITION BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS
                DESCRIPTION "Idle period in milliseconds between background heap snapshots for SBMD observability."
                VALUE 30000)
 
