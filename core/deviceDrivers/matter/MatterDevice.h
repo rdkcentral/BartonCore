@@ -150,6 +150,7 @@ namespace barton
          */
         void SetFeatureClusters(std::vector<uint32_t> clusters)
         {
+            std::lock_guard<std::mutex> lock(cachedClusterFeatureMapsMutex);
             featureClusters = std::move(clusters);
         }
 
@@ -459,8 +460,10 @@ namespace barton
         std::vector<std::unique_ptr<IncomingCommandHandler>> incomingCommandHandlers;
         std::vector<uint32_t> featureClusters;
         std::map<uint32_t, uint32_t> cachedClusterFeatureMaps;
-        // Guards cachedClusterFeatureMaps. UpdateCachedFeatureMaps() runs on both the Matter event
-        // loop (subscription established) and the commissioning thread (AddDevice), while
+        // Guards both featureClusters and cachedClusterFeatureMaps. UpdateCachedFeatureMaps() reads
+        // featureClusters and writes cachedClusterFeatureMaps on both the Matter event loop
+        // (subscription established) and the commissioning thread (AddDevice/reconfigure);
+        // SetFeatureClusters() writes featureClusters from the commissioning thread; and
         // GetCachedClusterFeatureMaps() is read from handler threads.
         mutable std::mutex cachedClusterFeatureMapsMutex;
         std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index -> resolved Matter EndpointId
