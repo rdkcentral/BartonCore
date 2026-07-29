@@ -667,7 +667,7 @@ GList *b_core_client_zigbee_energy_scan(BCoreClient *self,
     if (energyScanResults != NULL)
     {
         retVal = convertIcZigbeeEnergyScanResultListToGList(energyScanResults);
-        linkedListDestroy(energyScanResults, NULL);
+        linkedListDestroy(energyScanResults, free);
     }
 
     free(channelArray);

@@ -770,7 +770,7 @@ static bool initializeNetwork(void)
      * the cpe.zigbee namespace makes no sense to ZigbeeCore.
      */
     scoped_icStringHashMapIterator *it = stringHashMapIteratorCreate(properties);
-    scoped_icStringHashMap *zhalProps = stringHashMapCreate();
+    g_autoptr(GHashTable) zhalProps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     const size_t prefixLen = strlen(ZIGBEE_PROPS_PREFIX);
 
     while (stringHashMapIteratorHasNext(it) == true)
@@ -780,8 +780,7 @@ static bool initializeNetwork(void)
 
         if (stringHashMapIteratorGetNext(it, &key, &val) == true && strlen(key) > prefixLen)
         {
-            char *newKey = strdup(key + strlen(ZIGBEE_PROPS_PREFIX));
-            stringHashMapPut(zhalProps, newKey, strdupOpt(val));
+            g_hash_table_insert(zhalProps, g_strdup(key + strlen(ZIGBEE_PROPS_PREFIX)), g_strdup(val));
         }
     }
 
@@ -3196,7 +3195,19 @@ int zigbeeSubsystemGetSystemStatus(ZhalSystemStatus *status)
         return -1;
     }
 
-    return zhalGetSystemStatus(status);
+    // The new zhal client allocates a ZhalSystemStatus and returns it via an out-param;
+    // copy it into the caller-provided struct (all fields are plain data) and release it.
+    ZhalSystemStatus *tmp = NULL;
+    ZHAL_STATUS rc = zhalGetSystemStatus(&tmp);
+    if (rc == ZHAL_STATUS_OK && tmp != NULL)
+    {
+        *status = *tmp;
+    }
+    if (tmp != NULL)
+    {
+        ZhalSystemStatus_release(tmp);
+    }
+    return rc;
 }
 
 cJSON *zigbeeSubsystemGetAndClearCounters(void)
@@ -3241,7 +3252,8 @@ static uint8_t calculateBestChannel(void)
     uint8_t channels[] = {15, 19, 20, 25};
     int8_t bestScore = 0;
 
-    icLinkedList *scanResults = zhalPerformEnergyScan(channels, sizeof(channels), scanDurationMillis, scanCount);
+    icLinkedList *scanResults =
+        zigbeeSubsystemPerformEnergyScan(channels, sizeof(channels), scanDurationMillis, scanCount);
     if (scanResults != NULL)
     {
         sbIcLinkedListIterator *it = linkedListIteratorCreate(scanResults);
@@ -3261,6 +3273,8 @@ static uint8_t calculateBestChannel(void)
         {
             icLogWarn(LOG_TAG, "%s: no channel had non-zero score, returning invalid channel", __FUNCTION__);
         }
+
+        linkedListDestroy(scanResults, free);
     }
     else
     {
@@ -3430,7 +3444,7 @@ static void restartChannelChangeDeviceWatchdogIfRequired(void)
 
         ZhalSystemStatus status;
         memset(&status, 0, sizeof(ZhalSystemStatus));
-        if (zhalGetSystemStatus(&status) == 0)
+        if (zigbeeSubsystemGetSystemStatus(&status) == 0)
         {
             startChannelChangeDeviceWatchdog(previousChannel, status.channel);
         }
@@ -3502,7 +3516,7 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
 
             ZhalSystemStatus status;
             memset(&status, 0, sizeof(ZhalSystemStatus));
-            if (zhalGetSystemStatus(&status) == 0)
+            if (zigbeeSubsystemGetSystemStatus(&status) == 0)
             {
                 // We are already at that channel, so nothing to do
                 if (status.channel == channel)
@@ -4429,7 +4443,39 @@ icLinkedList *zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,
                                                uint32_t scanDurationMillis,
                                                uint32_t numScans)
 {
-    return zhalPerformEnergyScan(channelsToScan, numChannelsToScan, scanDurationMillis, numScans);
+    // The new zhal client takes a GArray of channels and returns the results via a
+    // GPtrArray out-param; adapt to/from the icLinkedList contract callers expect.
+    g_autoptr(GArray) channels = g_array_sized_new(FALSE, FALSE, sizeof(guint8), numChannelsToScan);
+    for (uint8_t i = 0; i < numChannelsToScan; ++i)
+    {
+        guint8 channel = channelsToScan[i];
+        g_array_append_val(channels, channel);
+    }
+
+    GPtrArray *results = NULL;
+    ZHAL_STATUS rc = zhalPerformEnergyScan(channels, scanDurationMillis, numScans, &results);
+    if (rc != ZHAL_STATUS_OK || results == NULL)
+    {
+        if (results != NULL)
+        {
+            g_ptr_array_unref(results);
+        }
+        return NULL;
+    }
+
+    // Copy each ZhalEnergyScanResult (plain data) into a heap-allocated element owned by
+    // the returned list; callers free the list (and elements) with linkedListDestroy(list, free).
+    icLinkedList *scanResults = linkedListCreate();
+    for (guint i = 0; i < results->len; ++i)
+    {
+        ZhalEnergyScanResult *src = g_ptr_array_index(results, i);
+        ZhalEnergyScanResult *copy = malloc(sizeof(ZhalEnergyScanResult));
+        *copy = *src;
+        linkedListAppend(scanResults, copy);
+    }
+    g_ptr_array_unref(results);
+
+    return scanResults;
 }
 
 void zigbeeSubsystemNotifyDeviceCommRestored(icDevice *device)

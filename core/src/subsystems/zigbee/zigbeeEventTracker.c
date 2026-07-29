@@ -1641,7 +1641,7 @@ static void channelEnergyDataCollectingCallback(void *arg)
 
         // run energy scan for channel
         //
-        icLinkedList *response = zhalPerformEnergyScan(channelToScan, 1, scanDur, numOfScan);
+        icLinkedList *response = zigbeeSubsystemPerformEnergyScan(channelToScan, 1, scanDur, numOfScan);
 
         // sanity check
         if (response != NULL)
@@ -1689,7 +1689,7 @@ static void channelEnergyDataCollectingCallback(void *arg)
             }
 
             // cleanup
-            linkedListDestroy(response, NULL);
+            linkedListDestroy(response, free);
         }
         else
         {
