@@ -79,11 +79,11 @@ static void b_core_device_found_details_set_property(GObject *object,
             self->device_class = g_value_dup_string(value);
             break;
         case B_CORE_DEVICE_FOUND_DETAILS_PROP_METADATA:
-            g_hash_table_unref(self->metadata);
+            g_clear_pointer(&self->metadata, g_hash_table_unref);
             self->metadata = g_value_dup_boxed(value);
             break;
         case B_CORE_DEVICE_FOUND_DETAILS_PROP_ENDPOINT_PROFILES:
-            g_hash_table_unref(self->endpoint_profiles);
+            g_clear_pointer(&self->endpoint_profiles, g_hash_table_unref);
             self->endpoint_profiles = g_value_dup_boxed(value);
             break;
         default:
@@ -139,8 +139,8 @@ static void b_core_device_found_details_finalize(GObject *object)
     g_free(self->hardware_version);
     g_free(self->firmware_version);
     g_free(self->device_class);
-    g_hash_table_unref(self->metadata);
-    g_hash_table_unref(self->endpoint_profiles);
+    g_clear_pointer(&self->metadata, g_hash_table_unref);
+    g_clear_pointer(&self->endpoint_profiles, g_hash_table_unref);
 
     G_OBJECT_CLASS(b_core_device_found_details_parent_class)->finalize(object);
 }
