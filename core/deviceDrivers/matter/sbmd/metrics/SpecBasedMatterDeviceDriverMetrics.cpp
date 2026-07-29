@@ -63,9 +63,9 @@ namespace barton
         }
     }
 
-    void SpecBasedMatterDeviceDriverMetrics::RecordDeferredMaxDepth(const char *driver,
-                                                                    const char *opType,
-                                                                    const char *resourceId)
+    void SpecBasedMatterDeviceDriverMetrics::RecordDeferredDepthExceeded(const char *driver,
+                                                                         const char *opType,
+                                                                         const char *resourceId)
     {
         if (resourceId)
         {

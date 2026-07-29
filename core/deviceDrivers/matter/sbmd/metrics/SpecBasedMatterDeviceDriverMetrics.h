@@ -47,8 +47,8 @@ namespace barton
         /** Record a deferred op overall-deadline timeout. */
         void RecordDeferredTimeout(const char *driver, const char *opType, const char *resourceId);
 
-        /** Record a deferred op max-deferral-depth overflow. */
-        void RecordDeferredMaxDepth(const char *driver, const char *opType, const char *resourceId);
+        /** Record a deferred op that was aborted because it exceeded the maximum deferral depth. */
+        void RecordDeferredDepthExceeded(const char *driver, const char *opType, const char *resourceId);
 
         /**
          * Record a completed deferred operation.
@@ -83,7 +83,7 @@ namespace barton
 
         void RecordDeferredTimeout(const char *, const char *, const char *) {}
 
-        void RecordDeferredMaxDepth(const char *, const char *, const char *) {}
+        void RecordDeferredDepthExceeded(const char *, const char *, const char *) {}
 
         void RecordDeferredComplete(double, double, const char *, const char *, const char *, int64_t) {}
     };

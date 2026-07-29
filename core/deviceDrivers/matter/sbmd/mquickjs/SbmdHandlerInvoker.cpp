@@ -180,7 +180,7 @@ namespace barton
         }
 
         // Extract context fields once — used for outcome reporting at multiple exit points.
-        const char *outDriver = opCtx ? opCtx->driverName.c_str() : nullptr;
+        const char *outDriver = opCtx ? opCtx->driverStem.c_str() : nullptr;
         const char *outOpType = opCtx ? opCtx->opType.c_str() : nullptr;
         const char *outResourceId = (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr;
 
@@ -208,7 +208,7 @@ namespace barton
 
         JSValue result = JS_Call(ctx, 1);
 
-        bool interrupted = MQuickJsRuntime::WasInterrupted();
+        bool timedOut = MQuickJsRuntime::WasTimedOut();
         MQuickJsRuntime::ClearDeadline();
 
         // Capture post-call state and record metrics
@@ -223,8 +223,8 @@ namespace barton
         metrics.RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
 
         // Update running heap snapshot (ctx is live; caller holds JS mutex)
-        MQuickJsRuntime::RecordHeapSnapshot(usageAfter, JS_GetGCRootCount(ctx));
-        MQuickJsRuntime::TickleSampler();
+        MQuickJsRuntime::RecordHeapSnapshot(usageAfter);
+        MQuickJsRuntime::GetMetrics().TickleSampler();
 
         if (JS_IsException(result))
         {
@@ -232,8 +232,10 @@ namespace barton
             MQuickJsRuntime::CheckAndClearPendingException(ctx, &err);
             icError("handler threw exception: %s", err.c_str());
 
+            MQuickJsRuntime::GetMetrics().RecordJsException("invocation", outDriver);
+
             // Distinguish timeout from handler exception
-            metrics.RecordOutcome(outDriver, outOpType, outResourceId, interrupted ? "timeout" : "exception");
+            metrics.RecordOutcome(outDriver, outOpType, outResourceId, timedOut ? "timeout" : "exception");
 
             return std::nullopt;
         }

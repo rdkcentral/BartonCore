@@ -122,6 +122,7 @@ namespace barton
 
         /**
          * Log current mquickjs memory usage at the given label.
+         * Also updates peak tracking when walkHeap is enabled.
          *
          * Not thread-safe: callers must hold MQuickJsRuntime::GetMutex() while
          * calling this function.
@@ -162,20 +163,11 @@ namespace barton
         static std::chrono::steady_clock::time_point GetDeadline();
 
         /**
-         * Mark that the script interrupt handler fired (deadline exceeded).
+         * Return true if the script execution deadline was exceeded during the last JS_Call.
          *
-         * Public only because ScriptInterruptHandler is a C-compatible callback in an
-         * anonymous namespace and cannot be a friend. Do not call this from anywhere
-         * other than ScriptInterruptHandler.
+         * @return true if the script timed out (deadline fired) for the current JS_Call
          */
-        static void RecordInterrupt();
-
-        /**
-         * Return whether the interrupt handler has fired since the last SetDeadline call.
-         *
-         * @return true if ScriptInterruptHandler fired for the current JS_Call
-         */
-        static bool WasInterrupted();
+        static bool WasTimedOut();
 
         /**
          * Return true when the JS context is live and accepting snapshots.
@@ -186,33 +178,31 @@ namespace barton
         static bool IsContextReady();
 
         /**
-         * Record a JS mutex wait duration in milliseconds.
-         * Called from AcquireJsMutex() in SpecBasedMatterDeviceDriver.cpp.
+         * Return a reference to the shared runtime metrics instance.
+         *
+         * Use this to call recording methods (RecordJsException, RecordMutexWait,
+         * TickleSampler, ForceSnapshot) directly on MQuickJsRuntimeMetrics rather
+         * than through mirrored wrappers. See MQuickJsRuntimeMetrics for the full
+         * recording API.
+         *
+         * @return Reference to the shared MQuickJsRuntimeMetrics instance.
          */
-        static void RecordMutexWait(double ms);
+        static MQuickJsRuntimeMetrics &GetMetrics();
 
         /**
-         * Record a JS exception event.
-         * @param phase  "init" or "loading"
-         * @param driver Filename stem, or nullptr to omit the "driver" attribute
+         * Acquire the JS runtime mutex, recording the wait duration via
+         * MQuickJsRuntimeMetrics::RecordMutexWait.
+         *
+         * @return An acquired std::unique_lock on the shared mutex
          */
-        static void RecordJsException(const char *phase, const char *driver);
+        static std::unique_lock<std::mutex> AcquireMutex();
 
         /**
          * Record pool health metrics from an already-captured JSMemoryUsage.
+         * When BARTON_CONFIG_SBMD_GC_INSTRUMENTATION is enabled the GC root
+         * count is read internally (requires the JS mutex to be held).
          */
-        static void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
-
-        /**
-         * Reset the idle sampler timer without waiting for the full period.
-         */
-        static void TickleSampler();
-
-        /**
-         * Synchronously sample heap stats and record pool health metrics.
-         * Delegates to the metrics member. Called from unit tests.
-         */
-        static void ForceSnapshot();
+        static void RecordHeapSnapshot(const JSMemoryUsage &usage);
 
     private:
         MQuickJsRuntime() = delete;
@@ -224,7 +214,6 @@ namespace barton
         inline static bool initialized = false;
         inline static size_t peakHeapUsed = 0;
         inline static std::chrono::steady_clock::time_point deadline;
-        inline static std::atomic<bool> scriptInterruptFired {false};
 
         // jsContextReady: set true at end of Initialize(), cleared at start of
         // Shutdown().

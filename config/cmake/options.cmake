@@ -178,6 +178,10 @@ bcore_option(NAME BCORE_SBMD_METRICS
            DEFINITION BARTON_CONFIG_SBMD_METRICS
            DESCRIPTION "Enable SBMD runtime observability metrics (heap sampling, mutex wait timing, handler and deferred operation tracking)"
            ENABLE)
+bcore_option(NAME BCORE_SBMD_GC_INSTRUMENTATION
+           DEFINITION BARTON_CONFIG_SBMD_GC_INSTRUMENTATION
+           DESCRIPTION "Enable GC callback and live-root-count instrumentation within SBMD metrics (JS_SetGCCallback + JS_GetGCRootCount on every handler call). Requires BCORE_SBMD_METRICS=ON. Can be disabled to reduce per-invocation overhead."
+           ENABLE)
 bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
            DEFINITION BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON
            DESCRIPTION "Build the third-party BartonCommon component"

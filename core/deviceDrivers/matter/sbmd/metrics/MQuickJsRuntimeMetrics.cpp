@@ -54,10 +54,12 @@ namespace barton
             "sbmd.js.mutex.wait_ms", "Time spent waiting to acquire the JS mutex before a handler call", "ms");
         jsExceptionCounter =
             observabilityCounterCreate("sbmd.js.exception", "Number of JavaScript exceptions encountered", "1");
+#ifdef BARTON_CONFIG_SBMD_GC_INSTRUMENTATION
         gcCountCounter = observabilityCounterCreate("sbmd.js.gc.count", "Number of GC cycles completed", "1");
         gcDurationHisto = observabilityHistogramCreate("sbmd.js.gc.duration_ms", "Duration of each GC cycle", "ms");
         gcRootsGauge = observabilityGaugeCreate(
             "sbmd.js.gc_roots", "Live GC roots registered on the JS context (push/pop + add/delete lists)", "1");
+#endif
     }
 
     // ── Sampler ───────────────────────────────────────────────────────────────
@@ -73,50 +75,47 @@ namespace barton
 
         try
         {
-            periodicSamplerThread = std::thread([this]() {
-                using clock = std::chrono::steady_clock;
-
-                std::unique_lock<std::mutex> lock(samplerCvMutex);
-
-                // Each outer iteration is one idle-wait cycle. On activity (tickle) we
-                // restart so the idle timer begins fresh from the moment of last activity.
-                // The loop exits only when stop is requested.
-                while (!samplerShouldStop.load(std::memory_order_relaxed))
-                {
-                    auto deadline =
-                        clock::now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS);
-                    auto lastTickle = tickleSeq.load(std::memory_order_relaxed);
-
-                    // Predicate-based wait handles spurious wakeups internally.
-                    // Returns true when the predicate fires (stop requested or activity);
-                    // returns false on timeout.
-                    bool activityOccurred = samplerCv.wait_until(lock, deadline, [&]() {
-                        return samplerShouldStop.load(std::memory_order_relaxed) ||
-                               tickleSeq.load(std::memory_order_relaxed) != lastTickle;
-                    });
-
-                    if (samplerShouldStop.load(std::memory_order_relaxed))
-                    {
-                        return;
-                    }
-
-                    if (!activityOccurred)
-                    {
-                        // Timeout: no handler activity for the full idle period — take a
-                        // snapshot, then restart the outer loop to arm the next deadline.
-                        lock.unlock();
-                        ForceSnapshot();
-                        lock.lock();
-                    }
-
-                    // Activity (tickle): fall through to restart the outer loop so the
-                    // idle deadline resets from the moment of last activity.
-                }
-            });
+            periodicSamplerThread = std::thread(&MQuickJsRuntimeMetrics::RunSampler, this);
         }
         catch (const std::system_error &e)
         {
             icWarn("Failed to start background heap sampler: %s — periodic sampling disabled", e.what());
+        }
+    }
+
+    void MQuickJsRuntimeMetrics::RunSampler()
+    {
+        using clock = std::chrono::steady_clock;
+
+        std::unique_lock<std::mutex> lock(samplerCvMutex);
+
+        // Each outer iteration is one idle-wait cycle. On activity (tickle) we
+        // restart so the idle timer begins fresh from the moment of last activity.
+        // The loop exits only when stop is requested.
+        while (!samplerShouldStop.load(std::memory_order_relaxed))
+        {
+            auto deadline = clock::now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS);
+            auto lastTickle = tickleSeq.load(std::memory_order_relaxed);
+
+            // Predicate-based wait handles spurious wakeups internally.
+            // Returns false (timeout) when the deadline elapses without the
+            // predicate firing; returns true on stop or tickle activity.
+            bool timeout = !samplerCv.wait_until(lock, deadline, [&]() {
+                return samplerShouldStop.load(std::memory_order_relaxed) ||
+                       tickleSeq.load(std::memory_order_relaxed) != lastTickle;
+            });
+
+            if (timeout)
+            {
+                // Timeout: no handler activity for the full idle period — take a
+                // snapshot, then restart the outer loop to arm the next deadline.
+                lock.unlock();
+                ForceSnapshot();
+                lock.lock();
+            }
+
+            // Stop or tickle: fall through to restart the outer loop. The while
+            // condition handles stop; a tickle resets the idle deadline from now.
         }
     }
 
@@ -148,9 +147,8 @@ namespace barton
             }
 
             JSMemoryUsage usage = {};
-            size_t gcRootCount = JS_GetGCRootCount(ctx);
             JS_GetMemoryUsage(ctx, &usage, 0);
-            RecordHeapSnapshot(usage, gcRootCount);
+            MQuickJsRuntime::RecordHeapSnapshot(usage);
         }
 
         TickleSampler();

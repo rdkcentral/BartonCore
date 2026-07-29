@@ -400,7 +400,7 @@ protected:
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, "test.resource", std::nullopt);
 
         OperationContext opCtx;
-        opCtx.driverName = "test-driver";
+        opCtx.driverStem = "test-driver";
         opCtx.opType = "read";
         opCtx.resourceId = "test.resource";
         opCtx.startTime = std::chrono::steady_clock::now();
@@ -424,7 +424,7 @@ TEST_F(SbmdObservabilityTest, ArenaSizeGaugeRecordedAtInit)
 TEST_F(SbmdObservabilityTest, ForceSnapshotPopulatesHeapHistogram)
 {
     int64_t countBefore = GetHistogramCount("sbmd.js.heap.used_bytes");
-    MQuickJsRuntime::ForceSnapshot();
+    MQuickJsRuntime::GetMetrics().ForceSnapshot();
     int64_t countAfter = GetHistogramCount("sbmd.js.heap.used_bytes");
 
     EXPECT_GT(countAfter, countBefore);
@@ -507,7 +507,7 @@ TEST_F(SbmdObservabilityTest, ExceptionCounterIncrementsOnThrow)
     SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, "test.resource", std::nullopt);
 
     OperationContext opCtx;
-    opCtx.driverName = "test-driver";
+    opCtx.driverStem = "test-driver";
     opCtx.opType = "read";
     opCtx.startTime = std::chrono::steady_clock::now();
 
@@ -557,7 +557,7 @@ TEST_F(SbmdObservabilityTest, ErrorOutcomeCounterIncrements)
     SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, "test.resource", std::nullopt);
 
     OperationContext opCtx;
-    opCtx.driverName = "test-driver";
+    opCtx.driverStem = "test-driver";
     opCtx.opType = "read";
     opCtx.resourceId = "test.resource";
     opCtx.startTime = std::chrono::steady_clock::now();
@@ -625,7 +625,7 @@ TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         double waitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        MQuickJsRuntime::RecordMutexWait(waitMs);
+        MQuickJsRuntime::GetMetrics().RecordMutexWait(waitMs);
     }
 
     holder.join();
@@ -651,7 +651,7 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
 
 TEST_F(SbmdObservabilityTest, GcRootsGaugeHasValue)
 {
-    MQuickJsRuntime::ForceSnapshot();
+    MQuickJsRuntime::GetMetrics().ForceSnapshot();
     double roots = GetGaugeValue("sbmd.js.gc_roots");
     EXPECT_GT(roots, 0.0);
 }

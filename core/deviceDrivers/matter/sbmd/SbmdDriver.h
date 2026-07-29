@@ -124,8 +124,10 @@ namespace barton
          * Get the clean driver stem for observability metric attributes.
          * Strips the .sbmd.js double extension from the file path.
          * e.g. "door-lock.sbmd.js" → "door-lock"
+         *
+         * Cached at construction time; subsequent calls are O(1).
          */
-        std::string GetDriverStem() const;
+        const std::string &GetDriverStem() const;
 
         /**
          * Get the attribute dispatch table (only valid when activated).
@@ -210,6 +212,7 @@ namespace barton
 
         std::unique_ptr<SbmdRegistration> registration;
         std::string source; // Retained for re-activation
+        std::string driverStem; // Cached at construction from registration->filePath
 
         // Dispatch tables — built at activation, cleared at deactivation
         SbmdDispatchTable attributeDispatch;

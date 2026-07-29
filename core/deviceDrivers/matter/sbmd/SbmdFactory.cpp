@@ -50,12 +50,6 @@ using namespace barton;
 
 bool SbmdFactory::RegisterDrivers()
 {
-    if (!drivers.empty())
-    {
-        icDebug("SBMD drivers already registered; skipping");
-        return true;
-    }
-
     bool allRegistered = true;
 
     g_autofree gchar *sbmdDirs = deviceServiceConfigurationGetSbmdDirs();

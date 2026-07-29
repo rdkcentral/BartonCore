@@ -37,7 +37,7 @@ The system SHALL provide a `MQuickJsRuntimeMetrics::ForceSnapshot()` public stat
 The SBMD runtime SHALL record the net heap allocation of each JS handler invocation as a histogram named `sbmd.handler.heap_delta_bytes`. The delta SHALL be computed as `heap_used_after - heap_used_before`, measured from immediately before `JS_PushArg` through immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler` (the same window as `sbmd.handler.duration_ms`), so that argument-marshalling allocations are included. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` SHALL be included when `opCtx->resourceId` is non-null and SHALL be omitted for attribute/event handler invocations where it is `nullptr`.
 
 #### Scenario: Heap delta recorded per invocation
-- **WHEN** a JS handler is invoked via `InvokeHandler` with a `driverName` and `opType`
+- **WHEN** a JS handler is invoked via `InvokeHandler` with a `driverStem` and `opType`
 - **THEN** `sbmd.handler.heap_delta_bytes` contains one new observation attributed to that driver and op type
 
 #### Scenario: Heap delta may be negative
@@ -79,7 +79,7 @@ The SBMD runtime SHALL count handler invocation outcomes using a counter named `
 - **THEN** `sbmd.handler.outcome` counter for `outcome="error"` increments by one
 
 ### Requirement: JS mutex wait time tracking
-The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point mutex acquisition begins until the lock is held, in all code paths that acquire the mutex for handler invocation. The measurement is centralized in the `AcquireJsMutex()` helper in `SpecBasedMatterDeviceDriver.cpp`.
+The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point mutex acquisition begins until the lock is held, in all code paths that acquire the mutex for handler invocation. The measurement is centralized in `MQuickJsRuntime::AcquireMutex()`, which acquires the mutex and records the wait duration via `MQuickJsRuntimeMetrics::RecordMutexWait()` before returning the lock to the caller.
 
 #### Scenario: Mutex wait recorded on contention
 - **WHEN** two threads attempt to invoke SBMD handlers concurrently
@@ -173,14 +173,14 @@ The SBMD runtime SHALL count deferred operations terminated because they reached
 > **Note:** Integration test coverage for this scenario is planned as future work (task 9.7). It requires a test-only driver whose response handler unconditionally re-arms with another `requestCommand`, which in turn requires new test infrastructure (a new `.sbmd.js` spec file and a fixture whose virtual device responds at least 11 times).
 
 ### Requirement: Subsystem metrics initialization
-Each SBMD metrics class (`MQuickJsRuntimeMetrics`, `SbmdHandlerInvokerMetrics`, `SbmdFactoryMetrics`, `SpecBasedMatterDeviceDriverMetrics`) SHALL self-register with `MetricsRegistry` at static-initialization time via a file-scope static in its `.cpp`. `Matter::Matter()` SHALL call `MetricsRegistry::initializeAll()` **before** `SbmdFactory::RegisterDrivers()`, so that all handles — including the `sbmd.js.exception{phase="init"}` counter — are live for init-phase exceptions. The corresponding `MetricsRegistry::shutdownAll()` SHALL be called in the subsystem shutdown path after `MQuickJsRuntime::Shutdown()` and `SbmdFactory::Instance().ShutdownMetrics()`. `SbmdFactory::ShutdownMetrics()` is a non-static instance method that resets only the `runtimeReady` flag; metric handle teardown is performed exclusively by `MetricsRegistry::shutdownAll()`. Each `InitializeMetrics()` SHALL be idempotent: a second call before a matching `ShutdownMetrics()` SHALL be a no-op (checked via the first handle being non-null), preventing handle leaks on initialization retry paths.
+Each SBMD metrics class (`MQuickJsRuntimeMetrics`, `SbmdHandlerInvokerMetrics`, `SbmdFactoryMetrics`, `SpecBasedMatterDeviceDriverMetrics`) initializes its metric handles in its constructor. No explicit `InitializeMetrics()` / `ShutdownMetrics()` lifecycle calls are needed: handles are created when the owning object is constructed and persist for the process lifetime. `MQuickJsRuntimeMetrics` is constructed as an `inline static` member of `MQuickJsRuntime`; `SbmdHandlerInvokerMetrics` as a `static` member of `SbmdHandlerInvoker`; `SbmdFactoryMetrics` as a non-static member of the `SbmdFactory` singleton; `SpecBasedMatterDeviceDriverMetrics` as a `static` member of `SpecBasedMatterDeviceDriver`. No `MetricsRegistry` or centralized initialization sequence is required.
 
-#### Scenario: Metrics available after initialization
-- **WHEN** `MetricsRegistry::initializeAll()` completes
-- **THEN** `MQuickJsRuntimeMetrics::ForceSnapshot()` and all recording functions operate without error
+#### Scenario: Metrics available after first use
+- **WHEN** any SBMD recording method is called
+- **THEN** the call succeeds without error (handles are live from object construction)
 
-#### Scenario: Recording before initialization is safe
-- **WHEN** a recording function is called before `MetricsRegistry::initializeAll()`
+#### Scenario: Recording before runtime initialization is safe
+- **WHEN** a recording function is called before `MQuickJsRuntime::Initialize()`
 - **THEN** the call is silently ignored without crashing
 
 ### Requirement: GC cycle count tracking

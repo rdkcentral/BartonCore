@@ -92,8 +92,10 @@ namespace barton
 
         /**
          * Record a JS exception event.
-         * @param phase  "init" or "loading"
-         * @param driver Filename stem, or nullptr to omit the "driver" attribute
+         * @param phase  "init" (bundle/polyfill load), "loading" (per-driver eval),
+         *               or "invocation" (runtime handler exception)
+         * @param driver Filename stem of the affected driver, or nullptr to omit
+         *               the "driver" attribute from the event
          */
         void RecordJsException(const char *phase, const char *driver);
 
@@ -114,6 +116,8 @@ namespace barton
         ObservabilityCounter *gcCountCounter = nullptr;
         ObservabilityHistogram *gcDurationHisto = nullptr;
         ObservabilityGauge *gcRootsGauge = nullptr;
+
+        void RunSampler();
 
         std::thread periodicSamplerThread;
         std::atomic<bool> samplerShouldStop {false};

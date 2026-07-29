@@ -41,6 +41,7 @@ namespace barton
     SbmdDriver::SbmdDriver(std::unique_ptr<SbmdRegistration> registration, std::string source) :
         registration(std::move(registration)), source(std::move(source))
     {
+        driverStem = driverStemFromPath(this->registration->filePath);
     }
 
     SbmdDriver::~SbmdDriver()
@@ -144,9 +145,9 @@ namespace barton
         return registration->name;
     }
 
-    std::string SbmdDriver::GetDriverStem() const
+    const std::string &SbmdDriver::GetDriverStem() const
     {
-        return driverStemFromPath(registration->filePath);
+        return driverStem;
     }
 
     const SbmdDispatchTable &SbmdDriver::GetAttributeDispatch() const

@@ -194,16 +194,6 @@ namespace
         std::optional<ParsedResult> &result;
     };
 
-    // Acquire the JS runtime mutex and record the wait duration as a metrics observation.
-    std::unique_lock<std::mutex> AcquireJsMutex()
-    {
-        auto t0 = std::chrono::steady_clock::now();
-        std::unique_lock<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        MQuickJsRuntime::RecordMutexWait(
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
-
-        return lock;
-    }
 } // namespace
 
 SpecBasedMatterDeviceDriverMetrics SpecBasedMatterDeviceDriver::metrics;
@@ -745,12 +735,12 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     ScopedResultRelease resultRelease {result};
 
     OperationContext opCtx;
-    opCtx.driverName = driver->GetDriverStem();
+    opCtx.driverStem = driver->GetDriverStem();
     opCtx.opType = "seed";
     opCtx.resourceId = resource.id;
 
     {
-        auto lock = AcquireJsMutex();
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
@@ -961,13 +951,13 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
 
     auto t0 = std::chrono::steady_clock::now();
     OperationContext opCtx;
-    opCtx.driverName = driver ? driver->GetDriverStem() : "";
+    opCtx.driverStem = driver ? driver->GetDriverStem() : "";
     opCtx.opType = opType;
     opCtx.resourceId = resourceId;
     opCtx.startTime = t0;
 
     {
-        auto lock = AcquireJsMutex();
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
@@ -1232,7 +1222,7 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     }
     else if (driver != nullptr)
     {
-        pending.operationCtx.driverName = driver->GetDriverStem();
+        pending.operationCtx.driverStem = driver->GetDriverStem();
     }
 
     pending.operationCtx.startTime = std::chrono::steady_clock::now();
@@ -1412,7 +1402,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     {
         icWarn("Deferred operation %" PRIu64 " exceeded overall deadline", pendingId);
         metrics.RecordDeferredTimeout(
-            pending.operationCtx.driverName.c_str(),
+            pending.operationCtx.driverStem.c_str(),
             pending.operationCtx.opType.c_str(),
             pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str());
 
@@ -1420,7 +1410,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
         std::optional<ParsedResult> errorResult;
         ScopedResultRelease errorResultRelease {errorResult};
         {
-            auto lock = AcquireJsMutex();
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onError.HasValue())
@@ -1458,7 +1448,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
     {
-        auto lock = AcquireJsMutex();
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         if (pending.onResponse.HasValue())
@@ -1502,7 +1492,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
     std::optional<ParsedResult> errorResult;
     ScopedResultRelease errorResultRelease {errorResult};
     {
-        auto lock = AcquireJsMutex();
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         if (pending.onError.HasValue())
@@ -1543,8 +1533,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         icError("Deferred operation %" PRIu64 " exceeded max deferral depth (%u)",
                 pendingId,
                 PendingOperation::MAX_DEFERRAL_DEPTH);
-        metrics.RecordDeferredMaxDepth(
-            pending.operationCtx.driverName.c_str(),
+        metrics.RecordDeferredDepthExceeded(
+            pending.operationCtx.driverStem.c_str(),
             pending.operationCtx.opType.c_str(),
             pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str());
         CompletePendingOperation(pendingId, false);
@@ -1824,7 +1814,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         if (err != CHIP_NO_ERROR)
         {
-            auto lock = AcquireJsMutex();
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onError.HasValue())
@@ -1846,7 +1836,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
             const std::string &tlvBase64 = *tlvBase64Opt;
 
-            auto lock = AcquireJsMutex();
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onResponse.HasValue())
@@ -1890,7 +1880,7 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
     double durationMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - pending.operationCtx.startTime)
             .count();
-    const char *driverAttr = pending.operationCtx.driverName.c_str();
+    const char *driverAttr = pending.operationCtx.driverStem.c_str();
     const char *opTypeAttr = pending.operationCtx.opType.c_str();
     const char *resourceAttr =
         pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str();
@@ -2141,7 +2131,7 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
 
         {
             auto startTime = std::chrono::steady_clock::now();
-            auto lock = AcquireJsMutex();
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             // args keeps its value alive for its whole lifetime, so it survives the allocations in
@@ -2150,7 +2140,7 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
             SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
 
             OperationContext opCtx;
-            opCtx.driverName = driver ? driver->GetDriverStem() : "";
+            opCtx.driverStem = driver ? driver->GetDriverStem() : "";
             opCtx.opType = elementNoun;
             opCtx.startTime = startTime;
             result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args, &opCtx);

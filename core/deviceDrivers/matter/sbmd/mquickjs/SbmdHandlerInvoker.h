@@ -139,7 +139,7 @@ namespace barton
      */
     struct OperationContext
     {
-        std::string driverName; // Driver filename stem for metric attributes (e.g., "door-lock")
+        std::string driverStem; // filename stem of the SBMD driver file (e.g., "door-lock" from door-lock.sbmd.js)
         std::string opType;     // "read", "write", "execute", "seed", "attribute", "event", "command", ...
         std::string resourceId; // resource ID for the related resource (empty when not applicable)
         std::chrono::steady_clock::time_point startTime {}; // time before mutex acquisition
@@ -228,6 +228,8 @@ namespace barton
          * @param ctx JS context (caller holds mutex)
          * @param handler The handler JSValue (must be a function)
          * @param args The args object (consumed by the call)
+         * @param opCtx Optional operation context used to tag observability metrics
+         *              Pass nullptr to skip metric recording.
          * @return Parsed result chain, or nullopt on failure
          */
         static std::optional<ParsedResult> InvokeHandler(JSContext *ctx,

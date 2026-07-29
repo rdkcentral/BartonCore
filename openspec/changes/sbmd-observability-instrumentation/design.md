@@ -54,7 +54,7 @@ All five `sbmd.handler.outcome` outcome values — `"success"`, `"exception"`, `
 
 ```cpp
 struct OperationContext {
-    std::string driverName;  // computed from filePath at assignment time
+    std::string driverStem;  // filename stem of the .sbmd.js file (e.g., "door-lock" from door-lock.sbmd.js)
     std::string opType;      // originating op type (e.g., "write", "execute")
     std::string resourceId;  // resource ID for the operation (empty when not applicable)
     std::chrono::steady_clock::time_point startTime;
@@ -80,7 +80,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 
 **In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntimeMetrics::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes`/`gc_roots` gauges) using the `JSMemoryUsage` struct already captured by the post-`JS_Call` `JS_GetMemoryUsage` call and the `gcRootCount` from `JS_GetGCRootCount(ctx)` — both computed by the caller while the mutex is held. `InvokeHandler` then calls `MQuickJsRuntimeMetrics::TickleSampler()` to notify the idle thread to reset its timer.
 
-**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_until` returns before the deadline, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: call `wait_until` again with the same absolute deadline (not a fresh `wait_for`) so that only the remaining time is consumed, not a full new period. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
+**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_HEAP_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. The wait uses the three-argument `samplerCv.wait_until(lock, deadline, predicate)` overload, where the predicate returns `true` when `samplerShouldStop` is set or `tickleSeq` has changed. The three-argument form handles spurious wakeups internally: it only returns when the predicate fires or the deadline elapses, so the outer loop never sees spurious wakeups. The return value (`false` = timeout, `true` = predicate fired) is captured as `bool timeout = !samplerCv.wait_until(...)`. On timeout: take a snapshot. On non-timeout (stop or tickle): fall through to the outer-loop condition, which handles stop; a tickle re-arms the deadline from `now()` without a snapshot.
 
 **Why two paths rather than either alone?**
 - Periodic-only: on low-traffic systems (e.g., 20% active, 80% idle), most captures reflect idle-state heap; behavior during activity is sampled at most once per interval.
@@ -111,7 +111,7 @@ InvokeHandler (JS mutex held by caller):     Idle background thread:
 
 ### Decision 4: `PendingOperation` extended with `OperationContext`
 
-An `OperationContext operationCtx` field is added to `PendingOperation`. It is initialized in `ExecuteRequestCommand` by copying from the `const OperationContext *opCtx` threaded in from `HandleResourceOp` via `ExecuteTerminal` (with `driverName` falling back to `driver->GetDriverStem()` when `opCtx` is null); `startTime` is always set fresh to `steady_clock::now()` at the moment the deferred op is registered. `CompletePendingOperation` — the single convergence point for all deferred op exits — reads `pending.operationCtx.startTime` to compute total duration and uses `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` as attributes on all deferred lifecycle metrics (`sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth`).
+An `OperationContext operationCtx` field is added to `PendingOperation`. It is initialized in `ExecuteRequestCommand` by copying from the `const OperationContext *opCtx` threaded in from `HandleResourceOp` via `ExecuteTerminal` (with `driverStem` falling back to `driver->GetDriverStem()` when `opCtx` is null); `startTime` is always set fresh to `steady_clock::now()` at the moment the deferred op is registered. `CompletePendingOperation` — the single convergence point for all deferred op exits — reads `pending.operationCtx.startTime` to compute total duration and uses `pending.operationCtx.driverStem`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` as attributes on all deferred lifecycle metrics (`sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth`).
 
 **Why `CompletePendingOperation` rather than each individual exit site?** There are ~15 `CompletePendingOperation` call sites. Recording in the single callee avoids duplicating metric logic and ensures no exit path is missed.
 
@@ -157,9 +157,10 @@ A `BCORE_SBMD_METRICS` ON/OFF CMake option (default ON, compiled definition `BAR
 - Each metrics header wraps its real class declaration in `#ifdef BARTON_CONFIG_SBMD_METRICS` and provides an empty inline stub class in the `#else` branch; all callers require zero source changes
 - Each metrics `.cpp` wraps its entire body in `#ifdef BARTON_CONFIG_SBMD_METRICS`; the files compile to empty translation units and the inline stubs resolve all call sites
 - The sampler thread is never started (`StartSampler()` / `StopSampler()` are empty stubs)
-- The timing measurements in `AcquireJsMutex()` are guarded with `#ifdef BARTON_CONFIG_SBMD_METRICS` so clock reads are eliminated even in unoptimized builds
-- All measurement overhead in `SbmdHandlerInvoker::InvokeHandler` — pre/post `JS_GetMemoryUsage`, `steady_clock::now()` timing, `JS_GetGCRootCount()`, and `WasInterrupted()` — is guarded with `#ifdef BARTON_CONFIG_SBMD_METRICS`; with metrics disabled the function pays only for `JS_Call` itself and does not reference the patched `JS_GetGCRootCount` symbol
-- All measurement overhead in `SbmdFactory::RegisterDriversFromDirectory` — `loadStart`/`loadEnd` (`steady_clock::now()`), `usageBefore`/`usageAfter` (`JS_GetMemoryUsage`), duration/delta math, and all `metrics.Record*` calls — is guarded with `#ifdef BARTON_CONFIG_SBMD_METRICS`; driver loading itself is unaffected
+- `MQuickJsRuntime::AcquireMutex()` (the centralized mutex-acquisition method) records wait time via `metrics.RecordMutexWait()` unconditionally; its timing calls are not guarded because the overhead is negligible and the guards were removed per task 11.3
+- All measurement overhead in `SbmdHandlerInvoker::InvokeHandler` — pre/post `JS_GetMemoryUsage`, `steady_clock::now()` timing, `JS_GetGCRootCount()`, and `WasTimedOut()` — is present unconditionally (guards removed per task 11.3); with `BCORE_SBMD_METRICS=OFF` the stub recording methods are empty inline no-ops, but the measurement calls themselves still compile
+- All measurement overhead in `SbmdFactory::RegisterDriversFromDirectory` — `loadStart`/`loadEnd` (`steady_clock::now()`), `usageBefore`/`usageAfter` (`JS_GetMemoryUsage`), duration/delta math, and all `metrics.Record*` calls — is present unconditionally (guards removed per task 11.3)
+- The two `JS_SetGCCallback` guards in `MQuickJsRuntime.cpp` (on init and shutdown) are retained as an explicitly approved exception: the patched GC callback symbols require careful conditional use
 - the constructor in each metrics class is a no-op stub; all recording methods are empty stubs; no initialization or shutdown calls are needed
 
 When `BCORE_OBSERVABILITY_BACKEND=none`, the observability backend API calls are already no-ops (via `observabilityNoop.c`), but the SBMD metrics infrastructure — sampler thread, timing measurements — still runs. Setting `BCORE_SBMD_METRICS=OFF` eliminates that remaining overhead for a true zero-cost build.
@@ -186,7 +187,7 @@ core/deviceDrivers/matter/sbmd/
 │                                            ← instance-based; static member of SpecBasedMatterDeviceDriver;
 │                                            handles + recording for sbmd.deferred.*;
 │                                            RecordDeferredStart, RecordDeferredTimeout,
-│                                            RecordDeferredMaxDepth, RecordDeferredComplete
+│                                            RecordDeferredDepthExceeded, RecordDeferredComplete
 │
 ├── mquickjs/
 │   ├── MQuickJsRuntime.h/.cpp               ← pure static class (constructor deleted); inline static members;

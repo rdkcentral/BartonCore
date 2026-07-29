@@ -50,6 +50,10 @@ namespace barton
 {
     using namespace mquickjs;
 
+    // File-scope flag written by ScriptInterruptHandler and read by WasTimedOut/SetDeadline.
+    // Kept here (not a class member) so the anonymous-namespace callback can write it directly.
+    static std::atomic<bool> scriptInterruptFired {false};
+
     namespace
     {
         /**
@@ -72,7 +76,7 @@ namespace barton
             if (std::chrono::steady_clock::now() > currentDeadline)
             {
                 icError("SBMD script execution timeout: script exceeded the configured time limit");
-                MQuickJsRuntime::RecordInterrupt();
+                scriptInterruptFired.store(true, std::memory_order_relaxed);
                 return 1;
             }
 
@@ -166,7 +170,7 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     icDebug("Script execution interrupt handler installed");
 
     // Install the GC instrumentation callback (passes the metrics instance as opaque)
-#ifdef BARTON_CONFIG_SBMD_METRICS
+#if defined(BARTON_CONFIG_SBMD_METRICS) && defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION)
     JS_SetGCCallback(ctx, &MQuickJsRuntimeMetrics::GCCallback, &metrics);
 #endif
 
@@ -180,7 +184,7 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
         if (JS_GetMemoryUsage(ctx, &arenaUsage, 0) == 0)
         {
             metrics.RecordArenaSize(static_cast<int64_t>(arenaUsage.arena_size));
-            metrics.RecordHeapSnapshot(arenaUsage, 0);
+            RecordHeapSnapshot(arenaUsage);
         }
     }
 
@@ -219,7 +223,7 @@ void MQuickJsRuntime::Shutdown()
 
         if (ctx)
         {
-#ifdef BARTON_CONFIG_SBMD_METRICS
+#if defined(BARTON_CONFIG_SBMD_METRICS) && defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION)
             JS_SetGCCallback(ctx, nullptr, nullptr);
 #endif
             JS_FreeContext(ctx);
@@ -445,12 +449,7 @@ std::chrono::steady_clock::time_point MQuickJsRuntime::GetDeadline()
     return deadline;
 }
 
-void MQuickJsRuntime::RecordInterrupt()
-{
-    scriptInterruptFired.store(true, std::memory_order_relaxed);
-}
-
-bool MQuickJsRuntime::WasInterrupted()
+bool MQuickJsRuntime::WasTimedOut()
 {
     return scriptInterruptFired.load(std::memory_order_relaxed);
 }
@@ -460,29 +459,28 @@ bool MQuickJsRuntime::IsContextReady()
     return jsContextReady.load(std::memory_order_acquire);
 }
 
-void MQuickJsRuntime::RecordMutexWait(double ms)
+MQuickJsRuntimeMetrics &MQuickJsRuntime::GetMetrics()
 {
-    metrics.RecordMutexWait(ms);
+    return metrics;
 }
 
-void MQuickJsRuntime::RecordJsException(const char *phase, const char *driver)
+std::unique_lock<std::mutex> MQuickJsRuntime::AcquireMutex()
 {
-    metrics.RecordJsException(phase, driver);
+    auto t0 = std::chrono::steady_clock::now();
+    std::unique_lock<std::mutex> lock(mutex);
+    metrics.RecordMutexWait(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+
+    return lock;
 }
 
-void MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount)
+void MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage)
 {
+#ifdef BARTON_CONFIG_SBMD_GC_INSTRUMENTATION
+    size_t gcRootCount = ctx ? JS_GetGCRootCount(ctx) : 0;
+#else
+    size_t gcRootCount = 0;
+#endif
     metrics.RecordHeapSnapshot(usage, gcRootCount);
-}
-
-void MQuickJsRuntime::TickleSampler()
-{
-    metrics.TickleSampler();
-}
-
-void MQuickJsRuntime::ForceSnapshot()
-{
-    metrics.ForceSnapshot();
 }
 
 } // namespace barton
