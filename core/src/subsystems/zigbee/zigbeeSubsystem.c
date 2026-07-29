@@ -74,7 +74,7 @@
 #include <jsonHelper/jsonHelper.h>
 #include <subsystemManager.h>
 #include <versionUtils.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 #include <zigbeeClusters/zigbeeCluster.h>
 
 #undef LOG_TAG
@@ -169,7 +169,7 @@
 static ZigbeeWatchdogDelegate *watchdogDelegate;
 static pthread_mutex_t watchdogDelegateMtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
-static zhalCallbacks callbacks;
+static ZhalCallbacks callbacks;
 
 static uint8_t crossAboveDb = 0;
 
@@ -225,7 +225,7 @@ static void deviceCallbackDestroy(void *item);
 
 static void *checkAllDevicesInCommThreadProc(void *arg);
 
-static void responseHandler(const char *responseType, ZHAL_STATUS resultCode);
+static void requestMonitor(gpointer ctx, const ZhalCompletedRequestInfo *info);
 
 typedef struct
 {
@@ -265,15 +265,15 @@ typedef struct
 typedef struct
 {
     uint64_t eui64;
-    zhalDeviceType deviceType;
-    zhalPowerSource powerSource;
+    ZhalDeviceType deviceType;
+    ZhalPowerSource powerSource;
 } DeviceAnnouncedContext;
 
 static void deviceCallbacksClusterCommandReceived(const void *item, const void *context);
 
 typedef struct
 {
-    OtaUpgradeEvent *otaEvent;
+    ZhalOtaUpgradeEvent *otaEvent;
     bool isSentFromServer;
 } DeviceCallbacksOtaUpgradeEventContext;
 
@@ -412,7 +412,7 @@ static void waitForInitialZigbeeCoreStartup(void)
                    "Starting timer of %d seconds to wait for Zigbee startup",
                    BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS);
         timeTrackerStart(timer, BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS);
-        while ((zhalHeartbeatRc = zhalHeartbeat(NULL, NULL)) != 0 && timeTrackerExpired(timer) == false)
+        while ((zhalHeartbeatRc = zhalGetServerInfo(NULL, NULL)) != 0 && timeTrackerExpired(timer) == false)
         {
             icLogDebug(LOG_TAG, "Waiting for ZigbeeCore to be ready.");
             sleep(DELAY_BETWEEN_INITIAL_HEARTBEATS_SECONDS);
@@ -555,7 +555,7 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     memset(&callbacks, 0, sizeof(callbacks));
     zigbeeEventHandlerInit(&callbacks);
 
-    zhalInit(ip, portNum, &callbacks, NULL, responseHandler);
+    zhalInit(ip, portNum, &callbacks, NULL, requestMonitor);
 
     // wait here until ZigbeeCore is functional or we time out
     waitForInitialZigbeeCoreStartup();
@@ -674,7 +674,8 @@ static void incrementNetworkCountersIfRequired()
         stringCompare(incrementCounters, "true", true) == 0)
     {
         // Do the counter increment
-        if (zhalIncrementNetworkCounters(NONCE_COUNTER_INCREMENT_AMOUNT, FRAME_COUNTER_INCREMENT_AMOUNT) == false)
+        if (zhalIncrementNetworkCounters(NONCE_COUNTER_INCREMENT_AMOUNT, FRAME_COUNTER_INCREMENT_AMOUNT) !=
+            ZHAL_STATUS_OK)
         {
             icLogWarn(LOG_TAG, "Failed to increment zigbee counters");
         }
@@ -1219,7 +1220,7 @@ void zigbeeSubsystemApsAckFailure(uint64_t eui64)
     zigbeeEventTrackerAddApsAckFailureEvent(eui64);
 }
 
-void zigbeeSubsystemDeviceOtaUpgradeMessageSent(OtaUpgradeEvent *otaEvent)
+void zigbeeSubsystemDeviceOtaUpgradeMessageSent(ZhalOtaUpgradeEvent *otaEvent)
 {
     DeviceCallbacksOtaUpgradeEventContext context = {
         .otaEvent = otaEvent,
@@ -1228,7 +1229,7 @@ void zigbeeSubsystemDeviceOtaUpgradeMessageSent(OtaUpgradeEvent *otaEvent)
     threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksOtaUpgradeMessageSent, &context);
 }
 
-void zigbeeSubsystemDeviceOtaUpgradeMessageReceived(OtaUpgradeEvent *otaEvent)
+void zigbeeSubsystemDeviceOtaUpgradeMessageReceived(ZhalOtaUpgradeEvent *otaEvent)
 {
     DeviceCallbacksOtaUpgradeEventContext context = {
         .otaEvent = otaEvent,
@@ -1400,8 +1401,13 @@ int zigbeeSubsystemSendCommand(uint64_t eui64,
                                uint8_t *message,
                                uint16_t messageLen)
 {
-    // for now just pass through
-    return zhalSendCommand(eui64, endpointId, clusterId, toServer, false, false, commandId, message, messageLen);
+    GBytes *msg = (message != NULL) ? g_bytes_new(message, messageLen) : NULL;
+    int result = zhalSendCommand(eui64, endpointId, clusterId, toServer, false, false, commandId, msg);
+    if (msg != NULL)
+    {
+        g_bytes_unref(msg);
+    }
+    return result;
 }
 
 int zigbeeSubsystemSendCommandDefaultResponse(uint64_t eui64,
@@ -1412,8 +1418,13 @@ int zigbeeSubsystemSendCommandDefaultResponse(uint64_t eui64,
                                               uint8_t *message,
                                               uint16_t messageLen)
 {
-    // for now just pass through
-    return zhalSendCommand(eui64, endpointId, clusterId, toServer, false, true, commandId, message, messageLen);
+    GBytes *msg = (message != NULL) ? g_bytes_new(message, messageLen) : NULL;
+    int result = zhalSendCommand(eui64, endpointId, clusterId, toServer, false, true, commandId, msg);
+    if (msg != NULL)
+    {
+        g_bytes_unref(msg);
+    }
+    return result;
 }
 
 int zigbeeSubsystemSendCommandWithEncryption(uint64_t eui64,
@@ -1424,8 +1435,13 @@ int zigbeeSubsystemSendCommandWithEncryption(uint64_t eui64,
                                              uint8_t *message,
                                              uint16_t messageLen)
 {
-    // for now just pass through
-    return zhalSendCommand(eui64, endpointId, clusterId, toServer, true, false, commandId, message, messageLen);
+    GBytes *msg = (message != NULL) ? g_bytes_new(message, messageLen) : NULL;
+    int result = zhalSendCommand(eui64, endpointId, clusterId, toServer, true, false, commandId, msg);
+    if (msg != NULL)
+    {
+        g_bytes_unref(msg);
+    }
+    return result;
 }
 
 int zigbeeSubsystemSendMfgCommand(uint64_t eui64,
@@ -1437,9 +1453,13 @@ int zigbeeSubsystemSendMfgCommand(uint64_t eui64,
                                   uint8_t *message,
                                   uint16_t messageLen)
 {
-    // for now just pass through
-    return zhalSendMfgCommand(
-        eui64, endpointId, clusterId, toServer, false, false, commandId, mfgId, message, messageLen);
+    GBytes *msg = (message != NULL) ? g_bytes_new(message, messageLen) : NULL;
+    int result = zhalSendMfgCommand(eui64, endpointId, clusterId, toServer, false, false, commandId, mfgId, msg);
+    if (msg != NULL)
+    {
+        g_bytes_unref(msg);
+    }
+    return result;
 }
 
 int zigbeeSubsystemSendMfgCommandDefaultResponse(uint64_t eui64,
@@ -1451,9 +1471,13 @@ int zigbeeSubsystemSendMfgCommandDefaultResponse(uint64_t eui64,
                                                  uint8_t *message,
                                                  uint16_t messageLen)
 {
-    // for now just pass through
-    return zhalSendMfgCommand(
-        eui64, endpointId, clusterId, toServer, false, true, commandId, mfgId, message, messageLen);
+    GBytes *msg = (message != NULL) ? g_bytes_new(message, messageLen) : NULL;
+    int result = zhalSendMfgCommand(eui64, endpointId, clusterId, toServer, false, true, commandId, mfgId, msg);
+    if (msg != NULL)
+    {
+        g_bytes_unref(msg);
+    }
+    return result;
 }
 
 int zigbeeSubsystemSendMfgCommandWithEncryption(uint64_t eui64,
@@ -1465,9 +1489,13 @@ int zigbeeSubsystemSendMfgCommandWithEncryption(uint64_t eui64,
                                                 uint8_t *message,
                                                 uint16_t messageLen)
 {
-    // for now just pass through
-    return zhalSendMfgCommand(
-        eui64, endpointId, clusterId, toServer, true, false, commandId, mfgId, message, messageLen);
+    GBytes *msg = (message != NULL) ? g_bytes_new(message, messageLen) : NULL;
+    int result = zhalSendMfgCommand(eui64, endpointId, clusterId, toServer, true, false, commandId, mfgId, msg);
+    if (msg != NULL)
+    {
+        g_bytes_unref(msg);
+    }
+    return result;
 }
 
 int zigbeeSubsystemSendViaApsAck(uint64_t eui64,
@@ -1477,8 +1505,13 @@ int zigbeeSubsystemSendViaApsAck(uint64_t eui64,
                                  uint8_t *message,
                                  uint16_t messageLen)
 {
-    // for now just pass through
-    return zhalSendViaApsAck(eui64, endpointId, clusterId, sequenceNum, message, messageLen);
+    GBytes *msg = (message != NULL) ? g_bytes_new(message, messageLen) : NULL;
+    int result = zhalSendViaApsAck(eui64, endpointId, clusterId, sequenceNum, msg);
+    if (msg != NULL)
+    {
+        g_bytes_unref(msg);
+    }
+    return result;
 }
 
 static int readString(uint64_t eui64,
@@ -1500,24 +1533,37 @@ static int readString(uint64_t eui64,
 
     if (toServer)
     {
-        uint16_t attributeIds[1] = {attributeId};
-        zhalAttributeData attributeData[1];
-        memset(attributeData, 0, sizeof(zhalAttributeData));
+        GArray *attributeIds = g_array_new(FALSE, FALSE, sizeof(guint16));
+        guint16 aid = attributeId;
+        g_array_append_val(attributeIds, aid);
+        GPtrArray *attributeData = NULL;
 
         if (isMfgSpecific)
         {
-            result = zhalAttributesReadMfgSpecific(
-                eui64, endpointId, clusterId, mfgId, toServer, attributeIds, 1, attributeData);
+            result =
+                zhalAttributesReadMfgSpecific(eui64, endpointId, clusterId, mfgId, toServer, attributeIds, &attributeData);
         }
         else
         {
-            result = zhalAttributesRead(eui64, endpointId, clusterId, toServer, attributeIds, 1, attributeData);
+            result = zhalAttributesRead(eui64, endpointId, clusterId, toServer, attributeIds, &attributeData);
+        }
+        g_array_unref(attributeIds);
+
+        gsize dataLen = 0;
+        const guint8 *data = NULL;
+        if (result == 0 && attributeData != NULL && attributeData->len > 0)
+        {
+            ZhalAttributeData *ad = g_ptr_array_index(attributeData, 0);
+            if (ad->data != NULL)
+            {
+                data = g_bytes_get_data(ad->data, &dataLen);
+            }
         }
 
-        if (result == 0 && attributeData[0].dataLen > 0)
+        if (data != NULL && dataLen > 0)
         {
-            *value = (char *) calloc(1, attributeData[0].data[0] + 1);
-            memcpy(*value, attributeData[0].data + 1, attributeData[0].data[0]);
+            *value = (char *) calloc(1, data[0] + 1);
+            memcpy(*value, data + 1, data[0]);
         }
         else
         {
@@ -1525,7 +1571,10 @@ static int readString(uint64_t eui64,
             result = -1;
         }
 
-        free(attributeData[0].data);
+        if (attributeData != NULL)
+        {
+            g_ptr_array_unref(attributeData);
+        }
     }
     else
     {
@@ -1577,29 +1626,46 @@ static int readNumbers(uint64_t eui64,
 
     memset(values, 0, sizeof(uint64_t) * numAttributes);
 
-    zhalAttributeData *attributeData = calloc(numAttributes, sizeof(zhalAttributeData));
+    GArray *idArray = g_array_new(FALSE, FALSE, sizeof(guint16));
+    for (uint8_t i = 0; i < numAttributes; i++)
+    {
+        guint16 id = attributeIds[i];
+        g_array_append_val(idArray, id);
+    }
+    GPtrArray *attributeData = NULL;
 
     if (isMfgSpecific)
     {
-        result = zhalAttributesReadMfgSpecific(
-            eui64, endpointId, clusterId, mfgId, toServer, attributeIds, numAttributes, attributeData);
+        result = zhalAttributesReadMfgSpecific(eui64, endpointId, clusterId, mfgId, toServer, idArray, &attributeData);
     }
     else
     {
-        result = zhalAttributesRead(eui64, endpointId, clusterId, toServer, attributeIds, numAttributes, attributeData);
+        result = zhalAttributesRead(eui64, endpointId, clusterId, toServer, idArray, &attributeData);
     }
+    g_array_unref(idArray);
 
-    if (result == 0)
+    if (result == 0 && attributeData != NULL)
     {
         for (uint8_t attIdx = 0; attIdx < numAttributes; attIdx++)
         {
-            if (attributeData[attIdx].dataLen > 0 && attributeData[attIdx].dataLen <= 8) // these will fit in uint64_t
+            gsize dataLen = 0;
+            const guint8 *data = NULL;
+            if (attIdx < attributeData->len)
+            {
+                ZhalAttributeData *ad = g_ptr_array_index(attributeData, attIdx);
+                if (ad->data != NULL)
+                {
+                    data = g_bytes_get_data(ad->data, &dataLen);
+                }
+            }
+
+            if (data != NULL && dataLen > 0 && dataLen <= 8) // these will fit in uint64_t
             {
                 readSuccesses[attIdx] = true; // we got data for this attribute, so mark it as successful
 
-                for (uint16_t i = 0; i < attributeData[attIdx].dataLen; i++)
+                for (gsize i = 0; i < dataLen; i++)
                 {
-                    values[attIdx] += ((uint64_t) attributeData[attIdx].data[i]) << (i * 8u);
+                    values[attIdx] += ((uint64_t) data[i]) << (i * 8u);
                 }
             }
             else
@@ -1608,8 +1674,6 @@ static int readNumbers(uint64_t eui64,
                     LOG_TAG, "%s: error, no data returned for attributeId %" PRIu16, __func__, attributeIds[attIdx]);
                 readSuccesses[attIdx] = false;
             }
-
-            free(attributeData[attIdx].data);
         }
     }
     else
@@ -1617,7 +1681,10 @@ static int readNumbers(uint64_t eui64,
         icLogError(LOG_TAG, "%s: zhal failed to read attribute", __func__);
     }
 
-    free(attributeData);
+    if (attributeData != NULL)
+    {
+        g_ptr_array_unref(attributeData);
+    }
 
     return result;
 }
@@ -1704,32 +1771,32 @@ static int writeNumber(uint64_t eui64,
                        uint64_t value,
                        uint8_t numBytes)
 {
-    zhalAttributeData attributeData;
-    memset(&attributeData, 0, sizeof(zhalAttributeData));
-    attributeData.attributeInfo.id = attributeId;
-    attributeData.attributeInfo.type = attributeType;
-    attributeData.data = (uint8_t *) calloc(numBytes, 1);
-
-    int retVal = 0;
-
     // note that this implementation only supports writing up to 8 bytes (what fits in uint64_t)
+    guint8 *bytes = (guint8 *) g_malloc0(numBytes);
     for (int i = 0; i < numBytes; i++)
     {
-        attributeData.data[i] = (uint8_t) ((value >> 8 * i) & 0xff);
+        bytes[i] = (uint8_t) ((value >> 8 * i) & 0xff);
     }
-    attributeData.dataLen = numBytes;
 
+    ZhalAttributeData *attributeData = ZhalAttributeData_new();
+    attributeData->attributeInfo.id = attributeId;
+    attributeData->attributeInfo.type = attributeType;
+    attributeData->data = g_bytes_new_take(bytes, numBytes); // takes ownership of bytes
+
+    GPtrArray *attributeDataList = g_ptr_array_new_with_free_func((GDestroyNotify) ZhalAttributeData_release);
+    g_ptr_array_add(attributeDataList, attributeData);
+
+    int retVal = 0;
     if (isMfgSpecific)
     {
-        retVal = zhalAttributesWriteMfgSpecific(eui64, endpointId, clusterId, mfgId, toServer, &attributeData, 1);
+        retVal = zhalAttributesWriteMfgSpecific(eui64, endpointId, clusterId, mfgId, toServer, attributeDataList);
     }
     else
     {
-        retVal = zhalAttributesWrite(eui64, endpointId, clusterId, toServer, &attributeData, 1);
+        retVal = zhalAttributesWrite(eui64, endpointId, clusterId, toServer, attributeDataList);
     }
 
-    // cleanup
-    free(attributeData.data);
+    g_ptr_array_unref(attributeDataList);
 
     return retVal;
 }
@@ -1768,7 +1835,22 @@ int zigbeeSubsystemBindingSet(uint64_t eui64, uint8_t endpointId, uint16_t clust
 
 icLinkedList *zigbeeSubsystemBindingGet(uint64_t eui64)
 {
-    return zhalBindingGet(eui64);
+    GPtrArray *bindings = NULL;
+    if (zhalBindingGet(eui64, &bindings) != ZHAL_STATUS_OK || bindings == NULL)
+    {
+        return NULL;
+    }
+
+    icLinkedList *result = linkedListCreate();
+    for (guint i = 0; i < bindings->len; i++)
+    {
+        ZhalBindingTableEntry *src = (ZhalBindingTableEntry *) g_ptr_array_index(bindings, i);
+        ZhalBindingTableEntry *copy = (ZhalBindingTableEntry *) calloc(1, sizeof(ZhalBindingTableEntry));
+        *copy = *src;
+        linkedListAppend(result, copy);
+    }
+    g_ptr_array_unref(bindings);
+    return result;
 }
 
 int zigbeeSubsystemBindingClear(uint64_t eui64, uint8_t endpointId, uint16_t clusterId)
@@ -1786,38 +1868,100 @@ int zigbeeSubsystemBindingClearTarget(uint64_t eui64,
 }
 
 
+// Convert a caller-provided flat array of reporting configs into the GPtrArray of
+// boxed ZhalAttributeReportingConfig* the new zhal client expects.  The configs are
+// plain POD, so a shallow copy into each boxed element is sufficient.
+static GPtrArray *reportingConfigsToPtrArray(ZhalAttributeReportingConfig *configs, uint8_t numConfigs)
+{
+    GPtrArray *configList = g_ptr_array_new_with_free_func((GDestroyNotify) ZhalAttributeReportingConfig_release);
+    for (uint8_t i = 0; i < numConfigs; i++)
+    {
+        ZhalAttributeReportingConfig *cfg = ZhalAttributeReportingConfig_new();
+        *cfg = configs[i];
+        g_ptr_array_add(configList, cfg);
+    }
+    return configList;
+}
+
 int zigbeeSubsystemAttributesSetReporting(uint64_t eui64,
                                           uint8_t endpointId,
                                           uint16_t clusterId,
-                                          zhalAttributeReportingConfig *configs,
+                                          ZhalAttributeReportingConfig *configs,
                                           uint8_t numConfigs)
 {
-    return zhalAttributesSetReporting(eui64, endpointId, clusterId, configs, numConfigs);
+    GPtrArray *configList = reportingConfigsToPtrArray(configs, numConfigs);
+    int result = zhalAttributesSetReporting(eui64, endpointId, clusterId, configList);
+    g_ptr_array_unref(configList);
+    return result;
 }
 
 int zigbeeSubsystemAttributesSetReportingMfgSpecific(uint64_t eui64,
                                                      uint8_t endpointId,
                                                      uint16_t clusterId,
                                                      uint16_t mfgId,
-                                                     zhalAttributeReportingConfig *configs,
+                                                     ZhalAttributeReportingConfig *configs,
                                                      uint8_t numConfigs)
 {
-    return zhalAttributesSetReportingMfgSpecific(eui64, endpointId, clusterId, mfgId, configs, numConfigs);
+    GPtrArray *configList = reportingConfigsToPtrArray(configs, numConfigs);
+    int result = zhalAttributesSetReportingMfgSpecific(eui64, endpointId, clusterId, mfgId, configList);
+    g_ptr_array_unref(configList);
+    return result;
 }
 
 int zigbeeSubsystemGetEndpointIds(uint64_t eui64, uint8_t **endpointIds, uint8_t *numEndpointIds)
 {
-    return zhalGetEndpointIds(eui64, endpointIds, numEndpointIds);
+    GArray *ids = NULL;
+    int result = zhalGetEndpointIds(eui64, &ids);
+    if (result == 0 && ids != NULL)
+    {
+        *numEndpointIds = (uint8_t) ids->len;
+        if (ids->len > 0)
+        {
+            *endpointIds = (uint8_t *) calloc(ids->len, sizeof(uint8_t));
+            memcpy(*endpointIds, ids->data, ids->len * sizeof(uint8_t));
+        }
+        else
+        {
+            *endpointIds = NULL;
+        }
+    }
+    if (ids != NULL)
+    {
+        g_array_unref(ids);
+    }
+    return result;
 }
 
 int zigbeeSubsystemDiscoverAttributes(uint64_t eui64,
                                       uint8_t endpointId,
                                       uint16_t clusterId,
                                       bool toServer,
-                                      zhalAttributeInfo **infos,
+                                      ZhalAttributeInfo **infos,
                                       uint16_t *numInfos)
 {
-    return zhalGetAttributeInfos(eui64, endpointId, clusterId, toServer, infos, numInfos);
+    GPtrArray *infoList = NULL;
+    int result = zhalGetAttributeInfos(eui64, endpointId, clusterId, toServer, &infoList);
+    if (result == 0 && infoList != NULL)
+    {
+        *numInfos = (uint16_t) infoList->len;
+        if (infoList->len > 0)
+        {
+            *infos = (ZhalAttributeInfo *) calloc(infoList->len, sizeof(ZhalAttributeInfo));
+            for (guint i = 0; i < infoList->len; i++)
+            {
+                (*infos)[i] = *((ZhalAttributeInfo *) g_ptr_array_index(infoList, i));
+            }
+        }
+        else
+        {
+            *infos = NULL;
+        }
+    }
+    if (infoList != NULL)
+    {
+        g_ptr_array_unref(infoList);
+    }
+    return result;
 }
 
 uint64_t getLocalEui64(void)
@@ -1857,7 +2001,7 @@ int zigbeeSubsystemSetAddresses(void)
 
     if (numEui64s > 0)
     {
-        zhalDeviceEntry *deviceEntries = calloc(numEui64s, sizeof(zhalDeviceEntry));
+        ZhalDeviceEntry *deviceEntries = calloc(numEui64s, sizeof(ZhalDeviceEntry));
 
         int i = 0;
 
@@ -1902,7 +2046,13 @@ int zigbeeSubsystemSetAddresses(void)
         }
         linkedListIteratorDestroy(iterator);
 
-        zhalSetDevices(deviceEntries, numEui64s);
+        GPtrArray *deviceList = g_ptr_array_new();
+        for (uint16_t j = 0; j < numEui64s; j++)
+        {
+            g_ptr_array_add(deviceList, &deviceEntries[j]);
+        }
+        zhalSetDevices(deviceList);
+        g_ptr_array_unref(deviceList);
 
         free(deviceEntries);
     }
@@ -1920,7 +2070,7 @@ int zigbeeSubsystemRemoveDeviceAddress(uint64_t eui64)
 static void prematureClusterCommandsFreeFunc(void *key, void *value)
 {
     icLinkedList *list = (icLinkedList *) value;
-    linkedListDestroy(list, (linkedListItemFreeFunc) freeReceivedClusterCommand);
+    linkedListDestroy(list, (linkedListItemFreeFunc) ReceivedClusterCommand_release);
     free(key);
 }
 
@@ -2712,7 +2862,7 @@ void zigbeeSubsystemDestroyPrematureClusterCommands(uint64_t eui64)
     if (result)
     {
         hashMapDelete(prematureClusterCommands, &eui64, sizeof(uint64_t), prematureClusterCommandFreeKeyFunc);
-        linkedListDestroy(result, (linkedListItemFreeFunc) freeReceivedClusterCommand);
+        linkedListDestroy(result, (linkedListItemFreeFunc) ReceivedClusterCommand_release);
     }
     pthread_mutex_unlock(&prematureClusterCommandsMtx);
 }
@@ -2775,7 +2925,7 @@ void zigbeeSubsystemRemovePrematureClusterCommand(uint64_t eui64, uint8_t comman
             ReceivedClusterCommand *command = linkedListIteratorGetNext(it);
             if (command->commandId == commandId)
             {
-                linkedListIteratorDeleteCurrent(it, (linkedListItemFreeFunc) freeReceivedClusterCommand);
+                linkedListIteratorDeleteCurrent(it, (linkedListItemFreeFunc) ReceivedClusterCommand_release);
             }
         }
         linkedListIteratorDestroy(it);
@@ -2784,7 +2934,7 @@ void zigbeeSubsystemRemovePrematureClusterCommand(uint64_t eui64, uint8_t comman
         if (linkedListCount(result) == 0)
         {
             hashMapDelete(prematureClusterCommands, &eui64, sizeof(uint64_t), prematureClusterCommandFreeKeyFunc);
-            linkedListDestroy(result, (linkedListItemFreeFunc) freeReceivedClusterCommand);
+            linkedListDestroy(result, (linkedListItemFreeFunc) ReceivedClusterCommand_release);
         }
     }
     pthread_mutex_unlock(&prematureClusterCommandsMtx);
@@ -2818,7 +2968,7 @@ void zigbeeSubsystemAddPrematureClusterCommand(const ReceivedClusterCommand *com
             *eui = command->eui64;
             hashMapPut(prematureClusterCommands, eui, sizeof(uint64_t), list);
         }
-        linkedListAppend(list, receivedClusterCommandClone(command));
+        linkedListAppend(list, ReceivedClusterCommand_acquire((ReceivedClusterCommand *) command));
 
         pthread_cond_broadcast(&prematureClusterCommandsCond);
         pthread_mutex_unlock(&prematureClusterCommandsMtx);
@@ -3038,7 +3188,7 @@ bool icDiscoveredDeviceDetailsEndpointGetDeviceId(const IcDiscoveredDeviceDetail
     return result;
 }
 
-int zigbeeSubsystemGetSystemStatus(zhalSystemStatus *status)
+int zigbeeSubsystemGetSystemStatus(ZhalSystemStatus *status)
 {
     if (status == NULL)
     {
@@ -3051,7 +3201,28 @@ int zigbeeSubsystemGetSystemStatus(zhalSystemStatus *status)
 
 cJSON *zigbeeSubsystemGetAndClearCounters(void)
 {
-    return zhalGetAndClearCounters();
+    // The new zhal client returns counters as a GHashTable of name->value strings;
+    // convert to the cJSON object this function's callers expect.
+    GHashTable *counters = NULL;
+    if (zhalGetAndClearCounters(&counters) != ZHAL_STATUS_OK || counters == NULL)
+    {
+        if (counters != NULL)
+        {
+            g_hash_table_destroy(counters);
+        }
+        return NULL;
+    }
+
+    cJSON *result = cJSON_CreateObject();
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, counters);
+    while (g_hash_table_iter_next(&iter, &key, &value))
+    {
+        cJSON_AddStringToObject(result, (const char *) key, (const char *) value);
+    }
+    g_hash_table_destroy(counters);
+    return result;
 }
 
 static uint8_t calculateBestChannel(void)
@@ -3076,7 +3247,7 @@ static uint8_t calculateBestChannel(void)
         sbIcLinkedListIterator *it = linkedListIteratorCreate(scanResults);
         while (linkedListIteratorHasNext(it))
         {
-            zhalEnergyScanResult *scanResult = linkedListIteratorGetNext(it);
+            ZhalEnergyScanResult *scanResult = linkedListIteratorGetNext(it);
 
             if (scanResult->score > bestScore)
             {
@@ -3181,8 +3352,8 @@ static void channelChangeDeviceWatchdogTask(void *arg)
         if (deviceServiceGetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, &channelStr) && channelStr != NULL &&
             strlen(channelStr) > 0 && stringToUint8(channelStr, &previousChannel))
         {
-            zhalNetworkChangeRequest networkChangeRequest;
-            memset(&networkChangeRequest, 0, sizeof(zhalNetworkChangeRequest));
+            ZhalNetworkChangeRequest networkChangeRequest;
+            memset(&networkChangeRequest, 0, sizeof(ZhalNetworkChangeRequest));
             networkChangeRequest.channel = previousChannel;
 
             if (zhalNetworkChange(&networkChangeRequest) == 0)
@@ -3257,8 +3428,8 @@ static void restartChannelChangeDeviceWatchdogIfRequired(void)
         icLogInfo(
             LOG_TAG, "%s: a channel change was in progress, starting channel change watchdog again", __FUNCTION__);
 
-        zhalSystemStatus status;
-        memset(&status, 0, sizeof(zhalSystemStatus));
+        ZhalSystemStatus status;
+        memset(&status, 0, sizeof(ZhalSystemStatus));
         if (zhalGetSystemStatus(&status) == 0)
         {
             startChannelChangeDeviceWatchdog(previousChannel, status.channel);
@@ -3329,8 +3500,8 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
         {
             icLogDebug(LOG_TAG, "%s: attempting channel change to %d", __FUNCTION__, channel);
 
-            zhalSystemStatus status;
-            memset(&status, 0, sizeof(zhalSystemStatus));
+            ZhalSystemStatus status;
+            memset(&status, 0, sizeof(ZhalSystemStatus));
             if (zhalGetSystemStatus(&status) == 0)
             {
                 // We are already at that channel, so nothing to do
@@ -3345,8 +3516,8 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
                     char buf[4];
                     snprintf(buf, sizeof(buf), "%" PRIu8, status.channel);
                     deviceServiceSetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, buf);
-                    zhalNetworkChangeRequest networkChangeRequest;
-                    memset(&networkChangeRequest, 0, sizeof(zhalNetworkChangeRequest));
+                    ZhalNetworkChangeRequest networkChangeRequest;
+                    memset(&networkChangeRequest, 0, sizeof(ZhalNetworkChangeRequest));
                     networkChangeRequest.channel = channel;
 
                     if (zhalNetworkChange(&networkChangeRequest) == 0)
@@ -3376,22 +3547,20 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
     return result;
 }
 
-static int32_t findLqiInTable(uint64_t eui64, icLinkedList *lqiTable)
+static int32_t findLqiInTable(uint64_t eui64, GPtrArray *lqiTable)
 {
     int32_t lqi = -1;
     if (lqiTable != NULL)
     {
-        icLinkedListIterator *iter = linkedListIteratorCreate(lqiTable);
-        while (linkedListIteratorHasNext(iter))
+        for (guint i = 0; i < lqiTable->len; i++)
         {
-            zhalLqiData *item = (zhalLqiData *) linkedListIteratorGetNext(iter);
+            ZhalLqiData *item = (ZhalLqiData *) g_ptr_array_index(lqiTable, i);
             if (item->eui64 == eui64)
             {
                 lqi = item->lqi;
                 break;
             }
         }
-        linkedListIteratorDestroy(iter);
     }
 
     return lqi;
@@ -3400,8 +3569,11 @@ static int32_t findLqiInTable(uint64_t eui64, icLinkedList *lqiTable)
 static void freeNextCloserHopToLqi(void *key, void *value)
 {
     (void) key; // Not owned by map
-    icLinkedList *lqiTable = (icLinkedList *) value;
-    linkedListDestroy(lqiTable, NULL);
+    GPtrArray *lqiTable = (GPtrArray *) value;
+    if (lqiTable != NULL)
+    {
+        g_ptr_array_unref(lqiTable);
+    }
 }
 
 /*
@@ -3410,8 +3582,8 @@ static void freeNextCloserHopToLqi(void *key, void *value)
  */
 icLinkedList *zigbeeSubsystemGetNetworkMap(void)
 {
-    icLinkedList *addressTable = zhalGetAddressTable();
-    if (addressTable == NULL)
+    GPtrArray *addressTable = NULL;
+    if (zhalGetAddressTable(&addressTable) != ZHAL_STATUS_OK || addressTable == NULL)
     {
         return NULL;
     }
@@ -3419,12 +3591,15 @@ icLinkedList *zigbeeSubsystemGetNetworkMap(void)
     icLinkedList *networkMap = linkedListCreate();
     icHashMap *nextCloserHopToLqi = hashMapCreate();
 
-    zhalSystemStatus status;
-    memset(&status, 0, sizeof(zhalSystemStatus));
+    ZhalSystemStatus *status = NULL;
     zhalGetSystemStatus(&status);
 
-    uint64_t ourEui64 = status.eui64;
+    uint64_t ourEui64 = (status != NULL) ? status->eui64 : 0;
     uint64_t blankEui64 = UINT64_MAX;
+    if (status != NULL)
+    {
+        ZhalSystemStatus_release(status);
+    }
 
     icLinkedList *devices = deviceServiceGetDevicesBySubsystem(ZIGBEE_SUBSYSTEM_NAME);
     icLinkedListIterator *iter = linkedListIteratorCreate(devices);
@@ -3435,24 +3610,29 @@ icLinkedList *zigbeeSubsystemGetNetworkMap(void)
         // Default is the device is child of ours
         uint64_t nextCloserHop = ourEui64;
 
-        if (zhalDeviceIsChild(deviceEui64) == false)
+        gboolean isChild = FALSE;
+        zhalDeviceIsChild(deviceEui64, &isChild);
+        if (isChild == FALSE)
         {
             // Discover the nextCloserHop
-            icLinkedList *hops = zhalGetSourceRoute(deviceEui64);
+            GArray *hops = NULL;
+            zhalGetSourceRoute(deviceEui64, &hops);
             if (hops == NULL)
             {
                 icLogInfo(LOG_TAG, "Device %s is not a child or in the source route table", item->uuid);
                 nextCloserHop = blankEui64;
             }
-            else if (linkedListCount(hops) > 0)
+            else if (hops->len > 0)
             {
-                uint64_t *hop = (uint64_t *) linkedListGetElementAt(hops, 0);
-                nextCloserHop = *hop;
+                nextCloserHop = g_array_index(hops, guint64, 0);
             }
             // Otherwise its our child, which is the default
 
             // Cleanup
-            linkedListDestroy(hops, NULL);
+            if (hops != NULL)
+            {
+                g_array_unref(hops);
+            }
         }
 
         ZigbeeSubsystemNetworkMapEntry *entry =
@@ -3460,11 +3640,11 @@ icLinkedList *zigbeeSubsystemGetNetworkMap(void)
         entry->address = deviceEui64;
         entry->nextCloserHop = nextCloserHop;
         // Get the lqiTable
-        icLinkedList *lqiTable = hashMapGet(nextCloserHopToLqi, &entry->nextCloserHop, sizeof(uint64_t));
+        GPtrArray *lqiTable = hashMapGet(nextCloserHopToLqi, &entry->nextCloserHop, sizeof(uint64_t));
         if (lqiTable == NULL)
         {
             // Fetch it if we haven't gotten it yet
-            lqiTable = zhalGetLqiTable(entry->nextCloserHop);
+            zhalGetLqiTable(entry->nextCloserHop, &lqiTable);
             if (lqiTable != NULL)
             {
                 hashMapPut(nextCloserHopToLqi, &entry->nextCloserHop, sizeof(uint64_t), lqiTable);
@@ -3478,25 +3658,23 @@ icLinkedList *zigbeeSubsystemGetNetworkMap(void)
         entry->lqi = findLqiInTable(entry->address, lqiTable);
 
         // add short ID
-        icLinkedListIterator *addressTableIter = linkedListIteratorCreate(addressTable);
-        while (linkedListIteratorHasNext(addressTableIter) == true)
+        for (guint atIdx = 0; atIdx < addressTable->len; atIdx++)
         {
-            const zhalAddressTableEntry *tableEntry =
-                (const zhalAddressTableEntry *) linkedListIteratorGetNext(addressTableIter);
-            if (stringCompare(tableEntry->strEui64, item->uuid, false) == 0)
+            const ZhalAddressTableEntry *tableEntry =
+                (const ZhalAddressTableEntry *) g_ptr_array_index(addressTable, atIdx);
+            if (tableEntry->eui64 == deviceEui64)
             {
                 entry->nodeId = tableEntry->nodeId;
                 break;
             }
         }
-        linkedListIteratorDestroy(addressTableIter);
 
         linkedListAppend(networkMap, entry);
     }
     linkedListIteratorDestroy(iter);
 
     // Cleanup
-    linkedListDestroy(addressTable, (linkedListItemFreeFunc) zhalAddressTableEntryDestroy);
+    g_ptr_array_unref(addressTable);
     linkedListDestroy(devices, (linkedListItemFreeFunc) deviceDestroy);
     hashMapDestroy(nextCloserHopToLqi, freeNextCloserHopToLqi);
 
@@ -3508,7 +3686,32 @@ bool zigbeeSubsystemUpgradeDeviceFirmwareLegacy(uint64_t eui64,
                                                 const char *appFilename,
                                                 const char *bootloaderFilename)
 {
-    return zhalUpgradeDeviceFirmwareLegacy(eui64, routerEui64, appFilename, bootloaderFilename) == 0;
+    if (appFilename == NULL)
+    {
+        icLogError(LOG_TAG, "%s: invalid arguments", __FUNCTION__);
+        return false;
+    }
+
+    // Legacy device firmware upgrade is not a first-class zhal operation; carry it
+    // over the new client's custom-request mechanism, preserving the original wire
+    // fields the (em35x) server expects.
+    cJSON *params = cJSON_CreateObject();
+    char buf[21]; // max uint64_t is 18446744073709551615
+    sprintf(buf, "%016" PRIx64, eui64);
+    cJSON_AddStringToObject(params, "address", buf);
+    sprintf(buf, "%016" PRIx64, routerEui64);
+    cJSON_AddStringToObject(params, "routerAddress", buf);
+    cJSON_AddStringToObject(params, "appFilename", appFilename);
+    cJSON_AddNumberToObject(params, "authChallengeResponse", 0); // unused but required
+    if (bootloaderFilename != NULL)
+    {
+        cJSON_AddStringToObject(params, "bootloaderFilename", bootloaderFilename);
+    }
+
+    g_autofree char *paramsJson = cJSON_PrintUnformatted(params);
+    cJSON_Delete(params);
+
+    return zhalSendCustomRequest("upgradeDeviceFirmwareLegacy", paramsJson, NULL) == ZHAL_STATUS_OK;
 }
 
 /**
@@ -3524,10 +3727,10 @@ bool zigbeeSubsystemUpgradeDeviceFirmwareLegacy(uint64_t eui64,
  */
 static void zigbeeCoreMonitorFunc(void *arg)
 {
-    pid_t pid = -1;
-    bool zigbeeCoreInitialized = false; // indicates if ZigbeeCore thinks initialized
+    GPid pid = -1;
+    gboolean zigbeeCoreInitialized = FALSE; // indicates if ZigbeeCore thinks initialized
 
-    if (zhalHeartbeat(&pid, &zigbeeCoreInitialized) == 0)
+    if (zhalGetServerInfo(&pid, &zigbeeCoreInitialized) == 0)
     {
         g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
 
@@ -3659,7 +3862,7 @@ IcDiscoveredDeviceDetails *zigbeeSubsystemDiscoverDeviceDetails(uint64_t eui64)
     IcDiscoveredDeviceDetails *details = NULL;
     uint8_t *endpointIds = NULL;
     uint8_t numEndpointIds;
-    if (zhalGetEndpointIds(eui64, &endpointIds, &numEndpointIds) == 0 && numEndpointIds > 0)
+    if (zigbeeSubsystemGetEndpointIds(eui64, &endpointIds, &numEndpointIds) == 0 && numEndpointIds > 0)
     {
         details = createIcDiscoveredDeviceDetails();
 
@@ -3667,9 +3870,13 @@ IcDiscoveredDeviceDetails *zigbeeSubsystemDiscoverDeviceDetails(uint64_t eui64)
 
         for (uint8_t i = 0; i < numEndpointIds; i++)
         {
-            zhalEndpointInfo endpointInfo;
-            if (zhalGetEndpointInfo(eui64, endpointIds[i], &endpointInfo) == 0)
+            ZhalEndpointInfo *epInfoPtr = NULL;
+            if (zhalGetEndpointInfo(eui64, endpointIds[i], &epInfoPtr) == 0 && epInfoPtr != NULL)
             {
+                // Copy the boxed endpoint info to a stack local so the rest of this
+                // block (which reads endpointInfo.<field>) is unchanged, then release.
+                ZhalEndpointInfo endpointInfo = *epInfoPtr;
+                ZhalEndpointInfo_release(epInfoPtr);
                 bool hasOtaCluster = false;
 
                 if (endpointInfo.appProfileId != HA_PROFILE_ID)
@@ -3812,7 +4019,12 @@ IcDiscoveredDeviceDetails *zigbeeSubsystemDiscoverDeviceDetails(uint64_t eui64)
  */
 char *zigbeeSubsystemGetFirmwareVersion(void)
 {
-    return zhalGetFirmwareVersion();
+    // The new zhal client returns the version via a caller-owned out-param
+    // (gchar*, which is just char*).  Hand it straight back; on failure it stays
+    // NULL.  Caller frees it (g_free()/free() are equivalent for GLib's allocator).
+    gchar *version = NULL;
+    zhalGetFirmwareVersion(&version);
+    return version;
 }
 
 /*
@@ -3851,6 +4063,106 @@ static bool isLPMMonitoredDevice(const char *deviceUUID)
     free(deviceMetadataUri);
 
     return result;
+}
+
+/* ---------------------------------------------------------------------------
+ * Low-Power Mode (LPM)
+ *
+ * LPM is an em35x-only feature that the shared zhal client does not model as a
+ * first-class API.  These types (previously provided by the old zhal.h) are kept
+ * local here, and the three LPM operations are carried over the new client's
+ * custom-request mechanism (zhalSendCustomRequest), preserving the original wire
+ * contract (method names and JSON field names).
+ * ---------------------------------------------------------------------------*/
+typedef enum
+{
+    MESSAGE_HANDLING_NORMAL = 0,
+    MESSAGE_HANDLING_IGNORE_ALL,
+    MESSAGE_HANDLING_PASSTHRU_ALL
+} zhalMessageHandlingType;
+
+typedef struct
+{
+    uint64_t eui64;
+    int32_t timeoutSeconds;
+    zhalMessageHandlingType messageHandling;
+} zhalLpmMonitoredDeviceInfo;
+
+static int lpmEnterLowPowerMode(icLinkedList *deviceList)
+{
+    cJSON *params = cJSON_CreateObject();
+    cJSON *monitorDevices = cJSON_AddArrayToObject(params, "monitoredDeviceInfos");
+
+    if (deviceList != NULL)
+    {
+        icLinkedListIterator *listIter = linkedListIteratorCreate(deviceList);
+        while (linkedListIteratorHasNext(listIter))
+        {
+            zhalLpmMonitoredDeviceInfo *deviceInfo =
+                (zhalLpmMonitoredDeviceInfo *) linkedListIteratorGetNext(listIter);
+
+            cJSON *arrayItem = cJSON_CreateObject();
+            char eui64Buf[21];
+            sprintf(eui64Buf, "%016" PRIx64, deviceInfo->eui64);
+            cJSON_AddStringToObject(arrayItem, "eui64", eui64Buf);
+            cJSON_AddNumberToObject(arrayItem, "timeoutSeconds", deviceInfo->timeoutSeconds);
+            cJSON_AddNumberToObject(arrayItem, "messageHandling", deviceInfo->messageHandling);
+            cJSON_AddItemToArray(monitorDevices, arrayItem);
+        }
+        linkedListIteratorDestroy(listIter);
+    }
+
+    g_autofree char *paramsJson = cJSON_PrintUnformatted(params);
+    cJSON_Delete(params);
+
+    return (zhalSendCustomRequest("enterLowPowerMode", paramsJson, NULL) == ZHAL_STATUS_OK) ? 0 : -1;
+}
+
+static int lpmExitLowPowerMode(void)
+{
+    return (zhalSendCustomRequest("exitLowPowerMode", NULL, NULL) == ZHAL_STATUS_OK) ? 0 : -1;
+}
+
+static icLinkedList *lpmGetMonitoredDevicesInfo(void)
+{
+    g_autofree char *resultJson = NULL;
+    if (zhalSendCustomRequest("getMonitoredDevices", NULL, &resultJson) != ZHAL_STATUS_OK || resultJson == NULL)
+    {
+        return NULL;
+    }
+
+    cJSON *response = cJSON_Parse(resultJson);
+    if (response == NULL)
+    {
+        return NULL;
+    }
+
+    icLinkedList *monitoredDevicesInfo = NULL;
+    cJSON *entries = cJSON_GetObjectItem(response, "monitoredDeviceInfos");
+    if (entries != NULL)
+    {
+        for (int i = 0; i < cJSON_GetArraySize(entries); i++)
+        {
+            cJSON *entry = cJSON_GetArrayItem(entries, i);
+            cJSON *eui64Str = cJSON_GetObjectItem(entry, "eui64");
+            cJSON *timerSeconds = cJSON_GetObjectItem(entry, "timerSeconds");
+            if (cJSON_IsString(eui64Str) && cJSON_IsNumber(timerSeconds))
+            {
+                if (monitoredDevicesInfo == NULL)
+                {
+                    monitoredDevicesInfo = linkedListCreate();
+                }
+                zhalLpmMonitoredDeviceInfo *deviceInfo =
+                    (zhalLpmMonitoredDeviceInfo *) calloc(1, sizeof(zhalLpmMonitoredDeviceInfo));
+                deviceInfo->eui64 = g_ascii_strtoull(eui64Str->valuestring, NULL, 16);
+                deviceInfo->timeoutSeconds = timerSeconds->valueint;
+                linkedListAppend(monitoredDevicesInfo, deviceInfo);
+            }
+        }
+    }
+
+    cJSON_Delete(response);
+    return monitoredDevicesInfo;
 }
 
 /*
@@ -4003,7 +4315,7 @@ static void zigbeeSubsystemEnterLPM(void)
      * this is why.
      */
     zhalSetCommunicationFailTimeout(minCommFailTimeoutSecs);
-    zhalEnterLowPowerMode(lpmDevices);
+    lpmEnterLowPowerMode(lpmDevices);
 }
 
 /*
@@ -4013,13 +4325,13 @@ static void zigbeeSubsystemExitLPM(void)
 {
     // tell zhal to exit LPM first
     //
-    zhalExitLowPowerMode();
+    lpmExitLowPowerMode();
 
     // get the monitored devices info
     // we will be using timeout seconds sent by xNCP as the communication
     // failure time out value for the devices.
     //
-    icLinkedList *monitoredDevicesInfoList = zhalGetMonitoredDevicesInfo();
+    icLinkedList *monitoredDevicesInfoList = lpmGetMonitoredDevicesInfo();
     if (monitoredDevicesInfoList != NULL)
     {
         icLinkedListIterator *listIter = linkedListIteratorCreate(monitoredDevicesInfoList);
@@ -4635,23 +4947,31 @@ bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64, bool withRejoin, bool isE
  * @param deviceType
  * @param powerSource
  */
-void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource)
+void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, ZhalDeviceType deviceType, ZhalPowerSource powerSource)
 {
     DeviceAnnouncedContext ctx = {.eui64 = eui64, .deviceType = deviceType, .powerSource = powerSource};
     threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksDeviceAnnounced, &ctx);
 }
 
-static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
+// Invoked by the zhal client once per request/response round-trip (the new
+// ZhalRequestMonitorCallback replaces the old async IPC responseHandler).  We
+// use it to notify the watchdog delegate when an attribute-read or command-send
+// is rejected because the Zigbee network is busy.
+static void requestMonitor(gpointer ctx, const ZhalCompletedRequestInfo *info)
 {
-    if (responseType == NULL)
+    (void) ctx;
+    if (info == NULL)
     {
         return;
     }
 
-    if (stringCompare(responseType, ZHAL_RESPONSE_TYPE_ATTRIBUTES_READ, false) == 0 ||
-        stringCompare(responseType, ZHAL_RESPONSE_TYPE_SEND_COMMAND, false) == 0)
+    if (info->requestType == ZHAL_REQUEST_TYPE_ATTRIBUTES_READ ||
+        info->requestType == ZHAL_REQUEST_TYPE_ATTRIBUTES_READ_MFG_SPECIFIC ||
+        info->requestType == ZHAL_REQUEST_TYPE_SEND_COMMAND ||
+        info->requestType == ZHAL_REQUEST_TYPE_SEND_MFG_COMMAND ||
+        info->requestType == ZHAL_REQUEST_TYPE_SEND_COMMAND_MULTICAST)
     {
-        bool operationRejected = (resultCode == ZHAL_STATUS_NETWORK_BUSY);
+        bool operationRejected = (info->responseStatus == ZHAL_STATUS_NETWORK_BUSY);
 
         g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
 

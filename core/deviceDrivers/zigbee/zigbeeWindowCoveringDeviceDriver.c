@@ -43,7 +43,7 @@
 #include <string.h>
 #include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #define LOG_TAG             "ZigBeeWindowCDD"
 #define DEVICE_DRIVER_NAME  "ZigBeeWindowCDD"

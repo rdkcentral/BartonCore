@@ -233,6 +233,9 @@ static void handleAlarmResponse(ZigbeeCluster *ctx, ReceivedClusterCommand *comm
 {
     AlarmsCluster *alarmsCluster = (AlarmsCluster *) ctx;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     // lock the overall table so we can check to see if we have an entry and add one if needed
     mutexLock(&alarmsCluster->tempAlarmTableContextMtx);
 
@@ -247,16 +250,16 @@ static void handleAlarmResponse(ZigbeeCluster *ctx, ReceivedClusterCommand *comm
     {
         mutexLock(&tempAlarmTableContext->tempAlarmTableMtx);
 
-        sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+        sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
 
         // first check the status byte (byte 0).  If it is success (0) then we can process the rest, otherwise we are
         // done
         uint8_t status = zigbeeIOGetUint8(zio);
         if (status == 0)
         {
-            if (command->commandDataLen != 8) // the payload of an alarm record should be 8 bytes
+            if (commandDataLen != 8) // the payload of an alarm record should be 8 bytes
             {
-                icLogDebug(LOG_TAG, "%s: unexpected payload length %" PRIu16, __func__, command->commandDataLen);
+                icLogDebug(LOG_TAG, "%s: unexpected payload length %" PRIu16, __func__, (uint16_t)commandDataLen);
             }
             else
             {
@@ -309,6 +312,9 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
     AlarmsCluster *alarmsCluster = (AlarmsCluster *) ctx;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     switch (command->commandId)
     {
         case ALARMS_ALARM_COMMAND_ID:
@@ -318,8 +324,8 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
                 ZigbeeAlarmTableEntry entry;
                 memset(&entry, 0, sizeof(ZigbeeAlarmTableEntry));
 
-                entry.alarmCode = command->commandData[0];
-                entry.clusterId = command->commandData[1] + (command->commandData[2] << 8);
+                entry.alarmCode = commandData[0];
+                entry.clusterId = commandData[1] + (commandData[2] << 8);
 
                 alarmsCluster->callbacks->alarmReceived(
                     command->eui64, command->sourceEndpoint, &entry, alarmsCluster->callbackContext);
@@ -335,8 +341,8 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
                 ZigbeeAlarmTableEntry entry;
                 memset(&entry, 0, sizeof(ZigbeeAlarmTableEntry));
 
-                entry.alarmCode = command->commandData[0];
-                entry.clusterId = command->commandData[1] + (command->commandData[2] << 8);
+                entry.alarmCode = commandData[0];
+                entry.clusterId = commandData[1] + (commandData[2] << 8);
 
                 alarmsCluster->callbacks->alarmCleared(
                     command->eui64, command->sourceEndpoint, &entry, alarmsCluster->callbackContext);

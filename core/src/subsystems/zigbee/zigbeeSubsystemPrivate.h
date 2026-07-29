@@ -55,8 +55,8 @@ void zigbeeSubsystemDeviceBeaconReceived(uint64_t eui64,
                                          bool hasRouterCapability,
                                          uint8_t depth);
 
-void zigbeeSubsystemDeviceOtaUpgradeMessageSent(OtaUpgradeEvent *otaEvent);
-void zigbeeSubsystemDeviceOtaUpgradeMessageReceived(OtaUpgradeEvent *otaEvent);
+void zigbeeSubsystemDeviceOtaUpgradeMessageSent(ZhalOtaUpgradeEvent *otaEvent);
+void zigbeeSubsystemDeviceOtaUpgradeMessageReceived(ZhalOtaUpgradeEvent *otaEvent);
 
 void zigbeeSubsystemRequestUnclaimedDevicesLeave(void);
 

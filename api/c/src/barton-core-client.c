@@ -637,7 +637,9 @@ gchar *b_core_client_zigbee_test(BCoreClient *self)
 {
     g_return_val_if_fail(self != NULL, NULL);
 
-    return zhalTest();
+    gchar *result = NULL;
+    zhalTest(&result);
+    return result;
 }
 
 GList *b_core_client_zigbee_energy_scan(BCoreClient *self,

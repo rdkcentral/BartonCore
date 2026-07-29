@@ -65,9 +65,8 @@ if (BCORE_ZIGBEE)
     file(GLOB zigSubSrc "src/subsystems/zigbee/*.c")
     file(GLOB_RECURSE zigbeeDrivers "deviceDrivers/zigbee/*.c")
 
-    # include zhal library
-    set(XTRA_LIBS ${XTRA_LIBS} zhal)
-    list(APPEND XTRA_INCLUDES ${PROJECT_SOURCE_DIR}/libs/zhal/c/public)
+    # include zhal library (new shared zhal-client from the external zhal repo)
+    set(XTRA_LIBS ${XTRA_LIBS} zhal-client)
 
 endif() #BARTON_CONFIG_ZIGBEE
 
@@ -443,8 +442,13 @@ if (BCORE_GEN_GIR)
     install(CODE "execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/gen_pygobject_stubs)")
 endif()
 
-# temporary until zhal is relocated to its own repo
-add_subdirectory(src/zhal/c)
+# zhal now lives in its own repo (sibling of BartonCore). Consume it directly
+# via relative path (no global install) until a formal packaging step exists.
+# Only the client is needed by BartonCore; skip the zhal test suite.
+if (BCORE_ZIGBEE)
+    set(ZHAL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/../zhal ${PROJECT_BINARY_DIR}/external-zhal)
+endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/api/c/test ${PROJECT_BINARY_DIR}/api/c/test)
 add_subdirectory(test)

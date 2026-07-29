@@ -53,7 +53,7 @@
 #include <icTypes/icLinkedList.h>
 #include <icTypes/icStringBuffer.h>
 #include <icUtil/stringUtils.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #include "commonDeviceDefs.h"
 #include "devicePrivateProperties.h"
@@ -1648,7 +1648,7 @@ static void channelEnergyDataCollectingCallback(void *arg)
         {
             // look at the first element of scan result
             //
-            zhalEnergyScanResult *scanResult = (zhalEnergyScanResult *) linkedListGetElementAt(response, 0);
+            ZhalEnergyScanResult *scanResult = (ZhalEnergyScanResult *) linkedListGetElementAt(response, 0);
             if (scanResult != NULL)
             {
                 pthread_mutex_lock(&eventTrackerMutex);
@@ -1993,7 +1993,12 @@ static deviceAttributeItem *createDeviceAttributeItem(ReceivedAttributeReport *n
     newItem->attributeId = stringBuilder("%d", newReport->sourceEndpoint);
 
     // the data
-    newItem->data = dataToString(newReport->reportData, newReport->reportDataLen);
+    // In the new zhal client the attribute report payload is a GBytes rather than
+    // a raw uint8_t*/len pair; unwrap it to feed the existing dataToString helper.
+    gsize reportDataLen = 0;
+    const guint8 *reportData =
+        (newReport->reportData != NULL) ? g_bytes_get_data(newReport->reportData, &reportDataLen) : NULL;
+    newItem->data = dataToString(reportData, (uint16_t) reportDataLen);
 
     return newItem;
 }

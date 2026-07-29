@@ -33,7 +33,7 @@
 #include <icLog/logging.h>
 #include <pthread.h>
 #include <stdint.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #define LOG_TAG                                       "zigbeeDefender"
 

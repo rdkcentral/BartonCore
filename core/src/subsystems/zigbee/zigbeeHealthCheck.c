@@ -31,9 +31,10 @@
 #include "provider/barton-core-property-provider.h"
 #include <event/deviceEventProducer.h>
 #include <icLog/logging.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include <stdint.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #define LOG_TAG                                                             "zigbeeHealthCheck"
 
@@ -102,8 +103,8 @@ void zigbeeHealthCheckStart()
             NETWORK_HEALTH_CHECK_DELAY_BETWEEN_THRESHOLD_RETRIES_MILLIS_DEFAULT);
 
         if (zhalConfigureNetworkHealthCheck(
-                intervalMillis, ccaThreshold, ccaFailureThreshold, restoreThreshold, delayBetweenRetriesMillis) ==
-            false)
+                intervalMillis, ccaThreshold, ccaFailureThreshold, restoreThreshold, delayBetweenRetriesMillis) !=
+            ZHAL_STATUS_OK)
         {
             icLogError(LOG_TAG, "%s: failed to start network health checking", __FUNCTION__);
         }
@@ -114,7 +115,7 @@ void zigbeeHealthCheckStop()
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    if (zhalConfigureNetworkHealthCheck(0, 0, 0, 0, 0) == false)
+    if (zhalConfigureNetworkHealthCheck(0, 0, 0, 0, 0) != ZHAL_STATUS_OK)
     {
         icLogError(LOG_TAG, "%s: failed to stop network health checking", __FUNCTION__);
     }

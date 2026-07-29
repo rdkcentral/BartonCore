@@ -69,6 +69,9 @@ static bool handleClusterCommand(ZigbeeCluster *cluster, ReceivedClusterCommand 
     bool handled = false;
     IASZoneCluster *_this = (IASZoneCluster *) cluster;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     if (command->clusterId == IAS_ZONE_CLUSTER_ID && command->fromServer == true)
@@ -90,7 +93,7 @@ static bool handleClusterCommand(ZigbeeCluster *cluster, ReceivedClusterCommand 
                 {
                     // skip the common 6 bytes of the standard zone status message
                     batterySavingData =
-                        comcastBatterySavingDataParse(command->commandData + 6, command->commandDataLen - 6);
+                        comcastBatterySavingDataParse(commandData + 6, (uint16_t)(commandDataLen - 6));
                 }
 
                 if (_this->callbacks->onZoneStatusChanged)
@@ -116,7 +119,7 @@ static bool handleClusterCommand(ZigbeeCluster *cluster, ReceivedClusterCommand 
                 if (_this->callbacks->onZoneEnrollRequested)
                 {
                     errno = 0;
-                    sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+                    sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
                     IASZoneType zoneType = zigbeeIOGetUint16(zio);
                     uint16_t mfgCode = zigbeeIOGetUint16(zio);
                     if (errno)
@@ -145,7 +148,11 @@ static int readZoneStatusPayload(IASZoneStatusChangedNotification *payload, cons
     int rc = 0;
 
     memset(payload, 0, sizeof(*payload));
-    sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
+    sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
 
     // Standard and Comcast versions start off with common data
     payload->zoneStatus = zigbeeIOGetUint16(zio);

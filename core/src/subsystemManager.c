@@ -42,7 +42,7 @@
 #include <string.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 #endif
 
 #include "subsystemManager.h"
