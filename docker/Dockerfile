@@ -246,7 +246,6 @@ RUN cd /tmp && \
     ninja install && \
     cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
     rm -rf /tmp/ot-br-posix
-COPY otbr-agent.conf /etc/dbus-1/system.d/
 
 # Simulated RCP for OpenThread
 RUN cd /tmp && \
