@@ -32,6 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <string>
 
 extern "C" {
@@ -196,6 +197,14 @@ namespace barton
          * @return An acquired std::unique_lock on the shared mutex
          */
         static std::unique_lock<std::mutex> AcquireMutex();
+
+        /**
+         * Read current heap statistics. Returns std::nullopt and logs a warning
+         * if JS_GetMemoryUsage fails. Caller must hold the JS mutex.
+         *
+         * @param flags  0 for the fast O(1) path (no heap walk); JS_MEMUSAGE_WALK_HEAP for full stats
+         */
+        static std::optional<JSMemoryUsage> GetMemoryUsage(JSContext *ctx, int flags = 0);
 
         /**
          * Record pool health metrics from an already-captured JSMemoryUsage.

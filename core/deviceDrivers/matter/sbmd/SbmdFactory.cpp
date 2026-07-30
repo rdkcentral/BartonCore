@@ -210,12 +210,12 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
 
                 // Load the driver registration under the JS mutex
                 auto loadStart = std::chrono::steady_clock::now();
-                JSMemoryUsage usageBefore = {};
+                std::optional<JSMemoryUsage> usageBefore;
                 std::unique_ptr<SbmdRegistration> registration;
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
                     auto *ctx = MQuickJsRuntime::GetSharedContext();
-                    JS_GetMemoryUsage(ctx, &usageBefore, 0);
+                    usageBefore = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
                     registration =
                         SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
                 }
@@ -230,7 +230,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
 
                 // Create the driver and activate it
                 auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
-                JSMemoryUsage usageAfter = {};
+                std::optional<JSMemoryUsage> usageAfter;
 
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -244,7 +244,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                         continue;
                     }
 
-                    JS_GetMemoryUsage(ctx, &usageAfter, 0);
+                    usageAfter = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
                 }
 
                 auto loadEnd = std::chrono::steady_clock::now();
@@ -263,8 +263,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 drivers.push_back(std::move(sbmdDriver));
 
                 double loadDurationMs = std::chrono::duration<double, std::milli>(loadEnd - loadStart).count();
-                double heapDelta =
-                    static_cast<double>(usageAfter.heap_used) - static_cast<double>(usageBefore.heap_used);
+                double heapDelta = (usageBefore && usageAfter) ? static_cast<double>(usageAfter->heap_used) -
+                                                                     static_cast<double>(usageBefore->heap_used)
+                                                               : 0.0;
                 metrics.RecordDriverLoadSuccess(loadDurationMs, heapDelta, driverStem.c_str());
 
                 icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());

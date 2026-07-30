@@ -122,10 +122,9 @@ namespace barton
 
         /**
          * Get the clean driver stem for observability metric attributes.
-         * Strips the .sbmd.js double extension from the file path.
          * e.g. "door-lock.sbmd.js" → "door-lock"
          *
-         * Cached at construction time; subsequent calls are O(1).
+         * Computed by driverStemFromPath() at construction time; subsequent calls are O(1).
          */
         const std::string &GetDriverStem() const;
 

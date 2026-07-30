@@ -193,8 +193,7 @@ namespace barton
         }
 
         // Capture pre-call heap state
-        JSMemoryUsage usageBefore = {};
-        JS_GetMemoryUsage(ctx, &usageBefore, 0);
+        auto usageBefore = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
         auto callStart = std::chrono::steady_clock::now();
 
         // Stack order for JS_Call: arg, func, this
@@ -212,18 +211,23 @@ namespace barton
         MQuickJsRuntime::ClearDeadline();
 
         // Capture post-call state and record metrics
-        JSMemoryUsage usageAfter = {};
-        JS_GetMemoryUsage(ctx, &usageAfter, 0);
+        auto usageAfter = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
 
         double durationMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - callStart).count();
-        double heapDelta = static_cast<double>(usageAfter.heap_used) - static_cast<double>(usageBefore.heap_used);
+        double heapDelta = (usageBefore && usageAfter) ? static_cast<double>(usageAfter->heap_used) -
+                                                             static_cast<double>(usageBefore->heap_used)
+                                                       : 0.0;
 
         // Record duration and heap-delta histograms
         metrics.RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
 
         // Update running heap snapshot (ctx is live; caller holds JS mutex)
-        MQuickJsRuntime::RecordHeapSnapshot(usageAfter);
+        if (usageAfter)
+        {
+            MQuickJsRuntime::RecordHeapSnapshot(*usageAfter);
+        }
+
         MQuickJsRuntime::GetMetrics().TickleSampler();
 
         if (JS_IsException(result))

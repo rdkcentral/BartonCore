@@ -473,6 +473,19 @@ std::unique_lock<std::mutex> MQuickJsRuntime::AcquireMutex()
     return lock;
 }
 
+std::optional<JSMemoryUsage> MQuickJsRuntime::GetMemoryUsage(JSContext *ctx, int flags)
+{
+    JSMemoryUsage usage = {};
+
+    if (JS_GetMemoryUsage(ctx, &usage, flags) != 0)
+    {
+        icWarn("JS_GetMemoryUsage failed");
+        return std::nullopt;
+    }
+
+    return usage;
+}
+
 void MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage)
 {
 #ifdef BARTON_CONFIG_SBMD_GC_INSTRUMENTATION

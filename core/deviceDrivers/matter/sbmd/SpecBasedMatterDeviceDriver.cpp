@@ -1216,6 +1216,8 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
     pending.deferralDepth = 0;
 
+    // opCtx (when present) already carries driverStem from this same driver, so it wins outright.
+    // The else-if is the no-opCtx fallback: seed at least driverStem so deferred metrics are attributed.
     if (opCtx != nullptr)
     {
         pending.operationCtx = *opCtx;

@@ -146,15 +146,14 @@ namespace barton
                 return;
             }
 
-            JSMemoryUsage usage = {};
+            auto usage = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
 
-            if (JS_GetMemoryUsage(ctx, &usage, 0) != 0)
+            if (!usage)
             {
-                icError("JS_GetMemoryUsage failed — skipping heap snapshot");
                 return;
             }
 
-            MQuickJsRuntime::RecordHeapSnapshot(usage);
+            MQuickJsRuntime::RecordHeapSnapshot(*usage);
         }
 
         TickleSampler();
