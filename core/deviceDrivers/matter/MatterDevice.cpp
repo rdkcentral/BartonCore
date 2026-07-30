@@ -346,9 +346,16 @@ bool MatterDevice::GetClusterFeatureMap(chip::EndpointId endpointId, chip::Clust
 
 void MatterDevice::UpdateCachedFeatureMaps()
 {
+    std::vector<uint32_t> clusters;
+
+    {
+        std::lock_guard<std::mutex> lock(cachedClusterFeatureMapsMutex);
+        clusters = featureClusters;
+    }
+
     std::map<uint32_t, uint32_t> clusterFeatureMaps;
 
-    for (uint32_t clusterId : featureClusters)
+    for (uint32_t clusterId : clusters)
     {
         chip::EndpointId chipEndpointId;
 
@@ -365,8 +372,15 @@ void MatterDevice::UpdateCachedFeatureMaps()
         }
     }
 
-    cachedClusterFeatureMaps = std::move(clusterFeatureMaps);
-    icDebug("Updated cached feature maps for device %s (%zu clusters)", deviceId.c_str(), cachedClusterFeatureMaps.size());
+    size_t cachedCount = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(cachedClusterFeatureMapsMutex);
+        cachedClusterFeatureMaps = std::move(clusterFeatureMaps);
+        cachedCount = cachedClusterFeatureMaps.size();
+    }
+
+    icDebug("Updated cached feature maps for device %s (%zu clusters)", deviceId.c_str(), cachedCount);
 }
 
 
