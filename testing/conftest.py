@@ -68,6 +68,7 @@ pytest_plugins = [
     # Devices
     "testing.mocks.devices.matter.matter_light",
     "testing.mocks.devices.matter.matter_door_lock",
+    "testing.mocks.devices.matter.matter_deferred_cmd_test_device",
     "testing.mocks.devices.matter.matter_thermostat",
     "testing.mocks.devices.matter.matter_thermostat_with_fan",
     "testing.mocks.devices.matter.matter_ikea_timmerflotte",

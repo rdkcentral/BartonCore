@@ -59,6 +59,8 @@ extern bool deviceServiceSetMetadata(const char *uri, const char *value);
 
 namespace barton
 {
+    SbmdHandlerInvokerMetrics SbmdHandlerInvoker::metrics;
+
     SafeJSValue SbmdHandlerInvoker::BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx)
     {
         // Root args for the whole build: subsequent allocations (JS_NewString, JS_NewObject)
@@ -162,8 +164,10 @@ namespace barton
         return args;
     }
 
-    std::optional<ParsedResult>
-    SbmdHandlerInvoker::InvokeHandler(JSContext *ctx, JSValue handler, const SafeJSValue &args)
+    std::optional<ParsedResult> SbmdHandlerInvoker::InvokeHandler(JSContext *ctx,
+                                                                  JSValue handler,
+                                                                  const SafeJSValue &args,
+                                                                  const OperationContext *opCtx)
     {
         // Root the handler function: JS_StackCheck below may allocate (grow the JS stack) and the
         // moving GC would then relocate an unrooted handler, leaving the pushed argument stale.
@@ -175,12 +179,22 @@ namespace barton
             return std::nullopt;
         }
 
+        // Extract context fields once — used for outcome reporting at multiple exit points.
+        const char *outDriver = opCtx ? opCtx->driverStem.c_str() : nullptr;
+        const char *outOpType = opCtx ? opCtx->opType.c_str() : nullptr;
+        const char *outResourceId = (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr;
+
         if (JS_StackCheck(ctx, 3)) // args, handler, this
         {
             icError("stack overflow before handler call");
+            metrics.RecordOutcome(outDriver, outOpType, outResourceId, "stack_overflow");
+
             return std::nullopt;
         }
 
+        // Capture pre-call heap state
+        auto usageBefore = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
+        auto callStart = std::chrono::steady_clock::now();
 
         // Stack order for JS_Call: arg, func, this
         JS_PushArg(ctx, args.Get());
@@ -188,21 +202,61 @@ namespace barton
         JS_PushArg(ctx, JS_NULL);
 
         // Arm the execution timeout
-        MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::now() + std::chrono::milliseconds(5000));
+        MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::now() +
+                                     std::chrono::milliseconds(BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS));
 
         JSValue result = JS_Call(ctx, 1);
 
+        bool timedOut = MQuickJsRuntime::WasTimedOut();
         MQuickJsRuntime::ClearDeadline();
+
+        // Capture post-call state and record metrics
+        auto usageAfter = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
+
+        double durationMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - callStart).count();
+        std::optional<double> heapDelta;
+
+        if (usageBefore && usageAfter)
+        {
+            heapDelta = static_cast<double>(usageAfter->heap_used) - static_cast<double>(usageBefore->heap_used);
+        }
+
+        // Record duration and heap-delta histograms; heap delta is omitted when memory usage
+        // measurement failed.
+        metrics.RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
+
+        // Update running heap snapshot (ctx is live; caller holds JS mutex)
+        if (usageAfter)
+        {
+            MQuickJsRuntime::RecordHeapSnapshot(*usageAfter);
+        }
+
+        MQuickJsRuntime::GetMetrics().TickleSampler();
 
         if (JS_IsException(result))
         {
             std::string err;
             MQuickJsRuntime::CheckAndClearPendingException(ctx, &err);
             icError("handler threw exception: %s", err.c_str());
+
+            MQuickJsRuntime::GetMetrics().RecordJsException("invocation", outDriver);
+
+            // Distinguish timeout from handler exception
+            metrics.RecordOutcome(outDriver, outOpType, outResourceId, timedOut ? "timeout" : "exception");
+
             return std::nullopt;
         }
 
-        return SbmdResultExecutor::Parse(ctx, result);
+        auto parsed = SbmdResultExecutor::Parse(ctx, result);
+
+        if (parsed.has_value())
+        {
+            bool isError = std::holds_alternative<ResultTerminal::Error>(parsed->terminal.data);
+            metrics.RecordOutcome(outDriver, outOpType, outResourceId, isError ? "error" : "success");
+        }
+
+        return parsed;
     }
 
     FetchedSupplements SbmdHandlerInvoker::PrefetchSupplements(const SbmdSupplements &supplements,

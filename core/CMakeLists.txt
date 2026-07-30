@@ -86,6 +86,8 @@ if (BCORE_MATTER)
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
     file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp")
+    file(GLOB sbmdMetricsSrc "deviceDrivers/matter/sbmd/metrics/*.cpp")
+    list(APPEND sbmdSrc ${sbmdMetricsSrc})
 
     # Select JS engine sources based on BCORE_MATTER_SBMD_JS_ENGINE
     if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")

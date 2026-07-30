@@ -38,7 +38,9 @@
 #include "../SbmdRegistration.h"
 #include "SbmdResultExecutor.h"
 #include "matter/sbmd/SafeJSValue.h"
+#include "matter/sbmd/metrics/SbmdHandlerInvokerMetrics.h"
 
+#include <chrono>
 #include <functional>
 #include <map>
 #include <optional>
@@ -132,6 +134,18 @@ namespace barton
     };
 
     /**
+     * Context describing the operation being invoked.
+     * Carried through InvokeHandler to tag observability metrics.
+     */
+    struct OperationContext
+    {
+        std::string driverStem; // filename stem of the SBMD driver file (e.g., "door-lock" from door-lock.sbmd.js)
+        std::string opType;     // "read", "write", "execute", "seed", "attribute", "event", "command", ...
+        std::string resourceId; // resource ID for the related resource (empty when not applicable)
+        std::chrono::steady_clock::time_point startTime {}; // time before mutex acquisition
+    };
+
+    /**
      * Invokes handler functions and parses their results.
      *
      * Usage:
@@ -214,9 +228,14 @@ namespace barton
          * @param ctx JS context (caller holds mutex)
          * @param handler The handler JSValue (must be a function)
          * @param args The args object (consumed by the call)
+         * @param opCtx Optional operation context used to tag observability metrics
+         *              Pass nullptr to skip metric recording.
          * @return Parsed result chain, or nullopt on failure
          */
-        static std::optional<ParsedResult> InvokeHandler(JSContext *ctx, JSValue handler, const SafeJSValue &args);
+        static std::optional<ParsedResult> InvokeHandler(JSContext *ctx,
+                                                         JSValue handler,
+                                                         const SafeJSValue &args,
+                                                         const OperationContext *opCtx = nullptr);
 
         /**
          * Execute the non-terminal ops from a parsed result.
@@ -343,6 +362,8 @@ namespace barton
          * Build the common base args object with deviceUuid, endpointId, clusterFeatureMaps.
          */
         static SafeJSValue BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx);
+
+        static SbmdHandlerInvokerMetrics metrics;
     };
 
 } // namespace barton
