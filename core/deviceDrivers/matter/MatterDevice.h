@@ -37,6 +37,7 @@
 #include <future>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -149,15 +150,20 @@ namespace barton
          */
         void SetFeatureClusters(std::vector<uint32_t> clusters)
         {
+            std::lock_guard<std::mutex> lock(cachedClusterFeatureMapsMutex);
             featureClusters = std::move(clusters);
         }
 
         /**
          * Get the cached cluster feature maps.
-         * @return Map of cluster ID to feature map value.
+         * @return A copy of the map of cluster ID to feature map value. Returned by value (under
+         *         the cache mutex) so the caller gets a stable snapshot that cannot be invalidated
+         *         by a concurrent UpdateCachedFeatureMaps().
          */
-        const std::map<uint32_t, uint32_t> &GetCachedClusterFeatureMaps() const
+        std::map<uint32_t, uint32_t> GetCachedClusterFeatureMaps() const
         {
+            std::lock_guard<std::mutex> lock(cachedClusterFeatureMapsMutex);
+
             return cachedClusterFeatureMaps;
         }
 
@@ -454,6 +460,12 @@ namespace barton
         std::vector<std::unique_ptr<IncomingCommandHandler>> incomingCommandHandlers;
         std::vector<uint32_t> featureClusters;
         std::map<uint32_t, uint32_t> cachedClusterFeatureMaps;
+        // Guards both featureClusters and cachedClusterFeatureMaps. UpdateCachedFeatureMaps() reads
+        // featureClusters and writes cachedClusterFeatureMaps on both the Matter event loop
+        // (subscription established) and the commissioning thread (AddDevice/reconfigure);
+        // SetFeatureClusters() writes featureClusters from the commissioning thread; and
+        // GetCachedClusterFeatureMaps() is read from handler threads.
+        mutable std::mutex cachedClusterFeatureMapsMutex;
         std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index -> resolved Matter EndpointId
 
         // Context for tracking active write operations
