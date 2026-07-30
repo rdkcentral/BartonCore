@@ -263,9 +263,14 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 drivers.push_back(std::move(sbmdDriver));
 
                 double loadDurationMs = std::chrono::duration<double, std::milli>(loadEnd - loadStart).count();
-                double heapDelta = (usageBefore && usageAfter) ? static_cast<double>(usageAfter->heap_used) -
-                                                                     static_cast<double>(usageBefore->heap_used)
-                                                               : 0.0;
+                std::optional<double> heapDelta;
+
+                if (usageBefore && usageAfter)
+                {
+                    heapDelta =
+                        static_cast<double>(usageAfter->heap_used) - static_cast<double>(usageBefore->heap_used);
+                }
+
                 metrics.RecordDriverLoadSuccess(loadDurationMs, heapDelta, driverStem.c_str());
 
                 icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());

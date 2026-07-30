@@ -215,11 +215,15 @@ namespace barton
 
         double durationMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - callStart).count();
-        double heapDelta = (usageBefore && usageAfter) ? static_cast<double>(usageAfter->heap_used) -
-                                                             static_cast<double>(usageBefore->heap_used)
-                                                       : 0.0;
+        std::optional<double> heapDelta;
 
-        // Record duration and heap-delta histograms
+        if (usageBefore && usageAfter)
+        {
+            heapDelta = static_cast<double>(usageAfter->heap_used) - static_cast<double>(usageBefore->heap_used);
+        }
+
+        // Record duration and heap-delta histograms; heap delta is omitted when memory usage
+        // measurement failed.
         metrics.RecordInvocation(durationMs, heapDelta, outDriver, outOpType, outResourceId);
 
         // Update running heap snapshot (ctx is live; caller holds JS mutex)

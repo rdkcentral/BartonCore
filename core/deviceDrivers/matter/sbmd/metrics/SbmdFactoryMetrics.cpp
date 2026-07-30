@@ -44,10 +44,15 @@ namespace barton
         observabilityCounterAddWithAttrs(driverLoadFailureCounter, 1, "driver", driver, "reason", reason, nullptr);
     }
 
-    void SbmdFactoryMetrics::RecordDriverLoadSuccess(double durationMs, double heapDelta, const char *driver)
+    void
+    SbmdFactoryMetrics::RecordDriverLoadSuccess(double durationMs, std::optional<double> heapDelta, const char *driver)
     {
         observabilityHistogramRecordWithAttrs(driverLoadDurationHisto, durationMs, "driver", driver, nullptr);
-        observabilityHistogramRecordWithAttrs(driverLoadHeapDeltaHisto, heapDelta, "driver", driver, nullptr);
+
+        if (heapDelta.has_value())
+        {
+            observabilityHistogramRecordWithAttrs(driverLoadHeapDeltaHisto, *heapDelta, "driver", driver, nullptr);
+        }
     }
 
     void SbmdFactoryMetrics::RecordRegisteredDriverCount(int64_t count)

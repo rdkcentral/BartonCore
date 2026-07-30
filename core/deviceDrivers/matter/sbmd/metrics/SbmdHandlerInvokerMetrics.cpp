@@ -38,7 +38,7 @@ namespace barton
     }
 
     void SbmdHandlerInvokerMetrics::RecordInvocation(double durationMs,
-                                                     double heapDelta,
+                                                     std::optional<double> heapDelta,
                                                      const char *driver,
                                                      const char *opType,
                                                      const char *resourceId)
@@ -76,7 +76,11 @@ namespace barton
         };
 
         recordHisto(handlerDurationHisto, durationMs);
-        recordHisto(handlerHeapDeltaHisto, heapDelta);
+
+        if (heapDelta.has_value())
+        {
+            recordHisto(handlerHeapDeltaHisto, *heapDelta);
+        }
     }
 
     void SbmdHandlerInvokerMetrics::RecordOutcome(const char *driver,

@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include <optional>
+
 #ifdef BARTON_CONFIG_SBMD_METRICS
 
 #include "observability/observabilityMetrics.h"
@@ -41,13 +43,14 @@ namespace barton
         /**
          * Record handler invocation timing and heap impact.
          * @param durationMs  wall-clock duration of the JS_Call in milliseconds
-         * @param heapDelta   net heap bytes allocated during the call (may be negative)
+         * @param heapDelta   net heap bytes allocated during the call (may be negative);
+         *                    nullopt if memory usage could not be measured — skips the heap histogram
          * @param driver      filename stem of the SBMD driver (e.g. "door-lock")
          * @param opType      originating operation type — see OperationContext::opType
          * @param resourceId  nullptr to omit the "resource_id" attribute
          */
         void RecordInvocation(double durationMs,
-                              double heapDelta,
+                              std::optional<double> heapDelta,
                               const char *driver,
                               const char *opType,
                               const char *resourceId);
@@ -77,7 +80,7 @@ namespace barton
     class SbmdHandlerInvokerMetrics
     {
     public:
-        void RecordInvocation(double, double, const char *, const char *, const char *) {}
+        void RecordInvocation(double, std::optional<double>, const char *, const char *, const char *) {}
 
         void RecordOutcome(const char *, const char *, const char *, const char *) {}
     };

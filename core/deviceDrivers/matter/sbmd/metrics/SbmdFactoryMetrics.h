@@ -24,6 +24,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #ifdef BARTON_CONFIG_SBMD_METRICS
 
@@ -43,8 +44,8 @@ namespace barton
         /** Record a driver load failure. */
         void RecordDriverLoadFailure(const char *driver, const char *reason);
 
-        /** Record a successful driver load. */
-        void RecordDriverLoadSuccess(double durationMs, double heapDelta, const char *driver);
+        /** Record a successful driver load. heapDelta is nullopt if memory usage could not be measured. */
+        void RecordDriverLoadSuccess(double durationMs, std::optional<double> heapDelta, const char *driver);
 
         /** Record the current registered-driver count. */
         void RecordRegisteredDriverCount(int64_t count);
@@ -67,7 +68,7 @@ namespace barton
     public:
         void RecordDriverLoadFailure(const char *, const char *) {}
 
-        void RecordDriverLoadSuccess(double, double, const char *) {}
+        void RecordDriverLoadSuccess(double, std::optional<double>, const char *) {}
 
         void RecordRegisteredDriverCount(int64_t) {}
     };
