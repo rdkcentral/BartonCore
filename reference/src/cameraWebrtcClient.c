@@ -587,12 +587,12 @@ CameraWebrtcClient *cameraWebrtcClientCreate(CameraWebrtcOnOfferReady onOffer,
                                              CameraWebrtcOnMediaBuffer onBuffer,
                                              gpointer userData)
 {
-    static gboolean gstInitialized = FALSE;
+    static gsize gstInitOnce = 0;
 
-    if (!gstInitialized)
+    if (g_once_init_enter(&gstInitOnce))
     {
         gst_init(NULL, NULL);
-        gstInitialized = TRUE;
+        g_once_init_leave(&gstInitOnce, 1);
     }
 
     CameraWebrtcClient *self = g_new0(CameraWebrtcClient, 1);
@@ -826,6 +826,10 @@ void cameraWebrtcClientDestroy(CameraWebrtcClient *client)
         }
 
         gst_element_set_state(client->pipeline, GST_STATE_NULL);
+
+        // Block until the NULL state change fully settles so the streaming task and any in-flight
+        // appsink/bus callbacks (which take `client` as userData) have stopped before we free it.
+        gst_element_get_state(client->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
         gst_object_unref(client->pipeline);
     }
 
