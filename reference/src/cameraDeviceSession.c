@@ -280,10 +280,7 @@ bool cameraDeviceSessionSendIceCandidates(CameraDeviceSession *session, const gc
 
 void cameraDeviceSessionDestroy(CameraDeviceSession *session)
 {
-    if (session == NULL)
-    {
-        return;
-    }
+    g_return_if_fail(session != NULL);
 
     // End the session on the device so it is never leaked if it was opened.
     if (session->opened)
