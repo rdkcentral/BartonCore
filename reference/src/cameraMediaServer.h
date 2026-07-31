@@ -38,6 +38,13 @@
 #include <glib.h>
 #include <stdbool.h>
 
+// Default HTTP media server bind address + port, used when the caller does not override them
+// (e.g. the `cs` command's `--out` is omitted). Shared here so both the command layer and the
+// server use the same values. Forwarded to the host by the dev container (see
+// .devcontainer/devcontainer.json forwardPorts).
+#define CAMERA_DEFAULT_SERVE_HOST "127.0.0.1"
+#define CAMERA_DEFAULT_SERVE_PORT 8088
+
 typedef struct _CameraMediaServer CameraMediaServer;
 
 /**

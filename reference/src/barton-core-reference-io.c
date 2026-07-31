@@ -395,7 +395,6 @@ void barton_core_reference_io_process(bool useLinenoise, processLineCallback cal
     g_autoptr(GInputStream) inputStream = NULL;
     if (useLinenoise && linenoiseStartRead(asyncContext))
     {
-        linenoiseStartRead(asyncContext);
         asyncContext->editActive = true;
         inputStream = g_unix_input_stream_new(asyncContext->ls.ifd, FALSE);
         GSource *source = g_pollable_input_stream_create_source(G_POLLABLE_INPUT_STREAM(inputStream), NULL);

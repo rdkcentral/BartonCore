@@ -38,9 +38,10 @@ typedef struct _CameraWebrtcClient CameraWebrtcClient;
 
 /**
  * Negotiated video configuration for the active stream. SDP-derived fields (codec,
- * bitrate, profile, RTP payload) are known once the remote description is set;
- * resolution, frame rate, and pixel format are known once decoded frames flow.
- * Unknown numeric fields are -1 and unknown string fields are empty.
+ * bitrate, profile, RTP payload) are populated once the remote description is set. This client is
+ * passthrough (it muxes H.264 without decoding), so resolution, frame rate, and pixel format are
+ * not determined here and remain unset. Unknown numeric fields are -1 and unknown string fields
+ * are empty.
  */
 typedef struct
 {

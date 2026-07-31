@@ -278,7 +278,7 @@ static gpointer connectivityWatchdog(gpointer userData)
 }
 
 // Bus sync handler: fires in the thread that posts the message. On an ERROR
-// (e.g. the render window was closed) or EOS, notify the owner via onClosed so it
+// (e.g. an element failed) or EOS, notify the owner via onClosed so it
 // can tear the session down gracefully. Runs synchronously (no GMainLoop needed).
 static GstBusSyncReply onBusMessage(GstBus *bus, GstMessage *message, gpointer userData)
 {
@@ -314,7 +314,9 @@ static GstBusSyncReply onBusMessage(GstBus *bus, GstMessage *message, gpointer u
             break;
     }
 
-    return GST_BUS_PASS;
+    // Nothing drains this bus (there is no GMainLoop or async watch), so drop each message after
+    // handling it here rather than letting messages accumulate on the bus queue until teardown.
+    return GST_BUS_DROP;
 }
 
 // appsink new-sample callback: hands each muxed fragmented-MP4 buffer to the owner. Runs on a
@@ -525,6 +527,11 @@ static void onPadAdded(GstElement *webrtcbin, GstPad *pad, gpointer userData)
     {
         emitError("[camera-stream] failed to create depay/parse/timestamper/capsfilter/mux/appsink elements\n");
 
+        if (self->onClosed != NULL)
+        {
+            self->onClosed(self->userData);
+        }
+
         return;
     }
 
@@ -557,6 +564,11 @@ static void onPadAdded(GstElement *webrtcbin, GstPad *pad, gpointer userData)
     {
         emitError("[camera-stream] failed to link depay -> parse -> timestamper -> capsfilter -> mux -> appsink\n");
 
+        if (self->onClosed != NULL)
+        {
+            self->onClosed(self->userData);
+        }
+
         return;
     }
 
@@ -564,6 +576,19 @@ static void onPadAdded(GstElement *webrtcbin, GstPad *pad, gpointer userData)
     GstPad *depaySink = gst_element_get_static_pad(depay, "sink");
     GstPadLinkReturn linkResult = gst_pad_link(pad, depaySink);
     gst_object_unref(depaySink);
+
+    if (linkResult != GST_PAD_LINK_OK)
+    {
+        emitError("[camera-stream] failed to link webrtcbin video pad to the depayloader (link result %d)\n",
+                  linkResult);
+
+        if (self->onClosed != NULL)
+        {
+            self->onClosed(self->userData);
+        }
+
+        return;
+    }
 
     emitOutput("[camera-stream] linked video pad to fragmented MP4 (link result %d)\n", linkResult);
 
@@ -827,9 +852,16 @@ void cameraWebrtcClientDestroy(CameraWebrtcClient *client)
 
         gst_element_set_state(client->pipeline, GST_STATE_NULL);
 
-        // Block until the NULL state change fully settles so the streaming task and any in-flight
-        // appsink/bus callbacks (which take `client` as userData) have stopped before we free it.
-        gst_element_get_state(client->pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+        // Wait (bounded) for the NULL state change to settle so the streaming task and any
+        // in-flight appsink/bus callbacks (which take `client` as userData) have stopped before we
+        // free it. A finite timeout avoids hanging teardown if an element wedges; warn if it hits.
+        GstStateChangeReturn stateRet = gst_element_get_state(client->pipeline, NULL, NULL, 5 * GST_SECOND);
+
+        if (stateRet == GST_STATE_CHANGE_ASYNC)
+        {
+            emitError("[camera-stream] pipeline did not reach NULL within 5s during teardown\n");
+        }
+
         gst_object_unref(client->pipeline);
     }
 
@@ -888,6 +920,7 @@ static void extractSdpVideoConfig(const GstSDPMessage *msg, CameraWebrtcVideoCon
         {
             const GstSDPBandwidth *bw = gst_sdp_media_get_bandwidth(media, b);
 
+            // "AS" = Application Specific bandwidth (kbps) advertised on the SDP b= line.
             if (bw != NULL && g_strcmp0(bw->bwtype, "AS") == 0)
             {
                 config->bitrateKbps = (gint) bw->bandwidth;

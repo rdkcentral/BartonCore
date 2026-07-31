@@ -43,10 +43,8 @@
 #include <signal.h>
 #include <stdio.h>
 
-// Default HTTP media server bind + port when `--out` is omitted. Forwarded to the host by
-// the dev container (see .devcontainer/devcontainer.json forwardPorts).
-#define CAMERA_DEFAULT_SERVE_HOST        "127.0.0.1"
-#define CAMERA_DEFAULT_SERVE_PORT        8088
+// CAMERA_DEFAULT_SERVE_HOST / CAMERA_DEFAULT_SERVE_PORT are defined in cameraMediaServer.h so the
+// command layer and the media server share the same defaults.
 
 // The SIGINT handler may only touch an async-signal-safe flag, so the blocking wait loops poll
 // it on this interval to observe Ctrl+C promptly without the handler taking locks.
@@ -158,7 +156,7 @@ static void onLocalIceCandidate(guint mlineIndex, const gchar *candidate, gpoint
     }
 }
 
-// Invoked when the WebRTC client stops on its own (render window closed or EOS).
+// Invoked when the WebRTC client stops on its own (pipeline error or EOS).
 // Requests the same graceful teardown as Ctrl+C so the session is ended on the
 // camera (EndSession) and the stream is deallocated rather than leaked.
 static void onWebrtcClosed(gpointer userData)
@@ -390,8 +388,9 @@ static void cleanupState(CameraStreamState *state)
     g_cond_clear(&state->cond);
 }
 
-// Pretty-print the negotiated stream configuration. Fields the pipeline hasn't reported
-// yet are omitted (resolution shows a placeholder until the first frame decodes).
+// Pretty-print the negotiated stream configuration. Only fields the pipeline can report are
+// shown; this is a passthrough (no-decode) pipeline, so resolution and frame rate are not
+// derived here and are omitted.
 static void printNegotiatedConfig(const CameraWebrtcVideoConfig *cfg)
 {
     emitOutput("[camera-stream] Negotiated stream configuration:\n");
@@ -436,8 +435,8 @@ static void printNegotiatedConfig(const CameraWebrtcVideoConfig *cfg)
 
 // Runs the full signaling sequence for one stream. Each module handle is scope
 // bound (g_autoptr), so every early return tears everything down in the right
-// order: the WebRTC client first (stopping the sink), then the window it drew
-// into, then the device session (which ends the camera session if it was opened).
+// order: the WebRTC client first (stopping the appsink), then the media server /
+// output file, then the device session (which ends the camera session if it was opened).
 static bool runCameraStream(BCoreClient *client,
                             const gchar *deviceId,
                             const gchar *filePath,
@@ -702,7 +701,7 @@ static bool runCameraStream(BCoreClient *client,
     flushBufferedRemoteIce(webrtc, state);
 
     // Print the signaled stream configuration (codec / bitrate / payload). Resolution and
-    // frame rate are only known once frames decode, which the client announces separately.
+    // frame rate are not derived from this passthrough (no-decode) pipeline, so they are omitted.
     {
         CameraWebrtcVideoConfig videoConfig;
         cameraWebrtcClientGetVideoConfig(webrtc, &videoConfig);

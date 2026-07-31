@@ -309,7 +309,7 @@ static gpointer serverThread(gpointer data)
 CameraMediaServer *cameraMediaServerCreate(const gchar *bindHost, guint16 port)
 {
     CameraMediaServer *self = g_new0(CameraMediaServer, 1);
-    self->bindHost = g_strdup(bindHost != NULL ? bindHost : "127.0.0.1");
+    self->bindHost = g_strdup(bindHost != NULL ? bindHost : CAMERA_DEFAULT_SERVE_HOST);
     self->port = port;
     self->url = g_strdup_printf("http://%s:%u", self->bindHost, port);
     self->initSegment = g_byte_array_new();
@@ -411,6 +411,14 @@ void cameraMediaServerPushBuffer(CameraMediaServer *self, const guint8 *data, gs
 
                 snapshot = g_list_prepend(snapshot, g_object_ref(conn));
                 emitOutput("[camera-stream] Viewer connected (%u active)\n", viewerCount);
+
+                // Now that a deferred viewer is active, request a keyframe just like the ready
+                // path does so it can begin decoding without waiting for the camera's periodic
+                // keyframe. Invoked outside the mutex; the handler must not re-enter.
+                if (self->onViewer != NULL)
+                {
+                    self->onViewer(self->onViewerData);
+                }
             }
         }
 
@@ -516,6 +524,9 @@ void cameraMediaServerDestroy(CameraMediaServer *self)
 
     g_clear_object(&self->service);
 
+    // The loop is unref'd here rather than next to the earlier g_main_loop_quit() because the
+    // server thread is still inside g_main_loop_run() at that point; the loop must be quit and its
+    // thread joined (both done above) before it is safe to drop the loop's last reference.
     if (self->loop != NULL)
     {
         g_main_loop_unref(self->loop);

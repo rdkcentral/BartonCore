@@ -22,6 +22,7 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "cameraDeviceSession.h"
+#include "barton-core-reference-io.h"
 #include "barton-core-resource.h"
 #include "events/barton-core-resource-updated-event.h"
 #include <jsonHelper/jsonHelper.h>
@@ -159,10 +160,7 @@ CameraDeviceSession *cameraDeviceSessionCreate(BCoreClient *client,
 
 bool cameraDeviceSessionOpen(CameraDeviceSession *session)
 {
-    if (session == NULL)
-    {
-        return false;
-    }
+    g_return_val_if_fail(session != NULL, false);
 
     g_autofree gchar *uri = g_strdup_printf("/%s/ep/camera/r/createSession", session->deviceId);
     g_free(session->sessionId);
@@ -175,16 +173,15 @@ bool cameraDeviceSessionOpen(CameraDeviceSession *session)
 
 bool cameraDeviceSessionStartStream(CameraDeviceSession *session)
 {
-    if (session == NULL)
-    {
-        return false;
-    }
+    g_return_val_if_fail(session != NULL, false);
 
     g_autofree gchar *uri = g_strdup_printf("/%s/ep/camera/r/stream", session->deviceId);
     g_autofree gchar *result = NULL;
 
     if (!b_core_client_execute_resource(session->client, uri, session->sessionId, &result))
     {
+        emitError("[camera-stream] failed to start stream (execute %s)\n", uri);
+
         return false;
     }
 
@@ -229,10 +226,7 @@ const gchar *cameraDeviceSessionGetEntryPoint(CameraDeviceSession *session)
 
 const gchar *cameraDeviceSessionGetRole(CameraDeviceSession *session)
 {
-    if (session == NULL)
-    {
-        return NULL;
-    }
+    g_return_val_if_fail(session != NULL, NULL);
 
     // The negotiation role is a WebRTC concept, so it lives on the webrtc endpoint rather than in
     // the abstract stream result. Read it lazily on first request and cache it for the session.
@@ -246,6 +240,12 @@ const gchar *cameraDeviceSessionGetRole(CameraDeviceSession *session)
         {
             session->role = value;
         }
+        else
+        {
+            emitError("[camera-stream] failed to read negotiation role from %s: %s\n",
+                      uri,
+                      err != NULL ? err->message : "(unknown error)");
+        }
     }
 
     return session->role;
@@ -253,10 +253,7 @@ const gchar *cameraDeviceSessionGetRole(CameraDeviceSession *session)
 
 bool cameraDeviceSessionSendOffer(CameraDeviceSession *session, const gchar *sdp)
 {
-    if (session == NULL)
-    {
-        return false;
-    }
+    g_return_val_if_fail(session != NULL, false);
 
     // Prefer the entry point the driver reported from the stream execute; fall back to the
     // conventional webrtc offer URI if it was unavailable.
@@ -274,10 +271,7 @@ bool cameraDeviceSessionSendOffer(CameraDeviceSession *session, const gchar *sdp
 
 bool cameraDeviceSessionSendIceCandidates(CameraDeviceSession *session, const gchar *jsonCandidates)
 {
-    if (session == NULL)
-    {
-        return false;
-    }
+    g_return_val_if_fail(session != NULL, false);
 
     g_autofree gchar *uri = g_strdup_printf("/%s/ep/webrtc/r/localIceCandidates", session->deviceId);
 
