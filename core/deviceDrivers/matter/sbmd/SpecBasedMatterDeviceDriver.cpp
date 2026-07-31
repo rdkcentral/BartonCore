@@ -29,7 +29,6 @@
 
 #include "SpecBasedMatterDeviceDriver.h"
 #include "matter/sbmd/SbmdDriver.h"
-
 #if defined(BCORE_USE_MQUICKJS)
 #include "matter/sbmd/SafeJSValue.h"
 #include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
@@ -194,7 +193,10 @@ namespace
     private:
         std::optional<ParsedResult> &result;
     };
+
 } // namespace
+
+SpecBasedMatterDeviceDriverMetrics SpecBasedMatterDeviceDriver::metrics;
 
 SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
@@ -732,15 +734,20 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
 
+    OperationContext opCtx;
+    opCtx.driverStem = driver->GetDriverStem();
+    opCtx.opType = "seed";
+    opCtx.resourceId = resource.id;
+
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
         SbmdHandlerInvoker::AddSupplements(ctx, args, resource.seed->supplements, supplements);
-        result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args, &opCtx);
     }
 
     if (!result.has_value())
@@ -942,15 +949,22 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
 
+    auto t0 = std::chrono::steady_clock::now();
+    OperationContext opCtx;
+    opCtx.driverStem = driver ? driver->GetDriverStem() : "";
+    opCtx.opType = opType;
+    opCtx.resourceId = resourceId;
+    opCtx.startTime = t0;
+
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
         SbmdHandlerInvoker::AddSupplements(ctx, args, handler->supplements, supplements);
-        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args, &opCtx);
     }
 
     if (!result.has_value())
@@ -972,7 +986,8 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                     readValue,
                     executeResponse,
                     exchangeMgr,
-                    sessionHandle);
+                    sessionHandle,
+                    &opCtx);
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
@@ -983,7 +998,8 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
                                                   char **readValue,
                                                   char **executeResponse,
                                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                                  const chip::SessionHandle &sessionHandle)
+                                                  const chip::SessionHandle &sessionHandle,
+                                                  const OperationContext *opCtx)
 {
     if (std::holds_alternative<ResultTerminal::Success>(terminal.data))
     {
@@ -1116,14 +1132,15 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
     if (std::holds_alternative<ResultTerminal::RequestCommand>(terminal.data))
     {
         auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
-        ExecuteRequestCommand(promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
+        ExecuteRequestCommand(
+            promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle, opCtx);
         return;
     }
 
     if (std::holds_alternative<ResultTerminal::ReadAttribute>(terminal.data))
     {
         auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
-        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
+        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle, opCtx);
         return;
     }
 
@@ -1142,7 +1159,8 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
                                                         char **readValue,
                                                         char **executeResponse,
                                                         chip::Messaging::ExchangeManager &exchangeMgr,
-                                                        const chip::SessionHandle &sessionHandle)
+                                                        const chip::SessionHandle &sessionHandle,
+                                                        const OperationContext *opCtx)
 {
     auto endpointOpt = ResolveEndpoint(device, cmd.clusterId, cmd.endpointId);
 
@@ -1198,10 +1216,32 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
     pending.deferralDepth = 0;
 
+    // opCtx (when present) already carries driverStem from this same driver, so it wins outright.
+    // The else-if is the no-opCtx fallback: seed at least driverStem so deferred metrics are attributed.
+    if (opCtx != nullptr)
+    {
+        pending.operationCtx = *opCtx;
+    }
+    else if (driver != nullptr)
+    {
+        pending.operationCtx.driverStem = driver->GetDriverStem();
+    }
+
+    pending.operationCtx.startTime = std::chrono::steady_clock::now();
+
     // The PendingOperation's SafeJSValue callbacks are empty at this point, so moving it into
     // the map performs no engine work and needs no mutex. The callbacks are transferred afterward,
     // below, using the stable map-node address.
     auto [it, inserted] = pendingOperations.emplace(pendingId, std::move(pending));
+
+    if (!inserted)
+    {
+        icError("Duplicate pending operation ID %" PRIu64 ", cannot register deferred operation", pendingId);
+        FailOperation(promises);
+        return;
+    }
+
+    metrics.RecordDeferredStart(static_cast<int64_t>(pendingOperations.size()));
     PendingOperation &stored = it->second;
 
     // Move the deferred callbacks (held alive by Parse) into the stable map node under the mutex.
@@ -1243,7 +1283,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
                                                        char **readValue,
                                                        char **executeResponse,
                                                        chip::Messaging::ExchangeManager &exchangeMgr,
-                                                       const chip::SessionHandle &sessionHandle)
+                                                       const chip::SessionHandle &sessionHandle,
+                                                       const OperationContext *opCtx)
 {
     auto endpointOpt = ResolveEndpoint(device, ra.clusterId, ra.endpointId);
 
@@ -1276,7 +1317,7 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
 
             SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
                 ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError.Get(), args, opCtx);
 
             // Release the callbacks now that they have been consumed.
             ra.onResponse = SafeJSValue {};
@@ -1312,7 +1353,7 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
 
             SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
                 ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse.Get(), args, opCtx);
 
             // Release the callbacks now that they have been consumed.
             ra.onResponse = SafeJSValue {};
@@ -1340,7 +1381,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
                     readValue,
                     executeResponse,
                     exchangeMgr,
-                    sessionHandle);
+                    sessionHandle,
+                    opCtx);
 }
 
 void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pendingId,
@@ -1361,12 +1403,16 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     if (std::chrono::steady_clock::now() > pending.overallDeadline)
     {
         icWarn("Deferred operation %" PRIu64 " exceeded overall deadline", pendingId);
+        metrics.RecordDeferredTimeout(
+            pending.operationCtx.driverStem.c_str(),
+            pending.operationCtx.opType.c_str(),
+            pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str());
 
         // Call onError with timeout
         std::optional<ParsedResult> errorResult;
         ScopedResultRelease errorResultRelease {errorResult};
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onError.HasValue())
@@ -1377,7 +1423,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
                                                                               "Overall operation deadline exceeded",
                                                                               -1,
                                                                               pending.context.Get());
-                errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
+                errorResult =
+                    SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args, &pending.operationCtx);
             }
         }
 
@@ -1403,14 +1450,14 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         if (pending.onResponse.HasValue())
         {
             SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(
                 ctx, pending.handlerContext, path.mClusterId, path.mCommandId, tlvBase64, pending.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args, &pending.operationCtx);
         }
     }
 
@@ -1447,7 +1494,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
     std::optional<ParsedResult> errorResult;
     ScopedResultRelease errorResultRelease {errorResult};
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto lock = MQuickJsRuntime::AcquireMutex();
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         if (pending.onError.HasValue())
@@ -1458,7 +1505,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
                                                                           error.AsString(),
                                                                           static_cast<int32_t>(error.AsInteger()),
                                                                           pending.context.Get());
-            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
+            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args, &pending.operationCtx);
         }
     }
 
@@ -1488,6 +1535,10 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         icError("Deferred operation %" PRIu64 " exceeded max deferral depth (%u)",
                 pendingId,
                 PendingOperation::MAX_DEFERRAL_DEPTH);
+        metrics.RecordDeferredDepthExceeded(
+            pending.operationCtx.driverStem.c_str(),
+            pending.operationCtx.opType.c_str(),
+            pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str());
         CompletePendingOperation(pendingId, false);
         return;
     }
@@ -1765,14 +1816,14 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         if (err != CHIP_NO_ERROR)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onError.HasValue())
             {
                 SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
                     ctx, pending.handlerContext, "readFailed", "Attribute not in cache", -1, pending.context.Get());
-                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args, &pending.operationCtx);
             }
         }
         else
@@ -1787,14 +1838,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
             const std::string &tlvBase64 = *tlvBase64Opt;
 
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onResponse.HasValue())
             {
                 SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
                     ctx, pending.handlerContext, ra.clusterId, ra.attributeId, tlvBase64, pending.context.Get());
-                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args);
+                nextResult =
+                    SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args, &pending.operationCtx);
             }
         }
 
@@ -1825,6 +1877,21 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
     }
 
     PendingOperation &pending = it->second;
+
+    // Record deferred operation metrics before releasing the operation
+    double durationMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - pending.operationCtx.startTime)
+            .count();
+    const char *driverAttr = pending.operationCtx.driverStem.c_str();
+    const char *opTypeAttr = pending.operationCtx.opType.c_str();
+    const char *resourceAttr =
+        pending.operationCtx.resourceId.empty() ? nullptr : pending.operationCtx.resourceId.c_str();
+    metrics.RecordDeferredComplete(durationMs,
+                                   static_cast<double>(pending.deferralDepth),
+                                   driverAttr,
+                                   opTypeAttr,
+                                   resourceAttr,
+                                   static_cast<int64_t>(pendingOperations.size()) - 1);
 
     // Resolve the parking promise
     if (pending.parkingPromise != nullptr)
@@ -2065,14 +2132,20 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
         ScopedResultRelease resultRelease {result};
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto startTime = std::chrono::steady_clock::now();
+            auto lock = MQuickJsRuntime::AcquireMutex();
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             // args keeps its value alive for its whole lifetime, so it survives the allocations in
             // AddSupplements and the handler call without a separate guard.
             SafeJSValue args = buildArgs(ctx);
             SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
+
+            OperationContext opCtx;
+            opCtx.driverStem = driver ? driver->GetDriverStem() : "";
+            opCtx.opType = elementNoun;
+            opCtx.startTime = startTime;
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args, &opCtx);
         }
 
         if (!result.has_value())
@@ -2158,10 +2231,17 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
     }
 
-    DispatchToHandlers(
-        deviceId, matches, matterDevice.get(), hctx, clusterId, attributeId, "Attribute", "attr", [&](JSContext *ctx) {
-            return SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
-        });
+    DispatchToHandlers(deviceId,
+                       matches,
+                       matterDevice.get(),
+                       hctx,
+                       clusterId,
+                       attributeId,
+                       "Attribute",
+                       "attribute_report",
+                       [&](JSContext *ctx) {
+                           return SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
+                       });
 }
 
 void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
