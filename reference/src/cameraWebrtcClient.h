@@ -149,9 +149,10 @@ bool cameraWebrtcClientSetRemoteSdp(CameraWebrtcClient *client, const gchar *sdp
 void cameraWebrtcClientAddIceCandidate(CameraWebrtcClient *client, guint mlineIndex, const gchar *candidate);
 
 /**
- * Copy the current negotiated video configuration into @p config. SDP-derived fields
- * are populated once the remote description is set; resolution and frame rate are
- * populated once decoded frames begin flowing (unknown fields are -1 / empty).
+ * Copy the current negotiated video configuration into @p config. SDP-derived fields are
+ * populated once the remote description is set. This client is passthrough (it muxes H.264
+ * without decoding), so resolution and frame rate are not determined and remain unset (unknown
+ * fields are -1 / empty).
  *
  * @param client the client
  * @param config receives the current configuration

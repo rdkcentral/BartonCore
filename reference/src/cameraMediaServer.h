@@ -48,9 +48,12 @@
 typedef struct _CameraMediaServer CameraMediaServer;
 
 /**
- * Invoked (on the server thread) each time a viewer connects to the stream. Handlers should be
- * quick and must not call back into the server. Typically used to request a fresh keyframe so a
- * newly-connected viewer can begin decoding without delay.
+ * Invoked each time a viewer connects to the stream. Usually called on the server thread, but for
+ * a viewer that connected before the init segment was ready it is invoked from
+ * cameraMediaServerPushBuffer() (the GStreamer appsink thread) when that viewer is promoted, so
+ * the handler must be thread-safe. Handlers should be quick and must not call back into the
+ * server. Typically used to request a fresh keyframe so a newly-connected viewer can begin
+ * decoding without delay.
  *
  * @param userData caller context registered with cameraMediaServerSetOnViewer()
  */

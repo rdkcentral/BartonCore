@@ -719,7 +719,13 @@ static bool runCameraStream(BCoreClient *client,
                    cameraMediaServerGetUrl(mediaServer));
     }
 
-    waitForCondition(state, &state->teardown, 3600);
+    // Block until the user interrupts (Ctrl+C) or the camera ends the session. waitForCondition
+    // returns FALSE on timeout, so loop to re-arm it rather than silently stopping a long-lived
+    // stream once the timeout elapses.
+    while (!state->teardown && !state->sessionEnded)
+    {
+        waitForCondition(state, &state->teardown, 3600);
+    }
 
     if (state->sessionEnded)
     {
@@ -730,6 +736,19 @@ static bool runCameraStream(BCoreClient *client,
     {
         emitOutput("\n[camera-stream] Stopping stream...\n");
     }
+
+    // Sever the cross-thread callbacks before the scope-bound handles tear down. The g_autoptr
+    // scope exit destroys the WebRTC client first, but the media server and device session outlive
+    // it briefly and their callbacks (onViewerConnected / onRemoteIce) reach into state->webrtc.
+    // Stop the media server from calling back and clear the shared pointers under the mutex so any
+    // late callback becomes a no-op instead of touching the destroyed client.
+    cameraMediaServerSetOnViewer(mediaServer, NULL, NULL);
+
+    g_mutex_lock(&state->mutex);
+    state->webrtc = NULL;
+    state->session = NULL;
+    state->mediaServer = NULL;
+    g_mutex_unlock(&state->mutex);
 
     return true;
 }
@@ -766,14 +785,18 @@ static void onViewerConnected(gpointer userData)
 {
     CameraStreamState *state = (CameraStreamState *) userData;
 
+    // Request the keyframe while holding the mutex so a concurrent teardown -- which clears
+    // state->webrtc under the same mutex before the client is destroyed -- cannot free the client
+    // between the NULL check and the call. requestKeyframe only takes the client's keyframe lock,
+    // so there is no lock-ordering hazard.
     g_mutex_lock(&state->mutex);
-    CameraWebrtcClient *webrtc = state->webrtc;
-    g_mutex_unlock(&state->mutex);
 
-    if (webrtc != NULL)
+    if (state->webrtc != NULL)
     {
-        cameraWebrtcClientRequestKeyframe(webrtc);
+        cameraWebrtcClientRequestKeyframe(state->webrtc);
     }
+
+    g_mutex_unlock(&state->mutex);
 }
 
 // Parse the --out URI. A "file://<path>" URI records to a file; anything else is treated as an

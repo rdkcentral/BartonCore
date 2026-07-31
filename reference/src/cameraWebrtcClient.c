@@ -634,7 +634,7 @@ CameraWebrtcClient *cameraWebrtcClientCreate(CameraWebrtcOnOfferReady onOffer,
     self->config.width = -1;
     self->config.height = -1;
     self->config.framerateNum = -1;
-    self->config.framerateDen = 1;
+    self->config.framerateDen = -1;
 
     g_mutex_init(&self->connMutex);
     g_cond_init(&self->connCond);
@@ -647,9 +647,9 @@ CameraWebrtcClient *cameraWebrtcClientCreate(CameraWebrtcOnOfferReady onOffer,
     self->pipeline = gst_pipeline_new("camera-stream");
     self->webrtcbin = gst_element_factory_make("webrtcbin", "webrtc");
 
-    if (self->webrtcbin == NULL)
+    if (self->pipeline == NULL || self->webrtcbin == NULL)
     {
-        emitError("[camera-stream] webrtcbin element not available\n");
+        emitError("[camera-stream] failed to create the GStreamer pipeline or webrtcbin element\n");
         cameraWebrtcClientDestroy(self);
 
         return NULL;

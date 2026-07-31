@@ -199,7 +199,7 @@ static void outputLineReady(GObject *inputStream, GAsyncResult *res, ioAsyncCont
     }
     else if (error != NULL)
     {
-        fprintf(stderr, "Error reading line: %s", error->message);
+        fprintf(stderr, "Error reading line: %s\n", error->message);
     }
 }
 
@@ -295,11 +295,11 @@ static void inputReady(GObject *inputStream, GAsyncResult *res, ioAsyncContext *
     {
         if (err != NULL)
         {
-            fprintf(stderr, "Error reading line: %s", err->message);
+            fprintf(stderr, "Error reading line: %s\n", err->message);
         }
         else
         {
-            fprintf(stderr, "Error reading line");
+            fprintf(stderr, "Error reading line\n");
         }
 
         g_main_loop_quit((GMainLoop *) data->mainLoop);
