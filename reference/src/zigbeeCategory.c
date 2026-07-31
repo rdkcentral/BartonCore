@@ -43,6 +43,9 @@
 // Small argument parsing helpers
 // ---------------------------------------------------------------------------
 
+// EUI64 / device-id addresses are hex without a "0x" prefix (matching the
+// zigbee device id format used everywhere else).  An optional "0x" prefix is
+// tolerated and ignored (g_ascii_strtoull skips it in base 16).
 static uint64_t parseEui64(const gchar *arg)
 {
     return (uint64_t) g_ascii_strtoull(arg, NULL, 16);
@@ -219,7 +222,7 @@ static bool localEui64Func(BCoreClient *client, gint argc, gchar **argv)
 
     uint64_t eui64 = getLocalEui64();
     char *id = zigbeeSubsystemEui64ToId(eui64);
-    emitOutput("Local EUI64: %s (0x%016" PRIx64 ")\n", id != NULL ? id : "<unknown>", eui64);
+    emitOutput("Local EUI64: %s\n", id != NULL ? id : "<unknown>");
     free(id);
 
     return eui64 != 0;
@@ -261,7 +264,7 @@ static bool systemStatusFunc(BCoreClient *client, gint argc, gchar **argv)
     emitOutput("Zigbee system status:\n");
     emitOutput("\tnetworkIsUp: %s\n", status.networkIsUp ? "true" : "false");
     emitOutput("\tnetworkIsOpenForJoin: %s\n", status.networkIsOpenForJoin ? "true" : "false");
-    emitOutput("\teui64: 0x%016" PRIx64 "\n", (uint64_t) status.eui64);
+    emitOutput("\teui64: %016" PRIx64 "\n", (uint64_t) status.eui64);
     emitOutput("\tchannel: %u\n", status.channel);
     emitOutput("\tpanId: 0x%04x\n", status.panId);
     emitOutput("\tversion: %s\n", status.version);
@@ -310,7 +313,7 @@ static bool networkMapFunc(BCoreClient *client, gint argc, gchar **argv)
         ZigbeeSubsystemNetworkMapEntry *entry = (ZigbeeSubsystemNetworkMapEntry *) linkedListIteratorGetNext(iter);
         if (entry != NULL)
         {
-            emitOutput("\taddress=0x%016" PRIx64 " nextCloserHop=0x%016" PRIx64 " lqi=%d nodeId=0x%04x\n",
+            emitOutput("\taddress=%016" PRIx64 " nextCloserHop=%016" PRIx64 " lqi=%d nodeId=0x%04x\n",
                        (uint64_t) entry->address,
                        (uint64_t) entry->nextCloserHop,
                        entry->lqi,
@@ -364,7 +367,7 @@ static bool requestLeaveFunc(BCoreClient *client, gint argc, gchar **argv)
 
     if (zigbeeSubsystemRequestDeviceLeave(eui64, withRejoin, isEndDevice))
     {
-        emitOutput("Requested device 0x%016" PRIx64 " leave the network\n", eui64);
+        emitOutput("Requested device %016" PRIx64 " leave the network\n", eui64);
         return true;
     }
 
@@ -484,7 +487,7 @@ static bool bindingGetFunc(BCoreClient *client, gint argc, gchar **argv)
         return false;
     }
 
-    emitOutput("Binding table for 0x%016" PRIx64 " (%d entries):\n", eui64, linkedListCount(bindings));
+    emitOutput("Binding table for %016" PRIx64 " (%d entries):\n", eui64, linkedListCount(bindings));
     scoped_icLinkedListIterator *iter = linkedListIteratorCreate(bindings);
     while (linkedListIteratorHasNext(iter))
     {
@@ -494,7 +497,7 @@ static bool bindingGetFunc(BCoreClient *client, gint argc, gchar **argv)
             continue;
         }
 
-        emitOutput("\tsource=0x%016" PRIx64 " sourceEndpoint=%u clusterId=0x%04x ",
+        emitOutput("\tsource=%016" PRIx64 " sourceEndpoint=%u clusterId=0x%04x ",
                    (uint64_t) entry->sourceAddress,
                    entry->sourceEndpoint,
                    entry->clusterId);
@@ -505,7 +508,7 @@ static bool bindingGetFunc(BCoreClient *client, gint argc, gchar **argv)
         }
         else
         {
-            emitOutput("-> device 0x%016" PRIx64 " endpoint %u\n",
+            emitOutput("-> device %016" PRIx64 " endpoint %u\n",
                        (uint64_t) entry->destination.extendedAddress.eui64,
                        entry->destination.extendedAddress.endpoint);
         }
@@ -597,7 +600,7 @@ static bool deviceDetailsFunc(BCoreClient *client, gint argc, gchar **argv)
 
     cJSON *json = icDiscoveredDeviceDetailsToJson(details);
     char *jsonStr = (json != NULL) ? cJSON_Print(json) : NULL;
-    emitOutput("Device details for 0x%016" PRIx64 ": %s\n", eui64, jsonStr != NULL ? jsonStr : "<none>");
+    emitOutput("Device details for %016" PRIx64 ": %s\n", eui64, jsonStr != NULL ? jsonStr : "<none>");
 
     free(jsonStr);
     cJSON_Delete(json);
@@ -721,7 +724,7 @@ static bool getEndpointIdsFunc(BCoreClient *client, gint argc, gchar **argv)
         return false;
     }
 
-    emitOutput("Endpoints for 0x%016" PRIx64 " (%u):", eui64, numEndpointIds);
+    emitOutput("Endpoints for %016" PRIx64 " (%u):", eui64, numEndpointIds);
     for (uint8_t i = 0; i < numEndpointIds; i++)
     {
         emitOutput(" %u", endpointIds[i]);
@@ -745,7 +748,7 @@ static bool bindingClearTargetFunc(BCoreClient *client, gint argc, gchar **argv)
 
     if (zigbeeSubsystemBindingClearTarget(eui64, endpointId, clusterId, targetEui64, targetEndpointId) == 0)
     {
-        emitOutput("Cleared binding on 0x%016" PRIx64 " cluster 0x%04x -> target 0x%016" PRIx64 "\n",
+        emitOutput("Cleared binding on %016" PRIx64 " cluster 0x%04x -> target %016" PRIx64 "\n",
                    eui64,
                    clusterId,
                    targetEui64);
@@ -765,7 +768,7 @@ static bool removeDeviceAddressFunc(BCoreClient *client, gint argc, gchar **argv
 
     if (zigbeeSubsystemRemoveDeviceAddress(eui64) == 0)
     {
-        emitOutput("Removed device address 0x%016" PRIx64 "\n", eui64);
+        emitOutput("Removed device address %016" PRIx64 "\n", eui64);
         return true;
     }
 
