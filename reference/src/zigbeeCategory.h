@@ -1,0 +1,38 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// If not stated otherwise in this file or this component's LICENSE file the
+// following copyright and licenses apply:
+//
+// Copyright 2024 Comcast Cable Communications Management, LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+#pragma once
+
+#include "category.h"
+
+/**
+ * Build the Zigbee command category.
+ *
+ * The first set of commands exercises BartonCore's public API as it relates to
+ * Zigbee.  The second set drops down to the (private) zigbeeSubsystem API to
+ * exercise functionality that is not otherwise reachable through the public
+ * client API.
+ *
+ * This unit is only compiled when the BCORE_ZIGBEE CMake option is enabled.
+ */
+Category *buildZigbeeCategory(void);

@@ -33,6 +33,9 @@
 #include "eventHandler.h"
 #include "matterCategory.h"
 #include "threadCategory.h"
+#ifdef BARTON_CONFIG_ZIGBEE
+#include "zigbeeCategory.h"
+#endif
 #include "provider/barton-core-property-provider.h"
 #include "reference-network-credentials-provider.h"
 #include <icLog/logging.h>
@@ -79,6 +82,9 @@ static void buildCategories()
     categories = g_list_append(categories, buildCoreCategory());
     categories = g_list_append(categories, buildMatterCategory());
     categories = g_list_append(categories, buildThreadCategory());
+#ifdef BARTON_CONFIG_ZIGBEE
+    categories = g_list_append(categories, buildZigbeeCategory());
+#endif
 }
 
 static void destroyCategories()
