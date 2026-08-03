@@ -27,16 +27,20 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <string>
 
 extern "C" {
 #include <icLog/logging.h>
 #include <mquickjs/mquickjs.h>
 }
+
+#include "matter/sbmd/metrics/MQuickJsRuntimeMetrics.h"
 
 namespace barton
 {
@@ -159,14 +163,72 @@ namespace barton
          */
         static std::chrono::steady_clock::time_point GetDeadline();
 
+        /**
+         * Return true if the script execution deadline was exceeded during the last JS_Call.
+         *
+         * @return true if the script timed out (deadline fired) for the current JS_Call
+         */
+        static bool WasTimedOut();
+
+        /**
+         * Return true when the JS context is live and accepting snapshots.
+         *
+         * Set to true (memory_order_release) at the end of Initialize(), cleared
+         * to false (memory_order_release) at the start of Shutdown().
+         */
+        static bool IsContextReady();
+
+        /**
+         * Return a reference to the shared runtime metrics instance.
+         *
+         * Use this to call recording methods (RecordJsException, RecordMutexWait,
+         * TickleSampler, ForceSnapshot) directly on MQuickJsRuntimeMetrics rather
+         * than through mirrored wrappers. See MQuickJsRuntimeMetrics for the full
+         * recording API.
+         *
+         * @return Reference to the shared MQuickJsRuntimeMetrics instance.
+         */
+        static MQuickJsRuntimeMetrics &GetMetrics();
+
+        /**
+         * Acquire the JS runtime mutex, recording the wait duration via
+         * MQuickJsRuntimeMetrics::RecordMutexWait.
+         *
+         * @return An acquired std::unique_lock on the shared mutex
+         */
+        static std::unique_lock<std::mutex> AcquireMutex();
+
+        /**
+         * Read current heap statistics. Returns std::nullopt and logs a warning
+         * if JS_GetMemoryUsage fails. Caller must hold the JS mutex.
+         *
+         * @param flags  0 for the fast O(1) path (no heap walk); JS_MEMUSAGE_WALK_HEAP for full stats
+         */
+        static std::optional<JSMemoryUsage> GetMemoryUsage(JSContext *ctx, int flags = 0);
+
+        /**
+         * Record pool health metrics from an already-captured JSMemoryUsage.
+         * When BARTON_CONFIG_SBMD_GC_INSTRUMENTATION is enabled the GC root
+         * count is read internally (requires the JS mutex to be held).
+         */
+        static void RecordHeapSnapshot(const JSMemoryUsage &usage);
+
     private:
-        static uint8_t *memBuffer;
-        static size_t memSize;
-        static JSContext *ctx;
-        static std::mutex mutex;
-        static bool initialized;
-        static size_t peakHeapUsed;
-        static std::chrono::steady_clock::time_point deadline;
+        MQuickJsRuntime() = delete;
+
+        inline static uint8_t *memBuffer = nullptr;
+        inline static size_t memSize = 0;
+        inline static JSContext *ctx = nullptr;
+        inline static std::mutex mutex;
+        inline static bool initialized = false;
+        inline static size_t peakHeapUsed = 0;
+        inline static std::chrono::steady_clock::time_point deadline;
+
+        // jsContextReady: set true at end of Initialize(), cleared at start of
+        // Shutdown().
+        inline static std::atomic<bool> jsContextReady {false};
+
+        inline static MQuickJsRuntimeMetrics metrics;
     };
 
 } // namespace barton

@@ -41,6 +41,7 @@
 #include "SbmdDispatch.h"
 #include "SbmdRegistration.h"
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -50,6 +51,15 @@ extern "C" {
 
 namespace barton
 {
+    /**
+     * Extract the clean driver name from a .sbmd.js file path by stripping the double extension.
+     * e.g. "/path/to/door-lock.sbmd.js" → "door-lock"
+     */
+    inline std::string driverStemFromPath(const std::string &filePath)
+    {
+        return std::filesystem::path(filePath).stem().stem().string();
+    }
+
     class SbmdDriver
     {
     public:
@@ -109,6 +119,14 @@ namespace barton
          * Get the driver name (convenience — same as registration.name).
          */
         const std::string &GetName() const;
+
+        /**
+         * Get the clean driver stem for observability metric attributes.
+         * e.g. "door-lock.sbmd.js" → "door-lock"
+         *
+         * Computed by driverStemFromPath() at construction time; subsequent calls are O(1).
+         */
+        const std::string &GetDriverStem() const;
 
         /**
          * Get the attribute dispatch table (only valid when activated).
@@ -193,6 +211,7 @@ namespace barton
 
         std::unique_ptr<SbmdRegistration> registration;
         std::string source; // Retained for re-activation
+        std::string driverStem; // Cached at construction from registration->filePath
 
         // Dispatch tables — built at activation, cleared at deactivation
         SbmdDispatchTable attributeDispatch;

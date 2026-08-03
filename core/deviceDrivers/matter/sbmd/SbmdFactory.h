@@ -28,6 +28,7 @@
 #pragma once
 
 #include "SbmdDriver.h"
+#include "metrics/SbmdFactoryMetrics.h"
 
 #include <memory>
 #include <string>
@@ -51,6 +52,7 @@ namespace barton
          */
         bool RegisterDrivers();
 
+
     private:
         SbmdFactory() = default;
         ~SbmdFactory() = default;
@@ -72,5 +74,7 @@ namespace barton
          * have been initialized for driver loading.
          */
         bool runtimeReady = false;
+
+        SbmdFactoryMetrics metrics;
     };
 } //namespace barton

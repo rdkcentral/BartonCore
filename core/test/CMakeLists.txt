@@ -157,6 +157,20 @@ if (BCORE_MATTER)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
 
+    # Observability no-op stub required by any test that compiles MQuickJsRuntime.cpp
+    # directly (those tests don't link BartonCoreStatic which embeds the real backend).
+    set(SBMD_OBS_NOOP_SRC ${PROJECT_SOURCE_DIR}/core/src/observability/noop/observabilityNoop.c)
+
+    # Metrics implementations required by any test that compiles MQuickJsRuntime.cpp,
+    # SbmdBundleLoader.cpp, SbmdHandlerInvoker.cpp, or SbmdLoader.cpp directly.
+    # MQuickJsRuntimeMetrics and SbmdHandlerInvokerMetrics are included;
+    # SbmdFactoryMetrics and SpecBasedMatterDeviceDriverMetrics are omitted
+    # because the tests do not compile those monitored classes directly.
+    set(SBMD_METRICS_SRC
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/metrics/MQuickJsRuntimeMetrics.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/metrics/SbmdHandlerInvokerMetrics.cpp
+    )
+
 
     bcore_add_cpp_test(
         NAME testMatterDeviceEndpointMap
@@ -185,6 +199,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdJsUtil.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -202,6 +218,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -219,6 +237,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -235,6 +255,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -255,6 +277,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -276,6 +300,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog cjson
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -296,6 +322,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog cjson
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -316,6 +344,8 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
@@ -346,6 +376,32 @@ if (BCORE_MATTER)
     if (TARGET testSbmdCameraWebrtc)
         target_link_libraries(testSbmdCameraWebrtc bCoreConfig)
         target_compile_definitions(testSbmdCameraWebrtc PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+    endif()
+
+    # SBMD observability tests — only meaningful with the in-memory backend.
+    if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
+        bcore_add_cpp_test(
+            NAME testSbmdObservability
+            SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdObservabilityTest.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdJsUtil.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+                    ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+                    ${SBMD_METRICS_SRC}
+                    ${PROJECT_SOURCE_DIR}/core/src/observability/memory/observabilityMemory.c
+            LIBS mquickjs gmock BartonCommon::xhLog BartonCommon::xhConcurrent cjson
+            INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                     ${PROJECT_SOURCE_DIR}/core
+        )
+
+        if (TARGET testSbmdObservability)
+            target_link_libraries(testSbmdObservability bCoreConfig)
+        endif()
     endif()
 
     if (BUILD_TESTING)

@@ -30,6 +30,7 @@
 #include "../MatterDevice.h"
 #include "../MatterDeviceDriver.h"
 #include "SbmdDriver.h"
+#include "metrics/SpecBasedMatterDeviceDriverMetrics.h"
 #include "mquickjs/SbmdHandlerInvoker.h"
 #include "mquickjs/SbmdResultExecutor.h"
 #include <chrono>
@@ -81,6 +82,9 @@ namespace barton
         uint32_t deferralDepth = 0;
         static constexpr uint32_t MAX_DEFERRAL_DEPTH = 10;
         static constexpr uint32_t DEFAULT_OVERALL_TIMEOUT_MS = 30000;
+
+        // Observability context for metrics
+        OperationContext operationCtx;
     };
 
     class SpecBasedMatterDeviceDriver : public MatterDeviceDriver
@@ -138,6 +142,7 @@ namespace barton
     private:
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
+        static SpecBasedMatterDeviceDriverMetrics metrics;
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);
@@ -192,7 +197,8 @@ namespace barton
                              char **readValue,
                              char **executeResponse,
                              chip::Messaging::ExchangeManager &exchangeMgr,
-                             const chip::SessionHandle &sessionHandle);
+                             const chip::SessionHandle &sessionHandle,
+                             const OperationContext *opCtx = nullptr);
 
         /**
          * Execute a requestCommand deferred terminal.
@@ -205,7 +211,8 @@ namespace barton
                                    char **readValue,
                                    char **executeResponse,
                                    chip::Messaging::ExchangeManager &exchangeMgr,
-                                   const chip::SessionHandle &sessionHandle);
+                                   const chip::SessionHandle &sessionHandle,
+                                   const OperationContext *opCtx = nullptr);
 
         /**
          * Execute a readAttribute deferred terminal.
@@ -218,7 +225,8 @@ namespace barton
                                   char **readValue,
                                   char **executeResponse,
                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                  const chip::SessionHandle &sessionHandle);
+                                  const chip::SessionHandle &sessionHandle,
+                                  const OperationContext *opCtx = nullptr);
 
         /**
          * Handle a deferred command response. Called from MatterDevice::OnResponse

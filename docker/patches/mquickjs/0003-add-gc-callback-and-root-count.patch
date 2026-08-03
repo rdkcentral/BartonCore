@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000003 Mon Sep 17 00:00:00 2001
+From: rchowd807 <rchowd807@comcast.com>
+Date: Sun, 20 Jul 2026 00:00:00 -0500
+Subject: [PATCH] Add JS_SetGCCallback and JS_GetGCRootCount for observability
+
+Expose two new public APIs that allow embedders to instrument the
+mquickjs garbage collector:
+
+  JS_SetGCCallback: registers a callback fired before (is_end=0) and
+  after (is_end=1) every GC cycle, including allocator-triggered cycles.
+
+  JS_GetGCRootCount: returns the count of live GC roots across both
+  the push/pop stack (top_gc_ref) and the add/delete list (last_gc_ref).
+
+Two pointer-sized fields (gc_callback, gc_opaque) are added to JSContext
+before class_obj, keeping the GC-scanned JSValue region intact.
+---
+diff --git a/mquickjs.c b/mquickjs.c
+index be3932d..86b8bd7 100644
+--- a/mquickjs.c
++++ b/mquickjs.c
+@@ -236,6 +236,8 @@ struct JSContext {
+     JSInterruptHandler *interrupt_handler;
+     JSWriteFunc *write_func; /* for the various dump functions */
+     void *opaque;
++    JSGCCallback *gc_callback; /* called before/after each GC cycle, or NULL */
++    void *gc_opaque;
+     JSValue *class_obj; /* same as class_proto + class_count */
+     JSStringPosCacheEntry string_pos_cache[JS_STRING_POS_CACHE_SIZE];
+                                            
+@@ -12523,7 +12525,38 @@ static void JS_GC2(JSContext *ctx, BOOL keep_atoms)
+ 
+ void JS_GC(JSContext *ctx)
+ {
++    if (ctx->gc_callback)
++        ctx->gc_callback(ctx, 0, ctx->gc_opaque);
+     JS_GC2(ctx, TRUE);
++    if (ctx->gc_callback)
++        ctx->gc_callback(ctx, 1, ctx->gc_opaque);
++}
++
++void JS_SetGCCallback(JSContext *ctx, JSGCCallback *callback, void *opaque)
++{
++    if (!ctx)
++        return;
++    ctx->gc_callback = callback;
++    ctx->gc_opaque = opaque;
++}
++
++size_t JS_GetGCRootCount(JSContext *ctx)
++{
++    JSGCRef *ref;
++    size_t count = 0;
++
++    if (!ctx)
++        return 0;
++
++    /* Walk the push/pop stack (top_gc_ref) */
++    for (ref = ctx->top_gc_ref; ref != NULL; ref = ref->prev)
++        count++;
++
++    /* Walk the add/delete list (last_gc_ref) */
++    for (ref = ctx->last_gc_ref; ref != NULL; ref = ref->prev)
++        count++;
++
++    return count;
+ }
+ 
+ /* bytecode saving and loading */
+diff --git a/mquickjs.h b/mquickjs.h
+index db8f649..9bef038 100644
+--- a/mquickjs.h
++++ b/mquickjs.h
+@@ -303,6 +303,19 @@ JSValue JS_Run(JSContext *ctx, JSValue val);
+ JSValue JS_Eval(JSContext *ctx, const char *input, size_t input_len,
+                 const char *filename, int eval_flags);
+ void JS_GC(JSContext *ctx);
++
++/* GC callback: fired immediately before (is_end == 0) and after
++ * (is_end == 1) every GC cycle, including allocator-triggered
++ * cycles.  Pass NULL callback to clear.
++ *
++ * JS_GetGCRootCount returns the total number of live GC roots
++ * registered via JS_PushGCRef (push/pop stack) or JS_AddGCRef
++ * (add/delete list).  Useful as a leak-detection gauge.
++ */
++typedef void JSGCCallback(JSContext *ctx, int is_end, void *opaque);
++void JS_SetGCCallback(JSContext *ctx, JSGCCallback *callback, void *opaque);
++size_t JS_GetGCRootCount(JSContext *ctx);
++
+ JSValue JS_NewStringLen(JSContext *ctx, const char *buf, size_t buf_len);
+ JSValue JS_NewString(JSContext *ctx, const char *buf);
+ const char *JS_ToCStringLen(JSContext *ctx, size_t *plen, JSValue val, JSCStringBuf *buf);
+
+-- 
+2.51.0
