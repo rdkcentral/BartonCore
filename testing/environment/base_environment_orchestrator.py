@@ -59,6 +59,7 @@ gi.require_version("BCore", major_version + ".0")
 from gi.repository import BCore
 
 from testing.credentials import network_credentials_provider
+from testing.utils import timeouts
 
 class BaseEnvironmentOrchestrator(ABC):
     """
@@ -197,10 +198,16 @@ class BaseEnvironmentOrchestrator(ABC):
                 self._ready_to_commission = True
                 self._ready_for_devices_condition.notify_all()
 
-    def wait_for_client_to_be_ready(self, timeout=5):
+    def wait_for_client_to_be_ready(self, timeout=None):
         """
         Waits for the Barton client to be ready before proceeding with the test.
+
+        When timeout is None the runtime-configurable default is used
+        (timeouts.client_ready; see testing/utils/timeouts.py).
         """
+        if timeout is None:
+            timeout = timeouts.client_ready
+
         with self._ready_for_devices_condition:
             if not self._ready_to_commission:
                 self._ready_for_devices_condition.wait(timeout=timeout)
@@ -222,17 +229,22 @@ class BaseEnvironmentOrchestrator(ABC):
             self._commissioned_device = True
             self._device_added_condition.notify_all()
 
-    def wait_for_device_added(self, timeout=5):
+    def wait_for_device_added(self, timeout=None):
         """
         Waits for a device to be added and commissioned within a specified timeout.
 
         Args:
             timeout (int, optional): The maximum time to wait for the device to be
-                commissioned, in seconds. Defaults to 5.
+                commissioned, in seconds. When None the runtime-configurable
+                default is used (timeouts.device_added; see
+                testing/utils/timeouts.py).
         Raises:
             AssertionError: If the device is not commissioned within the specified
             timeout.
         """
+        if timeout is None:
+            timeout = timeouts.device_added
+
         with self._device_added_condition:
             if not self._commissioned_device:
                 self._device_added_condition.wait(timeout=timeout)

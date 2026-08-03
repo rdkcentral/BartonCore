@@ -47,12 +47,42 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
+
+# Runtime-configurable wait timeouts (seconds). Defaults are tuned for serial
+# runs; parallel runs raise them (see testing/py_test.sh --parallel) to tolerate
+# concurrent-commissioning load. Resolved into testing/utils/timeouts.py in
+# pytest_configure and forwarded to each per-test subprocess (see
+# _run_in_subprocess) so the child that actually runs the test sees them.
+_TIMEOUT_OPTIONS = (
+    ("--client-ready-timeout", "client_ready", 5, "wait for the Barton client to be ready"),
+    ("--device-added-timeout", "device_added", 5, "wait for a device to be commissioned/added"),
+    ("--resource-value-timeout", "resource_value", 30, "wait for an expected resource value"),
+)
+
+
+def pytest_addoption(parser):
+    group = parser.getgroup("barton", "Barton integration test timeouts")
+    for flag, dest, default, desc in _TIMEOUT_OPTIONS:
+        group.addoption(
+            flag,
+            dest=dest,
+            type=int,
+            default=default,
+            help=f"Seconds to {desc} (default: {default}).",
+        )
+
+
 def pytest_configure(config):
-    """Register custom markers."""
+    """Register custom markers and resolve the configurable wait timeouts."""
     config.addinivalue_line(
         "markers",
         "requires_matterjs: skip test when Node.js or matter.js is not available",
     )
+
+    from testing.utils import timeouts
+
+    for _flag, dest, _default, _desc in _TIMEOUT_OPTIONS:
+        setattr(timeouts, dest, config.getoption(dest))
 
 
 # The following list of plugins are automatically loaded by pytest when running tests.
@@ -249,6 +279,12 @@ def _run_in_subprocess(item):
             "--no-header",
             "-q",
             f"--junit-xml={junit_path}",
+            # Forward the resolved wait timeouts so the child running the test
+            # sees the same values as this (possibly parallel) outer session.
+            *(
+                f"{flag}={item.config.getoption(dest)}"
+                for flag, dest, _default, _desc in _TIMEOUT_OPTIONS
+            ),
             child_nodeid,
         ]
 

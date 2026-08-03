@@ -140,7 +140,15 @@ if [[ -n "$PARALLEL_WORKERS" ]]; then
     # Use xdist's loadgroup distribution so tests sharing an xdist_group (e.g. the
     # zhal mock tests that bind fixed IPC ports 18443/8711) stay on one worker and
     # never collide.
-    PARALLEL_ARGS=(-n "$PARALLEL_WORKERS" --dist loadgroup)
+    #
+    # Raise the commissioning wait timeouts: under concurrent load the crypto-heavy
+    # CASE/commissioning phase legitimately takes longer than the (fast-failure)
+    # serial defaults, so give it headroom. These override testing/conftest.py's
+    # defaults and are forwarded into each per-test subprocess.
+    PARALLEL_ARGS=(
+        -n "$PARALLEL_WORKERS" --dist loadgroup
+        --client-ready-timeout=30 --device-added-timeout=30 --resource-value-timeout=30
+    )
 fi
 
 # Determine the correct ASAN runtime to preload based on the compiler that
