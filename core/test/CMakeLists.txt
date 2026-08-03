@@ -368,7 +368,9 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
-        LIBS mquickjs gmock BartonCommon::xhLog cjson
+                ${SBMD_METRICS_SRC}
+                ${SBMD_OBS_NOOP_SRC}
+        LIBS mquickjs gmock BartonCommon::xhLog BartonCommon::xhConcurrent cjson
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
     )
