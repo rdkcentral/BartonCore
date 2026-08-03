@@ -63,9 +63,10 @@
 //   3. Follow entryPoint to the protocol-specific endpoint
 //      (e.g., /<id>/ep/webrtc/r/localSdp). Any negotiation details live on that
 //      endpoint, not in the abstract stream result; for WebRTC the client reads
-//      r/negotiationRole to learn whether it is the 'offerer' (create the SDP
-//      offer) or 'answerer' (answer the camera's offer). The backing Matter flow
-//      (ProvideOffer vs SolicitOffer) is hidden from the client.
+//      r/negotiationRole to learn the CAMERA's role — 'offerer' when the camera
+//      creates the SDP offer, 'answerer' when it answers — then adopts the opposite
+//      role. The backing Matter flow (SolicitOffer vs ProvideOffer) is hidden from
+//      the client.
 //   4. Complete protocol-specific exchange (SDP, ICE, media URL, etc.) and
 //      subscribe to the protocol endpoint's event resources
 //   5. Execute destroySession with sessionId when finished
@@ -147,11 +148,12 @@ SbmdDriver({
         // instead of hardcoding, so the driver stays correct if the requestor endpoint changes.
         WEBRTC_REQUESTOR_ENDPOINT_ID: 1,
 
-        // Negotiation role conveyed to the client in the stream() result. The client uses it to
-        // drive its WebRTC peer; the Matter command mapping (ProvideOffer vs SolicitOffer +
-        // ProvideAnswer) stays entirely inside this driver.
-        //   'offerer'  — client creates the SDP offer      (ProvideOffer flow)
-        //   'answerer' — client answers the camera's offer (SolicitOffer flow)
+        // Negotiation role reported to the client on ep/webrtc r/negotiationRole. Because that
+        // endpoint is the camera's data model, the value is the CAMERA's role; the client adopts
+        // the opposite. The Matter command mapping (SolicitOffer vs ProvideOffer + ProvideAnswer)
+        // stays entirely inside this driver.
+        //   'offerer'  — camera creates the SDP offer      (SolicitOffer flow; the client answers)
+        //   'answerer' — camera answers the client's offer (ProvideOffer flow; the client offers)
         ROLE_OFFERER: 'offerer',
         ROLE_ANSWERER: 'answerer',
 
@@ -378,11 +380,11 @@ function executeCreateSession(args) {
         .success(sessionId);
 }
 
-function pickNegotiationRole(args) {
-    // Choose the WebRTC signaling flow from the camera's advertised capabilities. Prefer
-    // SolicitOffer (camera generates the offer, client answers) since real cameras favor it; use
-    // ProvideOffer (client offers) only when SolicitOffer is not accepted. Default to SolicitOffer
-    // when the AcceptedCommandList is unavailable.
+function cameraIsOfferer(args) {
+    // Determine, from the camera's advertised capabilities, whether the CAMERA generates the SDP
+    // offer (the SolicitOffer flow) or answers the client's offer (the ProvideOffer flow). Prefer
+    // SolicitOffer (real cameras favor it); fall back to ProvideOffer only when SolicitOffer is not
+    // accepted; default to SolicitOffer when the AcceptedCommandList is unavailable.
     var raw =
         args.supplements && args.supplements.attributes
             ? args.supplements.attributes.providerAcceptedCommands
@@ -401,24 +403,25 @@ function pickNegotiationRole(args) {
         }
     }
 
-    var role = ROLE_ANSWERER;
-
-    if (Array.isArray(accepted)) {
-        if (accepted.indexOf(CMD_SOLICIT_OFFER) !== -1) {
-            role = ROLE_ANSWERER;
-        } else if (accepted.indexOf(CMD_PROVIDE_OFFER) !== -1) {
-            role = ROLE_OFFERER;
-        }
+    if (
+        Array.isArray(accepted) &&
+        accepted.indexOf(CMD_SOLICIT_OFFER) === -1 &&
+        accepted.indexOf(CMD_PROVIDE_OFFER) !== -1
+    ) {
+        // The camera accepts only ProvideOffer: it answers and the client offers.
+        return false;
     }
 
-    return role;
+    // SolicitOffer accepted, or the list is unavailable: the camera generates the offer.
+    return true;
 }
 
 function readNegotiationRole(args) {
-    // Expose the WebRTC negotiation role ('offerer' | 'answerer') to the client. It is derived from
-    // the camera's advertised WebRTCTransportProvider commands, so it lives here on the webrtc
-    // endpoint rather than in the abstract stream result.
-    return Sbmd.result().success(pickNegotiationRole(args));
+    // Report the CAMERA's WebRTC negotiation role, because ep/webrtc is the camera's data model. The
+    // camera is the 'offerer' when it generates the SDP offer (SolicitOffer flow) and the 'answerer'
+    // when it answers the client's offer (ProvideOffer flow); the client adopts the opposite role.
+    // The role lives here on the webrtc endpoint rather than in the abstract stream result.
+    return Sbmd.result().success(cameraIsOfferer(args) ? ROLE_OFFERER : ROLE_ANSWERER);
 }
 
 function executeStream(args) {
@@ -545,14 +548,13 @@ function executeLocalSdp(args) {
 
     var input = args.resource.input;
     var sdp = input ? input.toString() : '';
-    var role = pickNegotiationRole(args);
 
-    if (role === ROLE_ANSWERER) {
-        // SolicitOffer flow. Route by how far negotiation has progressed rather than by the SDP
-        // payload: until the camera has offered there is no webRTCSessionID, so this call opens the
-        // flow (allocate a stream, then SolicitOffer in handleAllocateForSolicit). Once the camera's
-        // offer has arrived (webRTCSessionID recorded, remoteSdp emitted) the next call carries our
-        // answer, which we relay via ProvideAnswer.
+    if (cameraIsOfferer(args)) {
+        // SolicitOffer flow (the camera generates the offer). Route by how far negotiation has
+        // progressed rather than by the SDP payload: until the camera has offered there is no
+        // webRTCSessionID, so this call opens the flow (allocate a stream, then SolicitOffer in
+        // handleAllocateForSolicit). Once the camera's offer has arrived (webRTCSessionID recorded,
+        // remoteSdp emitted) the next call carries our answer, which we relay via ProvideAnswer.
         var haveCameraSession =
             sessions[sessionId].webRTCSessionID !== undefined &&
             sessions[sessionId].webRTCSessionID !== null;
@@ -564,7 +566,8 @@ function executeLocalSdp(args) {
         return sendProvideAnswer(sessions, sessionId, sdp);
     }
 
-    // ProvideOffer flow: this local SDP is our offer — allocate a stream, then send it directly.
+    // ProvideOffer flow (the camera answers): this local SDP is our offer — allocate a stream, then
+    // send it directly.
     if (sdp === '') {
         return Sbmd.result().error('SDP string required');
     }

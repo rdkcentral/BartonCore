@@ -28,7 +28,9 @@
  * the actual handler functions — no inline copies that can drift.
  *
  * Tests cover:
- *   - executeLocalSdp (offerer flow): TLV encoding (null webRTCSessionID, correct tags), error paths
+ *   - readNegotiationRole: reports the CAMERA's role (offerer/answerer) from the AcceptedCommandList
+ *   - executeLocalSdp (client-offers / ProvideOffer flow): TLV encoding (null webRTCSessionID, correct tags), error
+ * paths
  *   - executeLocalIceCandidates: valid JSON array → sendCommand, invalid JSON → error
  *   - handleIncomingOffer / handleIncomingAnswer / handleIncomingIceCandidates / handleIncomingEndSession
  *   - executeDestroySession with streaming session: sends EndSession command
@@ -70,10 +72,16 @@ namespace
     constexpr uint32_t CMD_END = 0x03;
 
     // providerAcceptedCommands (AcceptedCommandList) as base64 TLV: a top-level TLV array of
-    // command IDs advertising ProvideOffer (0x02) but NOT SolicitOffer (0x00), so
-    // pickNegotiationRole selects the offerer (client-offers / ProvideOffer) flow.
+    // command IDs advertising ProvideOffer (0x02) but NOT SolicitOffer (0x00). The camera answers
+    // the client's offer (ProvideOffer flow), so cameraIsOfferer() is false — the camera's role is
+    // 'answerer' and the client drives the offer.
     // TLV bytes: 0x16(array) 0x04(uint8) 0x02 0x18(end).
     constexpr const char *OFFERER_ACCEPTED_CMDS = "FgQCGA==";
+
+    // Same shape advertising SolicitOffer (0x00) but NOT ProvideOffer, so the camera generates the
+    // offer (SolicitOffer flow), cameraIsOfferer() is true, and the camera's role is 'offerer'.
+    // TLV bytes: 0x16(array) 0x04(uint8) 0x00 0x18(end).
+    constexpr const char *SOLICIT_ACCEPTED_CMDS = "FgQAGA==";
 
     // ========================================================================
     // Test Fixture — loads the real camera.sbmd.js via SbmdDriver
@@ -280,6 +288,68 @@ namespace
         }
 
         /**
+         * Build and invoke a resource READ handler (e.g. negotiationRole) with the camera's
+         * advertised AcceptedCommandList supplied as the providerAcceptedCommands supplement.
+         */
+        std::optional<ParsedResult> InvokeReadHandler(const std::string &endpointId,
+                                                      const std::string &resourceId,
+                                                      const std::string &acceptedCmdsBase64)
+        {
+            auto hctx = MakeContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+            const SbmdHandler *readHandler = nullptr;
+            const auto &reg = s_driver->GetRegistration();
+
+            for (const auto &ep : reg.endpoints)
+            {
+                if (ep.id != endpointId)
+                {
+                    continue;
+                }
+
+                for (const auto &r : ep.resources)
+                {
+                    if (r.id == resourceId && r.read.has_value())
+                    {
+                        readHandler = &r.read.value();
+                    }
+                }
+            }
+
+            if (readHandler == nullptr)
+            {
+                ADD_FAILURE() << "No read handler for " << endpointId << "/" << resourceId;
+                return std::nullopt;
+            }
+
+            // Root the handler (see InvokeExecuteHandler): the arg/supplement building below
+            // allocates and can relocate an unrooted function object under mquickjs's moving GC.
+            SafeJSValue handler(Ctx(), readHandler->Fn());
+            SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, resourceId, "");
+
+            SbmdSupplements supplements = readHandler->supplements;
+
+            auto fetched = SbmdHandlerInvoker::PrefetchSupplements(
+                supplements,
+                [&](const std::string &aliasName) -> std::optional<std::string> {
+                    if (aliasName == "providerAcceptedCommands" && !acceptedCmdsBase64.empty())
+                    {
+                        return acceptedCmdsBase64;
+                    }
+
+                    return std::nullopt;
+                },
+                [](const std::string &) { return std::nullopt; },
+                [](const std::string &) { return std::nullopt; },
+                [](const std::string &) { return std::nullopt; });
+
+            SbmdHandlerInvoker::AddSupplements(Ctx(), args, supplements, fetched);
+
+            return SbmdHandlerInvoker::InvokeHandler(Ctx(), handler.Get(), args);
+        }
+
+        /**
          * Build and invoke a command handler from the loaded driver by handler name.
          */
         std::optional<ParsedResult> InvokeCommandHandler(const std::string &handlerName,
@@ -357,6 +427,28 @@ namespace
     };
 
     std::unique_ptr<SbmdDriver> SbmdCameraWebrtcTest::s_driver;
+
+    // ========================================================================
+    // readNegotiationRole — reports the CAMERA's role
+    // ========================================================================
+
+    TEST_F(SbmdCameraWebrtcTest, NegotiationRoleReportsCameraRole)
+    {
+        // SolicitOffer accepted: the camera generates the offer, so its role is 'offerer'.
+        auto solicit = InvokeReadHandler("webrtc", "negotiationRole", SOLICIT_ACCEPTED_CMDS);
+        ExpectSuccess(solicit);
+        EXPECT_EQ(std::get<ResultTerminal::Success>(solicit->terminal.data).value, "offerer");
+
+        // ProvideOffer only: the camera answers the client's offer, so its role is 'answerer'.
+        auto provide = InvokeReadHandler("webrtc", "negotiationRole", OFFERER_ACCEPTED_CMDS);
+        ExpectSuccess(provide);
+        EXPECT_EQ(std::get<ResultTerminal::Success>(provide->terminal.data).value, "answerer");
+
+        // AcceptedCommandList unavailable: default SolicitOffer flow, camera's role is 'offerer'.
+        auto def = InvokeReadHandler("webrtc", "negotiationRole", "");
+        ExpectSuccess(def);
+        EXPECT_EQ(std::get<ResultTerminal::Success>(def->terminal.data).value, "offerer");
+    }
 
     // ========================================================================
     // 5.1 — executeOfferSdp
