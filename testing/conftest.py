@@ -55,26 +55,6 @@ def pytest_configure(config):
     )
 
 
-def pytest_sessionfinish(session, exitstatus):
-    """Sweep the shared, compile-time Matter config dir once, after everything.
-
-    The Matter SDK's PosixConfig ini files always live at the compile-time
-    CHIP_BARTON_CONF_DIR (~/.brtn-ds/matter) and cannot be redirected at runtime,
-    so every test process shares that one directory. Remove it only from the
-    outer, top-level session -- not the per-test subprocess runs, and not the
-    xdist workers -- so it is never deleted while another concurrent test is
-    still using it. Per-process KVS/dynamic storage lives on tmpfs and is cleaned
-    up by each process itself (see base_environment_orchestrator.py).
-    """
-    if os.environ.get(_SUBPROCESS_MARKER_ENV):
-        return  # inner per-test run
-
-    if hasattr(session.config, "workerinput"):
-        return  # xdist worker; the controller sweeps after all workers finish
-
-    shutil.rmtree(os.path.join(os.path.expanduser("~"), ".brtn-ds"), ignore_errors=True)
-
-
 # The following list of plugins are automatically loaded by pytest when running tests.
 # Any fixtures defined within these modules are automatically available to all test modules.
 pytest_plugins = [

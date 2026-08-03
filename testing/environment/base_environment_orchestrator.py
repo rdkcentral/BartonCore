@@ -114,8 +114,8 @@ class BaseEnvironmentOrchestrator(ABC):
         # NOTE: the Matter SDK's PosixConfig ini files (chip_factory.ini,
         # chip_config.ini, chip_counters.ini) still live at the compile-time
         # CHIP_BARTON_CONF_DIR (~/.brtn-ds/matter) and are not isolated by this;
-        # only the KVS honors this runtime path. That shared dir is swept once at
-        # session end (see testing/conftest.py::pytest_sessionfinish).
+        # only the KVS honors this runtime path. That shared dir is left in place
+        # (it may also be used by reference-app runs) and is simply reused.
         self._storage_tmpdir = tempfile.TemporaryDirectory(
             prefix="brtn-ds-", ignore_cleanup_errors=True
         )
@@ -197,7 +197,7 @@ class BaseEnvironmentOrchestrator(ABC):
                 self._ready_to_commission = True
                 self._ready_for_devices_condition.notify_all()
 
-    def wait_for_client_to_be_ready(self, timeout=30):
+    def wait_for_client_to_be_ready(self, timeout=5):
         """
         Waits for the Barton client to be ready before proceeding with the test.
         """
@@ -222,7 +222,7 @@ class BaseEnvironmentOrchestrator(ABC):
             self._commissioned_device = True
             self._device_added_condition.notify_all()
 
-    def wait_for_device_added(self, timeout=30):
+    def wait_for_device_added(self, timeout=5):
         """
         Waits for a device to be added and commissioned within a specified timeout.
 
