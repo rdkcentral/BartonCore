@@ -282,20 +282,21 @@ def _run_in_subprocess(item):
             )
 
         if outcome in ("failed", "unknown") or result.returncode != 0:
-            output = result.stdout + result.stderr
-            lines = output.strip().splitlines()
+            output = (result.stdout + result.stderr).strip()
+            excerpt = output or "<no output captured from child pytest process>"
 
-            if not lines:
-                excerpt = "<no output captured from child pytest process>"
-            else:
-                excerpt = "\n".join(lines)
-
+            # Wrap the captured child output in clear, greppable banners naming
+            # the test. Under --parallel (pytest-xdist) several failing tests'
+            # logs are reported together, so unambiguous per-test separators keep
+            # the dump parseable (grep for "BARTON TEST OUTPUT").
             raise AssertionError(
                 "Subprocess test failed\n"
                 f"exit code: {result.returncode}\n"
                 f"cwd: {item.config.rootpath}\n"
                 f"command: {' '.join(cmd)}\n\n"
-                f"Captured output:\n{excerpt}"
+                f"===== BARTON TEST OUTPUT BEGIN [{child_nodeid}] =====\n"
+                f"{excerpt}\n"
+                f"===== BARTON TEST OUTPUT END [{child_nodeid}] ====="
             )
     finally:
         try:
