@@ -81,7 +81,7 @@ USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-docker compose ${COMPOSE_FILES} run \
+docker compose "${COMPOSE_FILES[@]}" run \
     --rm \
     --name ${CONTAINER_NAME} \
     ${COMPOSE_INTERACTIVE_FLAGS} \
