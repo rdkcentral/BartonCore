@@ -543,6 +543,17 @@ static bool runCameraStream(BCoreClient *client,
     // we answer it; when the camera is the 'answerer' (ProvideOffer flow) we create the offer. Must
     // be set before the peer starts negotiating.
     const gchar *role = cameraDeviceSessionGetRole(session);
+
+    // The role read can fail (NULL) or return an unexpected value; bail out with a clear error
+    // rather than silently defaulting to a role that could drive the wrong signaling flow.
+    if (g_strcmp0(role, "offerer") != 0 && g_strcmp0(role, "answerer") != 0)
+    {
+        emitError("[camera-stream] could not determine the camera's negotiation role (got '%s')\n",
+                  role != NULL ? role : "(null)");
+
+        return false;
+    }
+
     gboolean answerer = (g_strcmp0(role, "offerer") == 0);
     cameraWebrtcClientSetAnswerer(webrtc, answerer);
 
