@@ -69,6 +69,7 @@ class MatterDevice(BaseDevice):
     _vendor_id: int
     _product_id: int
     _commissioning_code: str
+    _qr_code: str
     _process: subprocess.Popen
     _sideband: SidebandClient | None
 
@@ -86,6 +87,7 @@ class MatterDevice(BaseDevice):
         self._passcode = self._set_passcode()
         self._discriminator = self._set_discriminator()
         self._commissioning_code = self._set_commissioning_code()
+        self._qr_code = self._set_qr_code()
         self._process = None
         self._sideband = None
 
@@ -115,11 +117,32 @@ class MatterDevice(BaseDevice):
             discriminator=self._discriminator, passcode=self._passcode
         )
 
+    def _set_qr_code(self) -> str:
+        """
+        Generates and sets the QR code setup payload for the device.
+
+        The QR payload carries the full 12-bit discriminator, so a commissioner
+        matches this exact device rather than any device that shares the same
+        4-bit short discriminator carried by the manual pairing code.
+        """
+        return code_generators.generate_qr_code(
+            discriminator=self._discriminator,
+            passcode=self._passcode,
+            vendor_id=self._vendor_id,
+            product_id=self._product_id,
+        )
+
     def get_commissioning_code(self) -> str:
         """
         Returns the current commissioning code for the device.
         """
         return self._commissioning_code
+
+    def get_qr_code(self) -> str:
+        """
+        Returns the QR code setup payload for the device.
+        """
+        return self._qr_code
 
     @property
     def sideband(self) -> SidebandClient:

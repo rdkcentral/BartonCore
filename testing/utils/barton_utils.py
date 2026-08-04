@@ -34,8 +34,14 @@ def commission_device(environment, device, device_class):
 
     Commissions the device via the environment's client, waits for the
     device-added event, then returns the last device of the given class.
+
+    Uses the QR code setup payload (full 12-bit discriminator) so the
+    commissioner matches this exact device. The manual pairing code carries
+    only a 4-bit short discriminator, which collides across devices when many
+    are advertising concurrently and can cause the commissioner to match the
+    wrong device.
     """
-    environment.get_client().commission_device(device.get_commissioning_code(), 100)
+    environment.get_client().commission_device(device.get_qr_code(), 100)
     environment.wait_for_device_added()
     devices = environment.get_client().get_devices_by_device_class(device_class)
     assert len(devices) >= 1, f"Expected at least 1 '{device_class}' device, found 0"

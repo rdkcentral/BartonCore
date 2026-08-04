@@ -28,6 +28,92 @@
 import random
 from stdnum.verhoeff import calc_check_digit
 
+# Base38 alphabet used by the Matter QR code payload encoding (section 5.1.3.1
+# of the Matter Core Specification).
+_BASE38_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-."
+
+# Discovery capability bitmask values (section 5.1.3.1, "Discovery Capabilities
+# Bitmask"). kOnNetwork (bit 2) indicates the device is discoverable over
+# DNS-SD on the operational/commissionable IP network.
+DISCOVERY_CAPABILITY_ON_NETWORK = 0b100
+
+
+def _base38_encode(data: bytes) -> str:
+    """
+    Encodes a byte string using the Matter Base38 scheme (section 5.1.3.1 of
+    the Matter Core Specification). Bytes are consumed in groups of 3 (emitting
+    5 characters), 2 (4 characters), or 1 (2 characters), each group written
+    least-significant character first.
+    """
+    result = []
+    i = 0
+    n = len(data)
+
+    while i < n:
+        remaining = n - i
+
+        if remaining >= 3:
+            value = data[i] | (data[i + 1] << 8) | (data[i + 2] << 16)
+            chars = 5
+            i += 3
+        elif remaining == 2:
+            value = data[i] | (data[i + 1] << 8)
+            chars = 4
+            i += 2
+        else:
+            value = data[i]
+            chars = 2
+            i += 1
+
+        for _ in range(chars):
+            result.append(_BASE38_CHARS[value % 38])
+            value //= 38
+
+    return "".join(result)
+
+
+def generate_qr_code(
+    discriminator: int,
+    passcode: int,
+    vendor_id: int = 0,
+    product_id: int = 0,
+    discovery_capabilities: int = DISCOVERY_CAPABILITY_ON_NETWORK,
+    commissioning_flow: int = 0,
+    version: int = 0,
+) -> str:
+    """
+    Generates a Matter QR code setup payload ("MT:..." string) according to
+    section 5.1.3 of the Matter Core Specification.
+
+    Unlike the manual pairing code, the QR payload carries the full 12-bit
+    discriminator. A commissioner therefore matches the exact device rather
+    than any device that happens to share the same 4-bit short discriminator,
+    which is essential when many devices advertise concurrently.
+    """
+    # Fields are packed least-significant-bit first, in payload order (section
+    # 5.1.3.1, Table 38). Total width is 88 bits (11 bytes) including padding.
+    fields = [
+        (version, 3),
+        (vendor_id, 16),
+        (product_id, 16),
+        (commissioning_flow, 2),
+        (discovery_capabilities, 8),
+        (discriminator, 12),
+        (passcode, 27),
+        (0, 4),  # padding
+    ]
+
+    bit_buffer = 0
+    bit_count = 0
+
+    for value, length in fields:
+        bit_buffer |= (value & ((1 << length) - 1)) << bit_count
+        bit_count += length
+
+    data = bit_buffer.to_bytes((bit_count + 7) // 8, byteorder="little")
+
+    return "MT:" + _base38_encode(data)
+
 
 def generate_manual_pairing_code(
     discriminator: int,
