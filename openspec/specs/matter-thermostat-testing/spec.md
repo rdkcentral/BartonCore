@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Matter Thermostat Testing
+
+## Purpose
+
+Specifies the matter.js virtual thermostat devices (with and without fan control) and the Python integration tests covering commissioning, setpoint and system-mode read/write, side-band temperature changes, and fan resources.
+
+## Requirements
 
 ### Requirement: matter.js virtual thermostat device
 A matter.js virtual thermostat device (`ThermostatDevice.js`) SHALL be created extending `VirtualDevice` with:

@@ -34,3 +34,12 @@ MY_DIR=$(realpath "$(dirname "$0")")
 
 # JavaScript: Prettier formats staged *.js files via lint-staged.
 "${MY_DIR}/pre-commit-lint-staged"
+
+# OpenSpec: enforce that every spec conforms to the v4 structure. The dev
+# container provides the pinned openspec CLI; when it is absent (commits made
+# outside the container), skip and rely on the CI gate.
+if command -v openspec >/dev/null 2>&1; then
+    openspec validate --specs --strict --no-interactive
+else
+    echo "pre-commit: openspec not found on PATH; skipping spec validation (CI will enforce)." >&2
+fi

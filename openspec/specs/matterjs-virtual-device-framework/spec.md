@@ -1,4 +1,10 @@
-## ADDED Requirements
+# matter.js Virtual Device Framework
+
+## Purpose
+
+Specifies the matter.js virtual device framework used for integration testing: the base class, the side-band HTTP server and operation registration, the stdout ready signal, graceful shutdown, and package configuration.
+
+## Requirements
 
 ### Requirement: Virtual device base class initialization
 The matter.js virtual device base class (`VirtualDevice`) SHALL initialize a Matter `ServerNode` with configurable vendor ID, product ID, device name, passcode, discriminator, and port. The class SHALL handle all common Matter device setup so that subclasses only need to define their device type and side-band operations.
