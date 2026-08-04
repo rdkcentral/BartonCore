@@ -44,6 +44,7 @@
 extern "C" {
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProperties.h"
+#include "deviceServiceProps.h"
 #include "icUtil/fileUtils.h"
 #include "provider/barton-core-property-provider.h"
 #include "provider/barton-core-token-provider.h"
@@ -110,7 +111,6 @@ extern "C" {
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
 
 #define BLE_CONTROLLER_ADAPTER_ID_DEFAULT       0
-#define BLE_CONTROLLER_ADAPTER_ID_ENV           "BARTON_BLE_ADAPTER_ID"
 #define BLE_CONTROLLER_ADAPTER_ID_FILE          "/var/run/otbr-dbus/ble_adapter_id"
 #define BLE_CONTROLLER_DEVICE_NAME              BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
@@ -363,26 +363,31 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
 uint32_t Matter::ResolveBleAdapterId()
 {
     uint32_t adapterId = BLE_CONTROLLER_ADAPTER_ID_DEFAULT;
-    const char *env = getenv(BLE_CONTROLLER_ADAPTER_ID_ENV);
 
-    if (env != nullptr)
+    // 1. Check the runtime property (set by the reference app from env/CLI)
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autofree gchar *propVal =
+        b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_BLE_ADAPTER_ID, NULL);
+
+    if (propVal != nullptr)
     {
         char *endPtr = nullptr;
-        unsigned long val = strtoul(env, &endPtr, 10);
+        unsigned long val = strtoul(propVal, &endPtr, 10);
 
-        if (endPtr != env && *endPtr == '\0')
+        if (endPtr != propVal && *endPtr == '\0')
         {
             adapterId = static_cast<uint32_t>(val);
-            icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_ENV);
+            icInfo("Using BLE adapter hci%u from property %s", adapterId, DEVICE_PROP_MATTER_BLE_ADAPTER_ID);
         }
         else
         {
-            icWarn("Invalid %s value '%s', using default hci%u", BLE_CONTROLLER_ADAPTER_ID_ENV, env, adapterId);
+            icWarn("Invalid %s value '%s', using default hci%u", DEVICE_PROP_MATTER_BLE_ADAPTER_ID, propVal, adapterId);
         }
 
         return adapterId;
     }
 
+    // 2. Fall back to the file written by the otbr-radio entrypoint
     FILE *f = fopen(BLE_CONTROLLER_ADAPTER_ID_FILE, "r");
 
     if (f != nullptr)
