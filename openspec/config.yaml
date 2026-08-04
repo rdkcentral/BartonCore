@@ -82,11 +82,23 @@ context: |
   - C++ naming: PascalCase classes, camelCase methods
   - Test naming: test files prefixed with test or suffixed with Test/test
 
+  ## Spec Organization
+  OpenSpec specs are authored per capability or per device class — never per concrete
+  device driver. A new supported device is added as a `.sbmd.js` driver file under
+  core/deviceDrivers/matter/sbmd/specs/ (governed by the SBMD schema validator,
+  scripts/ci/validate_sbmd_v4_specs.py), not as a new OpenSpec spec. This keeps the
+  spec count bounded by the number of framework capabilities and device classes
+  (~8-15) even as the driver catalog scales to 100+. A new OpenSpec spec is justified
+  only by a new framework capability or a new device class. Specs live in a flat
+  layout (openspec/specs/<id>/spec.md — discovery is one directory deep); group
+  related specs with name prefixes (e.g. sbmd-*, device-class-*), not subdirectories.
+
 rules:
   proposal:
     - Always include a "Non-goals" section to clarify scope boundaries
     - Reference affected layers explicitly (API, core, drivers, subsystems, etc.)
     - Note which CMake feature flags are relevant
+    - Do not introduce a new spec per device driver; new device support is a `.sbmd.js` file, and new specs are justified only by a new framework capability or device class
   design:
     - Include ASCII architecture diagrams showing how changes fit into existing layers
     - Call out thread safety considerations (GLib main loop, Matter event loop, pthread mutexes)
@@ -97,6 +109,7 @@ rules:
     - For Matter features, specify cluster IDs, attribute IDs, and TLV types
     - For SBMD specs, include the complete mapper scripts
     - Define expected GObject signals/events for new functionality
+    - Scope device support by device class (device-class-*), not by concrete driver; the per-driver detail lives in the `.sbmd.js` file and its schema
   tasks:
     - Break tasks into chunks of max 4 hours
     - Separate API changes from implementation changes
