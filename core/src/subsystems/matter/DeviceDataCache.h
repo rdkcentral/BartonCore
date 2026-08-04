@@ -36,6 +36,7 @@
 #include <future>
 #include <json/json.h>
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 
@@ -44,7 +45,8 @@ using namespace barton::Subsystem::Matter;
 namespace barton
 {
 
-    class DeviceDataCache : public chip::app::ClusterStateCache::Callback
+    class DeviceDataCache : public chip::app::ClusterStateCache::Callback,
+                            public std::enable_shared_from_this<DeviceDataCache>
     {
         // Allow test subclass to access private members for cache population in tests
         friend class TestableMatterDevice;
@@ -62,6 +64,15 @@ namespace barton
 
         /**
          * Start the device data cache.
+         *
+         * Queues the device connection on the Matter event loop and returns without waiting for it.
+         * The cache must be owned by a std::shared_ptr; the queued work holds a reference, so the
+         * cache stays alive until that work has run even if the caller gives up and lets go of it.
+         * If nothing else holds the cache by the time the work runs, the connection is skipped. See
+         * ScheduleOnMatterThread() for what happens if the Matter stack stops first.
+         *
+         * Don't call this while the Matter stack is down: the queued work would not run unless the
+         * stack is restarted, and the cache would stay allocated until then.
          */
         std::future<bool> Start();
 
@@ -197,7 +208,12 @@ namespace barton
          * Trigger a full reprocessing of the cache's attribute data as if a full attribute report was
          * received, invoking report and attribute callbacks (events not reprocessed).
          *
-         * @return CHIP_NO_ERROR on success
+         * The reprocessing is queued on the Matter event loop and runs after this returns. The cache
+         * must be owned by a std::shared_ptr; the queued work holds a reference until it has run, and
+         * skips the reprocessing if nothing else holds the cache by then. See ScheduleOnMatterThread()
+         * for what happens if the Matter stack stops first.
+         *
+         * @return CHIP_NO_ERROR if the reprocessing was queued
          */
         CHIP_ERROR RegenerateAttributeReport();
 
@@ -219,6 +235,28 @@ namespace barton
         void OverrideLiveness(uint32_t ms);
 
     private:
+        /**
+         * Queue a member function to run on the Matter event loop. The queued work holds a strong
+         * reference to this cache until it has run. If that is the only reference left when the
+         * work runs, every caller has let go of the cache, so the work is skipped and the cache is
+         * destroyed on the Matter thread.
+         *
+         * If the Matter stack stops before the work runs: Matter::Stop() neither runs nor discards
+         * queued work, and the CHIP event queue is not cleared on stop. If the stack is restarted
+         * in the same process, the work runs then (and is skipped if nothing else holds the cache),
+         * releasing its reference. If the stack is never restarted, the cache is leaked. This is
+         * deliberate: freeing the cache at stop would let the work run on freed memory after a
+         * restart. Posting succeeds even while the stack is stopped, so this applies to any work
+         * queued while the stack is stopping or stopped. Callers should not start a cache while
+         * the stack is down: MatterDeviceDriver::AddDeviceIfRequired() checks for that, and
+         * CommissioningOrchestrator::Pair() fails before Start() because the commissioner is shut
+         * down, which leaves only work that races Matter::Stop().
+         */
+        CHIP_ERROR ScheduleOnMatterThread(void (DeviceDataCache::*work)());
+
+        void ConnectToDevice();
+        void DoRegenerateAttributeReport();
+
         static void OnDeviceConnectedCallback(void *context,
                                               chip::Messaging::ExchangeManager &exchangeMgr,
                                               const chip::SessionHandle &sessionHandle);
