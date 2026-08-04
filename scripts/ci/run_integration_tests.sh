@@ -55,4 +55,7 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" --parallel
+# Pin to 3 workers: CI runners have 4 cores, and 3 workers keeps a core free for
+# the OS/dbus/otbr while avoiding the CASE/PASE starvation seen at 4 (validated
+# ~30% faster than 2 with no flakes). The nproc/2 default would resolve to 2 here.
+"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" --parallel=3

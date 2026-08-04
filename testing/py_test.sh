@@ -76,8 +76,8 @@ function show_help {
     echo "                           to preload. If not specified, auto-detects from"
     echo "                           the system default 'cc'."
     echo "  --parallel[=<workers>]   Run tests in parallel across <workers> pytest-xdist"
-    echo "                           workers. With no value, defaults to min(CPUs/4, 64)"
-    echo "                           -- roughly half the physical cores, since each worker"
+    echo "                           workers. With no value, defaults to min(CPUs/2, 64)"
+    echo "                           -- about one worker per physical core, since each worker"
     echo "                           drives Barton plus a matter.js node process. Tests run"
     echo "                           SERIALLY unless this flag is given, so interactive/"
     echo "                           individual runs keep readable, interleaved logs."
@@ -114,26 +114,28 @@ if [[ -n "$PARALLEL_WORKERS" ]]; then
     if [[ "$PARALLEL_WORKERS" == "default" ]]; then
         # Scale the default worker count with the machine, capped at 64.
         #
-        # History: Matter commissioning discovers each virtual device over the
-        # shared mDNS plane (port 5353). The CHIP commissioner keeps a fixed
-        # cache of discovered commissionable nodes; because every commissioner
-        # sees every device's advertisement, concurrent commissionings used to
-        # overflow that cache ("Insufficient space") and discovery would time
-        # out -- which capped reliable parallelism at ~4. That cache was raised
-        # 10 -> 128 (barton patch 0003), which removes the mDNS ceiling: no
-        # overflow is seen even at 64 workers.
+        # Matter commissioning discovers each virtual device over the shared
+        # mDNS plane (port 5353). The CHIP commissioner keeps a fixed cache of
+        # discovered commissionable nodes; because every commissioner sees every
+        # device's advertisement, concurrent commissionings used to overflow
+        # that cache ("Insufficient space") -- raised 10 -> 128 (barton patch
+        # 0003), so no overflow is seen even at 64 workers.
         #
-        # The remaining limit at very high concurrency is soft and CPU-bound:
-        # each worker drives a multi-threaded Barton plus a matter.js node
-        # process (and ASAN), so it realistically needs ~2 physical cores.
-        # Running one worker per logical CPU oversubscribes and makes crypto-heavy
-        # CASE commissioning time out. nproc counts logical CPUs (hyperthreads),
-        # so use a quarter of it -- roughly half the physical cores -- to leave
-        # headroom on machines of any size. Min 1, capped at 64 (only ~58 tests,
-        # so more never helps).
+        # Each worker drives a multi-threaded Barton plus a matter.js node
+        # process (and ASAN), so it needs roughly a full physical core. nproc
+        # counts logical CPUs (hyperthreads), so use half of it -- about one
+        # worker per physical core -- leaving headroom for the OS and the
+        # per-test subprocesses. Oversubscribing past the physical core count
+        # starves the crypto-heavy CASE/PASE commissioning phase and makes it
+        # time out. Min 1, capped at 64 (only ~62 tests, so more never helps).
+        #
+        # (An earlier ceiling of ~4 workers came from commissioners matching the
+        # wrong device via the 4-bit short discriminator in the manual pairing
+        # code; that is fixed by commissioning with the full-discriminator QR
+        # code, so the limit is now purely CPU headroom.)
         PARALLEL_CAP=64
         CPU_COUNT=$(nproc)
-        PARALLEL_WORKERS=$(( CPU_COUNT / 4 ))
+        PARALLEL_WORKERS=$(( CPU_COUNT / 2 ))
         (( PARALLEL_WORKERS < 1 )) && PARALLEL_WORKERS=1
         (( PARALLEL_WORKERS > PARALLEL_CAP )) && PARALLEL_WORKERS=$PARALLEL_CAP
     fi
