@@ -51,7 +51,7 @@ while getopts ":ne:dH" opt; do
         DEV_VOL="-v /dev:/dev"
         ;;
     H) # use host networking (useful for Matter device access)
-        HOST_NETWORK="--network host"
+        HOST_NETWORK="1"
         ;;
     esac
 done
@@ -62,7 +62,14 @@ DIR=$(pwd)
 # generate the `docker/.env` file and ensure the network/image is created
 $DIR/docker/setupDockerEnv.sh
 
-COMPOSE_FILE="${DIR}/docker/compose.yaml"
+# `docker compose run` has no `--network` flag, so host networking is applied by
+# layering the host-network override compose file (which sets network_mode: host
+# and resets the base network) rather than passing a flag to the run command.
+COMPOSE_FILES="-f ${DIR}/docker/compose.yaml"
+
+if [ -n "$HOST_NETWORK" ]; then
+    COMPOSE_FILES="${COMPOSE_FILES} -f ${DIR}/docker/compose.host-network.yaml"
+fi
 
 EXTRA_VOLUMES="${DEV_VOL}"
 
@@ -74,11 +81,10 @@ USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-docker compose -f "${COMPOSE_FILE}" run \
+docker compose ${COMPOSE_FILES} run \
     --rm \
     --name ${CONTAINER_NAME} \
     ${COMPOSE_INTERACTIVE_FLAGS} \
-    ${HOST_NETWORK} \
     --workdir "${DIR}" \
     ${VOLUMES_ARGS} \
     ${EXTRA_ENV} \
