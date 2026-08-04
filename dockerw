@@ -65,10 +65,10 @@ $DIR/docker/setupDockerEnv.sh
 # `docker compose run` has no `--network` flag, so host networking is applied by
 # layering the host-network override compose file (which sets network_mode: host
 # and resets the base network) rather than passing a flag to the run command.
-COMPOSE_FILES="-f ${DIR}/docker/compose.yaml"
+COMPOSE_FILES=(-f "${DIR}/docker/compose.yaml")
 
 if [ -n "$HOST_NETWORK" ]; then
-    COMPOSE_FILES="${COMPOSE_FILES} -f ${DIR}/docker/compose.host-network.yaml"
+    COMPOSE_FILES+=(-f "${DIR}/docker/compose.host-network.yaml")
 fi
 
 EXTRA_VOLUMES="${DEV_VOL}"
