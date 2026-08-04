@@ -10,7 +10,7 @@ The camera SBMD driver SHALL declare an endpoint with id `"webrtc"` and profile 
 | Resource | Type | Modes | Purpose |
 |----------|------|-------|---------|
 | `localSdp` | `function` | execute | Client posts its local SDP (offer or answer) to drive signaling |
-| `negotiationRole` | `string` | [read] | Reports the negotiation role (`offerer` or `answerer`) the client must adopt |
+| `negotiationRole` | `string` | [read] | Reports the **camera's** negotiation role (`offerer` or `answerer`); the client adopts the opposite role |
 | `remoteSdp` | `string` | [] (events only) | Delivers the camera's remote SDP (offer or answer) to client |
 | `localIceCandidates` | `function` | execute | Client sends local ICE candidates |
 | `remoteIceCandidates` | `string` | [] (events only) | Delivers remote ICE candidates to client |
@@ -25,18 +25,6 @@ The endpoint SHALL be declared within the same `camera.sbmd.js` file as the `ep/
 #### Scenario: Event-only resources are not readable
 - **WHEN** a client attempts to read `remoteSdp`, `remoteIceCandidates`, or `webrtcError`
 - **THEN** the read SHALL fail or return no value (modes list is empty — no read mode)
-
-### Requirement: negotiationRole read reports the client's role
-
-The `negotiationRole` read handler SHALL report whether the client is the `offerer` or the `answerer`, derived from the camera's advertised WebRTCTransportProvider `AcceptedCommandList`. When the camera accepts `SolicitOffer` the role SHALL be `answerer` (the camera generates the offer); otherwise, when the camera accepts `ProvideOffer`, the role SHALL be `offerer`. When the accepted-command list is unavailable, the handler SHALL default to `answerer`. The negotiation role is a WebRTC concept and lives on the `webrtc` endpoint, not in the abstract `stream` result.
-
-#### Scenario: Camera supporting SolicitOffer yields answerer
-- **WHEN** a client reads `negotiationRole` and the camera's `AcceptedCommandList` includes `SolicitOffer`
-- **THEN** the read SHALL return `answerer`
-
-#### Scenario: Camera supporting only ProvideOffer yields offerer
-- **WHEN** a client reads `negotiationRole` and the camera's `AcceptedCommandList` includes `ProvideOffer` but not `SolicitOffer`
-- **THEN** the read SHALL return `offerer`
 
 ### Requirement: localSdp execute drives role-appropriate signaling
 
@@ -169,4 +157,20 @@ The webrtc endpoint resources, constants, and handler functions SHALL be grouped
 #### Scenario: Code organization supports extraction
 - **WHEN** the webrtc endpoint code is reviewed
 - **THEN** all webrtc-specific constants, resources, and handlers SHALL be identifiable as a cohesive group that could be moved to a separate file with only transient data key sharing as the interface
+
+### Requirement: negotiationRole read reports the camera's role
+
+The `negotiationRole` read handler SHALL report the **camera's** WebRTC negotiation role — `offerer` when the camera generates the SDP offer, or `answerer` when the camera answers the client's offer — derived from the camera's advertised WebRTCTransportProvider `AcceptedCommandList`. When the camera accepts `SolicitOffer` the role SHALL be `offerer` (the camera generates the offer); otherwise, when the camera accepts `ProvideOffer`, the role SHALL be `answerer` (the camera answers). When the accepted-command list is unavailable, the handler SHALL default to `offerer` (the SolicitOffer flow). The resource describes the camera because `ep/webrtc` is the camera's data model; the consuming client is responsible for adopting the opposite role. The negotiation role is a WebRTC concept and lives on the `webrtc` endpoint, not in the abstract `stream` result.
+
+#### Scenario: Camera supporting SolicitOffer reports offerer
+- **WHEN** a client reads `negotiationRole` and the camera's `AcceptedCommandList` includes `SolicitOffer`
+- **THEN** the read SHALL return `offerer` (the camera generates the offer and the client answers)
+
+#### Scenario: Camera supporting only ProvideOffer reports answerer
+- **WHEN** a client reads `negotiationRole` and the camera's `AcceptedCommandList` includes `ProvideOffer` but not `SolicitOffer`
+- **THEN** the read SHALL return `answerer` (the camera answers and the client offers)
+
+#### Scenario: Unavailable accepted-command list defaults to offerer
+- **WHEN** a client reads `negotiationRole` and the camera's `AcceptedCommandList` is unavailable
+- **THEN** the read SHALL return `offerer` (the default SolicitOffer flow, in which the camera generates the offer)
 

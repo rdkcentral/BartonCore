@@ -538,11 +538,23 @@ static bool runCameraStream(BCoreClient *client,
         return false;
     }
 
-    // Determine our negotiation role from the driver's stream result. In answerer mode
-    // (SolicitOffer flow) the camera provides the offer and we answer it; otherwise (offerer /
-    // ProvideOffer flow) we create the offer. Must be set before the peer starts negotiating.
+    // Determine our negotiation role by inverting the camera's. negotiationRole reports the
+    // CAMERA's role: when the camera is the 'offerer' (SolicitOffer flow) it provides the offer and
+    // we answer it; when the camera is the 'answerer' (ProvideOffer flow) we create the offer. Must
+    // be set before the peer starts negotiating.
     const gchar *role = cameraDeviceSessionGetRole(session);
-    gboolean answerer = (g_strcmp0(role, "answerer") == 0);
+
+    // The role read can fail (NULL) or return an unexpected value; bail out with a clear error
+    // rather than silently defaulting to a role that could drive the wrong signaling flow.
+    if (g_strcmp0(role, "offerer") != 0 && g_strcmp0(role, "answerer") != 0)
+    {
+        emitError("[camera-stream] could not determine the camera's negotiation role (got '%s')\n",
+                  role != NULL ? role : "(null)");
+
+        return false;
+    }
+
+    gboolean answerer = (g_strcmp0(role, "offerer") == 0);
     cameraWebrtcClientSetAnswerer(webrtc, answerer);
 
     // Step 4: Start client (in offerer mode this triggers negotiation -> creates the SDP offer)

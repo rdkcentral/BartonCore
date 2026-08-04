@@ -41,9 +41,9 @@ struct _CameraDeviceSession
     gchar *sessionId;
     gchar *protocol;   // from the stream execute result
     gchar *entryPoint; // from the stream execute result
-    gchar *role;       // 'offerer' | 'answerer'; populated lazily from
-                       // /ep/webrtc/r/negotiationRole (see cameraDeviceSessionGetRole), not the
-                       // stream execute result
+    gchar *role;       // the CAMERA's negotiation role ('offerer' | 'answerer'); populated lazily
+                       // from /ep/webrtc/r/negotiationRole (see cameraDeviceSessionGetRole), not the
+                       // stream execute result. The client adopts the opposite role.
     gboolean opened;
 };
 
@@ -229,7 +229,8 @@ const gchar *cameraDeviceSessionGetRole(CameraDeviceSession *session)
     g_return_val_if_fail(session != NULL, NULL);
 
     // The negotiation role is a WebRTC concept, so it lives on the webrtc endpoint rather than in
-    // the abstract stream result. Read it lazily on first request and cache it for the session.
+    // the abstract stream result. The resource reports the CAMERA's role (the client adopts the
+    // opposite). Read it lazily on first request and cache it for the session.
     if (session->role == NULL)
     {
         g_autofree gchar *uri = g_strdup_printf("/%s/ep/webrtc/r/negotiationRole", session->deviceId);

@@ -117,12 +117,12 @@ const gchar *cameraDeviceSessionGetProtocol(CameraDeviceSession *session);
 const gchar *cameraDeviceSessionGetEntryPoint(CameraDeviceSession *session);
 
 /**
- * Get the negotiation role for the active protocol ("offerer" or "answerer"), or NULL if
- * unavailable. For WebRTC this is read from the webrtc endpoint's negotiationRole resource on first
- * request and cached. The session owns the string.
+ * Get the CAMERA's negotiation role for the active protocol ("offerer" or "answerer"), or NULL if
+ * unavailable; the client adopts the opposite role. For WebRTC this is read from the webrtc
+ * endpoint's negotiationRole resource on first request and cached. The session owns the string.
  *
  * @param session the session
- * @return the role string, or NULL
+ * @return the role string (the camera's role), or NULL
  */
 const gchar *cameraDeviceSessionGetRole(CameraDeviceSession *session);
 
