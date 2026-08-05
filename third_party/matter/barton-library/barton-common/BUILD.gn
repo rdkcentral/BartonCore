@@ -43,6 +43,7 @@ config("config") {
 chip_data_model("barton-common") {
   zap_file = "barton-library.zap"
   is_server = true
+  external_clusters = [ "WEBRTC_TRANSPORT_REQUESTOR_CLUSTER" ]
 }
 
 source_set("barton-deps") {
