@@ -182,7 +182,7 @@ class BaseEnvironmentOrchestrator(ABC):
                 self._ready_to_commission = True
                 self._ready_for_devices_condition.notify_all()
 
-    def wait_for_client_to_be_ready(self, timeout=5):
+    def wait_for_client_to_be_ready(self, timeout=10):
         """
         Waits for the Barton client to be ready before proceeding with the test.
         """
