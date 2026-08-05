@@ -1977,6 +1977,12 @@ static uint64_t loadLocalEui64(void)
     g_autofree gchar *localEui64String =
         b_core_property_provider_get_property_as_string(propProvider, LOCAL_EUI64_PROP_KEY, NULL);
 
+    if (localEui64String == NULL)
+    {
+        icLogDebug(LOG_TAG, "%s: property \"%s\" not set; no local EUI64 available", __FUNCTION__, LOCAL_EUI64_PROP_KEY);
+        return 0;
+    }
+
     errno = 0;
     gchar *endptr = NULL;
     localEui64 = g_ascii_strtoull(localEui64String, &endptr, 16);
