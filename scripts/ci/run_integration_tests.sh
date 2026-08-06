@@ -55,4 +55,7 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing"
+# Forward any extra arguments (e.g. --parallel=<N>) to the pytest wrapper. The
+# worker count is specified by the caller/CI workflow rather than hard-coded
+# here, because it depends on the runner's core count (GitHub runners have 4).
+"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" "$@"

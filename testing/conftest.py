@@ -47,12 +47,42 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
+
+# Runtime-configurable wait timeouts (seconds). Defaults are tuned for serial
+# runs; parallel runs raise them (see testing/py_test.sh --parallel) to tolerate
+# concurrent-commissioning load. Resolved into testing/utils/timeouts.py in
+# pytest_configure and forwarded to each per-test subprocess (see
+# _run_in_subprocess) so the child that actually runs the test sees them.
+_TIMEOUT_OPTIONS = (
+    ("--client-ready-timeout", "client_ready", 10, "wait for the Barton client to be ready"),
+    ("--device-added-timeout", "device_added", 5, "wait for a device to be commissioned/added"),
+    ("--resource-value-timeout", "resource_value", 30, "wait for an expected resource value"),
+)
+
+
+def pytest_addoption(parser):
+    group = parser.getgroup("barton", "Barton integration test timeouts")
+    for flag, dest, default, desc in _TIMEOUT_OPTIONS:
+        group.addoption(
+            flag,
+            dest=dest,
+            type=int,
+            default=default,
+            help=f"Seconds to {desc} (default: {default}).",
+        )
+
+
 def pytest_configure(config):
-    """Register custom markers."""
+    """Register custom markers and resolve the configurable wait timeouts."""
     config.addinivalue_line(
         "markers",
         "requires_matterjs: skip test when Node.js or matter.js is not available",
     )
+
+    from testing.utils import timeouts
+
+    for _flag, dest, _default, _desc in _TIMEOUT_OPTIONS:
+        setattr(timeouts, dest, config.getoption(dest))
 
 
 # The following list of plugins are automatically loaded by pytest when running tests.
@@ -106,7 +136,17 @@ def _matterjs_available() -> bool:
 _has_matterjs = _matterjs_available()
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
+    # Keep tests that bind the fixed zhal IPC/event ports (18443/8711) on a
+    # single xdist worker so they never run concurrently and collide on those
+    # ports. Requires xdist's loadgroup distribution (testing/py_test.sh
+    # --parallel enables it); harmless when running serially. Runs tryfirst so
+    # the marker is applied before xdist reads xdist_group during collection.
+    for item in items:
+        if "/mocks/test/zhal/" in item.nodeid or "mock_zhal_implementation" in item.fixturenames:
+            item.add_marker(pytest.mark.xdist_group("zhal"))
+
     if _has_matterjs:
         return
 
@@ -223,6 +263,11 @@ def _run_in_subprocess(item):
     junit_fd, junit_path = tempfile.mkstemp(suffix=".xml")
     os.close(junit_fd)
 
+    # xdist's loadgroup scheduling appends "@<group>" to the nodeid (e.g. from an
+    # xdist_group marker). Strip it so the child pytest receives a real,
+    # selectable nodeid. Legitimate nodeids never contain "@".
+    child_nodeid = item.nodeid.split("@", 1)[0]
+
     try:
         cmd = [
             sys.executable,
@@ -234,7 +279,13 @@ def _run_in_subprocess(item):
             "--no-header",
             "-q",
             f"--junit-xml={junit_path}",
-            item.nodeid,
+            # Forward the resolved wait timeouts so the child running the test
+            # sees the same values as this (possibly parallel) outer session.
+            *(
+                f"{flag}={item.config.getoption(dest)}"
+                for flag, dest, _default, _desc in _TIMEOUT_OPTIONS
+            ),
+            child_nodeid,
         ]
 
         # In CI, py_test.sh preloads libasan via LD_PRELOAD so Python/GI tests can
@@ -267,20 +318,21 @@ def _run_in_subprocess(item):
             )
 
         if outcome in ("failed", "unknown") or result.returncode != 0:
-            output = result.stdout + result.stderr
-            lines = output.strip().splitlines()
+            output = (result.stdout + result.stderr).strip()
+            excerpt = output or "<no output captured from child pytest process>"
 
-            if not lines:
-                excerpt = "<no output captured from child pytest process>"
-            else:
-                excerpt = "\n".join(lines)
-
+            # Wrap the captured child output in clear, greppable banners naming
+            # the test. Under --parallel (pytest-xdist) several failing tests'
+            # logs are reported together, so unambiguous per-test separators keep
+            # the dump parseable (grep for "BARTON TEST OUTPUT").
             raise AssertionError(
                 "Subprocess test failed\n"
                 f"exit code: {result.returncode}\n"
                 f"cwd: {item.config.rootpath}\n"
                 f"command: {' '.join(cmd)}\n\n"
-                f"Captured output:\n{excerpt}"
+                f"===== BARTON TEST OUTPUT BEGIN [{child_nodeid}] =====\n"
+                f"{excerpt}\n"
+                f"===== BARTON TEST OUTPUT END [{child_nodeid}] ====="
             )
     finally:
         try:

@@ -165,7 +165,7 @@ def test_timmerflotte_driver_rejects_wrong_vendor_product(
 
     try:
         default_environment.get_client().commission_device(
-            sensor.get_commissioning_code(), 100
+            sensor.get_qr_code(), 100
         )
         default_environment.wait_for_device_added()
 

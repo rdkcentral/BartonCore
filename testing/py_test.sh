@@ -60,9 +60,20 @@ fi
 # each child pytest, so this propagates to the isolated test processes too.
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
+# Likewise, prepend this tree's freshly-built libBartonCore so it takes
+# precedence over a stale library path inherited from the environment (e.g. a
+# primary clone's build/core), so parallel/worktree runs load the right library.
+export LD_LIBRARY_PATH="$REPO_ROOT/build/core${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# And point GObject-introspection at this tree's BCore typelib for the same
+# reason: the container's GI_TYPELIB_PATH points at the provisioning clone's
+# build/core, so without this a worktree would load that clone's typelib (or
+# none at all, if it is unset in the current shell).
+export GI_TYPELIB_PATH="$REPO_ROOT/build/core${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
+
 function show_help {
     echo "This is a wrapper script around pytest to ensure the environment is setup correctly."
-    echo "Usage: $0 [-t=<clang|gcc>|--toolchain=<clang|gcc>] [pytest options]"
+    echo "Usage: $0 [-t=<clang|gcc>|--toolchain=<clang|gcc>] [--parallel[=<workers>]] [pytest options]"
     echo ""
     echo "Options:"
     echo "  -t=<clang|gcc>, --toolchain=<clang|gcc>"
@@ -70,9 +81,17 @@ function show_help {
     echo "                           libBartonCore.so. Determines which ASAN runtime"
     echo "                           to preload. If not specified, auto-detects from"
     echo "                           the system default 'cc'."
+    echo "  --parallel[=<workers>]   Run tests in parallel across <workers> pytest-xdist"
+    echo "                           workers. With no value, defaults to min(CPUs/4, 32)"
+    echo "                           -- about one worker per two physical cores, since each"
+    echo "                           commissioning is a ~2-core crypto burst across Barton and"
+    echo "                           a matter.js node process. Tests run"
+    echo "                           SERIALLY unless this flag is given, so interactive/"
+    echo "                           individual runs keep readable, interleaved logs."
 }
 
 TOOLCHAIN=""
+PARALLEL_WORKERS=""
 
 # Parse our options, pass the rest through to pytest
 PYTEST_ARGS=()
@@ -80,6 +99,12 @@ for arg in "$@"; do
     case "$arg" in
         -t=*|--toolchain=*)
             TOOLCHAIN="${arg#*=}"
+            ;;
+        --parallel)
+            PARALLEL_WORKERS="default"
+            ;;
+        --parallel=*)
+            PARALLEL_WORKERS="${arg#*=}"
             ;;
         -h|--help)
             show_help
@@ -90,6 +115,59 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+PARALLEL_ARGS=()
+if [[ -n "$PARALLEL_WORKERS" ]]; then
+    if [[ "$PARALLEL_WORKERS" == "default" ]]; then
+        # Scale the default worker count with the machine, capped at 32.
+        #
+        # Matter commissioning discovers each virtual device over the shared
+        # mDNS plane (port 5353). The CHIP commissioner keeps a fixed cache of
+        # discovered commissionable nodes; because every commissioner sees every
+        # device's advertisement, concurrent commissionings used to overflow
+        # that cache ("Insufficient space") -- raised 10 -> 128 (barton patch
+        # 0003), so no overflow is seen even at 32 workers.
+        #
+        # The binding limit is CPU: commissioning a device is a crypto-heavy
+        # PASE/CASE burst that runs concurrently on BOTH the commissioner
+        # (multi-threaded Barton) and the target device (a matter.js node
+        # process), i.e. it needs ~2 physical cores while it runs. If the target
+        # can't get the CPU it misses the PASE handshake and the commission
+        # fails. nproc counts logical CPUs (hyperthreads), so use a quarter of
+        # it -- about one worker per two physical cores -- which leaves room for
+        # both halves of every concurrent commissioning plus the OS and per-test
+        # subprocesses. Min 1, capped at 32 (only ~62 tests, and returns diminish
+        # well before then).
+        #
+        # Empirically, on a 64-physical-core box: nproc/2 (one worker per
+        # physical core) starves ~10% of runs; nproc/4 and nproc/3 are clean
+        # over 20 runs each. nproc/4 is chosen for margin. Raising timeouts is
+        # deliberately NOT used to paper over starvation -- the fix is fewer
+        # workers. (A separate earlier ceiling of ~4 workers came from the 4-bit
+        # short discriminator in the manual pairing code matching the wrong
+        # device; that is fixed by commissioning with the full-discriminator QR
+        # code, so the remaining limit is purely CPU headroom.)
+        PARALLEL_CAP=32
+        CPU_COUNT=$(nproc)
+        PARALLEL_WORKERS=$(( CPU_COUNT / 4 ))
+        (( PARALLEL_WORKERS < 1 )) && PARALLEL_WORKERS=1
+        (( PARALLEL_WORKERS > PARALLEL_CAP )) && PARALLEL_WORKERS=$PARALLEL_CAP
+    fi
+    # Use xdist's loadgroup distribution so tests sharing an xdist_group (e.g. the
+    # zhal mock tests that bind fixed IPC ports 18443/8711) stay on one worker and
+    # never collide.
+    #
+    # Raise the commissioning wait timeouts modestly: under concurrent load the
+    # crypto-heavy CASE/commissioning phase legitimately takes a little longer
+    # than the (fast-failure) serial defaults, so give it some headroom. These
+    # override testing/conftest.py's defaults and are forwarded into each
+    # per-test subprocess. They are NOT a remedy for CPU starvation -- that is
+    # bounded by keeping the worker count at/under the physical core count above.
+    PARALLEL_ARGS=(
+        -n "$PARALLEL_WORKERS" --dist loadgroup
+        --client-ready-timeout=30 --device-added-timeout=30 --resource-value-timeout=30
+    )
+fi
 
 # Determine the correct ASAN runtime to preload based on the compiler that
 # built libBartonCore.so. Clang uses libclang_rt.asan; GCC uses libasan.so.
@@ -124,4 +202,4 @@ case "$TOOLCHAIN" in
         ;;
 esac
 
-LD_PRELOAD="$ASAN_LIB" pytest "${PYTEST_ARGS[@]}"
+LD_PRELOAD="$ASAN_LIB" pytest "${PARALLEL_ARGS[@]}" "${PYTEST_ARGS[@]}"

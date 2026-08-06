@@ -26,14 +26,22 @@ from queue import Empty, Queue
 
 from gi.repository import BCore
 
+from testing.utils import timeouts
+
 
 def commission_device(environment, device, device_class):
     """Commission a device and return the most recently added device of the expected class.
 
     Commissions the device via the environment's client, waits for the
     device-added event, then returns the last device of the given class.
+
+    Uses the QR code setup payload (full 12-bit discriminator) so the
+    commissioner matches this exact device. The manual pairing code carries
+    only a 4-bit short discriminator, which collides across devices when many
+    are advertising concurrently and can cause the commissioner to match the
+    wrong device.
     """
-    environment.get_client().commission_device(device.get_commissioning_code(), 100)
+    environment.get_client().commission_device(device.get_qr_code(), 100)
     environment.wait_for_device_added()
     devices = environment.get_client().get_devices_by_device_class(device_class)
     assert len(devices) >= 1, f"Expected at least 1 '{device_class}' device, found 0"
@@ -98,12 +106,17 @@ def resource_update_listener(client, resource_id, transform=None):
     return queue
 
 
-def wait_for_resource_value(queue, expected_value, timeout=10):
+def wait_for_resource_value(queue, expected_value, timeout=None):
     """Drain events from the queue until we get the expected value or time out.
 
     This handles spurious initial subscription events that may arrive before
-    the event triggered by the test action.
+    the event triggered by the test action. When timeout is None the
+    runtime-configurable default is used (timeouts.resource_value; see
+    testing/utils/timeouts.py).
     """
+    if timeout is None:
+        timeout = timeouts.resource_value
+
     deadline = time.monotonic() + timeout
 
     while True:

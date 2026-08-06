@@ -29,7 +29,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from threading import Condition
-import shutil
+import os
+import tempfile
 
 # Get the expected gir version dynamically. There is some additional information
 # about this in the top-level CMakeLists.txt file.
@@ -58,6 +59,7 @@ gi.require_version("BCore", major_version + ".0")
 from gi.repository import BCore
 
 from testing.credentials import network_credentials_provider
+from testing.utils import timeouts
 
 class BaseEnvironmentOrchestrator(ABC):
     """
@@ -90,6 +92,7 @@ class BaseEnvironmentOrchestrator(ABC):
     _ready_to_commission: bool
     _device_added_condition: Condition
     _commissioned_device: bool
+    _storage_tmpdir: tempfile.TemporaryDirectory
     _barton_storage_path: str
     _matter_storage_path: str
     _sbmd_dirs: str
@@ -103,9 +106,22 @@ class BaseEnvironmentOrchestrator(ABC):
         self._device_added_condition = Condition()
         self._commissioned_device = False
 
-        # Must match what's compiled with barton matter sdk
-        self._barton_storage_path = str(Path.home()) + "/.brtn-ds"
-        self._matter_storage_path = self._barton_storage_path + "/matter"
+        # Per-process storage root on tmpfs (/tmp) so concurrent tests
+        # (pytest-xdist) don't clobber each other's KVS / dynamic storage, and so
+        # nothing is left behind in the user's home directory. TemporaryDirectory
+        # registers a finalizer that removes the tree when this process exits --
+        # even if a test fails or setup raises before the fixture teardown runs.
+        #
+        # NOTE: the Matter SDK's PosixConfig ini files (chip_factory.ini,
+        # chip_config.ini, chip_counters.ini) still live at the compile-time
+        # CHIP_BARTON_CONF_DIR (~/.brtn-ds/matter) and are not isolated by this;
+        # only the KVS honors this runtime path. That shared dir is left in place
+        # (it may also be used by reference-app runs) and is simply reused.
+        self._storage_tmpdir = tempfile.TemporaryDirectory(
+            prefix="brtn-ds-", ignore_cleanup_errors=True
+        )
+        self._barton_storage_path = self._storage_tmpdir.name
+        self._matter_storage_path = os.path.join(self._barton_storage_path, "matter")
         # SBMD specs directories relative to workspace root
         workspace_root = Path(__file__).parent.parent.parent
         production_specs = str(
@@ -182,10 +198,16 @@ class BaseEnvironmentOrchestrator(ABC):
                 self._ready_to_commission = True
                 self._ready_for_devices_condition.notify_all()
 
-    def wait_for_client_to_be_ready(self, timeout=10):
+    def wait_for_client_to_be_ready(self, timeout=None):
         """
         Waits for the Barton client to be ready before proceeding with the test.
+
+        When timeout is None the runtime-configurable default is used
+        (timeouts.client_ready; see testing/utils/timeouts.py).
         """
+        if timeout is None:
+            timeout = timeouts.client_ready
+
         with self._ready_for_devices_condition:
             if not self._ready_to_commission:
                 self._ready_for_devices_condition.wait(timeout=timeout)
@@ -207,17 +229,22 @@ class BaseEnvironmentOrchestrator(ABC):
             self._commissioned_device = True
             self._device_added_condition.notify_all()
 
-    def wait_for_device_added(self, timeout=5):
+    def wait_for_device_added(self, timeout=None):
         """
         Waits for a device to be added and commissioned within a specified timeout.
 
         Args:
             timeout (int, optional): The maximum time to wait for the device to be
-                commissioned, in seconds. Defaults to 5.
+                commissioned, in seconds. When None the runtime-configurable
+                default is used (timeouts.device_added; see
+                testing/utils/timeouts.py).
         Raises:
             AssertionError: If the device is not commissioned within the specified
             timeout.
         """
+        if timeout is None:
+            timeout = timeouts.device_added
+
         with self._device_added_condition:
             if not self._commissioned_device:
                 self._device_added_condition.wait(timeout=timeout)
@@ -232,7 +259,9 @@ class BaseEnvironmentOrchestrator(ABC):
         """
         self._barton_client.stop()
         self._barton_client = None
-        shutil.rmtree(self._barton_storage_path, ignore_errors=True)
+        # Remove the tmpfs storage now; the TemporaryDirectory finalizer is a
+        # safety net for paths where this method isn't reached.
+        self._storage_tmpdir.cleanup()
 
         self._ready_for_devices_condition = None
         self._device_added_condition = None
