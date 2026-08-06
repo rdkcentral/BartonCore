@@ -20,8 +20,8 @@
  * Top-level registration object passed to `SbmdDriver()`.
  */
 interface SbmdRegistration {
-    /** Schema version. Must be "4.0". */
-    schemaVersion: "4.0";
+    /** Schema version. Must be "5.0". */
+    schemaVersion: "5.0";
 
     /** Driver-specific version string or number. */
     driverVersion: string | number;
@@ -151,9 +151,10 @@ interface SbmdResource {
 
     /**
      * Access modes: "read", "write", "dynamic" (default on), "static" (opts out of dynamic),
-     * "emitEvents" (default on), "noEvents", "lazySaveNext", "sensitive".
+     * "emitEvents" (default on), "noEvents", "lazySaveNext", "sensitive", "volatile" (disables
+     * value caching).
      */
-    modes?: Array<"read" | "write" | "dynamic" | "static" | "emitEvents" | "noEvents" | "lazySaveNext" | "sensitive">;
+    modes?: Array<"read" | "write" | "dynamic" | "static" | "emitEvents" | "noEvents" | "lazySaveNext" | "sensitive" | "volatile">;
 
     /** Alias names or cluster IDs that must be present before creating this resource. */
     prerequisites?: Array<string | number>;
@@ -179,32 +180,22 @@ interface SbmdResource {
 // =============================================================================
 
 interface SbmdAttributeHandler {
-    /** Alias names to match. Mutually exclusive with clusterId. */
-    aliases?: string[];
-    /** Cluster to match. Mutually exclusive with aliases. */
-    clusterId?: number;
-    /** Single attribute ID or "*" wildcard. */
-    attributeId?: number | "*";
-    /** Multiple attribute IDs. */
-    attributeIds?: number[];
+    /** Alias names to match. */
+    aliases: string[];
     supplements?: SbmdSupplements;
     handler: SbmdHandlerFunction;
 }
 
 interface SbmdEventHandler {
-    aliases?: string[];
-    clusterId?: number;
-    eventId?: number | "*";
-    eventIds?: number[];
+    /** Alias names to match. */
+    aliases: string[];
     supplements?: SbmdSupplements;
     handler: SbmdHandlerFunction;
 }
 
 interface SbmdCommandHandler {
-    aliases?: string[];
-    clusterId?: number;
-    commandId?: number | "*";
-    commandIds?: number[];
+    /** Alias names to match. */
+    aliases: string[];
     supplements?: SbmdSupplements;
     handler: SbmdHandlerFunction;
 }
