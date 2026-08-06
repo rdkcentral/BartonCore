@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Matter Subsystem
+
+## Purpose
+
+Specifies the Matter subsystem that wraps the CHIP SDK: SDK initialization, commissioning orchestration, device discovery, the device data cache, storage/access-control/attestation delegates, pluggable credential and commissionable-data providers, and the Matter driver factory and device abstractions.
+
+## Requirements
 
 ### Requirement: Matter SDK initialization
 The Matter subsystem SHALL initialize the CHIP SDK, set up the GLib main loop integration, and configure operational parameters. Initialization SHALL be triggered via an `initialize` callback registered with `subsystemManagerRegister()` and SHALL report readiness via `notifySubsystemInitialized()`.

@@ -1,4 +1,10 @@
-## ADDED Requirements
+# SBMD v4 Runtime
+
+## Purpose
+
+Specifies the SBMD v4 embedded-JavaScript runtime: two-pass file evaluation with constants injection, the `SbmdDriver` capture function and registration extraction, result building, handler dispatch, supplements pre-loading, resource handler invocation, result-chain execution, deferred operations, driver lifecycle, and alias resolution.
+
+## Requirements
 
 ### Requirement: Two-pass file evaluation with constants injection
 The runtime SHALL evaluate `.sbmd.js` files using a two-pass process. Pass 1 SHALL extract the `constants:` block from the source text by brace-matching, evaluate it as a JavaScript object literal, and produce a set of name→primitive-value pairs. Pass 2 SHALL prepend `var` declarations for each constant, wrap the entire file in an IIFE, and evaluate the result using `JS_EVAL_REPL`.

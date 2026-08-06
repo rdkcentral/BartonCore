@@ -345,6 +345,11 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     apt-get install -y nodejs
 
 ###############################################################################
+# OpenSpec CLI for spec validation (used by developers and by CI)
+###############################################################################
+RUN npm install -g openspec@1.4.1
+
+###############################################################################
 # Development build stage
 #
 # This stage is responsible for installing packages and other tasks useful for

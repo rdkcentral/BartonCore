@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Endpoint Cluster Fallback
+
+## Purpose
+
+Specifies cluster-based fallback for endpoint resolution, ensuring all resource and event binding routes through `ResolveEndpointForCluster` when device-type matching alone is insufficient.
+
+## Requirements
 
 ### Requirement: Endpoint resolution with cluster-based fallback
 `MatterDevice` SHALL provide a `ResolveEndpointForCluster` method that resolves a Matter endpoint for a given cluster ID. When an SBMD endpoint index is provided, it SHALL first try the SBMD-mapped endpoint. If that endpoint does not host the required cluster (verified via `DeviceDataCache::EndpointHasServerCluster`), it SHALL fall back to cluster-based lookup via `GetEndpointForCluster`.
