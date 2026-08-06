@@ -62,5 +62,5 @@ RUN npm install -g prettier@3.3.3 lint-staged@15.2.10
 # User local installations
 USER $BUILDER_USER
 
-RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh && \
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+ENV PATH="/home/${BUILDER_USER}/.local/bin:${PATH}"
