@@ -121,11 +121,14 @@ std::future<bool> DeviceDataCache::Start()
         [](intptr_t arg) {
             auto *self = reinterpret_cast<DeviceDataCache *>(arg);
 
-            if (self->controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(self->deviceUuid),
+            CHIP_ERROR err =
+                self->controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(self->deviceUuid),
                                                      &self->mOnDeviceConnectedCallback,
-                                                     &self->mOnDeviceConnectionFailureCallback) != CHIP_NO_ERROR)
+                                                     &self->mOnDeviceConnectionFailureCallback);
+
+            if (err != CHIP_NO_ERROR)
             {
-                icError("Failed to start device connection");
+                icError("Failed to start device connection: %s", err.AsString());
                 std::lock_guard<std::mutex> lock(self->startupPromiseMutex);
                 if (self->startupPromise)
                 {
@@ -734,6 +737,14 @@ void DeviceDataCache::OnSubscriptionEstablished(chip::SubscriptionId aSubscripti
 
     // Ensure that, once a subscription is established, the naturally negotiated liveness timeout is used
     readClient->OverrideLivenessTimeout(chip::System::Clock::kZero);
+
+    // Forward to the registered callback (e.g. MatterDevice::CacheCallback) so it can react to
+    // subscription establishment, such as caching cluster feature maps now that the priming
+    // report has populated the cache.
+    if (callback)
+    {
+        callback->OnSubscriptionEstablished(aSubscriptionId);
+    }
 }
 
 void DeviceDataCache::OnError(CHIP_ERROR aError)
