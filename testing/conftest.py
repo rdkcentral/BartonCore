@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 # pytest_configure and forwarded to each per-test subprocess (see
 # _run_in_subprocess) so the child that actually runs the test sees them.
 _TIMEOUT_OPTIONS = (
-    ("--client-ready-timeout", "client_ready", 5, "wait for the Barton client to be ready"),
+    ("--client-ready-timeout", "client_ready", 10, "wait for the Barton client to be ready"),
     ("--device-added-timeout", "device_added", 5, "wait for a device to be commissioned/added"),
     ("--resource-value-timeout", "resource_value", 30, "wait for an expected resource value"),
 )

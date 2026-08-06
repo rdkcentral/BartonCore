@@ -38,6 +38,7 @@
 #include "deviceServicePrivate.h"
 #include "event/deviceEventProducer.h"
 #include "icTypes/icLinkedList.h"
+#include "observability/observability.h"
 #include "icTypes/icLinkedListFuncs.h"
 #include "observability/observability.h"
 

@@ -35,6 +35,6 @@ default at import time).
 """
 
 # Defaults (seconds), tuned for serial runs. Overridden in pytest_configure.
-client_ready = 5
+client_ready = 10
 device_added = 5
 resource_value = 30

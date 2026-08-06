@@ -207,10 +207,10 @@ if (BCORE_MATTER)
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 
-    # SBMD v4 specification validation
+    # SBMD specification validation
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         set(SBMD_SCHEMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/schema")
-        set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_v4_specs.py")
+        set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
         set(SBMD_EXTRACTOR "${CMAKE_SOURCE_DIR}/scripts/ci/sbmd_extract_registration.js")
 
         find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -224,10 +224,10 @@ if (BCORE_MATTER)
                 COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_DIR} ${SBMD_SPEC_FILES}
                 DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILES} ${SBMD_VALIDATOR} ${SBMD_EXTRACTOR}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                COMMENT "Validating SBMD v4 specification files against schema..."
+                COMMENT "Validating SBMD specification files against schema..."
             )
         else()
-            message(STATUS "No SBMD v4 spec files found in ${SBMD_SPECS_DIR}; skipping spec validation")
+            message(STATUS "No SBMD spec files found in ${SBMD_SPECS_DIR}; skipping spec validation")
         endif()
     endif()
 endif()
