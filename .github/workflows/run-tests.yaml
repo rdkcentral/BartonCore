@@ -85,4 +85,6 @@ jobs:
                 run: ./dockerw -n ctest --output-on-failure --test-dir build
             -
                 name: Run integration tests
-                run: ./dockerw -n ./scripts/ci/run_integration_tests.sh
+                # GitHub-hosted runners have 4 cores; 3 workers keeps one core
+                # free for the OS/dbus/otbr and avoids CASE/PASE starvation.
+                run: ./dockerw -n ./scripts/ci/run_integration_tests.sh --parallel=3

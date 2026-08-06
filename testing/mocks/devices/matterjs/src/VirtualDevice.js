@@ -194,6 +194,11 @@ export class VirtualDevice {
     startSidebandServer() {
         return new Promise((resolve, reject) => {
             this.httpServer = http.createServer(async (req, res) => {
+                // One-shot connections: closing after each response avoids
+                // keep-alive reset races on the loopback control channel when
+                // many device processes contend for the CPU under parallel load.
+                res.setHeader('Connection', 'close');
+
                 if (req.method === 'POST' && req.url === '/sideband') {
                     await this.handleSidebandRequest(req, res);
                 } else {

@@ -55,7 +55,7 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-# Pin to 3 workers: CI runners have 4 cores, and 3 workers keeps a core free for
-# the OS/dbus/otbr while avoiding the CASE/PASE starvation seen at 4 (validated
-# ~30% faster than 2 with no flakes). The nproc/2 default would resolve to 2 here.
-"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" --parallel=3
+# Forward any extra arguments (e.g. --parallel=<N>) to the pytest wrapper. The
+# worker count is specified by the caller/CI workflow rather than hard-coded
+# here, because it depends on the runner's core count (GitHub runners have 4).
+"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" "$@"

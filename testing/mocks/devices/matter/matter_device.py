@@ -231,7 +231,7 @@ class MatterDevice(BaseDevice):
             )
 
         sideband_port = ready_signal["sidebandPort"]
-        self._sideband = SidebandClient("localhost", sideband_port)
+        self._sideband = SidebandClient("127.0.0.1", sideband_port)
 
         logger.debug(
             f"Started {self._device_class} with PID {self._process.pid}, "

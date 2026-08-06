@@ -65,6 +65,12 @@ export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 # primary clone's build/core), so parallel/worktree runs load the right library.
 export LD_LIBRARY_PATH="$REPO_ROOT/build/core${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+# And point GObject-introspection at this tree's BCore typelib for the same
+# reason: the container's GI_TYPELIB_PATH points at the provisioning clone's
+# build/core, so without this a worktree would load that clone's typelib (or
+# none at all, if it is unset in the current shell).
+export GI_TYPELIB_PATH="$REPO_ROOT/build/core${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
+
 function show_help {
     echo "This is a wrapper script around pytest to ensure the environment is setup correctly."
     echo "Usage: $0 [-t=<clang|gcc>|--toolchain=<clang|gcc>] [--parallel[=<workers>]] [pytest options]"
@@ -76,9 +82,10 @@ function show_help {
     echo "                           to preload. If not specified, auto-detects from"
     echo "                           the system default 'cc'."
     echo "  --parallel[=<workers>]   Run tests in parallel across <workers> pytest-xdist"
-    echo "                           workers. With no value, defaults to min(CPUs/2, 64)"
-    echo "                           -- about one worker per physical core, since each worker"
-    echo "                           drives Barton plus a matter.js node process. Tests run"
+    echo "                           workers. With no value, defaults to min(CPUs/4, 32)"
+    echo "                           -- about one worker per two physical cores, since each"
+    echo "                           commissioning is a ~2-core crypto burst across Barton and"
+    echo "                           a matter.js node process. Tests run"
     echo "                           SERIALLY unless this flag is given, so interactive/"
     echo "                           individual runs keep readable, interleaved logs."
 }
@@ -112,30 +119,37 @@ done
 PARALLEL_ARGS=()
 if [[ -n "$PARALLEL_WORKERS" ]]; then
     if [[ "$PARALLEL_WORKERS" == "default" ]]; then
-        # Scale the default worker count with the machine, capped at 64.
+        # Scale the default worker count with the machine, capped at 32.
         #
         # Matter commissioning discovers each virtual device over the shared
         # mDNS plane (port 5353). The CHIP commissioner keeps a fixed cache of
         # discovered commissionable nodes; because every commissioner sees every
         # device's advertisement, concurrent commissionings used to overflow
         # that cache ("Insufficient space") -- raised 10 -> 128 (barton patch
-        # 0003), so no overflow is seen even at 64 workers.
+        # 0003), so no overflow is seen even at 32 workers.
         #
-        # Each worker drives a multi-threaded Barton plus a matter.js node
-        # process (and ASAN), so it needs roughly a full physical core. nproc
-        # counts logical CPUs (hyperthreads), so use half of it -- about one
-        # worker per physical core -- leaving headroom for the OS and the
-        # per-test subprocesses. Oversubscribing past the physical core count
-        # starves the crypto-heavy CASE/PASE commissioning phase and makes it
-        # time out. Min 1, capped at 64 (only ~62 tests, so more never helps).
+        # The binding limit is CPU: commissioning a device is a crypto-heavy
+        # PASE/CASE burst that runs concurrently on BOTH the commissioner
+        # (multi-threaded Barton) and the target device (a matter.js node
+        # process), i.e. it needs ~2 physical cores while it runs. If the target
+        # can't get the CPU it misses the PASE handshake and the commission
+        # fails. nproc counts logical CPUs (hyperthreads), so use a quarter of
+        # it -- about one worker per two physical cores -- which leaves room for
+        # both halves of every concurrent commissioning plus the OS and per-test
+        # subprocesses. Min 1, capped at 32 (only ~62 tests, and returns diminish
+        # well before then).
         #
-        # (An earlier ceiling of ~4 workers came from commissioners matching the
-        # wrong device via the 4-bit short discriminator in the manual pairing
-        # code; that is fixed by commissioning with the full-discriminator QR
-        # code, so the limit is now purely CPU headroom.)
-        PARALLEL_CAP=64
+        # Empirically, on a 64-physical-core box: nproc/2 (one worker per
+        # physical core) starves ~10% of runs; nproc/4 and nproc/3 are clean
+        # over 20 runs each. nproc/4 is chosen for margin. Raising timeouts is
+        # deliberately NOT used to paper over starvation -- the fix is fewer
+        # workers. (A separate earlier ceiling of ~4 workers came from the 4-bit
+        # short discriminator in the manual pairing code matching the wrong
+        # device; that is fixed by commissioning with the full-discriminator QR
+        # code, so the remaining limit is purely CPU headroom.)
+        PARALLEL_CAP=32
         CPU_COUNT=$(nproc)
-        PARALLEL_WORKERS=$(( CPU_COUNT / 2 ))
+        PARALLEL_WORKERS=$(( CPU_COUNT / 4 ))
         (( PARALLEL_WORKERS < 1 )) && PARALLEL_WORKERS=1
         (( PARALLEL_WORKERS > PARALLEL_CAP )) && PARALLEL_WORKERS=$PARALLEL_CAP
     fi
@@ -143,10 +157,12 @@ if [[ -n "$PARALLEL_WORKERS" ]]; then
     # zhal mock tests that bind fixed IPC ports 18443/8711) stay on one worker and
     # never collide.
     #
-    # Raise the commissioning wait timeouts: under concurrent load the crypto-heavy
-    # CASE/commissioning phase legitimately takes longer than the (fast-failure)
-    # serial defaults, so give it headroom. These override testing/conftest.py's
-    # defaults and are forwarded into each per-test subprocess.
+    # Raise the commissioning wait timeouts modestly: under concurrent load the
+    # crypto-heavy CASE/commissioning phase legitimately takes a little longer
+    # than the (fast-failure) serial defaults, so give it some headroom. These
+    # override testing/conftest.py's defaults and are forwarded into each
+    # per-test subprocess. They are NOT a remedy for CPU starvation -- that is
+    # bounded by keeping the worker count at/under the physical core count above.
     PARALLEL_ARGS=(
         -n "$PARALLEL_WORKERS" --dist loadgroup
         --client-ready-timeout=30 --device-added-timeout=30 --resource-value-timeout=30
