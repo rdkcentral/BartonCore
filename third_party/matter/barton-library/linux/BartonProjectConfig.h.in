@@ -48,6 +48,11 @@
 #define INET_CONFIG_NUM_TCP_ENDPOINTS 50
 #define INET_CONFIG_NUM_UDP_ENDPOINTS 50
 
+// Allow as many concurrent active TCP connections as we have TCP endpoints. The Matter default of 4
+// is far smaller than our secure-session pool, and since we prefer TCP (kLargePayloadWithMRPFallback)
+// for connections, a low cap would force otherwise-TCP-capable peers onto UDP once 4 were in use.
+#define CHIP_CONFIG_MAX_ACTIVE_TCP_CONNECTIONS 50
+
 #define FATCONFDIR           CHIP_BARTON_CONF_DIR // CHIP Factory Config
 #define SYSCONFDIR           CHIP_BARTON_CONF_DIR // CHIP Sys Config
 #define LOCALSTATEDIR        CHIP_BARTON_CONF_DIR // CHIP Counters Config

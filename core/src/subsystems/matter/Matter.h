@@ -43,10 +43,10 @@
 #include <controller/ExampleOperationalCredentialsIssuer.h>
 #include <credentials/GroupDataProviderImpl.h>
 #include <credentials/attestation_verifier/DeviceAttestationDelegate.h>
+#include <functional>
+#include <future>
 #include <platform/Linux/CHIPLinuxStorage.h>
 #include <thread>
-#include <future>
-#include <functional>
 
 #include <lib/support/PersistedCounter.h>
 
@@ -157,12 +157,14 @@ namespace barton
          *        freeing the setupCode and qrCode.
          *
          * @param nodeId the nodeId of the device to open the commissioning window for, or NULL for local
-         * @param timeoutSeconds the number of seconds to perform discovery before automatically stopping or 0 for default
+         * @param timeoutSeconds the number of seconds to perform discovery before automatically stopping or 0 for
+         * default
          * @param setupCode receives the setup code if successful
          * @param qrCode receives the QR code if successful
          * @return true on success
          */
-        bool OpenCommissioningWindow(chip::NodeId nodeId, uint16_t timeoutSecs, std::string &setupCode, std::string &qrCode);
+        bool
+        OpenCommissioningWindow(chip::NodeId nodeId, uint16_t timeoutSecs, std::string &setupCode, std::string &qrCode);
 
         /**
          * @brief Clear the AccessRestrictionList for certification testing
@@ -206,8 +208,12 @@ namespace barton
         static chip::NodeId LoadOrGenerateLocalNodeId();
 
         CHIP_ERROR ConfigureOTAProviderNode();
-        bool IsAccessibleByOTARequestors();
-        CHIP_ERROR AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::FabricIndex fabricIndex);
+        CHIP_ERROR ConfigureWebRtcRequestorNode();
+
+        // Shared ACL helpers for granting commissioned peers CASE/operate access to a
+        // specific cluster (an existing matching entry is left untouched).
+        bool HasCaseOperateAclEntryForCluster(chip::ClusterId clusterId);
+        CHIP_ERROR AppendCaseOperateAclEntryForCluster(chip::FabricIndex fabricIndex, chip::ClusterId clusterId);
 
         bool IsDevelopmentMode()
         {
@@ -284,9 +290,7 @@ namespace barton
          */
         bool SetAccessRestrictionList();
 
-        bool OpenLocalCommissioningWindow(uint16_t discriminator,
-                                          uint16_t timeoutSecs,
-                                          SetupPayload &setupPayload);
+        bool OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeoutSecs, SetupPayload &setupPayload);
 
         bool serverIsInitialized = false;
 

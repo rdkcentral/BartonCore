@@ -27,12 +27,28 @@ project(barton-core-reference)
 
 include(BCoreConfigureGLib)
 
+option(BCORE_REFERENCE_CAMERA_SUPPORT "Enable the reference app camera stream command with GStreamer WebRTC support" OFF)
+
 file(GLOB_RECURSE B_CORE_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
+
+if (NOT BCORE_REFERENCE_CAMERA_SUPPORT)
+    list(FILTER B_CORE_REFERENCE_SOURCES EXCLUDE REGEX "cameraCategory\\.c$|cameraDeviceSession\\.c$|cameraWebrtcClient\\.c$|cameraMediaServer\\.c$")
+endif()
 
 add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})
 
 # add library dependencies for this binary
 target_link_options(barton-core-reference PRIVATE -L ${CMAKE_BINARY_DIR}/matter-install/lib)
 target_link_libraries(barton-core-reference BartonCore linenoise)
+
+if (BCORE_REFERENCE_CAMERA_SUPPORT)
+    find_package(PkgConfig REQUIRED)
+    # gio-2.0 provides GSocketService for the HTTP media server that streams to the browser.
+    pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-webrtc-1.0 gstreamer-sdp-1.0 gstreamer-app-1.0)
+    pkg_check_modules(GIO REQUIRED gio-2.0)
+    target_include_directories(barton-core-reference PRIVATE ${GST_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS})
+    target_link_libraries(barton-core-reference ${GST_LIBRARIES} ${GIO_LIBRARIES})
+    target_compile_definitions(barton-core-reference PRIVATE BCORE_REFERENCE_CAMERA_SUPPORT)
+endif()
 
 bcore_configure_glib()
