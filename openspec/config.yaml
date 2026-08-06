@@ -86,7 +86,7 @@ context: |
   OpenSpec specs are authored per capability or per device class — never per concrete
   device driver. A new supported device is added as a `.sbmd.js` driver file under
   core/deviceDrivers/matter/sbmd/specs/ (governed by the SBMD schema validator,
-  scripts/ci/validate_sbmd_v4_specs.py), not as a new OpenSpec spec. This keeps the
+  scripts/ci/validate_sbmd_specs.py), not as a new OpenSpec spec. This keeps the
   spec count bounded by the number of framework capabilities and device classes
   (~8-15) even as the driver catalog scales to 100+. A new OpenSpec spec is justified
   only by a new framework capability or a new device class. Specs live in a flat

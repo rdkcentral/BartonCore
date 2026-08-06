@@ -1,16 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "sbmd-spec-schema-v4.0.json",
-  "title": "SBMD v4.0 Registration Schema",
-  "description": "JSON Schema for the SbmdDriver() registration object in .sbmd.js spec files (schema version 4.0). Functions are represented as `true` after extraction.",
+  "$id": "sbmd-spec-schema.json",
+  "title": "SBMD Registration Schema",
+  "description": "JSON Schema for the SbmdDriver() registration object in .sbmd.js spec files. Functions are represented as `true` after extraction.",
   "type": "object",
   "required": ["schemaVersion", "driverVersion", "name", "constants", "barton", "matter"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "const": "4.0",
-      "description": "Schema version. Must be '4.0'."
+      "const": "5.0",
+      "description": "Schema version. Must be '5.0'; see schema/CHANGELOG.md for the version history."
     },
     "driverVersion": {
       "oneOf": [
@@ -253,9 +253,15 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["read", "write", "dynamic", "static", "emitEvents", "noEvents", "lazySaveNext", "sensitive"]
+            "enum": ["read", "write", "dynamic", "static", "emitEvents", "noEvents", "lazySaveNext", "sensitive", "volatile"]
           },
-          "description": "Access modes controlling resource behavior."
+          "not": {
+            "anyOf": [
+              { "allOf": [{ "contains": { "const": "static" } }, { "contains": { "const": "dynamic" } }] },
+              { "allOf": [{ "contains": { "const": "noEvents" } }, { "contains": { "const": "emitEvents" } }] }
+            ]
+          },
+          "description": "Access modes controlling resource behavior. 'static'/'dynamic' and 'noEvents'/'emitEvents' are mutually exclusive (each pair's members default on/off, so listing both is contradictory). 'volatile' disables value caching (CACHING_POLICY_NEVER) so that, for a resource that emits events, updateResource delivers an event on every call even when the value is unchanged. CACHING_POLICY_NEVER also stops persisting the last value/dateOfLastSyncMillis to the device DB, so 'volatile' is intended for event-only signaling resources, not subscription-backed state resources whose reads rely on the DB-cached value."
         },
         "prerequisites": {
           "type": "array",
@@ -302,113 +308,50 @@
 
     "attributeHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "attributeId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single attribute ID or '*' wildcard. Mutually exclusive with attributeIds."
-        },
-        "attributeIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple attribute IDs. Mutually exclusive with attributeId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     },
 
     "eventHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "eventId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single event ID or '*' wildcard. Mutually exclusive with eventIds."
-        },
-        "eventIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple event IDs. Mutually exclusive with eventId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     },
 
     "commandHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "commandId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single command ID or '*' wildcard. Mutually exclusive with commandIds."
-        },
-        "commandIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple command IDs. Mutually exclusive with commandId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     }
   }
 }
