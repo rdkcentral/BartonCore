@@ -255,7 +255,6 @@ RUN cd /tmp && \
     ninja install && \
     cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
     rm -rf /tmp/ot-br-posix
-COPY otbr-agent.conf /etc/dbus-1/system.d/
 
 # Simulated RCP for OpenThread
 RUN cd /tmp && \
@@ -368,7 +367,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     tcpdump \
     lcov \
     rsync \
-    bash-completion
+    bash-completion \
+    bluez
 
 # Disable debuginfod for the container. LeakSanitizer runs at the exit of every
 # (subprocess-isolated) integration test and symbolizes suppressed system-library
