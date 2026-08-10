@@ -34,6 +34,12 @@ on:
     pull_request:
     workflow_dispatch:
 
+# Minimal token scope: checkout (contents) and pulling the builder image from
+# GHCR (packages). See docker/login-action below.
+permissions:
+    contents: read
+    packages: read
+
 jobs:
     get-action-constants:
         name: Get Action Constants
