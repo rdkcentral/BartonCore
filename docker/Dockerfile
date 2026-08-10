@@ -285,8 +285,11 @@ ARG MATTER_REF
 SHELL ["/bin/bash", "-c"]
 RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >&2 && exit 1) && \
     cd /tmp && \
-    git clone --branch ${MATTER_REF} --depth 1 https://github.com/project-chip/connectedhomeip.git matter && \
+    git init -q matter && \
     cd matter && \
+    git remote add origin https://github.com/project-chip/connectedhomeip.git && \
+    git fetch --depth 1 origin ${MATTER_REF} && \
+    git checkout -q FETCH_HEAD && \
     ./scripts/checkout_submodules.py --shallow --platform linux && \
     ${APPLY_PATCHES_PATH} /tmp/patches/matter . && \
     export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH && \
