@@ -294,21 +294,14 @@ The `validate-sbmd` skill SHALL be located at `.github/skills/validate-sbmd/SKIL
 - **AND** the `description` SHALL mention SBMD, validation, schema, and Matter drivers
 
 ### Requirement: SBMD validation skill documents spec validation
-The skill SHALL explain how to validate SBMD YAML files using `scripts/ci/validate_sbmd_specs.py`. The skill SHALL document the command syntax: `python3 scripts/ci/validate_sbmd_specs.py <schema_file> <sbmd_file> [<sbmd_file> ...]`. The skill SHALL note the validator checks both YAML schema conformance and embedded JavaScript syntax.
+The skill SHALL explain how to validate SBMD v4 `.sbmd.js` driver files using `scripts/ci/validate_sbmd_specs.py`. The skill SHALL document the command syntax: `python3 scripts/ci/validate_sbmd_specs.py <schema_dir> <sbmd_file.sbmd.js> [<sbmd_file.sbmd.js> ...]`. The skill SHALL note that the validator uses Node.js to evaluate each `.sbmd.js` file, extract its `SbmdDriver()` registration object, and validate that object against the JSON schema (`sbmd-spec-schema.json`), and that this validation also runs automatically during the build via the `validate_sbmd_specs` target when `BCORE_MATTER_VALIDATE_SCHEMAS=ON` (the default).
 
 #### Scenario: Agent validates SBMD specs
 - **WHEN** the agent needs to validate SBMD spec files after editing
-- **THEN** the skill SHALL show the validation command with the correct schema and spec file paths
-
-### Requirement: SBMD validation skill documents stub generation
-The skill SHALL explain how to generate JavaScript stubs from TypeScript definitions using `scripts/ci/generate_sbmd_stubs.py`. The skill SHALL document the command syntax: `python3 scripts/ci/generate_sbmd_stubs.py <d.ts_file> <output_json>`. The skill SHALL note that stubs keep the validator in sync with TypeScript interface definitions.
-
-#### Scenario: Agent regenerates SBMD stubs
-- **WHEN** the agent has modified TypeScript definition files
-- **THEN** the skill SHALL show the stub generation command
+- **THEN** the skill SHALL show the validation command with the correct schema directory and `.sbmd.js` spec file paths
 
 ### Requirement: SBMD validation skill documents spec file locations
-The skill SHALL identify that SBMD spec files live at `core/deviceDrivers/matter/sbmd/specs/`, the schema is generated during the build, and the stubs output is at `build/sbmd-stubs.json`. The skill SHALL note that validation runs automatically during build when `BCORE_MATTER_VALIDATE_SCHEMAS=ON` (the default).
+The skill SHALL identify that SBMD driver files live at `core/deviceDrivers/matter/sbmd/specs/` as `.sbmd.js` files, the JSON schema is at `core/deviceDrivers/matter/sbmd/schema/sbmd-spec-schema.json`, and the validation script is `scripts/ci/validate_sbmd_specs.py`. The skill SHALL note that validation runs automatically during build when `BCORE_MATTER_VALIDATE_SCHEMAS=ON` (the default).
 
 #### Scenario: Agent finds SBMD specs
 - **WHEN** the agent needs to locate SBMD spec files
