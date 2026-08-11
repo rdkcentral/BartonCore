@@ -176,8 +176,10 @@ namespace barton
 
                     datasetRetryCount++;
 
-                    // Dispatch D-Bus messages for up to 2 seconds before retrying
-                    dbus_connection_read_write_dispatch(dbusConnection.get(), 2000);
+                    // Dispatch D-Bus messages for up to 2 seconds before retrying,
+                    // but never exceed the remaining timeout.
+                    auto dispatchMs = std::min(milliseconds(2000), timer);
+                    dbus_connection_read_write_dispatch(dbusConnection.get(), dispatchMs.count());
                     next = steady_clock::now();
                     timer = timer - duration_cast<milliseconds>(next - current);
                     current = next;

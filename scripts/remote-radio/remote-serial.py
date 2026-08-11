@@ -30,9 +30,8 @@ Run this on the WORKSTATION (Windows or Linux) where the BRD2703 xG24 radio is
 physically connected via USB.  It:
 
   1. Auto-detects the Silicon Labs radio serial port.
-  2. Computes a per-user TCP port from the remote UID (base 20000 + UID) and
-     a per-user loopback address (127.0.<hi>.<lo>) to avoid conflicts on
-     shared servers.
+  2. Computes a per-user TCP port from the remote UID (base 20000 + UID)
+     to avoid conflicts on shared servers.
   3. Starts a local TCP server that relays bytes between the serial port and
      TCP clients.
   4. Opens an SSH reverse tunnel so the remote dev server can reach the
@@ -41,7 +40,7 @@ physically connected via USB.  It:
   5. Self-heals: reconnects serial and SSH on failure with backoff.
 
 Requirements (workstation):
-  - Python 3.8+
+  - Python 3.10+
   - pyserial  (pip install pyserial)
   - ssh client on PATH
 

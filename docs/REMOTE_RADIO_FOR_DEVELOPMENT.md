@@ -144,7 +144,7 @@ automatically.
 
 #### Prerequisites
 
-1. **Python 3.7+** and **pyserial** on the workstation:
+1. **Python 3.10+** and **pyserial** on the workstation:
 
    ```bash
    pip install pyserial

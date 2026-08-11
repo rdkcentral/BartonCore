@@ -42,6 +42,7 @@
 #include <libxml/parser.h>
 
 extern "C" {
+#include "barton-core-properties.h"
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProperties.h"
 #include "deviceServiceProps.h"
@@ -369,7 +370,7 @@ uint32_t Matter::ResolveBleAdapterId()
     // 1. Check the runtime property (set by the reference app from env/CLI)
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     g_autofree gchar *propVal =
-        b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_BLE_ADAPTER_ID, NULL);
+        b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_BLE_HCI_INDEX, NULL);
 
     if (propVal != nullptr)
     {
@@ -379,14 +380,12 @@ uint32_t Matter::ResolveBleAdapterId()
         if (endPtr != propVal && *endPtr == '\0')
         {
             adapterId = static_cast<uint32_t>(val);
-            icInfo("Using BLE adapter hci%u from property %s", adapterId, DEVICE_PROP_MATTER_BLE_ADAPTER_ID);
-        }
-        else
-        {
-            icWarn("Invalid %s value '%s', using default hci%u", DEVICE_PROP_MATTER_BLE_ADAPTER_ID, propVal, adapterId);
+            icInfo("Using BLE adapter hci%u from property %s", adapterId, B_CORE_BARTON_MATTER_BLE_HCI_INDEX);
+
+            return adapterId;
         }
 
-        return adapterId;
+        icWarn("Invalid %s value '%s', falling back to file detection", B_CORE_BARTON_MATTER_BLE_HCI_INDEX, propVal);
     }
 
     // 2. Fall back to the file written by the otbr-radio entrypoint
@@ -401,10 +400,24 @@ uint32_t Matter::ResolveBleAdapterId()
             char *endPtr = nullptr;
             unsigned long val = strtoul(buf, &endPtr, 10);
 
+            // Accept only if at least one digit was parsed and the remainder
+            // is purely whitespace/newline (reject partial parses like "1abc").
             if (endPtr != buf)
             {
-                adapterId = static_cast<uint32_t>(val);
-                icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_FILE);
+                while (*endPtr == ' ' || *endPtr == '\t' || *endPtr == '\n' || *endPtr == '\r')
+                {
+                    endPtr++;
+                }
+
+                if (*endPtr == '\0')
+                {
+                    adapterId = static_cast<uint32_t>(val);
+                    icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_FILE);
+                }
+                else
+                {
+                    icWarn("Invalid content in %s, using default hci%u", BLE_CONTROLLER_ADAPTER_ID_FILE, adapterId);
+                }
             }
         }
 

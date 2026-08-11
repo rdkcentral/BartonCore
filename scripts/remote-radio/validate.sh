@@ -101,16 +101,21 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "otbr-radio" /entrypoint.sh 2>/dev/null;
             echo "Not in otbr-radio container — re-executing inside ${OTBR_CONTAINER}..."
             echo ""
             # Use the Docker Engine API to exec into the container.
-            # Read the script content, base64-encode it, and pass as a
-            # command argument to avoid Docker exec stdin piping issues.
-            _ESCAPED_ARGS=""
-            for arg in "$@"; do
-                _ESCAPED_ARGS="${_ESCAPED_ARGS}, \"${arg}\""
-            done
+            # The script is base64-encoded and passed as a positional
+            # parameter ($1) to avoid interpolating into the bash -c string.
+            # Arguments are passed as additional positional params (${@:2})
+            # so spaces and special characters are preserved without injection.
             _SCRIPT_B64=$(base64 -w0 "$0")
+            _EXEC_PAYLOAD=$(python3 -c "
+import json, sys
+script_b64 = sys.argv[1]
+args = sys.argv[2:]
+cmd = ['bash', '-c', 'echo \"\$1\" | base64 -d | bash -s -- \"\${@:2}\"', '--', script_b64] + args
+print(json.dumps({'Cmd': cmd, 'AttachStdout': True, 'AttachStderr': True}))
+" "$_SCRIPT_B64" "$@")
             _EXEC_ID=$($_CURL -X POST "$_DOCKER_API/containers/${OTBR_CONTAINER}/exec" \
                 -H "Content-Type: application/json" \
-                -d "{\"Cmd\":[\"bash\", \"-c\", \"echo ${_SCRIPT_B64} | base64 -d | bash -s -- ${*}\"],\"AttachStdout\":true,\"AttachStderr\":true}" \
+                -d "$_EXEC_PAYLOAD" \
                 | python3 -c "import json,sys; print(json.load(sys.stdin)['Id'])")
             # Start the exec and demux the Docker multiplexed stream.
             $_CURL -X POST "$_DOCKER_API/exec/${_EXEC_ID}/start" \

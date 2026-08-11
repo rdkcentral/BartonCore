@@ -267,7 +267,7 @@ static void setDefaultParameters(BCoreInitializeParamsContainer *params)
         if (bleAdapterEnv != NULL)
         {
             b_core_property_provider_set_property_string(
-                propProvider, "device.matter.bleAdapterId", bleAdapterEnv);
+                propProvider, B_CORE_BARTON_MATTER_BLE_HCI_INDEX, bleAdapterEnv);
         }
     }
 }

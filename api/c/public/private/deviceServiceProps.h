@@ -41,9 +41,3 @@
 
 #define DEVICE_PROP_MATTER_DAC_P12_PATH         DEVICE_PROP_MATTER_NS "dacP12Path"
 #define DEVICE_PROP_MATTER_DAC_P12_PASSWORD     DEVICE_PROP_MATTER_NS "dacP12Password"
-
-/**
- * @brief BLE adapter index (e.g. 0 for hci0, 1 for hci1).
- * Set by the reference app from the BARTON_BLE_ADAPTER_ID environment variable.
- */
-#define DEVICE_PROP_MATTER_BLE_ADAPTER_ID       DEVICE_PROP_MATTER_NS "bleAdapterId"
