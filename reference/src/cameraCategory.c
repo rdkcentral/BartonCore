@@ -22,15 +22,12 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Coordinator for the camera stream (cs) command. Handles the reference-app
-// user interface and drives the streaming state machine, delegating the actual
-// work to these modules:
-//   - cameraDeviceSession: camera flows over the Barton client interface
-//   - cameraWebrtcClient:  the WebRTC client backed by GStreamer (muxes to file / fMP4)
-//   - cameraMediaServer:   HTTP server that streams the fragmented MP4 to a browser
-//
-// This module owns only the cross-thread synchronization (the modules invoke
-// callbacks from their own threads) and the ordering of the signaling steps.
+// The camera stream (cs) command. This layer is technology-agnostic: it opens the abstract camera
+// session, starts the stream, and hands off to a CameraStreamBackend selected by the technology the
+// camera's data model reports (the stream protocol). All protocol-specific state and logic live in
+// the backends (see cameraWebrtcBackend / cameraOnvifBackend) behind the CameraStreamBackend
+// abstraction, and everything shared (the device session, output sink, and teardown signaling)
+// lives in CameraStreamContext.
 //
 
 #include "cameraCategory.h"
@@ -38,69 +35,17 @@
 #include "barton-core-reference-io.h"
 #include "cameraDeviceSession.h"
 #include "cameraMediaServer.h"
-#include "cameraWebrtcClient.h"
-#include <jsonHelper/jsonHelper.h>
+#include "cameraStreamBackend.h"
+#include "cameraStreamContext.h"
 #include <signal.h>
-#include <stdio.h>
+#include <string.h>
 
 // CAMERA_DEFAULT_SERVE_HOST / CAMERA_DEFAULT_SERVE_PORT are defined in cameraMediaServer.h so the
 // command layer and the media server share the same defaults.
 
-// The SIGINT handler may only touch an async-signal-safe flag, so the blocking wait loops poll
-// it on this interval to observe Ctrl+C promptly without the handler taking locks.
-#define CAMERA_SIGINT_POLL_INTERVAL_USEC (200 * G_TIME_SPAN_MILLISECOND)
-
-// ============================================================================
-// Shared state between threads
-// ============================================================================
-
-typedef struct
-{
-    GMutex mutex;
-    GCond cond;
-
-    // Set by the WebRTC client callbacks
-    gchar *localSdpOffer;
-    gboolean offerReady;
-    GQueue localIceCandidates; // candidate strings buffered until trickle sending is enabled
-
-    // Set by the device-session callbacks
-    gchar *remoteSdp;
-    GQueue remoteIceCandidates; // JSON array strings buffered until inbound trickle feeding is enabled
-    gboolean remoteSdpReady;
-    gboolean sessionEnded;
-    gchar *errorMessage;
-
-    // Control
-    gboolean teardown;
-
-    // Trickle ICE (outbound): once the camera session is established, local candidates are sent
-    // to the camera immediately as they are gathered; until then they are buffered above.
-    CameraDeviceSession *session;
-    gboolean iceSendEnabled;
-
-    // Trickle ICE (inbound): once the remote SDP is set, the camera's candidates are fed to the
-    // WebRTC client as they arrive; until then they are buffered above.
-    CameraWebrtcClient *webrtc;
-    gboolean remoteIceFeedEnabled;
-
-    // Serve mode: the in-container pipeline muxes fragmented MP4 and this HTTP server streams
-    // it to the browser. NULL when recording to a file.
-    CameraMediaServer *mediaServer;
-
-    // Record mode: the muxed fragmented MP4 is written here. NULL when serving over HTTP.
-    FILE *outFile;
-} CameraStreamState;
-
-// Set by the SIGINT handler, which must stay async-signal-safe. The blocking wait loops poll
-// this flag rather than relying on the handler to take locks or signal condition variables.
+// Set by the SIGINT handler, which must stay async-signal-safe. The context's wait loop polls this
+// flag rather than relying on the handler to take locks or signal condition variables.
 static volatile sig_atomic_t sigintRequested = 0;
-
-static void sendLocalIceCandidate(CameraDeviceSession *session, const gchar *candidate);
-static void feedRemoteIceCandidates(CameraWebrtcClient *client, const gchar *jsonCandidates);
-static void onMediaBuffer(const guint8 *data, gsize size, gboolean isHeader, gpointer userData);
-static void onViewerConnected(gpointer userData);
-static gboolean parseOutputUri(const gchar *uri, gchar **filePathOut, gchar **serveHostOut, guint16 *servePortOut);
 
 // ============================================================================
 // SIGINT handler
@@ -110,706 +55,14 @@ static void sigintHandler(int sig)
 {
     (void) sig;
 
-    // Only touch an async-signal-safe flag here. Taking the GLib mutex or signaling the
-    // condition variable from a signal handler is undefined behavior; the wait loops poll this
-    // flag instead (see waitForCondition).
+    // Only touch an async-signal-safe flag here. Taking a GLib mutex or signaling a condition
+    // variable from a signal handler is undefined behavior; the wait loop polls this flag instead.
     sigintRequested = 1;
 }
 
 // ============================================================================
-// WebRTC client callbacks
+// Argument parsing
 // ============================================================================
-
-static void onLocalOfferReady(const gchar *sdp, gpointer userData)
-{
-    CameraStreamState *state = (CameraStreamState *) userData;
-    g_mutex_lock(&state->mutex);
-    g_free(state->localSdpOffer);
-    state->localSdpOffer = g_strdup(sdp);
-    state->offerReady = TRUE;
-    g_cond_signal(&state->cond);
-    g_mutex_unlock(&state->mutex);
-}
-
-static void onLocalIceCandidate(guint mlineIndex, const gchar *candidate, gpointer userData)
-{
-    (void) mlineIndex;
-    CameraStreamState *state = (CameraStreamState *) userData;
-
-    g_mutex_lock(&state->mutex);
-    gboolean sendNow = state->iceSendEnabled;
-
-    if (!sendNow)
-    {
-        // The camera session isn't established yet; buffer until trickle sending is enabled.
-        g_queue_push_tail(&state->localIceCandidates, g_strdup(candidate));
-        g_cond_signal(&state->cond);
-    }
-
-    CameraDeviceSession *session = state->session;
-    g_mutex_unlock(&state->mutex);
-
-    // Trickle: send this candidate to the camera immediately as its own message.
-    if (sendNow)
-    {
-        sendLocalIceCandidate(session, candidate);
-    }
-}
-
-// Invoked when the WebRTC client stops on its own (pipeline error or EOS).
-// Requests the same graceful teardown as Ctrl+C so the session is ended on the
-// camera (EndSession) and the stream is deallocated rather than leaked.
-static void onWebrtcClosed(gpointer userData)
-{
-    CameraStreamState *state = (CameraStreamState *) userData;
-    g_mutex_lock(&state->mutex);
-    state->teardown = TRUE;
-    g_cond_signal(&state->cond);
-    g_mutex_unlock(&state->mutex);
-}
-
-// ============================================================================
-// Device-session callbacks
-// ============================================================================
-
-static void onRemoteSdp(const gchar *sdp, gpointer userData)
-{
-    CameraStreamState *state = (CameraStreamState *) userData;
-    g_mutex_lock(&state->mutex);
-    g_free(state->remoteSdp);
-    state->remoteSdp = g_strdup(sdp);
-    state->remoteSdpReady = TRUE;
-    g_cond_signal(&state->cond);
-    g_mutex_unlock(&state->mutex);
-}
-
-static void onRemoteIce(const gchar *jsonCandidates, gpointer userData)
-{
-    CameraStreamState *state = (CameraStreamState *) userData;
-
-    g_mutex_lock(&state->mutex);
-    gboolean feedNow = state->remoteIceFeedEnabled;
-    CameraWebrtcClient *webrtc = state->webrtc;
-
-    if (!feedNow)
-    {
-        // The remote SDP isn't set yet; buffer until inbound trickle feeding is enabled.
-        g_queue_push_tail(&state->remoteIceCandidates, g_strdup(jsonCandidates));
-        g_cond_signal(&state->cond);
-    }
-
-    g_mutex_unlock(&state->mutex);
-
-    // Trickle: feed these candidates to the WebRTC client the moment they arrive.
-    if (feedNow)
-    {
-        feedRemoteIceCandidates(webrtc, jsonCandidates);
-    }
-}
-
-static void onSessionError(const gchar *message, gpointer userData)
-{
-    CameraStreamState *state = (CameraStreamState *) userData;
-    g_mutex_lock(&state->mutex);
-    g_free(state->errorMessage);
-    state->errorMessage = g_strdup(message);
-    state->sessionEnded = TRUE;
-    g_cond_signal(&state->cond);
-    g_mutex_unlock(&state->mutex);
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-static gboolean waitForCondition(CameraStreamState *state, gboolean *flag, gint timeoutSeconds)
-{
-    gint64 deadline = g_get_monotonic_time() + (gint64) timeoutSeconds * G_USEC_PER_SEC;
-    g_mutex_lock(&state->mutex);
-
-    while (!*flag && !state->teardown && !state->sessionEnded)
-    {
-        if (sigintRequested)
-        {
-            state->teardown = TRUE;
-
-            break;
-        }
-
-        gint64 now = g_get_monotonic_time();
-
-        if (now >= deadline)
-        {
-            g_mutex_unlock(&state->mutex);
-
-            return FALSE;
-        }
-
-        // Wake periodically to poll the async-signal-safe SIGINT flag, since the signal handler
-        // cannot safely take the mutex or signal the condition variable.
-        gint64 wakeup = now + CAMERA_SIGINT_POLL_INTERVAL_USEC;
-
-        if (wakeup > deadline)
-        {
-            wakeup = deadline;
-        }
-
-        g_cond_wait_until(&state->cond, &state->mutex, wakeup);
-    }
-
-    gboolean result = *flag;
-    g_mutex_unlock(&state->mutex);
-
-    return result;
-}
-
-// Block until Ctrl+C (teardown) or the camera ends the session.
-
-// Wrap a single ICE candidate in the one-element JSON array the camera expects, so each
-// candidate can be trickled to the camera as its own message.
-static gchar *buildSingleIceCandidateJson(const gchar *candidate)
-{
-    scoped_cJSON *array = cJSON_CreateArray();
-    cJSON_AddItemToArray(array, cJSON_CreateString(candidate));
-
-    // cJSON prints into a malloc'd buffer; copy it into a glib buffer (freed with
-    // cJSON_free) so the caller can free the result with g_free.
-    char *raw = cJSON_PrintUnformatted(array);
-    gchar *result = g_strdup(raw);
-    cJSON_free(raw);
-
-    return result;
-}
-
-// Send one local ICE candidate to the camera as its own offerIceCandidates message.
-static void sendLocalIceCandidate(CameraDeviceSession *session, const gchar *candidate)
-{
-    g_autofree gchar *json = buildSingleIceCandidateJson(candidate);
-    cameraDeviceSessionSendIceCandidates(session, json);
-}
-
-// Send any candidates that were gathered before trickle sending was enabled, one message each.
-static void flushBufferedLocalIce(CameraDeviceSession *session, CameraStreamState *state)
-{
-    for (;;)
-    {
-        g_mutex_lock(&state->mutex);
-        gchar *candidate = g_queue_pop_head(&state->localIceCandidates);
-        g_mutex_unlock(&state->mutex);
-
-        if (candidate == NULL)
-        {
-            break;
-        }
-
-        g_autofree gchar *owned = candidate;
-        sendLocalIceCandidate(session, owned);
-    }
-}
-
-// Parse the camera's remote ICE JSON array and feed each candidate to the client.
-static void feedRemoteIceCandidates(CameraWebrtcClient *client, const gchar *jsonCandidates)
-{
-    scoped_cJSON *array = cJSON_Parse(jsonCandidates);
-
-    if (!cJSON_IsArray(array))
-    {
-        return;
-    }
-
-    cJSON *item = NULL;
-    cJSON_ArrayForEach(item, array)
-    {
-        if (!cJSON_IsString(item))
-        {
-            continue;
-        }
-
-        // GStreamer's webrtcbin expects the bare "candidate:..." value; the camera
-        // sends candidates with the SDP "a=" attribute prefix.
-        const gchar *value = item->valuestring;
-
-        if (g_str_has_prefix(value, "a="))
-        {
-            value += 2;
-        }
-
-        // Skip the empty end-of-candidates marker the camera includes.
-        if (*value != '\0')
-        {
-            cameraWebrtcClientAddIceCandidate(client, 0, value);
-        }
-    }
-}
-
-// Feed any remote candidates that arrived before inbound trickle feeding was enabled, then the
-// callback delivers the rest live for the remainder of the session.
-static void flushBufferedRemoteIce(CameraWebrtcClient *client, CameraStreamState *state)
-{
-    for (;;)
-    {
-        g_mutex_lock(&state->mutex);
-        gchar *json = g_queue_pop_head(&state->remoteIceCandidates);
-        g_mutex_unlock(&state->mutex);
-
-        if (json == NULL)
-        {
-            break;
-        }
-
-        g_autofree gchar *owned = json;
-        feedRemoteIceCandidates(client, owned);
-    }
-}
-
-static void cleanupState(CameraStreamState *state)
-{
-    g_free(state->localSdpOffer);
-    g_free(state->remoteSdp);
-    g_free(state->errorMessage);
-
-    while (!g_queue_is_empty(&state->localIceCandidates))
-    {
-        g_free(g_queue_pop_head(&state->localIceCandidates));
-    }
-
-    while (!g_queue_is_empty(&state->remoteIceCandidates))
-    {
-        g_free(g_queue_pop_head(&state->remoteIceCandidates));
-    }
-
-    if (state->outFile != NULL)
-    {
-        fclose(state->outFile);
-        state->outFile = NULL;
-    }
-
-    g_mutex_clear(&state->mutex);
-    g_cond_clear(&state->cond);
-}
-
-// Pretty-print the negotiated stream configuration. Only fields the pipeline can report are
-// shown; this is a passthrough (no-decode) pipeline, so resolution and frame rate are not
-// derived here and are omitted.
-static void printNegotiatedConfig(const CameraWebrtcVideoConfig *cfg)
-{
-    emitOutput("[camera-stream] Negotiated stream configuration:\n");
-
-    if (cfg->codec[0] != '\0')
-    {
-        if (cfg->profileLevelId[0] != '\0')
-        {
-            emitOutput("[camera-stream]     Codec       : %s (profile-level-id %s)\n", cfg->codec, cfg->profileLevelId);
-        }
-        else
-        {
-            emitOutput("[camera-stream]     Codec       : %s\n", cfg->codec);
-        }
-    }
-
-    if (cfg->bitrateKbps > 0)
-    {
-        emitOutput("[camera-stream]     Bit rate    : %d kbps\n", cfg->bitrateKbps);
-    }
-
-    if (cfg->payloadType >= 0 && cfg->clockRate > 0)
-    {
-        emitOutput("[camera-stream]     RTP payload : %d @ %d Hz\n", cfg->payloadType, cfg->clockRate);
-    }
-
-    if (cfg->width > 0 && cfg->height > 0)
-    {
-        emitOutput("[camera-stream]     Resolution  : %dx%d\n", cfg->width, cfg->height);
-    }
-
-    if (cfg->framerateNum > 0 && cfg->framerateDen > 0)
-    {
-        emitOutput("[camera-stream]     Frame rate  : %g fps\n",
-                   (double) cfg->framerateNum / (double) cfg->framerateDen);
-    }
-}
-
-// ============================================================================
-// Command implementation
-// ============================================================================
-
-// Runs the full signaling sequence for one stream. Each module handle is scope
-// bound (g_autoptr), so every early return tears everything down in the right
-// order: the WebRTC client first (stopping the appsink), then the media server /
-// output file, then the device session (which ends the camera session if it was opened).
-static bool runCameraStream(BCoreClient *client,
-                            const gchar *deviceId,
-                            const gchar *filePath,
-                            const gchar *serveHost,
-                            guint16 servePort,
-                            CameraStreamState *state)
-{
-    // Subscribe to camera events before anything else so no update is missed.
-    g_autoptr(CameraDeviceSession) session =
-        cameraDeviceSessionCreate(client, deviceId, onRemoteSdp, onRemoteIce, onSessionError, state);
-
-    if (session == NULL)
-    {
-        emitError("[camera-stream] Failed to set up camera session\n");
-
-        return false;
-    }
-
-    // Make the session available to the ICE-candidate callback so it can trickle candidates.
-    g_mutex_lock(&state->mutex);
-    state->session = session;
-    g_mutex_unlock(&state->mutex);
-
-    // Step 1: Create session
-    emitOutput("[camera-stream] Creating session...\n");
-
-    if (!cameraDeviceSessionOpen(session))
-    {
-        emitError("[camera-stream] Failed to create session\n");
-
-        return false;
-    }
-
-    emitOutput("[camera-stream] Session created\n");
-
-    // Step 2: Start stream
-    emitOutput("[camera-stream] Starting stream...\n");
-
-    if (!cameraDeviceSessionStartStream(session))
-    {
-        emitError("[camera-stream] Failed to start stream\n");
-
-        return false;
-    }
-
-    const gchar *protocol = cameraDeviceSessionGetProtocol(session);
-    const gchar *entryPoint = cameraDeviceSessionGetEntryPoint(session);
-    emitOutput("[camera-stream] Stream started (protocol %s, entry %s), setting up WebRTC...\n",
-               protocol != NULL ? protocol : "unknown",
-               entryPoint != NULL ? entryPoint : "unknown");
-
-    // Step 3: In serve mode, start the HTTP media server before the client so it receives the
-    // pipeline's first (init-segment) buffers. In record mode, open the output file. Then create
-    // the WebRTC client, which always muxes the camera's H.264 into fragmented MP4 and delivers
-    // the buffers to onMediaBuffer. The client is declared after the server so it is destroyed
-    // first, stopping the pipeline before the server it feeds.
-    g_autoptr(CameraMediaServer) mediaServer = NULL;
-
-    if (filePath != NULL)
-    {
-        state->outFile = fopen(filePath, "wb");
-
-        if (state->outFile == NULL)
-        {
-            emitError("[camera-stream] Failed to open %s for writing\n", filePath);
-
-            return false;
-        }
-
-        emitOutput("[camera-stream] Recording camera video to %s\n", filePath);
-    }
-    else
-    {
-        mediaServer = cameraMediaServerCreate(serveHost, servePort);
-
-        if (mediaServer == NULL)
-        {
-            emitError("[camera-stream] Failed to start the media server\n");
-
-            return false;
-        }
-
-        g_mutex_lock(&state->mutex);
-        state->mediaServer = mediaServer;
-        g_mutex_unlock(&state->mutex);
-
-        cameraMediaServerSetOnViewer(mediaServer, onViewerConnected, state);
-
-        emitOutput("[camera-stream] Serving camera video at %s\n", cameraMediaServerGetUrl(mediaServer));
-    }
-
-    g_autoptr(CameraWebrtcClient) webrtc =
-        cameraWebrtcClientCreate(onLocalOfferReady, onLocalIceCandidate, onWebrtcClosed, onMediaBuffer, state);
-
-    if (webrtc == NULL)
-    {
-        emitError("[camera-stream] Failed to create WebRTC client\n");
-
-        return false;
-    }
-
-    // Determine our negotiation role by inverting the camera's. negotiationRole reports the
-    // CAMERA's role: when the camera is the 'offerer' (SolicitOffer flow) it provides the offer and
-    // we answer it; when the camera is the 'answerer' (ProvideOffer flow) we create the offer. Must
-    // be set before the peer starts negotiating.
-    const gchar *role = cameraDeviceSessionGetRole(session);
-
-    // The role read can fail (NULL) or return an unexpected value; bail out with a clear error
-    // rather than silently defaulting to a role that could drive the wrong signaling flow.
-    if (g_strcmp0(role, "offerer") != 0 && g_strcmp0(role, "answerer") != 0)
-    {
-        emitError("[camera-stream] could not determine the camera's negotiation role (got '%s')\n",
-                  role != NULL ? role : "(null)");
-
-        return false;
-    }
-
-    gboolean answerer = (g_strcmp0(role, "offerer") == 0);
-    cameraWebrtcClientSetAnswerer(webrtc, answerer);
-
-    // Step 4: Start client (in offerer mode this triggers negotiation -> creates the SDP offer)
-    if (!cameraWebrtcClientStart(webrtc))
-    {
-        emitError("[camera-stream] Failed to start WebRTC client\n");
-
-        return false;
-    }
-
-    if (answerer)
-    {
-        // Answerer (SolicitOffer flow): open signaling by posting an empty local SDP, which tells
-        // the driver to allocate a stream and ask the camera to generate the offer. Then wait for
-        // that offer, set it as the remote description (which makes the client create our answer),
-        // and send the answer back.
-        emitOutput("[camera-stream] Requesting camera SDP offer...\n");
-
-        if (!cameraDeviceSessionSendOffer(session, ""))
-        {
-            emitError("[camera-stream] Failed to request camera SDP offer\n");
-
-            return false;
-        }
-
-        emitOutput("[camera-stream] Waiting for camera SDP offer...\n");
-
-        if (!waitForCondition(state, &state->remoteSdpReady, 30))
-        {
-            emitError("[camera-stream] Timeout waiting for camera SDP offer\n");
-
-            return false;
-        }
-
-        if (state->teardown || state->sessionEnded)
-        {
-            return false;
-        }
-
-        g_autofree gchar *remoteOffer = NULL;
-        g_mutex_lock(&state->mutex);
-        remoteOffer = g_strdup(state->remoteSdp);
-        g_mutex_unlock(&state->mutex);
-
-        emitOutput("[camera-stream] Offer received, creating answer...\n");
-
-        if (!cameraWebrtcClientSetRemoteSdp(webrtc, remoteOffer))
-        {
-            emitError("[camera-stream] Failed to set remote SDP offer\n");
-
-            return false;
-        }
-
-        // The client produces the answer asynchronously (create-answer).
-        if (!waitForCondition(state, &state->offerReady, 10))
-        {
-            emitError("[camera-stream] Timeout waiting for local SDP answer\n");
-
-            return false;
-        }
-
-        if (state->teardown || state->sessionEnded)
-        {
-            return false;
-        }
-
-        g_autofree gchar *localAnswer = NULL;
-        g_mutex_lock(&state->mutex);
-        localAnswer = g_strdup(state->localSdpOffer);
-        g_mutex_unlock(&state->mutex);
-
-        emitOutput("[camera-stream] Sending SDP answer to camera...\n");
-
-        if (!cameraDeviceSessionSendOffer(session, localAnswer))
-        {
-            emitError("[camera-stream] Failed to send SDP answer\n");
-
-            return false;
-        }
-    }
-    else
-    {
-        // Offerer (ProvideOffer flow): we create the offer, the camera answers.
-        emitOutput("[camera-stream] Waiting for local SDP offer...\n");
-
-        if (!waitForCondition(state, &state->offerReady, 10))
-        {
-            emitError("[camera-stream] Timeout waiting for SDP offer\n");
-
-            return false;
-        }
-
-        if (state->teardown || state->sessionEnded)
-        {
-            return false;
-        }
-
-        g_autofree gchar *localOffer = NULL;
-        g_mutex_lock(&state->mutex);
-        localOffer = g_strdup(state->localSdpOffer);
-        g_mutex_unlock(&state->mutex);
-
-        emitOutput("[camera-stream] Sending SDP offer to camera...\n");
-
-        if (!cameraDeviceSessionSendOffer(session, localOffer))
-        {
-            emitError("[camera-stream] Failed to send SDP offer\n");
-
-            return false;
-        }
-
-        emitOutput("[camera-stream] SDP offer sent, waiting for answer...\n");
-
-        if (!waitForCondition(state, &state->remoteSdpReady, 30))
-        {
-            emitError("[camera-stream] Timeout waiting for remote SDP answer\n");
-
-            return false;
-        }
-
-        if (state->teardown || state->sessionEnded)
-        {
-            return false;
-        }
-
-        g_autofree gchar *remoteAnswer = NULL;
-        g_mutex_lock(&state->mutex);
-        remoteAnswer = g_strdup(state->remoteSdp);
-        g_mutex_unlock(&state->mutex);
-
-        emitOutput("[camera-stream] Answer received, setting remote SDP...\n");
-
-        if (!cameraWebrtcClientSetRemoteSdp(webrtc, remoteAnswer))
-        {
-            emitError("[camera-stream] Failed to set remote SDP\n");
-
-            return false;
-        }
-    }
-
-    // Step 9: Enable trickle ICE in both directions now that the camera session is established
-    // and the remote description is set. Candidates gathered/received before now are flushed
-    // here; later ones are trickled by the callbacks the moment they arrive, for the life of
-    // the session.
-    emitOutput("[camera-stream] Trickling ICE candidates...\n");
-    g_mutex_lock(&state->mutex);
-    state->iceSendEnabled = TRUE;
-    state->webrtc = webrtc;
-    state->remoteIceFeedEnabled = TRUE;
-    g_mutex_unlock(&state->mutex);
-
-    // Outbound: send local candidates to the camera. Inbound: feed the camera's candidates to
-    // the WebRTC client. Both drain whatever was buffered during signaling; the callbacks then
-    // keep trickling in each direction until the session ends.
-    flushBufferedLocalIce(session, state);
-    flushBufferedRemoteIce(webrtc, state);
-
-    // Print the signaled stream configuration (codec / bitrate / payload). Resolution and
-    // frame rate are not derived from this passthrough (no-decode) pipeline, so they are omitted.
-    {
-        CameraWebrtcVideoConfig videoConfig;
-        cameraWebrtcClientGetVideoConfig(webrtc, &videoConfig);
-        printNegotiatedConfig(&videoConfig);
-    }
-
-    // Step 12: Media flowing - wait for teardown
-    if (filePath != NULL)
-    {
-        emitOutput("[camera-stream] Media flowing, recording to %s. Press Ctrl+C to stop.\n", filePath);
-    }
-    else
-    {
-        emitOutput("[camera-stream] Media flowing at %s. Press Ctrl+C to stop.\n",
-                   cameraMediaServerGetUrl(mediaServer));
-    }
-
-    // Block until the user interrupts (Ctrl+C) or the camera ends the session. waitForCondition
-    // returns FALSE on timeout, so loop to re-arm it rather than silently stopping a long-lived
-    // stream once the timeout elapses.
-    while (!state->teardown && !state->sessionEnded)
-    {
-        waitForCondition(state, &state->teardown, 3600);
-    }
-
-    if (state->sessionEnded)
-    {
-        emitOutput("[camera-stream] Session ended: %s\n",
-                   state->errorMessage != NULL ? state->errorMessage : "unknown reason");
-    }
-    else
-    {
-        emitOutput("\n[camera-stream] Stopping stream...\n");
-    }
-
-    // Sever the cross-thread callbacks before the scope-bound handles tear down. The g_autoptr
-    // scope exit destroys the WebRTC client first, but the media server and device session outlive
-    // it briefly and their callbacks (onViewerConnected / onRemoteIce) reach into state->webrtc.
-    // Stop the media server from calling back and clear the shared pointers under the mutex so any
-    // late callback becomes a no-op instead of touching the destroyed client.
-    cameraMediaServerSetOnViewer(mediaServer, NULL, NULL);
-
-    g_mutex_lock(&state->mutex);
-    state->webrtc = NULL;
-    state->session = NULL;
-    state->mediaServer = NULL;
-    g_mutex_unlock(&state->mutex);
-
-    return true;
-}
-
-// SERVE mode: hand each muxed fragmented-MP4 buffer from the pipeline to the HTTP media server.
-static void onMediaBuffer(const guint8 *data, gsize size, gboolean isHeader, gpointer userData)
-{
-    CameraStreamState *state = (CameraStreamState *) userData;
-
-    g_mutex_lock(&state->mutex);
-    CameraMediaServer *server = state->mediaServer;
-    FILE *outFile = state->outFile;
-    g_mutex_unlock(&state->mutex);
-
-    // Serve mode: fan the fragmented-MP4 buffer out to viewers. Record mode: append it to the
-    // file. (outFile is only closed in cleanupState, after the pipeline -- and therefore this
-    // callback -- has stopped, so the pointer stays valid for the write here.)
-    if (server != NULL)
-    {
-        cameraMediaServerPushBuffer(server, data, size, isHeader);
-    }
-
-    if (outFile != NULL)
-    {
-        fwrite(data, 1, size, outFile);
-        fflush(outFile);
-    }
-}
-
-// Invoked (on the media server thread) when a new viewer connects. Requests a fresh keyframe so
-// the viewer can begin decoding immediately. state->webrtc may still be NULL if a viewer connects
-// during setup, before the client is published; in that case the stream-start keyframe covers it.
-static void onViewerConnected(gpointer userData)
-{
-    CameraStreamState *state = (CameraStreamState *) userData;
-
-    // Request the keyframe while holding the mutex so a concurrent teardown -- which clears
-    // state->webrtc under the same mutex before the client is destroyed -- cannot free the client
-    // between the NULL check and the call. requestKeyframe only takes the client's keyframe lock,
-    // so there is no lock-ordering hazard.
-    g_mutex_lock(&state->mutex);
-
-    if (state->webrtc != NULL)
-    {
-        cameraWebrtcClientRequestKeyframe(state->webrtc);
-    }
-
-    g_mutex_unlock(&state->mutex);
-}
 
 // Parse the --out URI. A "file://<path>" URI records to a file; anything else is treated as an
 // HTTP serve target (the "http://" scheme is optional). A NULL uri (no --out) selects the default
@@ -853,18 +106,103 @@ static gboolean parseOutputUri(const gchar *uri, gchar **filePathOut, gchar **se
     return (*servePortOut != 0);
 }
 
+// ============================================================================
+// Command implementation
+// ============================================================================
+
+// Open the abstract camera session, start the stream, and drive the technology-specific backend.
+// Every handle is scope bound (g_autoptr) so early returns tear everything down in the right order:
+// the backend (and its media client) first, then the context (output sink), then the device session
+// (which ends the camera session if it was opened).
+static bool runCameraStream(BCoreClient *client,
+                            const gchar *deviceId,
+                            const gchar *filePath,
+                            const gchar *serveHost,
+                            guint16 servePort,
+                            const CameraStreamOptions *options)
+{
+    g_autoptr(CameraDeviceSession) session = cameraDeviceSessionCreate(client, deviceId);
+
+    if (session == NULL)
+    {
+        emitError("[camera-stream] Failed to set up camera session\n");
+
+        return false;
+    }
+
+    emitOutput("[camera-stream] Creating session...\n");
+
+    if (!cameraDeviceSessionOpen(session))
+    {
+        emitError("[camera-stream] Failed to create session\n");
+
+        return false;
+    }
+
+    emitOutput("[camera-stream] Session created\n");
+
+    emitOutput("[camera-stream] Starting stream...\n");
+
+    if (!cameraDeviceSessionStartStream(session))
+    {
+        emitError("[camera-stream] Failed to start stream\n");
+
+        return false;
+    }
+
+    // The stream springboard reports the technology (protocol) and the entry point to begin on.
+    const gchar *protocol = cameraDeviceSessionGetProtocol(session);
+    const gchar *entryPoint = cameraDeviceSessionGetEntryPoint(session);
+    emitOutput("[camera-stream] Stream started (protocol %s, entry %s)\n",
+               protocol != NULL ? protocol : "unknown",
+               entryPoint != NULL ? entryPoint : "unknown");
+
+    // Select the backend for the reported technology; unknown protocols are rejected by the factory.
+    g_autoptr(CameraStreamBackend) backend = cameraStreamBackendCreate(protocol, options);
+
+    if (backend == NULL)
+    {
+        return false;
+    }
+
+    g_autoptr(CameraStreamContext) ctx =
+        cameraStreamContextCreate(session, filePath, serveHost, servePort, &sigintRequested);
+
+    // Session-ended status is shared across technologies, so it is handled by the context.
+    cameraDeviceSessionSetStatusCallback(session, cameraStreamContextOnSessionEnded, ctx);
+
+    return cameraStreamBackendRun(backend, ctx);
+}
+
 static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     const gchar *deviceId = argv[0];
     const gchar *outUri = NULL;
+    CameraStreamOptions options = {0};
+    const gchar *snapshotArg = NULL;
 
-    // Parse optional --out <uri>: file://<path> records, http://<host>:<port> serves.
+    // Parse optional flags:
+    //   --out <uri>        file://<path> records, http://<host>:<port> serves (default: serve)
+    //   --user <name>      ONVIF/RTSP username (interim credential mechanism; ONVIF path only)
+    //   --pass <secret>    ONVIF/RTSP password (interim credential mechanism; ONVIF path only)
+    //   --snapshot <path>  ONVIF path only: take a picture and save the JPEG to file://<path>
     for (gint i = 1; i < argc; i++)
     {
         if (g_strcmp0(argv[i], "--out") == 0 && i + 1 < argc)
         {
-            outUri = argv[i + 1];
-            i++;
+            outUri = argv[++i];
+        }
+        else if (g_strcmp0(argv[i], "--user") == 0 && i + 1 < argc)
+        {
+            options.user = argv[++i];
+        }
+        else if (g_strcmp0(argv[i], "--pass") == 0 && i + 1 < argc)
+        {
+            options.pass = argv[++i];
+        }
+        else if (g_strcmp0(argv[i], "--snapshot") == 0 && i + 1 < argc)
+        {
+            snapshotArg = argv[++i];
         }
     }
 
@@ -880,6 +218,24 @@ static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
         return false;
     }
 
+    // The snapshot target is a plain path; accept an optional file:// scheme for symmetry with --out.
+    g_autofree gchar *snapshotPath = NULL;
+
+    if (snapshotArg != NULL)
+    {
+        snapshotPath = g_str_has_prefix(snapshotArg, "file://") ? g_strdup(snapshotArg + strlen("file://"))
+                                                                : g_strdup(snapshotArg);
+
+        if (snapshotPath[0] == '\0')
+        {
+            emitError("Invalid --snapshot path '%s'\n", snapshotArg);
+
+            return false;
+        }
+
+        options.snapshotPath = snapshotPath;
+    }
+
     // Verify device exists
     g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, deviceId);
 
@@ -889,13 +245,6 @@ static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
 
         return false;
     }
-
-    // Initialize shared state
-    CameraStreamState state = {0};
-    g_mutex_init(&state.mutex);
-    g_cond_init(&state.cond);
-    g_queue_init(&state.localIceCandidates);
-    g_queue_init(&state.remoteIceCandidates);
 
     // Install signal handler so Ctrl+C requests a graceful teardown. Clear any leftover request
     // from a previous run before arming the handler for this one.
@@ -907,12 +256,10 @@ static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
     sigaction(SIGINT, &newAction, &oldAction);
 
     bool success = runCameraStream(
-        client, deviceId, filePath, serveHost != NULL ? serveHost : CAMERA_DEFAULT_SERVE_HOST, servePort, &state);
+        client, deviceId, filePath, serveHost != NULL ? serveHost : CAMERA_DEFAULT_SERVE_HOST, servePort, &options);
 
     // Restore signal handler
     sigaction(SIGINT, &oldAction, NULL);
-
-    cleanupState(&state);
 
     emitOutput("[camera-stream] Done.\n");
 
@@ -923,14 +270,16 @@ Category *buildCameraCategory(void)
 {
     Category *cat = categoryCreate("Camera", "Camera streaming commands");
 
-    Command *command = commandCreate("cameraStream",
-                                     "cs",
-                                     "<deviceId> [--out <uri>]",
-                                     "Stream a camera via WebRTC; serve over HTTP (default http://127.0.0.1:8088) "
-                                     "or record with --out file://<path>",
-                                     1,
-                                     3,
-                                     cameraStreamFunc);
+    Command *command =
+        commandCreate("cameraStream",
+                      "cs",
+                      "<deviceId> [--out <uri>] [--user <name>] [--pass <secret>] [--snapshot <file://path>]",
+                      "Stream a camera (WebRTC or ONVIF/RTSP); serve over HTTP (default "
+                      "http://127.0.0.1:8088) or record with --out file://<path>. For ONVIF cameras, "
+                      "--user/--pass supply interim credentials and --snapshot saves a still image.",
+                      1,
+                      9,
+                      cameraStreamFunc);
     categoryAddCommand(cat, command);
 
     return cat;
