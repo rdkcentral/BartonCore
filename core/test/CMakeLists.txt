@@ -442,6 +442,15 @@ if (BCORE_ONVIF)
         INCLUDES ${ONVIF_DIR} ${ONVIF_TEST_XML_INCLUDE_DIRS} ${ONVIF_TEST_CURL_INCLUDE_DIRS}
     )
 
+    bcore_add_cpp_test(
+        NAME testOnvifWsDiscovery
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/OnvifWsDiscoveryTest.cpp
+                ${ONVIF_DIR}/OnvifWsDiscovery.cpp
+                ${ONVIF_DIR}/OnvifXml.cpp
+        LIBS ${ONVIF_TEST_XML_LIBRARIES} gmock BartonCommon::xhXmlHelper
+        INCLUDES ${ONVIF_DIR} ${ONVIF_TEST_XML_INCLUDE_DIRS}
+    )
+
     if (BUILD_TESTING)
         bcore_configure_glib()
     endif()
