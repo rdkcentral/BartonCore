@@ -420,3 +420,29 @@ if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
     )
 endif()
+
+# ONVIF standalone unit tests (SOAP client + WS-Discovery). These compile the ONVIF units directly
+# and only need glib/libcurl/libxml2 — no BartonCoreStatic — so they build without Matter.
+if (BCORE_ONVIF)
+    include(BCoreAddCppTest)
+    include(BCoreConfigureGLib)
+    include(FindPkgConfig)
+
+    pkg_check_modules(ONVIF_TEST_XML REQUIRED libxml-2.0)
+    pkg_check_modules(ONVIF_TEST_CURL REQUIRED libcurl)
+
+    set(ONVIF_DIR ${PROJECT_SOURCE_DIR}/core/deviceDrivers/onvif)
+
+    bcore_add_cpp_test(
+        NAME testOnvifSoapClient
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/OnvifSoapClientTest.cpp
+                ${ONVIF_DIR}/OnvifSoapClient.cpp
+                ${ONVIF_DIR}/OnvifXml.cpp
+        LIBS ${ONVIF_TEST_CURL_LIBRARIES} ${ONVIF_TEST_XML_LIBRARIES} gmock BartonCommon::xhXmlHelper
+        INCLUDES ${ONVIF_DIR} ${ONVIF_TEST_XML_INCLUDE_DIRS} ${ONVIF_TEST_CURL_INCLUDE_DIRS}
+    )
+
+    if (BUILD_TESTING)
+        bcore_configure_glib()
+    endif()
+endif()
