@@ -336,8 +336,7 @@ function parseSessions(sessionsJson) {
 }
 
 function findStreamingSessionId(sessions) {
-    if (sessions === null || sessions === undefined)
-    {
+    if (sessions === null || sessions === undefined) {
         return null;
     }
 
@@ -356,22 +355,17 @@ function findStreamingSessionId(sessions) {
 // webRTCSessionID so the resource update event can be attributed to the exact
 // session, which matters when multiple clients are active and streaming-state
 // inference would be ambiguous.
-function findSessionIdByWebRTCSessionID(sessions, webRTCSessionID)
-{
-    if (webRTCSessionID === undefined || webRTCSessionID === null)
-    {
+function findSessionIdByWebRTCSessionID(sessions, webRTCSessionID) {
+    if (webRTCSessionID === undefined || webRTCSessionID === null) {
         return null;
     }
 
-    if (sessions === null || sessions === undefined)
-    {
+    if (sessions === null || sessions === undefined) {
         return null;
     }
 
-    for (var id in sessions)
-    {
-        if (sessions[id].webRTCSessionID === webRTCSessionID)
-        {
+    for (var id in sessions) {
+        if (sessions[id].webRTCSessionID === webRTCSessionID) {
             return id;
         }
     }
@@ -962,7 +956,7 @@ function handleIncomingOffer(args) {
     // Store the Matter webRTCSessionID for correlation
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
-    var sessionId = findStreamingSessionId(sessions);
+    var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
     var metadata = {sessionId: sessionId || 'unknown'};
 
     if (sessions === null) {
@@ -1003,7 +997,7 @@ function handleIncomingAnswer(args) {
 
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
-    var sessionId = findStreamingSessionId(sessions);
+    var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
     var metadata = {sessionId: sessionId || 'unknown'};
 
     // Store the camera-allocated webRTCSessionID for use by subsequent commands
@@ -1055,7 +1049,12 @@ function handleIncomingIceCandidates(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(EP_WEBRTC, 'remoteIceCandidates', JSON.stringify(candidates), metadata)
+        .dataModel.updateResource(
+            EP_WEBRTC,
+            'remoteIceCandidates',
+            JSON.stringify(candidates),
+            metadata
+        )
         .success();
 }
 

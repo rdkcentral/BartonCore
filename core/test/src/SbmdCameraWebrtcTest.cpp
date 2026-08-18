@@ -761,7 +761,7 @@ namespace
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingOfferUpdatesRemoteSdp)
     {
-        std::string sessions = SessionsJson("1", "streaming");
+        std::string sessions = SessionsJson("1", "streaming", 42);
         auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, sdp:{tag:1,type:'string'}}",
                              "{webRTCSessionID: 42, sdp: 'remote-offer-sdp'}");
 
@@ -776,7 +776,7 @@ namespace
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingAnswerUpdatesRemoteSdp)
     {
-        std::string sessions = SessionsJson("1", "streaming");
+        std::string sessions = SessionsJson("1", "streaming", 99);
         auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, sdp:{tag:1,type:'string'}}",
                              "{webRTCSessionID: 99, sdp: 'remote-answer-sdp'}");
 
@@ -852,7 +852,7 @@ namespace
         EXPECT_TRUE(ur->metadata->find("reason") != std::string::npos);
     }
 
-    TEST_F(SbmdCameraWebrtcTest, HandleIncomingEndWithUnknownWebRTCSessionIDReturnsError)
+    TEST_F(SbmdCameraWebrtcTest, HandleIncomingEndWithUnknownWebRTCSessionIDExpectSuccess)
     {
         std::string sessions = SessionsJson("1", "streaming", 42);
         auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, reason:{tag:1,type:'enum8'}}",
