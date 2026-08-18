@@ -77,21 +77,21 @@ else
     mkdir -p ${BUILD_DIR}
 
     cd ${BUILD_DIR}
-    git clone \
-        --branch ${MATTER_REF} \
-        --depth 1 \
-        https://github.com/project-chip/connectedhomeip.git \
-        matter
-
+    # Fetch by ref so MATTER_REF may be a tag, branch, or commit SHA (git clone --branch rejects SHAs).
+    git init -q matter
     cd ${MATTER_BUILD_DIR}
+    git remote add origin https://github.com/project-chip/connectedhomeip.git
+    git fetch --depth 1 origin ${MATTER_REF}
+    git checkout -q FETCH_HEAD
+    MATTER_COMMIT=$(git rev-parse HEAD)
 
     ./scripts/checkout_submodules.py --shallow --platform linux
 
-    git am ${MY_DIR}/third_party/matter/barton-library/patches/*.patch || (git am --abort && git reset --hard ${MATTER_REF} && exit 1)
+    git am ${MY_DIR}/third_party/matter/barton-library/patches/*.patch || (git am --abort && git reset --hard ${MATTER_COMMIT} && exit 1)
     ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER} ${BUILD_WITH_MESSAGE_TRACING}
 
     cd ${MATTER_BUILD_DIR}
-    git reset --hard ${MATTER_REF}
+    git reset --hard ${MATTER_COMMIT}
 fi
 
 # Clean up
