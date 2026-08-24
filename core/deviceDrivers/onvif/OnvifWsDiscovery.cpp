@@ -29,6 +29,7 @@
 #include <atomic>
 #include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <libxml/parser.h>
@@ -185,6 +186,16 @@ namespace barton
         {
             std::vector<OnvifProbeMatch> results;
 
+            if (timeoutMs < 0)
+            {
+                if (error != nullptr)
+                {
+                    *error = "invalid discovery timeout: " + std::to_string(timeoutMs);
+                }
+
+                return results;
+            }
+
             int sock = socket(AF_INET, SOCK_DGRAM, 0);
 
             if (sock < 0)
@@ -272,13 +283,30 @@ namespace barton
                 return results;
             }
 
-            // Gather responses until the receive timeout elapses, bounding the total so a noisy or
-            // hostile LAN cannot grow results without limit.
+            // Gather responses until the overall timeout elapses, bounding the total so a noisy or
+            // hostile LAN cannot grow results without limit. SO_RCVTIMEO is per-recvfrom, so the
+            // per-call timeout is shrunk to the time remaining before the absolute deadline.
             static const size_t maxMatches = 256;
+            const std::chrono::steady_clock::time_point deadline =
+                std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
             char buffer[8192];
 
             while (results.size() < maxMatches)
             {
+                long remainingMs = static_cast<long>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now())
+                        .count());
+
+                if (remainingMs <= 0)
+                {
+                    break; // overall gather window elapsed
+                }
+
+                struct timeval rtv;
+                rtv.tv_sec = remainingMs / 1000;
+                rtv.tv_usec = (remainingMs % 1000) * 1000;
+                (void) setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
+
                 ssize_t received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, nullptr, nullptr);
 
                 if (received < 0)
