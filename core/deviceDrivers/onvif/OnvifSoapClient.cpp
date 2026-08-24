@@ -29,6 +29,7 @@
 #include <glib.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <sys/random.h>
 
 #include <cstring>
 #include <mutex>
@@ -194,14 +195,19 @@ namespace barton
         {
             std::string header;
 
-            if (!creds.username.empty())
+            if (!creds.username.empty() && !creds.password.empty())
             {
                 // Raw 16-byte nonce; the Nonce element carries its Base64, the digest hashes the raw bytes.
                 guint8 nonceBytes[16];
 
-                for (size_t i = 0; i < sizeof(nonceBytes); i++)
+                // Use a CSPRNG so the nonce is unpredictable (WS-UsernameToken replay protection);
+                // glib's g_random_* is a non-cryptographic PRNG. Fall back only if getrandom fails.
+                if (getrandom(nonceBytes, sizeof(nonceBytes), 0) != static_cast<ssize_t>(sizeof(nonceBytes)))
                 {
-                    nonceBytes[i] = static_cast<guint8>(g_random_int_range(0, 256));
+                    for (size_t i = 0; i < sizeof(nonceBytes); i++)
+                    {
+                        nonceBytes[i] = static_cast<guint8>(g_random_int_range(0, 256));
+                    }
                 }
                 std::string nonceRaw(reinterpret_cast<const char *>(nonceBytes), sizeof(nonceBytes));
 

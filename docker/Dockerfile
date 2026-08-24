@@ -184,6 +184,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     libgstreamer-plugins-base1.0-dev \
     libgstreamer-plugins-bad1.0-dev \
     gstreamer1.0-tools \
+    gir1.2-glib-2.0 \
+    gir1.2-gstreamer-1.0 \
     gir1.2-gst-rtsp-server-1.0
 
 # Fake Function Framework (FFF)
