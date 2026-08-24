@@ -79,14 +79,49 @@ namespace barton
                 return tokens;
             }
 
+            // Minimal XML text/attribute escaping so a message id can never break the probe envelope.
+            std::string EscapeXml(const std::string &in)
+            {
+                std::string out;
+                out.reserve(in.size());
+
+                for (char c : in)
+                {
+                    switch (c)
+                    {
+                        case '&':
+                            out += "&amp;";
+                            break;
+                        case '<':
+                            out += "&lt;";
+                            break;
+                        case '>':
+                            out += "&gt;";
+                            break;
+                        case '"':
+                            out += "&quot;";
+                            break;
+                        case '\'':
+                            out += "&apos;";
+                            break;
+                        default:
+                            out += c;
+                            break;
+                    }
+                }
+
+                return out;
+            }
+
         } // namespace
 
         std::string OnvifBuildProbeMessage(const std::string &messageId)
         {
             return std::string("<?xml version=\"1.0\" encoding=\"UTF-8\"?>") + "<e:Envelope xmlns:e=\"" + NS_SOAP +
                    "\" xmlns:w=\"" + NS_WSA + "\" xmlns:d=\"" + NS_WSD + "\" xmlns:dn=\"" + NS_ONVIF_NET +
-                   "\"><e:Header><w:MessageID>" + messageId + "</w:MessageID><w:To e:mustUnderstand=\"true\">" +
-                   WSD_TO + "</w:To><w:Action e:mustUnderstand=\"true\">" + WSD_PROBE_ACTION +
+                   "\"><e:Header><w:MessageID>" + EscapeXml(messageId) +
+                   "</w:MessageID><w:To e:mustUnderstand=\"true\">" + WSD_TO +
+                   "</w:To><w:Action e:mustUnderstand=\"true\">" + WSD_PROBE_ACTION +
                    "</w:Action></e:Header><e:Body><d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe>"
                    "</e:Body></e:Envelope>";
         }
@@ -99,7 +134,7 @@ namespace barton
                                         static_cast<int>(xml.size()),
                                         nullptr,
                                         nullptr,
-                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER);
+                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER | XML_PARSE_NONET);
 
             if (doc == nullptr)
             {
@@ -198,10 +233,23 @@ namespace barton
             struct timeval tv;
             tv.tv_sec = timeoutMs / 1000;
             tv.tv_usec = (timeoutMs % 1000) * 1000;
-            setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
+            if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
+            {
+                if (error != nullptr)
+                {
+                    *error = std::string("failed to set receive timeout: ") + std::strerror(errno);
+                }
+
+                close(sock);
+
+                return results;
+            }
+
+            // Best-effort: keep the probe on the local link. A failure here is non-fatal to
+            // discovery (the OS default TTL is still usable), so the result is deliberately ignored.
             unsigned char ttl = 1;
-            setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
+            (void) setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 
             struct sockaddr_in dest;
             std::memset(&dest, 0, sizeof(dest));
@@ -246,7 +294,19 @@ namespace barton
             {
                 ssize_t received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, nullptr, nullptr);
 
-                if (received <= 0)
+                if (received < 0)
+                {
+                    // SO_RCVTIMEO expiry is the normal end of the gather window; anything else is a
+                    // real error worth surfacing (but we still return whatever was already collected).
+                    if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR && error != nullptr)
+                    {
+                        *error = std::string("failed to receive probe response: ") + std::strerror(errno);
+                    }
+
+                    break;
+                }
+
+                if (received == 0)
                 {
                     break;
                 }

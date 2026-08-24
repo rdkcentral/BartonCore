@@ -217,8 +217,13 @@ class OnvifCameraServer:
     def stop(self):
         self._running = False
         self._http.shutdown()
+        self._http.server_close()
         self._udp.close()
         self._loop.quit()
+
+        for thread in (self._http_thread, self._udp_thread, self._loop_thread):
+            if thread is not None:
+                thread.join(timeout=5)
 
 
 @pytest.fixture
