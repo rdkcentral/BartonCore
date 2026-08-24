@@ -347,6 +347,7 @@ void OnvifDriver::DiscoveryWorker()
                 }
             }
         }
+
         g_object_unref(provider);
     }
 
@@ -480,6 +481,7 @@ static icDeviceEndpoint *findEndpointById(icDevice *device, const char *endpoint
             break;
         }
     }
+
     linkedListIteratorDestroy(it);
 
     return found;
