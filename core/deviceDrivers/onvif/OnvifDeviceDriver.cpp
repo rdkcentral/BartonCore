@@ -446,15 +446,18 @@ bool OnvifDriver::ConfigureDevice(icDevice *device)
 
     DiscoveredCamera cam;
 
-    if (!LookupDiscovered(device->uuid, cam))
+    if (LookupDiscovered(device->uuid, cam))
     {
-        icLogError(LOG_TAG, "configureDevice: no discovered details for %s", device->uuid);
-
-        return false;
+        // Fresh discovery: persist the service URL so on-demand SOAP calls survive restarts.
+        createDeviceMetadata(device, ONVIF_METADATA_SERVICE_URL, cam.serviceUrl.c_str());
     }
-
-    // Persist the service URL so on-demand SOAP calls survive restarts without re-discovery.
-    createDeviceMetadata(device, ONVIF_METADATA_SERVICE_URL, cam.serviceUrl.c_str());
+    else
+    {
+        // Reconfiguration (e.g. after a service restart): the discovery cache is empty but the
+        // service URL was persisted at first configuration, so recreate the endpoints idempotently.
+        icLogInfo(
+            LOG_TAG, "configureDevice: %s not in discovery cache; reconfiguring from persisted state", device->uuid);
+    }
 
     createEndpoint(device, CAMERA_SESSION_ENDPOINT_ID, CAMERA_SESSION_PROFILE, true);
     createEndpoint(device, ONVIF_ENDPOINT_ID, ONVIF_PROFILE, true);
