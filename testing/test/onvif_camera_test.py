@@ -32,15 +32,23 @@ import logging
 import time
 import urllib.request
 
-import gi
-
 from testing.utils.barton_utils import (
     resource_update_listener,
     resource_uri,
 )
 
-gi.require_version("Gst", "1.0")
-from gi.repository import Gst  # noqa: E402
+# GStreamer is only needed to probe live RTSP media. Guard the import so a missing/unavailable Gst
+# binding skips these tests at runtime (via the onvif_camera fixture) instead of erroring collection.
+try:
+    import gi
+
+    gi.require_version("Gst", "1.0")
+    from gi.repository import Gst
+
+    _GST_AVAILABLE = True
+except (ImportError, ValueError):
+    Gst = None
+    _GST_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +61,7 @@ def _probe_rtsp_buffers(url, seconds=8):
     """
     Gst.init(None)
     counter = {"n": 0}
-    pipeline = Gst.parse_launch(f"rtspsrc location={url} latency=100 ! fakesink name=sink")
+    pipeline = Gst.parse_launch(f'rtspsrc location="{url}" latency=100 ! fakesink name=sink')
     sink = pipeline.get_by_name("sink")
     sink.set_property("signal-handoffs", True)
     sink.connect("handoff", lambda s, b, p: counter.__setitem__("n", counter["n"] + 1))

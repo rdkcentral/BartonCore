@@ -53,7 +53,8 @@ namespace barton
         std::vector<OnvifProbeMatch> OnvifParseProbeMatches(const std::string &xml);
 
         // Derive a stable Barton device uuid from a ProbeMatch endpoint reference. Strips a leading
-        // "urn:uuid:" (case-insensitive) and lower-cases the result; falls back to the trimmed input.
+        // "urn:uuid:" (case-insensitive) if present, then trims and lower-cases the result (the
+        // fallback, when no prefix is present, is likewise trimmed and lower-cased).
         std::string OnvifDeviceUuidFromEndpointReference(const std::string &endpointReference);
 
         class OnvifWsDiscovery
