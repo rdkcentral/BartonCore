@@ -37,6 +37,9 @@ set(BCORE_GEN_GIR ON CACHE BOOL "Gir generation")
 # Build the reference app's camera stream command (GStreamer WebRTC) in the dev platform.
 set(BCORE_REFERENCE_CAMERA_SUPPORT ON CACHE BOOL "Enable reference app camera support")
 
+# Build the native ONVIF/RTSP IP camera driver in the dev platform.
+set(BCORE_ONVIF ON CACHE BOOL "Enable ONVIF/RTSP IP camera support")
+
 # Matter settings
 include(${CMAKE_SOURCE_DIR}/config/cmake/modules/BCoreMatterHelper.cmake)
 
