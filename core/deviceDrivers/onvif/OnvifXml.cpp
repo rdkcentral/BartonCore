@@ -39,6 +39,39 @@ namespace barton
     namespace onvif
     {
 
+        std::string OnvifXmlEscape(const std::string &in)
+        {
+            std::string out;
+            out.reserve(in.size());
+
+            for (char c : in)
+            {
+                switch (c)
+                {
+                    case '&':
+                        out += "&amp;";
+                        break;
+                    case '<':
+                        out += "&lt;";
+                        break;
+                    case '>':
+                        out += "&gt;";
+                        break;
+                    case '"':
+                        out += "&quot;";
+                        break;
+                    case '\'':
+                        out += "&apos;";
+                        break;
+                    default:
+                        out += c;
+                        break;
+                }
+            }
+
+            return out;
+        }
+
         xmlNode *OnvifXmlFindFirstByLocalName(xmlNode *node, const char *localName)
         {
             // findChildNode compares libxml2's local element name (namespace prefix ignored) and

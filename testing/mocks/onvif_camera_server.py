@@ -141,7 +141,8 @@ class _OnvifSoapHandler(http.server.BaseHTTPRequestHandler):
 
 
 class OnvifCameraServer:
-    """A mock ONVIF camera: a UDP WS-Discovery responder plus an HTTP SOAP endpoint."""
+    """A mock ONVIF camera: a UDP WS-Discovery responder, an HTTP SOAP endpoint, a live RTSP stream,
+    and an HTTP snapshot endpoint."""
 
     def __init__(self):
         # A unique id per instance keeps repeated runs from colliding on a persisted device id.
@@ -191,7 +192,8 @@ class OnvifCameraServer:
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<e:Envelope xmlns:e="http://www.w3.org/2003/05/soap-envelope" '
             'xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing" '
-            'xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery">'
+            'xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery" '
+            'xmlns:dn="http://www.onvif.org/ver10/network/wsdl">'
             "<e:Body><d:ProbeMatches><d:ProbeMatch>"
             "<w:EndpointReference><w:Address>urn:uuid:" + self.device_uuid + "</w:Address></w:EndpointReference>"
             "<d:Types>dn:NetworkVideoTransmitter</d:Types>"

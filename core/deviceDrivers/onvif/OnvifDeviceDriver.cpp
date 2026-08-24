@@ -522,7 +522,7 @@ bool OnvifDriver::RegisterResources(icDevice *device)
 
     // ONVIF protocol endpoint: on-demand URL retrieval + event delivery + credentials.
     createEndpointResource(onvifEp,
-                           ONVIF_RESOURCE_GET_MEDIA_URL,
+                           ONVIF_FUNCTION_GET_MEDIA_URL,
                            NULL,
                            RESOURCE_TYPE_STRING,
                            RESOURCE_MODE_EXECUTABLE,
@@ -530,7 +530,7 @@ bool OnvifDriver::RegisterResources(icDevice *device)
     createEndpointResource(
         onvifEp, ONVIF_RESOURCE_MEDIA_URL, NULL, RESOURCE_TYPE_STRING, RESOURCE_MODE_EMIT_EVENTS, CACHING_POLICY_NEVER);
     createEndpointResource(onvifEp,
-                           ONVIF_RESOURCE_GET_SNAPSHOT_URL,
+                           ONVIF_FUNCTION_GET_SNAPSHOT_URL,
                            NULL,
                            RESOURCE_TYPE_STRING,
                            RESOURCE_MODE_EXECUTABLE,
@@ -642,7 +642,7 @@ bool OnvifDriver::ExecuteResource(icDeviceResource *resource, const char *arg, c
         {
             if (response != nullptr)
             {
-                *response = strdup(StreamInfoJson(uuid, ONVIF_RESOURCE_GET_MEDIA_URL).c_str());
+                *response = strdup(StreamInfoJson(uuid, ONVIF_FUNCTION_GET_MEDIA_URL).c_str());
             }
 
             return true;
@@ -652,7 +652,7 @@ bool OnvifDriver::ExecuteResource(icDeviceResource *resource, const char *arg, c
         {
             if (response != nullptr)
             {
-                *response = strdup(StreamInfoJson(uuid, ONVIF_RESOURCE_GET_SNAPSHOT_URL).c_str());
+                *response = strdup(StreamInfoJson(uuid, ONVIF_FUNCTION_GET_SNAPSHOT_URL).c_str());
             }
 
             return true;
@@ -666,14 +666,14 @@ bool OnvifDriver::ExecuteResource(icDeviceResource *resource, const char *arg, c
     }
     else if (strcmp(resource->endpointId, ONVIF_ENDPOINT_ID) == 0)
     {
-        if (strcmp(id, ONVIF_RESOURCE_GET_MEDIA_URL) == 0)
+        if (strcmp(id, ONVIF_FUNCTION_GET_MEDIA_URL) == 0)
         {
             FetchAndEmitUrl(uuid, false);
 
             return true;
         }
 
-        if (strcmp(id, ONVIF_RESOURCE_GET_SNAPSHOT_URL) == 0)
+        if (strcmp(id, ONVIF_FUNCTION_GET_SNAPSHOT_URL) == 0)
         {
             FetchAndEmitUrl(uuid, true);
 
