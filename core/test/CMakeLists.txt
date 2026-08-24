@@ -423,7 +423,7 @@ endif()
 
 # ONVIF standalone unit test (SOAP client). It compiles the ONVIF units directly
 # and only needs glib/libcurl/libxml2 — no BartonCoreStatic — so it builds without Matter.
-if (BCORE_ONVIF)
+if (BCORE_ONVIF AND BUILD_TESTING)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
     include(FindPkgConfig)
