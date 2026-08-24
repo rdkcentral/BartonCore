@@ -94,7 +94,9 @@ cannot block the executing thread indefinitely.
 The `takePicture` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "entryPoint":
 "/<deviceId>/ep/onvif/r/getSnapshotUrl" }` and SHALL ignore the `sessionId` argument. Executing
 `getSnapshotUrl` on `ep/onvif` SHALL perform an ONVIF `GetSnapshotUri` SOAP call authenticated with
-the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` event.
+the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` event. As with
+`getMediaUrl`, the SOAP call SHALL use a bounded libcurl timeout so an unresponsive or packet-dropping
+camera cannot block the executing thread indefinitely.
 
 #### Scenario: takePicture returns the snapshot entry point
 - **WHEN** a client executes `takePicture` on an ONVIF camera
@@ -107,8 +109,11 @@ the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` e
 ### Requirement: authRequired signals credential need without exposing secrets
 
 The `authRequired` resource SHALL indicate whether the client must apply credentials to the returned
-media/snapshot URLs. The driver SHALL NOT place credentials in any resource value, event payload, or
-returned URL; secrets SHALL reside only in the `SENSITIVE` credential resources.
+media/snapshot URLs. In this driver version the driver SHALL set `authRequired` to a constant `"true"`
+at configuration time — a static hint reflecting that ONVIF media/snapshot fetches reuse the stored
+credentials — rather than deriving it from a live authentication probe. The driver SHALL NOT place
+credentials in any resource value, event payload, or returned URL; secrets SHALL reside only in the
+`SENSITIVE` credential resources.
 
 #### Scenario: authRequired is readable and non-secret
 - **WHEN** a client reads `authRequired` on `ep/onvif`

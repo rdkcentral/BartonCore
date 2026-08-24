@@ -28,7 +28,7 @@
 - [x] 5.1 Add the `BCORE_ONVIF` CMake option (default OFF) → `BARTON_CONFIG_ONVIF`, wire `core/deviceDrivers/onvif/` sources and library links in `core/CMakeLists.txt`
 - [x] 5.2 Implement the driver skeleton: C++ class behind `extern "C"` thunks with `this` in `callbackContext`, self-registered via `__attribute__((constructor))`, declaring device class `"camera"`
 - [x] 5.3 Implement `discoverDevices` (returns immediately; runs WS-Discovery on a worker thread via commit 3) and `GetDeviceInformation`, then `deviceServiceDeviceFound`
-- [x] 5.4 Implement `configureDevice` to create the `ep/camera` and `ep/onvif` endpoints (and persist the service URL) with **no** authenticated ONVIF calls
+- [x] 5.4 Implement `configureDevice` to create the `ep/camera` and `ep/onvif` endpoints and persist the service URL **as device metadata** (so on-demand SOAP calls recover it after a service restart without re-discovery) with **no** authenticated ONVIF calls
 - [x] 5.4a Implement the `registerResources` callback — invoked by `deviceServiceDeviceFound` after `configureDevice` — to populate `ep/camera`'s four lifecycle executes and `ep/onvif`'s media/snapshot/auth/credential resources (credentials as `RESOURCE_MODE_SENSITIVE`), so a driver that omits this callback cannot crash during registration
 - [x] 5.5 Implement `executeResource` for `createSession`/`stream`/`takePicture`/`destroySession` as stateless springboards (ignore `sessionId`)
 - [x] 5.6 Implement `getMediaUrl`/`getSnapshotUrl` to call the SOAP client (commit 2) on-demand and emit `mediaUrl`/`snapshotUrl` events marshalled onto the GLib main loop via `g_main_context_invoke`; guard driver state with a `pthread` mutex
