@@ -31,9 +31,10 @@ typedef struct
     CameraStreamBackend base; // must be first so a CameraStreamBackend* aliases this struct
     CameraStreamContext *ctx; // set for the duration of run()
 
-    // Local SDP offer/answer produced by the WebRTC client.
-    gchar *localSdpOffer;
-    gboolean offerReady;
+    // Local SDP the WebRTC client produces for this peer: an offer in the offerer flow, an answer in
+    // the answerer flow.
+    gchar *localSdp;
+    gboolean localSdpReady;
     GQueue localIceCandidates; // candidate strings buffered until trickle sending is enabled
 
     // Remote SDP answer/offer and ICE candidates delivered by the camera via device-session events.
@@ -200,9 +201,9 @@ static void onLocalOfferReady(const gchar *sdp, gpointer userData)
 {
     CameraWebrtcBackend *self = (CameraWebrtcBackend *) userData;
     cameraStreamContextLock(self->ctx);
-    g_free(self->localSdpOffer);
-    self->localSdpOffer = g_strdup(sdp);
-    self->offerReady = TRUE;
+    g_free(self->localSdp);
+    self->localSdp = g_strdup(sdp);
+    self->localSdpReady = TRUE;
     cameraStreamContextWake(self->ctx);
     cameraStreamContextUnlock(self->ctx);
 }
@@ -282,10 +283,17 @@ static void onRemoteIce(const gchar *jsonCandidates, gpointer userData)
     CameraWebrtcBackend *self = (CameraWebrtcBackend *) userData;
 
     cameraStreamContextLock(self->ctx);
-    gboolean feedNow = self->remoteIceFeedEnabled;
-    CameraWebrtcClient *webrtc = self->webrtc;
 
-    if (!feedNow)
+    if (self->remoteIceFeedEnabled)
+    {
+        // Trickle under the lock: teardown clears self->webrtc (and destroys the client) under this
+        // same lock, so feeding here rather than after unlocking avoids racing on a freed client.
+        if (self->webrtc != NULL)
+        {
+            feedRemoteIceCandidates(self->webrtc, jsonCandidates);
+        }
+    }
+    else
     {
         // The remote SDP isn't set yet; buffer until inbound trickle feeding is enabled.
         g_queue_push_tail(&self->remoteIceCandidates, g_strdup(jsonCandidates));
@@ -293,12 +301,6 @@ static void onRemoteIce(const gchar *jsonCandidates, gpointer userData)
     }
 
     cameraStreamContextUnlock(self->ctx);
-
-    // Trickle: feed these candidates to the WebRTC client the moment they arrive.
-    if (feedNow && webrtc != NULL)
-    {
-        feedRemoteIceCandidates(webrtc, jsonCandidates);
-    }
 }
 
 // ============================================================================
@@ -350,7 +352,7 @@ static bool runAnswererSignaling(CameraWebrtcBackend *self,
     }
 
     // The client produces the answer asynchronously (create-answer).
-    if (!cameraStreamContextWaitFlag(ctx, &self->offerReady, 10))
+    if (!cameraStreamContextWaitFlag(ctx, &self->localSdpReady, 10))
     {
         emitError("[camera-stream] Timeout waiting for local SDP answer\n");
 
@@ -364,7 +366,7 @@ static bool runAnswererSignaling(CameraWebrtcBackend *self,
 
     g_autofree gchar *localAnswer = NULL;
     cameraStreamContextLock(ctx);
-    localAnswer = g_strdup(self->localSdpOffer);
+    localAnswer = g_strdup(self->localSdp);
     cameraStreamContextUnlock(ctx);
 
     emitOutput("[camera-stream] Sending SDP answer to camera...\n");
@@ -387,7 +389,7 @@ static bool runOffererSignaling(CameraWebrtcBackend *self,
 {
     emitOutput("[camera-stream] Waiting for local SDP offer...\n");
 
-    if (!cameraStreamContextWaitFlag(ctx, &self->offerReady, 10))
+    if (!cameraStreamContextWaitFlag(ctx, &self->localSdpReady, 10))
     {
         emitError("[camera-stream] Timeout waiting for SDP offer\n");
 
@@ -401,7 +403,7 @@ static bool runOffererSignaling(CameraWebrtcBackend *self,
 
     g_autofree gchar *localOffer = NULL;
     cameraStreamContextLock(ctx);
-    localOffer = g_strdup(self->localSdpOffer);
+    localOffer = g_strdup(self->localSdp);
     cameraStreamContextUnlock(ctx);
 
     emitOutput("[camera-stream] Sending SDP offer to camera...\n");
@@ -543,7 +545,7 @@ static void webrtcDestroy(CameraStreamBackend *base)
 {
     CameraWebrtcBackend *self = (CameraWebrtcBackend *) base;
 
-    g_free(self->localSdpOffer);
+    g_free(self->localSdp);
     g_free(self->remoteSdp);
 
     while (!g_queue_is_empty(&self->localIceCandidates))

@@ -186,6 +186,13 @@ namespace barton
         {
             std::vector<OnvifProbeMatch> results;
 
+            // Start from a clean error so a caller reusing the string does not see a stale message on
+            // success or on a (documented non-error) empty/timeout result.
+            if (error != nullptr)
+            {
+                error->clear();
+            }
+
             if (timeoutMs < 0)
             {
                 if (error != nullptr)
