@@ -4,7 +4,7 @@
 
 {
     "name": "Barton Ubuntu Development Environment",
-    "initializeCommand": "docker/setupDockerEnv.sh",
+    "initializeCommand": ".devcontainer/setupDevcontainerEnv.sh",
     "dockerComposeFile": [
         "../docker/compose.yaml",
         "../docker/compose.devcontainer.yaml"
@@ -32,7 +32,7 @@
     "mounts": [
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
         "source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind",
-        "source=${localEnv:HOME}/.claude,target=/home/${localEnv:USER}/.claude,type=bind"
+        "source=${localEnv:HOME}/.local/share/rtk/,target=/home/${localEnv:USER}/.local/share/rtk/,type=bind"
     ],
 
     // By setting this value to true, VSC will not run the entrypoint/CMD in the Dockerfile
