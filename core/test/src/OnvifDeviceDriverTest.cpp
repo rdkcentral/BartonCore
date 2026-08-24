@@ -32,7 +32,7 @@
 
 #include <fff/fff.h>
 
-#include <memory>
+#include <cstdlib>
 #include <string>
 
 // device-driver.h transitively pulls in libxml2/ICU C++ template headers; include libxml2's parser
