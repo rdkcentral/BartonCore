@@ -447,7 +447,7 @@ if (BCORE_ONVIF AND BUILD_TESTING)
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/OnvifWsDiscoveryTest.cpp
                 ${ONVIF_DIR}/OnvifWsDiscovery.cpp
                 ${ONVIF_DIR}/OnvifXml.cpp
-        LIBS ${ONVIF_TEST_XML_LIBRARIES} gmock BartonCommon::xhXmlHelper
+        LIBS ${ONVIF_TEST_XML_LINK_LIBRARIES} gmock BartonCommon::xhXmlHelper
         INCLUDES ${ONVIF_DIR} ${ONVIF_TEST_XML_INCLUDE_DIRS}
     )
 
