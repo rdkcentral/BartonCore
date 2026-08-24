@@ -31,6 +31,7 @@
 #include <libxml/tree.h>
 
 #include <cstring>
+#include <mutex>
 
 namespace barton
 {
@@ -126,7 +127,7 @@ namespace barton
                                         static_cast<int>(xml.size()),
                                         nullptr,
                                         nullptr,
-                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER);
+                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER | XML_PARSE_NONET);
 
             if (doc == nullptr)
             {
@@ -147,11 +148,13 @@ namespace barton
 
         bool OnvifParseProfiles(const std::string &xml, std::vector<std::string> &tokensOut)
         {
+            tokensOut.clear();
+
             xmlDoc *doc = xmlReadMemory(xml.data(),
                                         static_cast<int>(xml.size()),
                                         nullptr,
                                         nullptr,
-                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER);
+                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER | XML_PARSE_NONET);
 
             if (doc == nullptr)
             {
@@ -176,13 +179,36 @@ namespace barton
             return !tokensOut.empty();
         }
 
+        // Strip any "userinfo@" from a URI's authority so embedded credentials are not leaked to
+        // callers/logs; the driver supplies credentials separately (username/password resources).
+        std::string StripUriCredentials(const std::string &uri)
+        {
+            std::string::size_type schemeEnd = uri.find("://");
+
+            if (schemeEnd == std::string::npos)
+            {
+                return uri;
+            }
+
+            std::string::size_type authStart = schemeEnd + 3;
+            std::string::size_type authEnd = uri.find('/', authStart);
+            std::string::size_type at = uri.find('@', authStart);
+
+            if (at == std::string::npos || (authEnd != std::string::npos && at > authEnd))
+            {
+                return uri;
+            }
+
+            return uri.substr(0, authStart) + uri.substr(at + 1);
+        }
+
         std::string OnvifParseMediaUri(const std::string &xml)
         {
             xmlDoc *doc = xmlReadMemory(xml.data(),
                                         static_cast<int>(xml.size()),
                                         nullptr,
                                         nullptr,
-                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER);
+                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER | XML_PARSE_NONET);
 
             if (doc == nullptr)
             {
@@ -192,7 +218,7 @@ namespace barton
             std::string uri = OnvifXmlFindText(xmlDocGetRootElement(doc), "Uri");
             xmlFreeDoc(doc);
 
-            return uri;
+            return StripUriCredentials(uri);
         }
 
         std::string OnvifSoapClient::BuildEnvelope(const std::string &bodyXml, const OnvifCredentials &creds)
@@ -235,6 +261,11 @@ namespace barton
 
         bool OnvifSoapClient::Post(const std::string &envelope, std::string &responseOut, std::string *error)
         {
+            // libcurl requires a one-time, process-wide init before any easy handle is created; do it
+            // exactly once in a thread-safe way since drivers may issue SOAP calls from worker threads.
+            static std::once_flag curlInitFlag;
+            std::call_once(curlInitFlag, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
+
             CURL *curl = curl_easy_init();
 
             if (curl == nullptr)
