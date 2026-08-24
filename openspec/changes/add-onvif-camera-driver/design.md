@@ -98,8 +98,10 @@ public discovery API carries no credential channel, so credentials arrive *after
 state machine. If credentials are missing/invalid at call time, the execute returns an error.
 
 ### D5: Credential-free URLs + non-secret `authRequired` signal
-`GetStreamUri`/`GetSnapshotUri` return credential-free URLs (per ONVIF spec); the driver emits them
-verbatim in `mediaUrl`/`snapshotUrl` events. RTSP/HTTP auth uses the **same persistent device
+`GetStreamUri`/`GetSnapshotUri` return credential-free URLs (per ONVIF spec). The driver does **not**
+trust that blindly: before emitting a `mediaUrl`/`snapshotUrl` event it strips any embedded
+`user:pass@` userinfo from the URI, so a nonconforming or malicious camera cannot leak credentials
+through an event or returned URL. RTSP/HTTP auth uses the **same persistent device
 credentials** the ONVIF calls use; the client already holds them (it wrote them). The model surfaces
 only a non-secret `authRequired` resource so the client knows to apply those credentials. **Why:**
 never place secrets in a resource value, event, or URL (OWASP sensitive-data-exposure). Secrets live
@@ -204,9 +206,13 @@ driver (4), so it can proceed in parallel with the mock/integration commits.
 
 ## Migration Plan
 
-Purely additive and off-by-default (`BCORE_ONVIF=OFF`). No migration of existing devices, no public
-API/GIR changes (endpoints and the `authRequired`/credential resources surface through the existing
-`BCoreEndpoint`/`BCoreResource` types — no new signals or properties). The `camera-session-lifecycle`
+Almost entirely additive and off-by-default (`BCORE_ONVIF=OFF`). No migration of existing devices,
+and no *new* public API surface — endpoints and the `authRequired`/credential resources surface
+through the existing `BCoreEndpoint`/`BCoreResource` types (no new signals or properties). The one
+exception is the D9 prerequisite: annotating `b_core_client_execute_resource`'s `response` as `(out)`
+is a **breaking** GIR binding-signature change, so it lands as a `!` commit that bumps the major
+version and derived GIR namespace (`BCore-${MAJOR}.0`); C callers are unaffected and existing-version
+introspection consumers stay on the old namespace. The `camera-session-lifecycle`
 spec is generalized without removing any WebRTC requirement, so existing Matter camera behavior is
 unchanged. Rollback = revert the stack or leave the flag off; no persisted-state implications.
 

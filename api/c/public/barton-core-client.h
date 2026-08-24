@@ -472,7 +472,7 @@ gboolean b_core_client_remove_endpoint_by_id(BCoreClient *self, const gchar *dev
  *
  * Returns: gboolean - TRUE if the resource was executed successfully.
  */
-gboolean b_core_client_execute_resource(BCoreClient *self, const gchar *uri, const gchar *payload, char **response);
+gboolean b_core_client_execute_resource(BCoreClient *self, const gchar *uri, const gchar *payload, gchar **response);
 
 /**
  * b_core_client_write_resource

@@ -38,12 +38,21 @@ import socket
 import threading
 import uuid as uuid_module
 
-import gi
 import pytest
 
-gi.require_version("Gst", "1.0")
-gi.require_version("GstRtspServer", "1.0")
-from gi.repository import GLib, Gst, GstRtspServer  # noqa: E402
+# GStreamer's RTSP GI bindings are optional. This module is auto-loaded as a pytest plugin, so a
+# missing binding must not hard-fail collection; defer the skip to the fixture that actually needs it.
+try:
+    import gi
+
+    gi.require_version("Gst", "1.0")
+    gi.require_version("GstRtspServer", "1.0")
+    from gi.repository import GLib, Gst, GstRtspServer
+
+    _GST_RTSP_AVAILABLE = True
+except (ImportError, ValueError):
+    GLib = Gst = GstRtspServer = None
+    _GST_RTSP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +238,8 @@ class OnvifCameraServer:
 @pytest.fixture
 def onvif_camera():
     """Start a mock ONVIF camera for the duration of a test."""
+    if not _GST_RTSP_AVAILABLE:
+        pytest.skip("GStreamer RTSP GI bindings (Gst/GstRtspServer) are not available")
     server = OnvifCameraServer()
     server.start()
     try:
