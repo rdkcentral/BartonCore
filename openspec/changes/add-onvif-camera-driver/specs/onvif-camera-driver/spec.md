@@ -42,7 +42,7 @@ resources, and an endpoint with id `"onvif"` and profile `"onvif"` exposing:
 - `getMediaUrl` — executable
 - `mediaUrl` — string, event-emitting, non-cached (`RESOURCE_MODE_EMIT_EVENTS`, `CACHING_POLICY_NEVER`)
 - `getSnapshotUrl` — executable
-- `snapshotUrl` — string, event-emitting, non-cached
+- `snapshotUrl` — string, event-emitting, non-cached (`RESOURCE_MODE_EMIT_EVENTS`, `CACHING_POLICY_NEVER`)
 - `authRequired` — readable boolean (`RESOURCE_TYPE_BOOLEAN`, `RESOURCE_MODE_READABLE`)
 - `username` — writable, sensitive (`RESOURCE_TYPE_USER_ID`, `RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE`)
 - `password` — writable, sensitive (`RESOURCE_TYPE_PASSWORD`, `RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE`)
