@@ -180,10 +180,12 @@ static bool runCameraStream(BCoreClient *client,
 
     bool result = cameraStreamBackendRun(backend, ctx);
 
-    // The status callback captures ctx, a scope-bound autoptr freed when this function returns. Clear
-    // it before the session (also scope bound) is torn down so its teardown cannot invoke the callback
-    // against a dangling context (use-after-free).
+    // The session callbacks capture ctx / the backend (self), both scope-bound autoptrs freed when
+    // this function returns. Clear every session callback before the session (also scope bound) is
+    // torn down so a late resource-updated event cannot invoke one against a dangling pointer (UAF).
     cameraDeviceSessionSetStatusCallback(session, NULL, NULL);
+    cameraDeviceSessionSetWebrtcCallbacks(session, NULL, NULL, NULL);
+    cameraDeviceSessionSetOnvifCallbacks(session, NULL, NULL, NULL);
 
     return result;
 }
