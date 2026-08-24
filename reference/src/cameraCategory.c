@@ -98,7 +98,14 @@ static gboolean parseOutputUri(const gchar *uri, gchar **filePathOut, gchar **se
     if (colon != NULL)
     {
         *colon = '\0';
-        *servePortOut = (guint16) g_ascii_strtoull(colon + 1, NULL, 10);
+
+        guint64 parsedPort = g_ascii_strtoull(colon + 1, NULL, 10);
+
+        if (parsedPort == 0 || parsedPort > G_MAXUINT16)
+        {
+            return FALSE; // out-of-range or unparseable port
+        }
+        *servePortOut = (guint16) parsedPort;
     }
 
     *serveHostOut = (authority[0] != '\0') ? g_strdup(authority) : g_strdup(CAMERA_DEFAULT_SERVE_HOST);
@@ -171,7 +178,14 @@ static bool runCameraStream(BCoreClient *client,
     // Session-ended status is shared across technologies, so it is handled by the context.
     cameraDeviceSessionSetStatusCallback(session, cameraStreamContextOnSessionEnded, ctx);
 
-    return cameraStreamBackendRun(backend, ctx);
+    bool result = cameraStreamBackendRun(backend, ctx);
+
+    // The status callback captures ctx, a scope-bound autoptr freed when this function returns. Clear
+    // it before the session (also scope bound) is torn down so its teardown cannot invoke the callback
+    // against a dangling context (use-after-free).
+    cameraDeviceSessionSetStatusCallback(session, NULL, NULL);
+
+    return result;
 }
 
 static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)

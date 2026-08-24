@@ -268,10 +268,16 @@ void cameraStreamContextAwaitTeardown(CameraStreamContext *ctx)
         cameraStreamContextWaitFlag(ctx, &ctx->teardown, 3600);
     }
 
-    if (ctx->sessionEnded)
+    // Snapshot the session-ended state under the lock; cameraStreamContextOnSessionEnded mutates
+    // these fields from the session status-callback thread.
+    g_mutex_lock(&ctx->mutex);
+    gboolean sessionEnded = ctx->sessionEnded;
+    g_autofree gchar *errorMessage = g_strdup(ctx->errorMessage);
+    g_mutex_unlock(&ctx->mutex);
+
+    if (sessionEnded)
     {
-        emitOutput("[camera-stream] Session ended: %s\n",
-                   ctx->errorMessage != NULL ? ctx->errorMessage : "unknown reason");
+        emitOutput("[camera-stream] Session ended: %s\n", errorMessage != NULL ? errorMessage : "unknown reason");
     }
     else
     {
