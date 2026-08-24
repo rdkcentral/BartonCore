@@ -1,7 +1,7 @@
-## 1. Commit 0 — Build dependencies (reserved, expected empty)
+## 1. Commit 0 — Builder-image dependency (for the mock RTSP server)
 
-- [x] 1.1 Confirm the driver's needs (libcurl, libxml2, glib `g_checksum`/`g_base64`) are already satisfied by the builder image; make **no** `docker/Dockerfile` change unless a missing dependency is proven
-- [x] 1.2 If (and only if) a dependency turns out missing, add it to the `third_party_builder` stage as an isolated first commit (requires Docker image rebuild/publish) — added `gir1.2-gst-rtsp-server-1.0` to `docker/Dockerfile` so the mock ONVIF camera can run a live RTSP server for end-to-end media validation
+- [x] 1.1 Confirm the driver's own runtime needs (libcurl, libxml2, glib `g_checksum`/`g_base64`) are already satisfied by the builder image — no `docker/Dockerfile` change is needed for the driver itself
+- [x] 1.2 Add the one builder-image dependency the mock's live RTSP server requires — `gir1.2-gst-rtsp-server-1.0` — to `docker/Dockerfile` (folded into the mock commit; requires a Docker image rebuild/publish)
 
 ## 2. Commit 1 — Camera model definitions (API/headers)
 
