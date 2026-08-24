@@ -418,9 +418,20 @@ void OnvifDriver::DiscoveryWorker()
         stringHashMapPut(details.endpointProfileMap, strdup(ONVIF_ENDPOINT_ID), strdup(ONVIF_PROFILE));
 
         icLogInfo(LOG_TAG, "ONVIF camera found: uuid=%s service=%s", uuid.c_str(), cam.serviceUrl.c_str());
-        deviceServiceDeviceFound(&details, driver.neverReject);
+
+        bool accepted = deviceServiceDeviceFound(&details, driver.neverReject);
 
         stringHashMapDestroy(details.endpointProfileMap, NULL);
+
+        if (!accepted)
+        {
+            // The device service rejected the camera; drop the entry we speculatively cached so a
+            // later probe starts clean instead of reusing stale discovery state.
+            icLogWarn(LOG_TAG, "deviceServiceDeviceFound rejected uuid=%s; dropping cached discovery", uuid.c_str());
+
+            std::lock_guard<std::mutex> lock(stateMutex);
+            discovered.erase(uuid);
+        }
     }
 
     discoveryActive.store(false);

@@ -181,7 +181,8 @@ namespace barton
 
         // Strip any "userinfo@" from a URI's authority so embedded credentials are not leaked to
         // callers/logs; the driver supplies credentials separately (username/password resources).
-        std::string StripUriCredentials(const std::string &uri)
+        // File-local (static) so it is not exported from this translation unit.
+        static std::string StripUriCredentials(const std::string &uri)
         {
             std::string::size_type schemeEnd = uri.find("://");
 
@@ -261,6 +262,10 @@ namespace barton
 
         bool OnvifSoapClient::Post(const std::string &envelope, std::string &responseOut, std::string *error)
         {
+            // Start from a clean slate so a reused output string (or a retry) cannot concatenate the
+            // new response onto stale bytes; the curl write callback only appends.
+            responseOut.clear();
+
             // libcurl requires a one-time, process-wide init before any easy handle is created; do it
             // exactly once in a thread-safe way since drivers may issue SOAP calls from worker threads.
             static std::once_flag curlInitFlag;
