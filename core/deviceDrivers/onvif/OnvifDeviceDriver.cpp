@@ -225,6 +225,7 @@ bool OnvifDriver::LookupDiscovered(const std::string &uuid, DiscoveredCamera &ou
     {
         return false;
     }
+
     out = it->second;
 
     return true;
@@ -450,10 +451,30 @@ bool OnvifDriver::ConfigureDevice(icDevice *device)
     return true;
 }
 
+static icDeviceEndpoint *findEndpointById(icDevice *device, const char *endpointId)
+{
+    icLinkedListIterator *it = linkedListIteratorCreate(device->endpoints);
+    icDeviceEndpoint *found = nullptr;
+
+    while (linkedListIteratorHasNext(it))
+    {
+        icDeviceEndpoint *ep = (icDeviceEndpoint *) linkedListIteratorGetNext(it);
+
+        if (ep != nullptr && ep->id != nullptr && strcmp(ep->id, endpointId) == 0)
+        {
+            found = ep;
+            break;
+        }
+    }
+    linkedListIteratorDestroy(it);
+
+    return found;
+}
+
 bool OnvifDriver::RegisterResources(icDevice *device)
 {
-    icDeviceEndpoint *cameraEp = (icDeviceEndpoint *) linkedListGetElementAt(device->endpoints, 0);
-    icDeviceEndpoint *onvifEp = (icDeviceEndpoint *) linkedListGetElementAt(device->endpoints, 1);
+    icDeviceEndpoint *cameraEp = findEndpointById(device, CAMERA_SESSION_ENDPOINT_ID);
+    icDeviceEndpoint *onvifEp = findEndpointById(device, ONVIF_ENDPOINT_ID);
 
     if (cameraEp == nullptr || onvifEp == nullptr)
     {
@@ -545,8 +566,9 @@ void OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
         return;
     }
 
-    // The SOAP round trip is blocking network I/O; run it off the caller's thread and marshal the
-    // resulting event back onto the GLib main loop.
+    // The SOAP round trip is blocking network I/O, so run it on a detached worker thread and emit the
+    // resulting resource-update event directly (the emit path is thread-safe, matching the Zigbee
+    // driver's asynchronous resource-update pattern).
     std::thread([uuid, serviceUrl, creds, snapshot]() {
         OnvifSoapClient client(serviceUrl);
         std::string error;
@@ -702,13 +724,14 @@ static bool writeResource(void *ctx, icDeviceResource *resource, const char *, c
 {
     (void) ctx;
 
-    // Accept writes to our known resources (credentials). Per the device service write
-    // contract, the driver must call updateResource() to actually persist the new value;
+    // Accept writes only to our credential resources (username/password). Per the device service
+    // write contract, the driver must call updateResource() to actually persist the new value;
     // the service does not store it on our behalf. Without this, ReadCredentials() would
     // later read back an empty value and the WS-UsernameToken digest would be computed over
     // an empty password, causing the camera to reject every request with HTTP 401.
     if (resource != nullptr && resource->endpointId != nullptr && resource->id != nullptr &&
-        resource->deviceUuid != nullptr && strcmp(resource->endpointId, ONVIF_ENDPOINT_ID) == 0)
+        resource->deviceUuid != nullptr && strcmp(resource->endpointId, ONVIF_ENDPOINT_ID) == 0 &&
+        (strcmp(resource->id, ONVIF_RESOURCE_USERNAME) == 0 || strcmp(resource->id, ONVIF_RESOURCE_PASSWORD) == 0))
     {
         updateResource(resource->deviceUuid, resource->endpointId, resource->id, newValue, nullptr);
         return true;
