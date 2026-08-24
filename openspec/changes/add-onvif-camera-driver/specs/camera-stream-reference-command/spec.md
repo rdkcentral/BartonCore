@@ -121,7 +121,10 @@ For ONVIF cameras, the `cameraStream` command SHALL accept the camera credential
 command flags (e.g. `--user`/`--pass`) and write them to the sensitive `username`/`password`
 resources on `ep/onvif` before streaming. This flag-based credential entry is an explicitly
 **interim** mechanism for this driver version and SHALL be documented as such; it is expected to be
-superseded by a configuration-driven credential model.
+superseded by a configuration-driven credential model. The command's argument contract SHALL be
+extended accordingly: beyond `<deviceId> [--out <uri>]` it SHALL also accept the optional
+`--user`/`--pass` (and `--snapshot <path>`) flags, and its registered maximum-argument limit SHALL be
+raised to admit them.
 
 #### Scenario: Credentials supplied via flags
 - **WHEN** a user runs `cameraStream <onvifDeviceId> --user <u> --pass <p>`
