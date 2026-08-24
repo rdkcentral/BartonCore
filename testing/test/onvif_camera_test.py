@@ -44,11 +44,8 @@ try:
 
     gi.require_version("Gst", "1.0")
     from gi.repository import Gst
-
-    _GST_AVAILABLE = True
 except (ImportError, ValueError):
     Gst = None
-    _GST_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
