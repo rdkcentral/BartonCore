@@ -15,7 +15,7 @@ builder image.
 
 #### Scenario: Mock responds to a discovery probe
 - **WHEN** a WS-Discovery `Probe` for the ONVIF camera type is received
-- **THEN** the mock SHALL send a `ProbeMatch` containing a `urn:uuid` endpoint reference and its ONVIF service address
+- **THEN** the mock SHALL send a `ProbeMatch` containing a `urn:uuid:…` endpoint reference and its ONVIF service address
 
 #### Scenario: Discovery and SOAP use only the Python standard library
 - **WHEN** the mock's WS-Discovery and SOAP responders are started in the test environment
