@@ -81,47 +81,13 @@ namespace barton
                 return tokens;
             }
 
-            // Minimal XML text/attribute escaping so a message id can never break the probe envelope.
-            std::string EscapeXml(const std::string &in)
-            {
-                std::string out;
-                out.reserve(in.size());
-
-                for (char c : in)
-                {
-                    switch (c)
-                    {
-                        case '&':
-                            out += "&amp;";
-                            break;
-                        case '<':
-                            out += "&lt;";
-                            break;
-                        case '>':
-                            out += "&gt;";
-                            break;
-                        case '"':
-                            out += "&quot;";
-                            break;
-                        case '\'':
-                            out += "&apos;";
-                            break;
-                        default:
-                            out += c;
-                            break;
-                    }
-                }
-
-                return out;
-            }
-
         } // namespace
 
         std::string OnvifBuildProbeMessage(const std::string &messageId)
         {
             return std::string("<?xml version=\"1.0\" encoding=\"UTF-8\"?>") + "<e:Envelope xmlns:e=\"" + NS_SOAP +
                    "\" xmlns:w=\"" + NS_WSA + "\" xmlns:d=\"" + NS_WSD + "\" xmlns:dn=\"" + NS_ONVIF_NET +
-                   "\"><e:Header><w:MessageID>" + EscapeXml(messageId) +
+                   "\"><e:Header><w:MessageID>" + OnvifXmlEscape(messageId) +
                    "</w:MessageID><w:To e:mustUnderstand=\"true\">" + WSD_TO +
                    "</w:To><w:Action e:mustUnderstand=\"true\">" + WSD_PROBE_ACTION +
                    "</w:Action></e:Header><e:Body><d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe>"
@@ -253,6 +219,18 @@ namespace barton
             unsigned char ttl = 1;
             (void) setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 
+            if (destPort < 1 || destPort > 65535)
+            {
+                if (error != nullptr)
+                {
+                    *error = "invalid discovery destination port: " + std::to_string(destPort);
+                }
+
+                close(sock);
+
+                return results;
+            }
+
             struct sockaddr_in dest;
             std::memset(&dest, 0, sizeof(dest));
             dest.sin_family = AF_INET;
@@ -294,10 +272,12 @@ namespace barton
                 return results;
             }
 
-            // Gather responses until the receive timeout elapses.
+            // Gather responses until the receive timeout elapses, bounding the total so a noisy or
+            // hostile LAN cannot grow results without limit.
+            static const size_t maxMatches = 256;
             char buffer[8192];
 
-            while (true)
+            while (results.size() < maxMatches)
             {
                 ssize_t received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, nullptr, nullptr);
 
@@ -329,6 +309,11 @@ namespace barton
 
                 for (OnvifProbeMatch &match : parsed)
                 {
+                    if (results.size() >= maxMatches)
+                    {
+                        break;
+                    }
+
                     results.push_back(std::move(match));
                 }
             }
