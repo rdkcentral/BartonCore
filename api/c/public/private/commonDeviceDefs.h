@@ -134,8 +134,8 @@
 // ONVIF protocol endpoint. The abstract "stream"/"takePicture" executes springboard here via a
 // { protocol, entryPoint } result; media/snapshot URLs are delivered as events on this endpoint.
 #define ONVIF_PROFILE                                                "onvif"
-#define ONVIF_ENDPOINT_ID                                            "onvif"
-#define ONVIF_PROTOCOL_NAME                                          "onvif"
+#define ONVIF_ENDPOINT_ID                                            ONVIF_PROFILE
+#define ONVIF_PROTOCOL_NAME                                          ONVIF_PROFILE
 #define ONVIF_FUNCTION_GET_MEDIA_URL                                 "getMediaUrl"
 #define ONVIF_RESOURCE_MEDIA_URL                                     "mediaUrl"
 #define ONVIF_FUNCTION_GET_SNAPSHOT_URL                              "getSnapshotUrl"

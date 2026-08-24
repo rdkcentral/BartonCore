@@ -112,7 +112,10 @@ namespace barton
 
             xmlFreeDoc(doc);
 
-            return true;
+            // A SOAP Fault or unrelated payload parses fine but yields none of the expected fields;
+            // treat that as a failure so discovery does not report a bogus device.
+            return !(out.manufacturer.empty() && out.model.empty() && out.firmwareVersion.empty() &&
+                     out.serialNumber.empty() && out.hardwareId.empty());
         }
 
         bool OnvifParseProfiles(const std::string &xml, std::vector<std::string> &tokensOut)
