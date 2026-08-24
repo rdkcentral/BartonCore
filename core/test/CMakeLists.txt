@@ -421,8 +421,8 @@ if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
     )
 endif()
 
-# ONVIF standalone unit tests (SOAP client + WS-Discovery). These compile the ONVIF units directly
-# and only need glib/libcurl/libxml2 — no BartonCoreStatic — so they build without Matter.
+# ONVIF standalone unit test (SOAP client). It compiles the ONVIF units directly
+# and only needs glib/libcurl/libxml2 — no BartonCoreStatic — so it builds without Matter.
 if (BCORE_ONVIF)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
