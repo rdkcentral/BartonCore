@@ -8,10 +8,11 @@ A test-only ONVIF camera mock used by the ONVIF driver integration tests. It ans
 
 A test-only ONVIF device mock SHALL listen for WS-Discovery `Probe` messages and respond with a
 `ProbeMatch` that advertises a camera device type and a stable endpoint reference
-(`urn:uuid:…`) plus the mock's ONVIF service address. The WS-Discovery and SOAP responders SHALL be
-implemented using the Python standard library only (no third-party pip packages); the live RTSP
-server (see below) MAY use the GStreamer GObject-Introspection bindings already provided by the
-builder image.
+(`urn:uuid:…`) plus the mock's ONVIF service address. The WS-Discovery and SOAP responder **logic**
+SHALL use the Python standard library only (no third-party pip packages); the live RTSP server (see
+below) uses the GStreamer GObject-Introspection bindings provided by the builder image, so the shared
+mock module imports those GI bindings (guarded) at import time even though the responders themselves
+do not depend on them.
 
 #### Scenario: Mock responds to a discovery probe
 - **WHEN** a WS-Discovery `Probe` for the ONVIF camera type is received
