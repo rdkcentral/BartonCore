@@ -120,11 +120,12 @@
 #define CAMERA_PROFILE_FUNCTION_GET_PICTURE                          "getPicture"
 #define CAMERA_PROFILE_FUNCTION_UPLOAD_VIDEO_CLIP                    "uploadVideoClip"
 
-// Abstract camera session model (protocol-agnostic "camera" endpoint). These resource names match
-// the shipped contract exposed by camera.sbmd.js and consumed by the reference app; native camera
-// drivers (e.g. ONVIF) create the same endpoint so a single client flow works across technologies.
-#define CAMERA_SESSION_PROFILE                                       "camera"
-#define CAMERA_SESSION_ENDPOINT_ID                                   "camera"
+// Abstract camera session model (protocol-agnostic "camera" endpoint). These endpoint, resource, and
+// function names match the shipped contract exposed by camera.sbmd.js and consumed by the reference
+// app; native camera drivers (e.g. ONVIF) create the same endpoint so a single client flow works
+// across technologies.
+#define CAMERA_SESSION_PROFILE                                       CAMERA_PROFILE
+#define CAMERA_SESSION_ENDPOINT_ID                                   CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID
 #define CAMERA_SESSION_FUNCTION_CREATE_SESSION                       "createSession"
 #define CAMERA_SESSION_FUNCTION_STREAM                               "stream"
 #define CAMERA_SESSION_FUNCTION_TAKE_PICTURE                         "takePicture"
