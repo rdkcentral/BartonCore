@@ -45,6 +45,7 @@
 #include <pwd.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -258,6 +259,15 @@ static void setDefaultParameters(BCoreInitializeParamsContainer *params)
             // Use the well-known development passcode 20202021
             b_core_property_provider_set_property_uint32(
                 propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 20202021);
+        }
+
+        // Translate BARTON_BLE_ADAPTER_ID env var to a runtime property
+        const char *bleAdapterEnv = getenv("BARTON_BLE_ADAPTER_ID");
+
+        if (bleAdapterEnv != NULL)
+        {
+            b_core_property_provider_set_property_string(
+                propProvider, B_CORE_BARTON_MATTER_BLE_HCI_INDEX, bleAdapterEnv);
         }
     }
 }
