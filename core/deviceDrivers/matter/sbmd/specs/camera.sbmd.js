@@ -336,9 +336,36 @@ function parseSessions(sessionsJson) {
 }
 
 function findStreamingSessionId(sessions) {
+    if (sessions === null || sessions === undefined) {
+        return null;
+    }
+
     // Return the id of the (single) session in the 'streaming' state, or null if there is none.
     for (var id in sessions) {
         if (sessions[id].state === 'streaming') {
+            return id;
+        }
+    }
+
+    return null;
+}
+
+// Return the session id whose stored webRTCSessionID matches an incoming
+// WebRTCTransportRequestor command. Use this when the command already carries a
+// webRTCSessionID so the resource update event can be attributed to the exact
+// session, which matters when multiple clients are active and streaming-state
+// inference would be ambiguous.
+function findSessionIdByWebRTCSessionID(sessions, webRTCSessionID) {
+    if (webRTCSessionID === undefined || webRTCSessionID === null) {
+        return null;
+    }
+
+    if (sessions === null || sessions === undefined) {
+        return null;
+    }
+
+    for (var id in sessions) {
+        if (sessions[id].webRTCSessionID === webRTCSessionID) {
             return id;
         }
     }
@@ -929,25 +956,25 @@ function handleIncomingOffer(args) {
     // Store the Matter webRTCSessionID for correlation
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
+    var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
+    var metadata = {sessionId: sessionId || 'unknown'};
 
     if (sessions === null) {
         // Corrupt session data: reset it, but still surface the remote SDP to the client.
         return Sbmd.result()
             .storage.setTransientData(TD_SESSIONS, '', 0)
-            .dataModel.updateResource(EP_WEBRTC, 'remoteSdp', sdp.toString())
+            .dataModel.updateResource(EP_WEBRTC, 'remoteSdp', sdp.toString(), metadata)
             .success();
     }
 
     // Find the active streaming session and associate the Matter session ID.
-    var sessionId = findStreamingSessionId(sessions);
-
     if (sessionId) {
         sessions[sessionId].webRTCSessionID = webRTCSessionID;
     }
 
     return Sbmd.result()
         .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
-        .dataModel.updateResource(EP_WEBRTC, 'remoteSdp', sdp.toString())
+        .dataModel.updateResource(EP_WEBRTC, 'remoteSdp', sdp.toString(), metadata)
         .success();
 }
 
@@ -968,11 +995,13 @@ function handleIncomingAnswer(args) {
         return Sbmd.result().error('Answer command missing SDP');
     }
 
-    // Store the camera-allocated webRTCSessionID for use by subsequent commands
-    // (ProvideICECandidates, EndSession)
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
+    var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
+    var metadata = {sessionId: sessionId || 'unknown'};
 
+    // Store the camera-allocated webRTCSessionID for use by subsequent commands
+    // (ProvideICECandidates, EndSession)
     if (sessions && webRTCSessionID !== undefined && webRTCSessionID !== null) {
         var answerSessionId = findStreamingSessionId(sessions);
 
@@ -983,7 +1012,7 @@ function handleIncomingAnswer(args) {
 
     return Sbmd.result()
         .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions || {}), ONE_HOUR_SECS)
-        .dataModel.updateResource(EP_WEBRTC, 'remoteSdp', sdp.toString())
+        .dataModel.updateResource(EP_WEBRTC, 'remoteSdp', sdp.toString(), metadata)
         .success();
 }
 
@@ -997,11 +1026,18 @@ function handleIncomingIceCandidates(args) {
     var decoded = Sbmd.Tlv.decode(tlvBase64);
 
     // ICECandidates fields: webRTCSessionID (tag 0), ICECandidates (tag 1, array of structs)
+    var webRTCSessionID = decoded[0];
     var candidateStructs = decoded[1];
 
     if (!candidateStructs || !Array.isArray(candidateStructs)) {
         return Sbmd.result().error('ICECandidates command missing candidates array');
     }
+
+    var sessionsJson = args.supplements.transientData[TD_SESSIONS];
+    var sessions = parseSessions(sessionsJson);
+    var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
+
+    var metadata = {sessionId: sessionId || 'unknown'};
 
     // Extract candidate strings from ICECandidateStruct array
     // Each struct has: candidate (tag 0), SDPMid (tag 1), SDPMLineIndex (tag 2)
@@ -1013,18 +1049,26 @@ function handleIncomingIceCandidates(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(EP_WEBRTC, 'remoteIceCandidates', JSON.stringify(candidates))
+        .dataModel.updateResource(
+            EP_WEBRTC,
+            'remoteIceCandidates',
+            JSON.stringify(candidates),
+            metadata
+        )
         .success();
 }
 
 function handleIncomingEndSession(args) {
     var tlvBase64 = args.command.tlvBase64;
     var reason = 12; // UnknownReason default
+    var webRTCSessionID = null;
 
     if (tlvBase64) {
         var decoded = Sbmd.Tlv.decode(tlvBase64);
 
         // End fields: webRTCSessionID (tag 0), reason (tag 1)
+        webRTCSessionID = decoded[0];
+
         if (decoded[1] !== undefined) {
             reason = decoded[1];
         }
@@ -1046,7 +1090,10 @@ function handleIncomingEndSession(args) {
             .success();
     }
 
-    var sessionId = findStreamingSessionId(sessions);
+    // Use the camera-provided webRTCSessionID so the ended event is attributed to the exact
+    // session that the camera is ending. If we cannot resolve that id, still publish the ended
+    // event with sessionId='unknown' rather than guessing from the current streaming state.
+    var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
 
     if (sessionId) {
         delete sessions[sessionId];

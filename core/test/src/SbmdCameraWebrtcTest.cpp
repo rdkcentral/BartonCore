@@ -761,7 +761,7 @@ namespace
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingOfferUpdatesRemoteSdp)
     {
-        std::string sessions = SessionsJson("1", "streaming");
+        std::string sessions = SessionsJson("1", "streaming", 42);
         auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, sdp:{tag:1,type:'string'}}",
                              "{webRTCSessionID: 42, sdp: 'remote-offer-sdp'}");
 
@@ -769,12 +769,14 @@ namespace
             InvokeCommandHandler("handleIncomingOffer", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_OFFER, tlv, sessions);
 
         ExpectSuccess(result);
-        ExpectUpdateResource(*result, "remoteSdp", "remote-offer-sdp");
+        const auto *ur = ExpectUpdateResource(*result, "remoteSdp", "remote-offer-sdp");
+        ASSERT_TRUE(ur->metadata.has_value());
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"1\"") != std::string::npos);
     }
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingAnswerUpdatesRemoteSdp)
     {
-        std::string sessions = SessionsJson("1", "streaming");
+        std::string sessions = SessionsJson("1", "streaming", 99);
         auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, sdp:{tag:1,type:'string'}}",
                              "{webRTCSessionID: 99, sdp: 'remote-answer-sdp'}");
 
@@ -782,7 +784,9 @@ namespace
             InvokeCommandHandler("handleIncomingAnswer", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_ANSWER, tlv, sessions);
 
         ExpectSuccess(result);
-        ExpectUpdateResource(*result, "remoteSdp", "remote-answer-sdp");
+        const auto *ur = ExpectUpdateResource(*result, "remoteSdp", "remote-answer-sdp");
+        ASSERT_TRUE(ur->metadata.has_value());
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"1\"") != std::string::npos);
     }
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingAnswerStoresWebRTCSessionID)
@@ -812,7 +816,24 @@ namespace
             "handleIncomingIceCandidates", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_ICE_CANDIDATES, tlv, sessions);
 
         ExpectSuccess(result);
-        ExpectUpdateResource(*result, "remoteIceCandidates");
+        const auto *ur = ExpectUpdateResource(*result, "remoteIceCandidates");
+        ASSERT_TRUE(ur->metadata.has_value());
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"1\"") != std::string::npos);
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, HandleIncomingIceCandidatesWithoutWebRTCSessionIDEmitsUnknownMetadata)
+    {
+        std::string sessions = SessionsJson("1", "streaming", 42);
+        auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, ICECandidates:{tag:1,type:'array'}}",
+                             "{webRTCSessionID: null, ICECandidates: [{0:'candidate:1 udp host', 1:null, 2:null}]}");
+
+        auto result = InvokeCommandHandler(
+            "handleIncomingIceCandidates", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_ICE_CANDIDATES, tlv, sessions);
+
+        ExpectSuccess(result);
+        const auto *ur = ExpectUpdateResource(*result, "remoteIceCandidates");
+        ASSERT_TRUE(ur->metadata.has_value());
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"unknown\"") != std::string::npos);
     }
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingEndEmitsWebrtcErrorEnded)
@@ -827,8 +848,23 @@ namespace
         ExpectSuccess(result);
         const auto *ur = ExpectUpdateResource(*result, "webrtcError", "ended");
         ASSERT_TRUE(ur->metadata.has_value());
-        EXPECT_TRUE(ur->metadata->find("sessionId") != std::string::npos);
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"1\"") != std::string::npos);
         EXPECT_TRUE(ur->metadata->find("reason") != std::string::npos);
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, HandleIncomingEndWithUnknownWebRTCSessionIDExpectSuccess)
+    {
+        std::string sessions = SessionsJson("1", "streaming", 42);
+        auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, reason:{tag:1,type:'enum8'}}",
+                             "{webRTCSessionID: 99, reason: 2}");
+
+        auto result =
+            InvokeCommandHandler("handleIncomingEndSession", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_END, tlv, sessions);
+
+        ExpectSuccess(result);
+        const auto *ur = ExpectUpdateResource(*result, "webrtcError", "ended");
+        ASSERT_TRUE(ur->metadata.has_value());
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"unknown\"") != std::string::npos);
     }
 
     TEST_F(SbmdCameraWebrtcTest, ExecuteStreamReturnsProtocolAndEntryPoint)
