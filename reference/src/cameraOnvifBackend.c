@@ -121,6 +121,11 @@ static bool snapshotFetch(const gchar *url, const gchar *user, const gchar *pass
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 
+    // Restrict to HTTP(S), including across redirects, so a malicious snapshot URL cannot coerce
+    // libcurl into file://, scp://, or other schemes (local file read / SSRF).
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long) (CURLPROTO_HTTP | CURLPROTO_HTTPS));
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, (long) (CURLPROTO_HTTP | CURLPROTO_HTTPS));
+
     // Be permissive about TLS: IP cameras routinely serve their snapshot endpoint over HTTPS
     // with a self-signed or hostname-mismatched certificate (e.g. Reolink redirects http snapshot
     // requests to https). This is a developer reference app, so disable peer/host verification

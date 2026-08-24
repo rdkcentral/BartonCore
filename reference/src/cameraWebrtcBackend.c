@@ -295,7 +295,7 @@ static void onRemoteIce(const gchar *jsonCandidates, gpointer userData)
     cameraStreamContextUnlock(self->ctx);
 
     // Trickle: feed these candidates to the WebRTC client the moment they arrive.
-    if (feedNow)
+    if (feedNow && webrtc != NULL)
     {
         feedRemoteIceCandidates(webrtc, jsonCandidates);
     }

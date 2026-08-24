@@ -46,7 +46,11 @@ logger = logging.getLogger(__name__)
 
 
 def _probe_rtsp_buffers(url, seconds=8):
-    """Open the RTSP URL and count depayloaded buffers received within the time budget."""
+    """Open the RTSP URL and count the raw RTP buffers rtspsrc delivers to fakesink within the time budget.
+
+    The pipeline is ``rtspsrc ! fakesink`` with no depayloader, so these are undepayloaded RTP
+    buffers; the count is only used to prove that media is actually flowing over the connection.
+    """
     Gst.init(None)
     counter = {"n": 0}
     pipeline = Gst.parse_launch(f"rtspsrc location={url} latency=100 ! fakesink name=sink")
