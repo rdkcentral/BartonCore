@@ -145,6 +145,11 @@ class OnvifCameraServer:
     and an HTTP snapshot endpoint."""
 
     def __init__(self):
+        if not _GST_RTSP_AVAILABLE:
+            raise RuntimeError(
+                "OnvifCameraServer requires the Gst/GstRtspServer GObject-introspection bindings, "
+                "which are not available in this environment"
+            )
         # A unique id per instance keeps repeated runs from colliding on a persisted device id.
         self.device_uuid = str(uuid_module.uuid4())
 
