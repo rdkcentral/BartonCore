@@ -32,6 +32,7 @@
 
 #include <cstring>
 #include <mutex>
+#include <utility>
 
 namespace barton
 {
@@ -53,39 +54,6 @@ namespace barton
                 "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest";
             const char *const BASE64_ENCODING_TYPE =
                 "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary";
-
-            std::string XmlEscape(const std::string &in)
-            {
-                std::string out;
-                out.reserve(in.size());
-
-                for (char c : in)
-                {
-                    switch (c)
-                    {
-                        case '&':
-                            out += "&amp;";
-                            break;
-                        case '<':
-                            out += "&lt;";
-                            break;
-                        case '>':
-                            out += "&gt;";
-                            break;
-                        case '"':
-                            out += "&quot;";
-                            break;
-                        case '\'':
-                            out += "&apos;";
-                            break;
-                        default:
-                            out += c;
-                            break;
-                    }
-                }
-
-                return out;
-            }
 
             size_t WriteCb(char *ptr, size_t size, size_t nmemb, void *userdata)
             {
@@ -246,9 +214,9 @@ namespace barton
 
                 header = std::string("<s:Header><wsse:Security s:mustUnderstand=\"1\" xmlns:wsse=\"") + NS_WSSE +
                          "\" xmlns:wsu=\"" + NS_WSU + "\"><wsse:UsernameToken><wsse:Username>" +
-                         XmlEscape(creds.username) + "</wsse:Username><wsse:Password Type=\"" + PASSWORD_DIGEST_TYPE +
-                         "\">" + digest + "</wsse:Password><wsse:Nonce EncodingType=\"" + BASE64_ENCODING_TYPE + "\">" +
-                         nonceB64 + "</wsse:Nonce><wsu:Created>" + created +
+                         OnvifXmlEscape(creds.username) + "</wsse:Username><wsse:Password Type=\"" +
+                         PASSWORD_DIGEST_TYPE + "\">" + digest + "</wsse:Password><wsse:Nonce EncodingType=\"" +
+                         BASE64_ENCODING_TYPE + "\">" + nonceB64 + "</wsse:Nonce><wsu:Created>" + created +
                          "</wsu:Created></wsse:UsernameToken></wsse:Security></s:Header>";
 
                 g_free(nonceB64);
@@ -386,7 +354,7 @@ namespace barton
             std::string body = std::string("<trt:GetStreamUri xmlns:trt=\"") + NS_TRT + "\" xmlns:tt=\"" + NS_TT +
                                "\"><trt:StreamSetup><tt:Stream>RTP-Unicast</tt:Stream><tt:Transport><tt:Protocol>RTSP"
                                "</tt:Protocol></tt:Transport></trt:StreamSetup><trt:ProfileToken>" +
-                               XmlEscape(profileToken) + "</trt:ProfileToken></trt:GetStreamUri>";
+                               OnvifXmlEscape(profileToken) + "</trt:ProfileToken></trt:GetStreamUri>";
             std::string response;
 
             if (!Post(BuildEnvelope(body, creds), response, error))
@@ -415,7 +383,7 @@ namespace barton
                                              std::string *error)
         {
             std::string body = std::string("<trt:GetSnapshotUri xmlns:trt=\"") + NS_TRT + "\"><trt:ProfileToken>" +
-                               XmlEscape(profileToken) + "</trt:ProfileToken></trt:GetSnapshotUri>";
+                               OnvifXmlEscape(profileToken) + "</trt:ProfileToken></trt:GetSnapshotUri>";
             std::string response;
 
             if (!Post(BuildEnvelope(body, creds), response, error))
