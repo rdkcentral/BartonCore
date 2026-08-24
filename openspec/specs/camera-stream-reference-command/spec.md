@@ -5,11 +5,11 @@ The reference app's `cameraStream` (`cs`) command drives a camera through Barton
 ## Requirements
 ### Requirement: cameraStream command exists in reference app
 
-The reference app SHALL provide a command named `cameraStream` with short alias `cs` in a dedicated camera command category. The command SHALL accept a device ID as a required argument and optional flags: `--out <uri>` (media destination) and, for ONVIF cameras, `--user`/`--pass` (credentials) and `--snapshot <file://path>` (still capture).
+The reference app SHALL provide a command named `cameraStream` with short alias `cs` in a dedicated camera command category. The command SHALL accept a device ID as a required argument and optional flags: `--out <uri>` (media destination) and, for ONVIF cameras, `--user`/`--pass` (credentials) and `--snapshot <path>` (still capture; a plain filesystem path, with an optional `file://` prefix).
 
 #### Scenario: Command appears in help
 - **WHEN** a user types `help` in the reference app
-- **THEN** the camera category SHALL list `cameraStream` with usage: `<deviceId> [--out <uri>] [--user <name>] [--pass <secret>] [--snapshot <file://path>]`
+- **THEN** the camera category SHALL list `cameraStream` with usage: `<deviceId> [--out <uri>] [--user <name>] [--pass <secret>] [--snapshot <path>]`
 
 #### Scenario: Command with short alias
 - **WHEN** a user types `cs <deviceId>`
