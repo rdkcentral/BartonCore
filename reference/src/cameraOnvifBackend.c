@@ -154,9 +154,9 @@ static bool snapshotFetch(const gchar *url, const gchar *user, const gchar *pass
         return false;
     }
 
-    // A completed transfer can still be an auth/error page (401/403 HTML). Only treat 2xx as success.
-    // httpCode is 0 for non-HTTP schemes (e.g. file://), which we also accept.
-    if (httpCode != 0 && (httpCode < 200 || httpCode >= 300))
+    // A completed transfer can still be an auth/error page (401/403 HTML). The fetch is restricted to
+    // HTTP(S), so httpCode is always a real status; only treat 2xx as success.
+    if (httpCode < 200 || httpCode >= 300)
     {
         emitError("[camera-stream] Snapshot download returned HTTP %ld\n", httpCode);
         return false;
