@@ -72,7 +72,7 @@ The `cameraStream` command SHALL interact with Barton exclusively through `BCore
 - **WHEN** the reference app is compiled
 - **THEN** the camera stream module SHALL compile without any Matter SDK headers in its include path
 
-### Requirement: cameraStream uses GStreamer webrtcbin for media
+### Requirement: cameraStream uses GStreamer for media (webrtcbin or rtspsrc)
 
 For **WebRTC** cameras, the `cameraStream` command SHALL use GStreamer's `webrtcbin` element as its
 local WebRTC peer connection (host candidates only). For **ONVIF** cameras it SHALL instead use a
