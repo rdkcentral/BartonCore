@@ -26,8 +26,10 @@
 #include "OnvifXml.h"
 
 #include <arpa/inet.h>
+#include <atomic>
 #include <cctype>
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -269,7 +271,12 @@ namespace barton
             }
 
             // A per-probe message id; format is not significant to the camera beyond uniqueness.
-            std::string messageId = std::string("uuid:") + std::to_string(getpid()) + "-" + std::to_string(timeoutMs);
+            // WS-Addressing MessageIDs must be unique; a per-process atomic counter makes repeated
+            // probes (even with the same timeout) distinct so devices/proxies do not de-duplicate them.
+            static std::atomic<uint64_t> probeSequence {0};
+            uint64_t sequence = probeSequence.fetch_add(1, std::memory_order_relaxed);
+            std::string messageId = std::string("uuid:") + std::to_string(getpid()) + "-" + std::to_string(timeoutMs) +
+                                    "-" + std::to_string(sequence);
             std::string probe = OnvifBuildProbeMessage(messageId);
 
             ssize_t sent =
@@ -296,9 +303,14 @@ namespace barton
 
                 if (received < 0)
                 {
-                    // SO_RCVTIMEO expiry is the normal end of the gather window; anything else is a
-                    // real error worth surfacing (but we still return whatever was already collected).
-                    if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR && error != nullptr)
+                    if (errno == EINTR)
+                    {
+                        continue; // interrupted by a signal; keep gathering rather than ending early
+                    }
+
+                    // SO_RCVTIMEO expiry (EAGAIN/EWOULDBLOCK) is the normal end of the gather window;
+                    // anything else is a real error worth surfacing (we still return what we gathered).
+                    if (errno != EAGAIN && errno != EWOULDBLOCK && error != nullptr)
                     {
                         *error = std::string("failed to receive probe response: ") + std::strerror(errno);
                     }
