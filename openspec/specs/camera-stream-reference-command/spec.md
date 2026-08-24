@@ -132,7 +132,8 @@ through the `ep/onvif` endpoint using the same command interface as WebRTC: it S
 `authRequired`, ensure credentials are applied, subscribe to `mediaUrl`, execute `getMediaUrl`, and on
 receiving the `mediaUrl` event open a GStreamer `rtspsrc` source at that URL (applying credentials
 when `authRequired` is true) feeding the shared fragmented-MP4 → serve/record sink. Taking a picture
-SHALL use `takePicture` → `getSnapshotUrl` → `snapshotUrl` analogously.
+(requested via the `--snapshot <path>` flag) SHALL use `takePicture` → `getSnapshotUrl` →
+`snapshotUrl` analogously, downloading the JPEG over HTTP(S) and writing it to `<path>`.
 
 #### Scenario: ONVIF stream played through the same command
 - **WHEN** a user runs `cameraStream <onvifDeviceId>` and the driver reports protocol `onvif`
@@ -141,6 +142,10 @@ SHALL use `takePicture` → `getSnapshotUrl` → `snapshotUrl` analogously.
 #### Scenario: ONVIF credentials applied to the RTSP source
 - **WHEN** `authRequired` reads `"true"` for the camera
 - **THEN** the command SHALL apply the configured credentials to the `rtspsrc` connection and SHALL NOT print the credentials
+
+#### Scenario: Snapshot captured to a file
+- **WHEN** a user runs `cameraStream <onvifDeviceId> --snapshot <path>`
+- **THEN** the command SHALL execute `takePicture`, follow the `getSnapshotUrl` springboard, wait for the `snapshotUrl` event, download the JPEG over HTTP(S) (applying the configured credentials when `authRequired` is true), and write it to `<path>`
 
 ### Requirement: cameraStream accepts ONVIF credentials via interim flags
 
