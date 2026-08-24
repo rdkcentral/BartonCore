@@ -95,7 +95,8 @@ static size_t snapshotWriteCallback(char *ptr, size_t size, size_t nmemb, void *
 {
     FILE *out = (FILE *) userdata;
 
-    return fwrite(ptr, size, nmemb, out);
+    // libcurl expects the number of *bytes* consumed; fwrite returns the item count, so scale by size.
+    return fwrite(ptr, size, nmemb, out) * size;
 }
 
 // Perform the snapshot HTTP GET to `url`, writing the body to `out`. Credentials (if any) are

@@ -463,7 +463,7 @@ if (BCORE_ONVIF)
         LIBS ${ONVIF_TEST_CURL_LIBRARIES} ${ONVIF_TEST_XML_LIBRARIES} gmock
              xhDeviceDescriptors BartonCommon::xhTypes BartonCommon::xhLog BartonCommon::xhUtil
         INCLUDES ${ONVIF_DIR} ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
-                 ${PROJECT_SOURCE_DIR}/api/c/public
+                 ${PROJECT_SOURCE_DIR}/api/c/public ${FFF_INCLUDE_DIR}
                  ${ONVIF_TEST_XML_INCLUDE_DIRS} ${ONVIF_TEST_CURL_INCLUDE_DIRS}
     )
 

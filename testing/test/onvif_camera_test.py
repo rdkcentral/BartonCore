@@ -102,7 +102,8 @@ def test_onvif_stream_returns_media_url(onvif_environment, onvif_camera):
     assert stream_info["entryPoint"] == resource_uri(camera, "getMediaUrl", endpoint_id="onvif")
 
     # Follow the entry point: getMediaUrl retrieves the RTSP URL and delivers it as a mediaUrl event.
-    client.execute_resource(stream_info["entryPoint"], "")
+    ok, _ = client.execute_resource(stream_info["entryPoint"], "")
+    assert ok, "getMediaUrl entry-point execute failed"
 
     media_url = media_queue.get(timeout=10)
     assert media_url == onvif_camera.rtsp_uri
@@ -126,7 +127,8 @@ def test_onvif_take_picture_returns_snapshot_url(onvif_environment, onvif_camera
     assert snapshot_info["protocol"] == "onvif"
     assert snapshot_info["entryPoint"] == resource_uri(camera, "getSnapshotUrl", endpoint_id="onvif")
 
-    client.execute_resource(snapshot_info["entryPoint"], "")
+    ok, _ = client.execute_resource(snapshot_info["entryPoint"], "")
+    assert ok, "getSnapshotUrl entry-point execute failed"
 
     snapshot_url = snapshot_queue.get(timeout=10)
     assert snapshot_url == onvif_camera.snapshot_uri
@@ -150,7 +152,8 @@ def test_onvif_stream_media_flows(onvif_environment, onvif_camera):
 
     ok, info = client.execute_resource(resource_uri(camera, "stream", endpoint_id="camera"), "")
     assert ok
-    client.execute_resource(json.loads(info)["entryPoint"], "")
+    ok, _ = client.execute_resource(json.loads(info)["entryPoint"], "")
+    assert ok, "getMediaUrl entry-point execute failed"
 
     media_url = media_queue.get(timeout=10)
     assert media_url == onvif_camera.rtsp_uri
@@ -171,7 +174,8 @@ def test_onvif_snapshot_fetch_returns_jpeg(onvif_environment, onvif_camera):
 
     ok, info = client.execute_resource(resource_uri(camera, "takePicture", endpoint_id="camera"), "")
     assert ok
-    client.execute_resource(json.loads(info)["entryPoint"], "")
+    ok, _ = client.execute_resource(json.loads(info)["entryPoint"], "")
+    assert ok, "getSnapshotUrl entry-point execute failed"
 
     snapshot_url = snapshot_queue.get(timeout=10)
 

@@ -64,6 +64,11 @@ namespace barton
 
         std::string OnvifXmlElementText(xmlNode *node)
         {
+            if (node == nullptr)
+            {
+                return "";
+            }
+
             char *content = getXmlNodeContentsAsString(node, nullptr);
             std::string result = content != nullptr ? content : "";
             free(content);
@@ -73,6 +78,11 @@ namespace barton
 
         std::string OnvifXmlElementAttr(xmlNode *node, const char *attrName)
         {
+            if (node == nullptr)
+            {
+                return "";
+            }
+
             char *value = getXmlNodeAttributeAsString(node, attrName, nullptr);
             std::string result = value != nullptr ? value : "";
             free(value);

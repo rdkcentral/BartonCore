@@ -23,7 +23,9 @@ WS-Discovery `Probe` on the local network. The call SHALL return immediately and
 a background thread. For each responding camera, the driver SHALL derive a stable device `uuid` from
 the WS-Discovery ProbeMatch endpoint reference (`urn:uuid:…`), obtain manufacturer, model, and
 firmware via an anonymous ONVIF `GetDeviceInformation`, and report the device with
-`deviceServiceDeviceFound`.
+`deviceServiceDeviceFound`. Because a discovered ONVIF camera normally has no DDL descriptor entry,
+the driver SHALL report it with `neverReject = true` so the device service does not reject it for
+lack of a matching descriptor.
 
 #### Scenario: Discovery reports a responding ONVIF camera
 - **WHEN** a discovery request for `camera` is active and an ONVIF camera answers the WS-Discovery Probe
@@ -80,7 +82,8 @@ The `stream` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "entryP
 
 Executing `getMediaUrl` on `ep/onvif` SHALL perform an ONVIF `GetStreamUri` SOAP call authenticated
 with the stored credentials and SHALL emit the returned credential-free RTSP URL as a `mediaUrl`
-event.
+event. The SOAP call SHALL use a bounded libcurl timeout so an unresponsive or packet-dropping camera
+cannot block the executing thread indefinitely.
 
 #### Scenario: getMediaUrl emits the RTSP URL
 - **WHEN** `getMediaUrl` is executed with valid stored credentials
