@@ -61,6 +61,7 @@ pytest_plugins = [
     # Environments
     "testing.environment.default_environment_orchestrator",
     "testing.environment.descriptor_environment_orchestrator",
+    "testing.environment.onvif_environment_orchestrator",
     # Helpers
     "testing.helpers.http_fixture_server",
     # Mocks
