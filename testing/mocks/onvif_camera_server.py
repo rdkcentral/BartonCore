@@ -23,7 +23,9 @@
 
 #
 # A test-only mock ONVIF camera. It answers WS-Discovery probes over UDP and serves canned ONVIF
-# SOAP responses over HTTP, using only the Python standard library. The ONVIF driver is pointed at
+# SOAP responses over HTTP; the discovery and SOAP responders use only the Python standard library,
+# while this module additionally depends on pytest (fixture) and the GStreamer GObject-introspection
+# bindings for the live RTSP server (below). The ONVIF driver is pointed at
 # the UDP responder by unicast via the "onvif.discovery.address" property (see the ONVIF driver's
 # discovery test seam), which avoids relying on multicast reachability in CI/container networks.
 #

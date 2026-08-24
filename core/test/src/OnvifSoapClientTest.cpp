@@ -82,6 +82,17 @@ TEST(OnvifSoapClient, ParsesDeviceInformation)
     EXPECT_EQ(info.serialNumber, "SN42");
 }
 
+TEST(OnvifSoapClient, RejectsDeviceInformationWithoutExpectedFields)
+{
+    // A SOAP Fault returned with HTTP 200 parses as valid XML but carries none of the device fields.
+    std::string xml = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">"
+                      "<s:Body><s:Fault><s:Code><s:Value>s:Sender</s:Value></s:Code>"
+                      "<s:Reason><s:Text>not authorized</s:Text></s:Reason></s:Fault></s:Body></s:Envelope>";
+
+    OnvifDeviceInfo info;
+    EXPECT_FALSE(OnvifParseDeviceInformation(xml, info));
+}
+
 TEST(OnvifSoapClient, ParsesProfileTokens)
 {
     std::string xml = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">"
