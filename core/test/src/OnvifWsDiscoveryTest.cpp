@@ -32,7 +32,7 @@ TEST(OnvifWsDiscovery, ProbeMessageContainsRequiredElements)
     std::string probe = OnvifBuildProbeMessage("uuid:abc-123");
 
     EXPECT_NE(probe.find("<w:MessageID>uuid:abc-123</w:MessageID>"), std::string::npos);
-    EXPECT_NE(probe.find("Probe"), std::string::npos);
+    EXPECT_NE(probe.find("<d:Probe>"), std::string::npos);
     EXPECT_NE(probe.find("NetworkVideoTransmitter"), std::string::npos);
 }
 
@@ -76,7 +76,7 @@ TEST(OnvifWsDiscovery, DeviceUuidStripsUrnPrefixAndLowercases)
     EXPECT_EQ(OnvifDeviceUuidFromEndpointReference("urn:uuid:AABBCCDD-1122-3344-5566-778899AABBCC"),
               "aabbccdd-1122-3344-5566-778899aabbcc");
     EXPECT_EQ(OnvifDeviceUuidFromEndpointReference("URN:UUID:abc"), "abc");
-    // Falls back to the trimmed input when there is no urn:uuid prefix.
+    // With no urn:uuid prefix, the input is trimmed and lower-cased.
     EXPECT_EQ(OnvifDeviceUuidFromEndpointReference("  plainId  "), "plainid");
 }
 
@@ -84,4 +84,28 @@ TEST(OnvifWsDiscovery, EmptyResponseYieldsNoMatches)
 {
     EXPECT_TRUE(OnvifParseProbeMatches("").empty());
     EXPECT_TRUE(OnvifParseProbeMatches("<not-soap/>").empty());
+}
+
+TEST(OnvifWsDiscovery, ProbeReportsErrorForInvalidDestinationAddress)
+{
+    OnvifWsDiscovery discovery;
+    discovery.SetDestination("not-a-valid-ip", 3702);
+
+    std::string error;
+    std::vector<OnvifProbeMatch> matches = discovery.Probe(10, &error);
+
+    EXPECT_TRUE(matches.empty());
+    EXPECT_FALSE(error.empty());
+}
+
+TEST(OnvifWsDiscovery, ProbeReportsErrorForInvalidDestinationPort)
+{
+    OnvifWsDiscovery discovery;
+    discovery.SetDestination("239.255.255.250", 70000);
+
+    std::string error;
+    std::vector<OnvifProbeMatch> matches = discovery.Probe(10, &error);
+
+    EXPECT_TRUE(matches.empty());
+    EXPECT_FALSE(error.empty());
 }
