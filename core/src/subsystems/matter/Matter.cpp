@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <regex>
 #include <vector>
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
@@ -397,27 +398,16 @@ uint32_t Matter::ResolveBleAdapterId()
 
         if (fgets(buf, sizeof(buf), f) != nullptr)
         {
-            char *endPtr = nullptr;
-            unsigned long val = strtoul(buf, &endPtr, 10);
+            std::cmatch match;
 
-            // Accept only if at least one digit was parsed and the remainder
-            // is purely whitespace/newline (reject partial parses like "1abc").
-            if (endPtr != buf)
+            if (std::regex_match(buf, match, std::regex(R"(^\s*(\d+)\s*$)")))
             {
-                while (*endPtr == ' ' || *endPtr == '\t' || *endPtr == '\n' || *endPtr == '\r')
-                {
-                    endPtr++;
-                }
-
-                if (*endPtr == '\0')
-                {
-                    adapterId = static_cast<uint32_t>(val);
-                    icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_FILE);
-                }
-                else
-                {
-                    icWarn("Invalid content in %s, using default hci%u", BLE_CONTROLLER_ADAPTER_ID_FILE, adapterId);
-                }
+                adapterId = static_cast<uint32_t>(std::stoul(match[1].str()));
+                icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_FILE);
+            }
+            else
+            {
+                icWarn("Invalid content in %s, using default hci%u", BLE_CONTROLLER_ADAPTER_ID_FILE, adapterId);
             }
         }
 

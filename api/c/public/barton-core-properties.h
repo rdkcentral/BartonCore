@@ -242,7 +242,6 @@ G_BEGIN_DECLS
  * MATTER_BLE_HCI_INDEX: (value "device.matter.bleAdapterId")
  *
  * BLE adapter index (e.g. 0 for hci0, 1 for hci1).
- * Set by the reference app from the BARTON_BLE_ADAPTER_ID environment variable.
  * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_BLE_HCI_INDEX "device.matter.bleAdapterId"
