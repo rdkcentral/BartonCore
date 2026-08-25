@@ -146,9 +146,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         return false;
     }
 
-    zhalAttributeReportingConfig configs[1];
+    ZhalAttributeReportingConfig configs[1];
     uint8_t numConfigs = 1;
-    memset(&configs[0], 0, sizeof(zhalAttributeReportingConfig));
+    memset(&configs[0], 0, sizeof(ZhalAttributeReportingConfig));
     configs[0].attributeInfo.id = METERING_INSTANTANEOUS_DEMAND_ATTRIBUTE_ID;
     configs[0].attributeInfo.type = ZCL_INT24S_ATTRIBUTE_TYPE;
     configs[0].minInterval = 1;
@@ -177,11 +177,14 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     MeteringCluster *meteringCluster = (MeteringCluster *) ctx;
 
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
     if (meteringCluster->callbacks->instantaneousDemandChanged != NULL)
     {
-        if (report->reportDataLen == 6)
+        if (reportDataLen == 6)
         {
-            int32_t val = report->reportData[3] + (report->reportData[4] << 8) + (report->reportData[5] << 16);
+            int32_t val = reportData[3] + (reportData[4] << 8) + (reportData[5] << 16);
             icLogDebug(LOG_TAG, "%s: instantaneous power now %" PRId32 " kW", __FUNCTION__, val);
 
             meteringCluster->callbacks->instantaneousDemandChanged(

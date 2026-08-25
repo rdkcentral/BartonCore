@@ -42,7 +42,7 @@
 #include <string.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 #endif
 
 #include "subsystemManager.h"
@@ -186,7 +186,7 @@ static void subsystemRegistrationMapDestroy(void *value)
  */
 static void setSubsystemReadyLocked(const char *subsystem, bool isReady)
 {
-    if (subsystem == NULL)
+    if (subsystem == NULL || subsystems == NULL)
     {
         return;
     }
@@ -237,6 +237,15 @@ static void onSubsystemDeinitialized(const char *subsystem)
 {
     {
         READ_LOCK_SCOPE(mutex);
+
+        // A subsystem can report that it is no longer ready as it is torn down during
+        // subsystemManagerShutdown(), which has already stolen and freed 'subsystems'.
+        // There is nothing to update and no client to notify, so ignore the late event.
+        if (subsystems == NULL)
+        {
+            return;
+        }
+
         setSubsystemReadyLocked(subsystem, false);
     }
 

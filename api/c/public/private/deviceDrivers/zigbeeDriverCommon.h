@@ -251,7 +251,7 @@ char *getZigbeeVersionString(uint32_t version);
 
 uint32_t getZigbeeVersionFromString(const char *version);
 
-bool validateOtaUpgradeMessage(OtaUpgradeEvent *otaEvent);
+bool validateOtaUpgradeMessage(ZhalOtaUpgradeEvent *otaEvent);
 
 void *zigbeeDriverCommonGetDriverPrivateData(ZigbeeDriverCommon *ctx);
 void zigbeeDriverCommonSetDriverPrivateData(ZigbeeDriverCommon *ctx, void *privateData);

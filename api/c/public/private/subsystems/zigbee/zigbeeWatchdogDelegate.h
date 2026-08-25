@@ -31,7 +31,7 @@
 
 #include <glib.h>
 
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 typedef enum
 {

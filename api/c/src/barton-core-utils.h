@@ -43,7 +43,7 @@
 #include "private/deviceServiceStatus.h"
 
 #ifdef BARTON_CONFIG_ZIGBEE
-#include "zhal/zhal.h"
+#include <zhal-client.h>
 #endif
 
 
@@ -57,7 +57,7 @@ BCoreDevice *convertIcDeviceToGObject(const icDevice *device);
 
 #ifdef BARTON_CONFIG_ZIGBEE
 BCoreZigbeeEnergyScanResult *
-convertZhalEnergyScanResultToGObject(const zhalEnergyScanResult *zigbeeEnergyScanResult);
+convertZhalEnergyScanResultToGObject(const ZhalEnergyScanResult *zigbeeEnergyScanResult);
 #endif
 
 GList *convertIcDeviceEndpointListToGList(const icLinkedList *endpoints);

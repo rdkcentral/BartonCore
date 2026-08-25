@@ -99,9 +99,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         cluster->mfgSpecificRebootReasonAttributeId = (uint16_t) attributeId;
 
         // configure attribute reporting on reboot reason
-        zhalAttributeReportingConfig rebootReasonConfigs[1];
+        ZhalAttributeReportingConfig rebootReasonConfigs[1];
         uint8_t numConfigs = 1;
-        memset(&rebootReasonConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+        memset(&rebootReasonConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
         rebootReasonConfigs[0].attributeInfo.id = (uint16_t) attributeId;
         rebootReasonConfigs[0].attributeInfo.type = ZCL_ENUM8_ATTRIBUTE_TYPE;
         rebootReasonConfigs[0].minInterval = 1;
@@ -146,7 +146,10 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     BasicCluster *cluster = (BasicCluster *) ctx;
 
-    sbZigbeeIOContext *zio = zigbeeIOInit(report->reportData, report->reportDataLen, ZIO_READ);
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
+    sbZigbeeIOContext *zio = zigbeeIOInit(reportData, reportDataLen, ZIO_READ);
     uint16_t attributeId = zigbeeIOGetUint16(zio);
     uint8_t attributeType = zigbeeIOGetUint8(zio);
     uint8_t attributeValue = zigbeeIOGetUint8(zio);

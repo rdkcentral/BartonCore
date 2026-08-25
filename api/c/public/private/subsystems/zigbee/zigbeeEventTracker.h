@@ -44,7 +44,7 @@
 
 #include <icTypes/icLinkedList.h>
 #include <time.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 // max number of rejoin values, check-in values and attribute report values
 #define MAX_NUMBER_OF_ATTRIBUTE_REPORTS 8

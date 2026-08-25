@@ -355,10 +355,10 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig
+    ZhalAttributeReportingConfig
         doorLockConfigs[3]; // the first entry is mandatory, but we could have up to two others.
     uint8_t numConfigs = 1;
-    memset(&doorLockConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+    memset(&doorLockConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
     doorLockConfigs[0].attributeInfo.id = DOORLOCK_LOCK_STATE_ATTRIBUTE_ID;
     doorLockConfigs[0].attributeInfo.type = ZCL_ENUM8_ATTRIBUTE_TYPE;
     doorLockConfigs[0].minInterval = 1;
@@ -502,13 +502,16 @@ static bool handleOperationEventNotification(DoorLockCluster *cluster, ReceivedC
     bool handled = false;
     bool isLocked = false;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     // ensure we have minimum sane command payload length
-    if (command->commandDataLen < 9)
+    if (commandDataLen < 9)
     {
         return false;
     }
 
-    sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+    sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
 
     uint8_t eventSource = zigbeeIOGetUint8(zio);
     uint8_t eventCode = zigbeeIOGetUint8(zio);
@@ -536,7 +539,7 @@ static bool handleOperationEventNotification(DoorLockCluster *cluster, ReceivedC
             break;
 
         default:
-            icLogWarn(LOG_TAG, "%s: ignoring operation code %d", __FUNCTION__, command->commandData[1]);
+            icLogWarn(LOG_TAG, "%s: ignoring operation code %d", __FUNCTION__, commandData[1]);
             break;
     }
 
@@ -588,15 +591,18 @@ static bool handleProgrammingEventNotification(DoorLockCluster *cluster, Receive
 {
     bool handled = false;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     icLogDebug(LOG_TAG, "%s", __func__);
 
     // ensure we have minimum sane command payload length
-    if (command->commandDataLen < 12)
+    if (commandDataLen < 12)
     {
         return false;
     }
 
-    sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+    sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
     uint8_t programmingEventSource = zigbeeIOGetUint8(zio);
 
     if (programmingEventSource == 0x00) // we only care about programming at the keypad
@@ -636,8 +642,11 @@ static bool handleProgrammingEventNotification(DoorLockCluster *cluster, Receive
 
 static bool handleSetPinCodeResponse(DoorLockCluster *cluster, ReceivedClusterCommand *command)
 {
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     // ensure we have minimum sane command payload length
-    if (command->commandDataLen != 1)
+    if (commandDataLen != 1)
     {
         return false;
     }
@@ -645,7 +654,7 @@ static bool handleSetPinCodeResponse(DoorLockCluster *cluster, ReceivedClusterCo
     if (cluster->callbacks->setPinCodeResponse != NULL)
     {
         cluster->callbacks->setPinCodeResponse(
-            command->eui64, command->sourceEndpoint, command->commandData[0], cluster->callbackContext);
+            command->eui64, command->sourceEndpoint, commandData[0], cluster->callbackContext);
     }
 
     return true;
@@ -655,13 +664,16 @@ static bool handleGetPinCodeResponse(DoorLockCluster *cluster, ReceivedClusterCo
 {
     bool handled = false;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     // ensure we have minimum sane command payload length
-    if (command->commandDataLen < 5)
+    if (commandDataLen < 5)
     {
         return false;
     }
 
-    sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+    sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
     DoorLockClusterUser user;
     memset(&user, 0, sizeof(user));
 
@@ -684,8 +696,11 @@ static bool handleGetPinCodeResponse(DoorLockCluster *cluster, ReceivedClusterCo
 
 static bool handleClearPinCodeResponse(DoorLockCluster *cluster, ReceivedClusterCommand *command)
 {
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     // ensure we have minimum sane command payload length
-    if (command->commandDataLen != 1)
+    if (commandDataLen != 1)
     {
         return false;
     }
@@ -693,7 +708,7 @@ static bool handleClearPinCodeResponse(DoorLockCluster *cluster, ReceivedCluster
     if (cluster->callbacks->clearPinCodeResponse != NULL)
     {
         cluster->callbacks->clearPinCodeResponse(
-            command->eui64, command->sourceEndpoint, command->commandData[0] == 0, cluster->callbackContext);
+            command->eui64, command->sourceEndpoint, commandData[0] == 0, cluster->callbackContext);
     }
 
     return true;
@@ -701,8 +716,11 @@ static bool handleClearPinCodeResponse(DoorLockCluster *cluster, ReceivedCluster
 
 static bool handleClearAllPinCodesResponse(DoorLockCluster *cluster, ReceivedClusterCommand *command)
 {
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     // ensure we have minimum sane command payload length
-    if (command->commandDataLen != 1)
+    if (commandDataLen != 1)
     {
         return false;
     }
@@ -710,7 +728,7 @@ static bool handleClearAllPinCodesResponse(DoorLockCluster *cluster, ReceivedClu
     if (cluster->callbacks->clearAllPinCodesResponse != NULL)
     {
         cluster->callbacks->clearAllPinCodesResponse(
-            command->eui64, command->sourceEndpoint, command->commandData[0] == 0, cluster->callbackContext);
+            command->eui64, command->sourceEndpoint, commandData[0] == 0, cluster->callbackContext);
     }
 
     return true;
@@ -763,10 +781,13 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 {
     bool handled = false;
 
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     // there has to be more than the attribute id and type
-    if (report->clusterId != DOORLOCK_CLUSTER_ID || report->reportDataLen <= 3)
+    if (report->clusterId != DOORLOCK_CLUSTER_ID || reportDataLen <= 3)
     {
         icLogError(LOG_TAG, "%s: invalid report data", __FUNCTION__);
         return false;
@@ -774,7 +795,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     DoorLockCluster *cluster = (DoorLockCluster *) ctx;
 
-    sbZigbeeIOContext *zio = zigbeeIOInit(report->reportData, report->reportDataLen, ZIO_READ);
+    sbZigbeeIOContext *zio = zigbeeIOInit(reportData, reportDataLen, ZIO_READ);
 
     uint16_t attributeId = zigbeeIOGetUint16(zio);
     uint8_t attributeType = zigbeeIOGetUint8(zio);

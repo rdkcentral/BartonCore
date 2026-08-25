@@ -36,7 +36,7 @@
 #include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -317,9 +317,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         if (getBoolConfigurationMetadata(configContext->configurationMetadata, CONFIGURE_BATTERY_ALARM_STATE_KEY, true))
         {
             // configure attribute reporting on battery state
-            zhalAttributeReportingConfig batteryStateConfigs[1];
+            ZhalAttributeReportingConfig batteryStateConfigs[1];
             uint8_t numConfigs = 1;
-            memset(&batteryStateConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+            memset(&batteryStateConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
             batteryStateConfigs[0].attributeInfo.id = BATTERY_ALARM_STATE_ATTRIBUTE_ID;
             batteryStateConfigs[0].attributeInfo.type = ZCL_BITMAP32_ATTRIBUTE_TYPE;
             batteryStateConfigs[0].minInterval = 1;
@@ -391,9 +391,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         if (getBoolConfigurationMetadata(configContext->configurationMetadata, CONFIGURE_BATTERY_VOLTAGE_KEY, false))
         {
             // configure attribute reporting on battery voltage
-            zhalAttributeReportingConfig batteryVoltageConfigs[1];
+            ZhalAttributeReportingConfig batteryVoltageConfigs[1];
             uint8_t numConfigs = 1;
-            memset(&batteryVoltageConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+            memset(&batteryVoltageConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
             batteryVoltageConfigs[0].attributeInfo.id = BATTERY_VOLTAGE_ATTRIBUTE_ID;
             batteryVoltageConfigs[0].attributeInfo.type = ZCL_INT8U_ATTRIBUTE_TYPE;
             batteryVoltageConfigs[0].minInterval = 1;
@@ -427,10 +427,10 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     {
         if (getBoolConfigurationMetadata(configContext->configurationMetadata, CONFIGURE_BATTERY_PERCENTAGE_KEY, false))
         {
-            zhalAttributeReportingConfig batteryPercentConfigs[1];
+            ZhalAttributeReportingConfig batteryPercentConfigs[1];
             uint8_t numConfigs = 1;
 
-            memset(&batteryPercentConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+            memset(&batteryPercentConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
 
             batteryPercentConfigs[0].attributeInfo.id = BATTERY_PERCENTAGE_REMAINING_ATTRIBUTE_ID;
             batteryPercentConfigs[0].attributeInfo.type = ZCL_INT8U_ATTRIBUTE_TYPE;
@@ -463,10 +463,10 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         PowerConfigurationCluster *cluster = (PowerConfigurationCluster *) ctx;
         cluster->mfgSpecificBatteryRechargeCycleAttributeId = (uint16_t) attributeId;
 
-        zhalAttributeReportingConfig batteryRechargeCycleConfigs[1];
+        ZhalAttributeReportingConfig batteryRechargeCycleConfigs[1];
         uint8_t numConfigs = 1;
 
-        memset(&batteryRechargeCycleConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+        memset(&batteryRechargeCycleConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
 
         batteryRechargeCycleConfigs[0].attributeInfo.id = (uint16_t) attributeId;
         batteryRechargeCycleConfigs[0].attributeInfo.type = ZCL_INT16U_ATTRIBUTE_TYPE;
@@ -652,7 +652,10 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     PowerConfigurationCluster *cluster = (PowerConfigurationCluster *) ctx;
 
-    sbZigbeeIOContext *zio = zigbeeIOInit(report->reportData, report->reportDataLen, ZIO_READ);
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
+    sbZigbeeIOContext *zio = zigbeeIOInit(reportData, reportDataLen, ZIO_READ);
     uint16_t attributeId = zigbeeIOGetUint16(zio);
     uint8_t attributeType = zigbeeIOGetUint8(zio);
 

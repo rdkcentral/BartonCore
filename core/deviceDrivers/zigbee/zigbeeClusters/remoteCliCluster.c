@@ -97,12 +97,15 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
     RemoteCliCluster *cluster = (RemoteCliCluster *) ctx;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     if (command->mfgSpecific == true && command->mfgCode == COMCAST_MFG_ID &&
         command->commandId == REMOTE_CLI_CLI_COMMAND_RESPONSE_COMMAND_ID)
     {
         if (cluster->callbacks->handleCliCommandResponse != NULL)
         {
-            sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+            sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
             scoped_generic char *response = zigbeeIOGetString(zio);
 
             cluster->callbacks->handleCliCommandResponse(

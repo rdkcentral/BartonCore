@@ -181,7 +181,7 @@ BCoreDevice *convertIcDeviceToGObject(const icDevice *device)
 
 #ifdef BARTON_CONFIG_ZIGBEE
 BCoreZigbeeEnergyScanResult *
-convertZhalEnergyScanResultToGObject(const zhalEnergyScanResult *zigbeeEnergyScanResult)
+convertZhalEnergyScanResultToGObject(const ZhalEnergyScanResult *zigbeeEnergyScanResult)
 {
     BCoreZigbeeEnergyScanResult *retVal = NULL;
 
@@ -292,7 +292,7 @@ GList *convertIcZigbeeEnergyScanResultListToGList(const icLinkedList *zigbeeEner
 
     while (linkedListIteratorHasNext(iter))
     {
-        zhalEnergyScanResult *result = linkedListIteratorGetNext(iter);
+        ZhalEnergyScanResult *result = linkedListIteratorGetNext(iter);
         if (result != NULL)
         {
             BCoreZigbeeEnergyScanResult *dsResult = convertZhalEnergyScanResultToGObject(result);

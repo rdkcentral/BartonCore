@@ -46,7 +46,7 @@
 #include <string.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <sys/stat.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 
 #define LOG_TAG                 "zigbeeSubsystemTest"
@@ -64,6 +64,12 @@ icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem);
 DeviceDescriptor *__wrap_deviceServiceGetDeviceDescriptorForDevice(icDevice *device);
 gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir();
 void __wrap_subsystemManagerRegister(Subsystem *subsystem);
+ZHAL_STATUS __wrap_zhalAttributesRead(guint64 eui64,
+                                      guint8 endpointId,
+                                      guint16 clusterId,
+                                      gboolean toServer,
+                                      GArray *attributeIds,
+                                      GPtrArray **attributeData);
 static icDevice *createDummyDevice(const char *manufacturer,
                                    const char *model,
                                    const char *hardwareVersion,
@@ -512,9 +518,117 @@ static void createDummyFirmwareFile(DeviceFirmwareType firmwareType)
     createMarkerFile(path);
 }
 
+static ZhalAttributeData *createAttributeData(uint16_t id, const guint8 *bytes, gsize len)
+{
+    ZhalAttributeData *ad = ZhalAttributeData_new();
+    ad->attributeInfo.id = id;
+    ad->data = (bytes != NULL) ? g_bytes_new(bytes, len) : NULL;
+    return ad;
+}
+
+static GPtrArray *createAttributeDataList(void)
+{
+    return g_ptr_array_new_with_free_func((GDestroyNotify) ZhalAttributeData_release);
+}
+
+static void test_zigbeeSubsystemReadNumbersInRequestOrder(void **state)
+{
+    const guint8 v1[] = {0x34, 0x12};
+    const guint8 v2[] = {0x07};
+    GPtrArray *list = createAttributeDataList();
+    g_ptr_array_add(list, createAttributeData(0x0001, v1, sizeof(v1)));
+    g_ptr_array_add(list, createAttributeData(0x0002, v2, sizeof(v2)));
+    will_return(__wrap_zhalAttributesRead, list);
+
+    uint16_t ids[] = {0x0001, 0x0002};
+    uint64_t values[2];
+    bool successes[2];
+    assert_int_equal(zigbeeSubsystemReadNumbers(1, 1, 6, true, 2, ids, values, successes), 0);
+    assert_true(successes[0]);
+    assert_true(successes[1]);
+    assert_int_equal(values[0], 0x1234);
+    assert_int_equal(values[1], 0x07);
+
+    (void) state;
+}
+
+static void test_zigbeeSubsystemReadNumbersOutOfOrder(void **state)
+{
+    const guint8 v1[] = {0x34, 0x12};
+    const guint8 v2[] = {0x07};
+    const guint8 v3[] = {0x01, 0x02, 0x03};
+    GPtrArray *list = createAttributeDataList();
+    g_ptr_array_add(list, createAttributeData(0x0003, v3, sizeof(v3)));
+    g_ptr_array_add(list, createAttributeData(0x0001, v1, sizeof(v1)));
+    g_ptr_array_add(list, createAttributeData(0x0002, v2, sizeof(v2)));
+    will_return(__wrap_zhalAttributesRead, list);
+
+    uint16_t ids[] = {0x0001, 0x0002, 0x0003};
+    uint64_t values[3];
+    bool successes[3];
+    assert_int_equal(zigbeeSubsystemReadNumbers(1, 1, 6, true, 3, ids, values, successes), 0);
+    assert_true(successes[0]);
+    assert_true(successes[1]);
+    assert_true(successes[2]);
+    assert_int_equal(values[0], 0x1234);
+    assert_int_equal(values[1], 0x07);
+    assert_int_equal(values[2], 0x030201);
+
+    (void) state;
+}
+
+static void test_zigbeeSubsystemReadNumbersMissingAndFailedAttributes(void **state)
+{
+    const guint8 v1[] = {0x05};
+    GPtrArray *list = createAttributeDataList();
+    g_ptr_array_add(list, createAttributeData(0x0002, NULL, 0)); // read failed for this attribute
+    g_ptr_array_add(list, createAttributeData(0x0001, v1, sizeof(v1)));
+    will_return(__wrap_zhalAttributesRead, list);
+
+    uint16_t ids[] = {0x0001, 0x0002, 0x0003}; // 0x0003 is absent from the reply
+    uint64_t values[3];
+    bool successes[3];
+    assert_int_equal(zigbeeSubsystemReadNumbers(1, 1, 6, true, 3, ids, values, successes), 0);
+    assert_true(successes[0]);
+    assert_false(successes[1]);
+    assert_false(successes[2]);
+    assert_int_equal(values[0], 0x05);
+
+    (void) state;
+}
+
+static void test_zigbeeSubsystemReadStringMatchesById(void **state)
+{
+    const guint8 other[] = {0x01, 'x'};
+    const guint8 str[] = {0x03, 'a', 'b', 'c'};
+    GPtrArray *list = createAttributeDataList();
+    g_ptr_array_add(list, createAttributeData(0x0099, other, sizeof(other)));
+    g_ptr_array_add(list, createAttributeData(0x0004, str, sizeof(str)));
+    will_return(__wrap_zhalAttributesRead, list);
+
+    char *value = NULL;
+    assert_int_equal(zigbeeSubsystemReadString(1, 1, 0, true, 0x0004, &value), 0);
+    assert_non_null(value);
+    assert_string_equal(value, "abc");
+    free(value);
+
+    (void) state;
+}
+
 // ******************************
 // wrapped(mocked) functions
 // ******************************
+
+ZHAL_STATUS __wrap_zhalAttributesRead(guint64 eui64,
+                                      guint8 endpointId,
+                                      guint16 clusterId,
+                                      gboolean toServer,
+                                      GArray *attributeIds,
+                                      GPtrArray **attributeData)
+{
+    *attributeData = mock_type(GPtrArray *);
+    return ZHAL_STATUS_OK;
+}
 
 icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem)
 {
@@ -566,7 +680,11 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_encodeDecodeIcDiscoveredDeviceDetails),
         cmocka_unit_test(test_icDiscoveredDeviceDetailsGetClusterEndpoint),
         cmocka_unit_test(test_icDiscoveredDeviceDetailsGetAttributeEndpoint),
-        cmocka_unit_test(test_zigbeeSubsystemSetWatchdogDelegate)};
+        cmocka_unit_test(test_zigbeeSubsystemSetWatchdogDelegate),
+        cmocka_unit_test(test_zigbeeSubsystemReadNumbersInRequestOrder),
+        cmocka_unit_test(test_zigbeeSubsystemReadNumbersOutOfOrder),
+        cmocka_unit_test(test_zigbeeSubsystemReadNumbersMissingAndFailedAttributes),
+        cmocka_unit_test(test_zigbeeSubsystemReadStringMatchesById)};
 
     int retval = cmocka_run_group_tests(tests, testSetup, testTeardown);
 

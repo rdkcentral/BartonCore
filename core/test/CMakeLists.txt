@@ -94,6 +94,7 @@ if (BCORE_ZIGBEE)
             TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/subsystems/zigbee/zigbeeSubsystemTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem deviceServiceGetDeviceDescriptorForDevice
                               deviceServiceConfigurationGetFirmwareFileDir subsystemManagerRegister
+                              zhalAttributesRead
             LINK_LIBRARIES BartonCoreStatic
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES} ${BARTON_PRIVATE_INCLUDES}
     )

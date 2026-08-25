@@ -150,9 +150,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig colorConfigs[2];
+    ZhalAttributeReportingConfig colorConfigs[2];
     uint8_t numConfigs = 2;
-    memset(&colorConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+    memset(&colorConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
     colorConfigs[0].attributeInfo.id = COLOR_CONTROL_CURRENTX_ATTRIBUTE_ID;
     colorConfigs[0].attributeInfo.type = ZCL_INT16U_ATTRIBUTE_TYPE;
     colorConfigs[0].minInterval = 1;
@@ -185,7 +185,11 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     ColorControlCluster *colorControlCluster = (ColorControlCluster *) ctx;
-    sbZigbeeIOContext *zio = zigbeeIOInit(report->reportData, report->reportDataLen, ZIO_READ);
+
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
+    sbZigbeeIOContext *zio = zigbeeIOInit(reportData, reportDataLen, ZIO_READ);
 
     // Attributes we are expecting
     AUTO_CLEAN(free_generic__auto) uint16_t *x = NULL;

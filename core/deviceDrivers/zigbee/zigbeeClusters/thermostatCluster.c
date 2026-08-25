@@ -93,8 +93,8 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig *tstatReportingConfigs =
-        (zhalAttributeReportingConfig *) calloc(8, sizeof(zhalAttributeReportingConfig));
+    ZhalAttributeReportingConfig *tstatReportingConfigs =
+        (ZhalAttributeReportingConfig *) calloc(8, sizeof(ZhalAttributeReportingConfig));
 
     tstatReportingConfigs[0].attributeInfo.id = THERMOSTAT_LOCAL_TEMPERATURE_ATTRIBUTE_ID;
     tstatReportingConfigs[0].attributeInfo.type = ZCL_INT16S_ATTRIBUTE_TYPE;
@@ -173,7 +173,10 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    if (report->reportDataLen <= 3) // there has to be more than the attribute id and type
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
+    if (reportDataLen <= 3) // there has to be more than the attribute id and type
     {
         icLogError(LOG_TAG, "%s: invalid report data", __FUNCTION__);
         return false;
@@ -181,13 +184,13 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     ThermostatCluster *thermostatCluster = (ThermostatCluster *) ctx;
 
-    uint16_t attributeId = report->reportData[0] + (report->reportData[1] << (uint8_t) 8);
+    uint16_t attributeId = reportData[0] + (reportData[1] << (uint8_t) 8);
 
     switch (attributeId)
     {
         case THERMOSTAT_LOCAL_TEMPERATURE_ATTRIBUTE_ID:
         {
-            int16_t temp = report->reportData[3] + (report->reportData[4] << (uint8_t) 8);
+            int16_t temp = reportData[3] + (reportData[4] << (uint8_t) 8);
             if (thermostatCluster->callbacks->localTemperatureChanged != NULL)
             {
                 thermostatCluster->callbacks->localTemperatureChanged(
@@ -198,7 +201,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
         case THERMOSTAT_OCCUPIED_HEATING_SETPOINT_ATTRIBUTE_ID:
         {
-            int16_t temp = report->reportData[3] + (report->reportData[4] << (uint8_t) 8);
+            int16_t temp = reportData[3] + (reportData[4] << (uint8_t) 8);
             if (thermostatCluster->callbacks->occupiedHeatingSetpointChanged != NULL)
             {
                 thermostatCluster->callbacks->occupiedHeatingSetpointChanged(
@@ -209,7 +212,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
         case THERMOSTAT_OCCUPIED_COOLING_SETPOINT_ATTRIBUTE_ID:
         {
-            int16_t temp = report->reportData[3] + (report->reportData[4] << (uint8_t) 8);
+            int16_t temp = reportData[3] + (reportData[4] << (uint8_t) 8);
             if (thermostatCluster->callbacks->occupiedCoolingSetpointChanged != NULL)
             {
                 thermostatCluster->callbacks->occupiedCoolingSetpointChanged(
@@ -223,20 +226,20 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
             if (thermostatCluster->callbacks->systemModeChanged != NULL)
             {
                 thermostatCluster->callbacks->systemModeChanged(
-                    report->eui64, report->sourceEndpoint, report->reportData[3], thermostatCluster->callbackContext);
+                    report->eui64, report->sourceEndpoint, reportData[3], thermostatCluster->callbackContext);
             }
             break;
         }
 
         case THERMOSTAT_RUNNING_STATE_ATTRIBUTE_ID:
         {
-            if (report->reportDataLen < 5)
+            if (reportDataLen < 5)
             {
                 icLogError(LOG_TAG, "Insufficient data in thermostat running state attribute report");
                 break;
             }
 
-            uint16_t state = report->reportData[3] + (report->reportData[4] << (uint8_t) 8);
+            uint16_t state = reportData[3] + (reportData[4] << (uint8_t) 8);
 
             if (thermostatCluster->callbacks->runningStateChanged != NULL)
             {
@@ -252,7 +255,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
             {
                 thermostatCluster->callbacks->setpointHoldChanged(report->eui64,
                                                                   report->sourceEndpoint,
-                                                                  report->reportData[3] > 0,
+                                                                  reportData[3] > 0,
                                                                   thermostatCluster->callbackContext);
             }
             break;
@@ -263,7 +266,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
             if (thermostatCluster->callbacks->ctrlSeqOpChanged != NULL)
             {
                 thermostatCluster->callbacks->ctrlSeqOpChanged(
-                    report->eui64, report->sourceEndpoint, report->reportData[3], thermostatCluster->callbackContext);
+                    report->eui64, report->sourceEndpoint, reportData[3], thermostatCluster->callbackContext);
 
                 break;
             }
@@ -274,7 +277,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
             if (thermostatCluster->callbacks->localTemperatureCalibrationChanged != NULL)
             {
                 thermostatCluster->callbacks->localTemperatureCalibrationChanged(
-                    report->eui64, report->sourceEndpoint, report->reportData[3], thermostatCluster->callbackContext);
+                    report->eui64, report->sourceEndpoint, reportData[3], thermostatCluster->callbackContext);
             }
             break;
         }
@@ -293,15 +296,18 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
     ThermostatCluster *thermostatCluster = (ThermostatCluster *) ctx;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     if (command->mfgSpecific == true && command->mfgCode == RTCOA_MFG_ID &&
         command->commandId == LEGACY_OPERATIONAL_INFO_COMMAND_ID)
     {
         if (thermostatCluster->callbacks->legacyOperationInfoReceived != NULL)
         {
-            uint8_t runningMode = command->commandData[0];
-            bool holdOn = command->commandData[1] == 1;
-            uint8_t runningState = command->commandData[2];
-            uint8_t fanRunningState = command->commandData[3];
+            uint8_t runningMode = commandData[0];
+            bool holdOn = commandData[1] == 1;
+            uint8_t runningState = commandData[2];
+            uint8_t fanRunningState = commandData[3];
 
             thermostatCluster->callbacks->legacyOperationInfoReceived(
                 command->eui64, command->sourceEndpoint, runningMode, holdOn, runningState, fanRunningState);

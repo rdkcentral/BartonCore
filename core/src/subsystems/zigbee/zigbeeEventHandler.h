@@ -29,14 +29,14 @@
 #ifndef FLEXCORE_ZHALEVENTHANDLER_H
 #define FLEXCORE_ZHALEVENTHANDLER_H
 
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 /*
  * Populate the callbacks structure with the handlers in this module.
  *
  * Events will not be handled until zigbeeEventHandlerSystemReady is called.
  */
-int zigbeeEventHandlerInit(zhalCallbacks *callbacks);
+int zigbeeEventHandlerInit(ZhalCallbacks *callbacks);
 
 /*
  * Informs the event handler that the system is ready and it can now start handling events.

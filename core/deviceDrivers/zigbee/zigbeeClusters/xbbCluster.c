@@ -105,10 +105,13 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
     XbbCluster *xbbCluster = (XbbCluster *) ctx;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     if (command->mfgSpecific && command->mfgCode == COMCAST_MFG_ID && command->clusterId == XBB_CLUSTER_ID &&
         command->commandId == XBB_CLUSTER_STATUS_COMMAND_ID)
     {
-        sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+        sbZigbeeIOContext *zio = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
         zigbeeIOGetUint16(zio); // unused cluster revision
         uint16_t status = zigbeeIOGetUint16(zio);
 

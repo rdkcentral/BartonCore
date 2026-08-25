@@ -30,7 +30,7 @@
 #include "device-driver/device-driver.h"
 #include "zigbeeCluster.h"
 #include <inttypes.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #define IAS_ZONE_CIE_ADDRESS_ATTRIBUTE_ID              0x0010
 #define IAS_ZONE_STATUS_CHANGE_NOTIFICATION_COMMAND_ID 0x00

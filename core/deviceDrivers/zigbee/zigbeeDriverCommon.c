@@ -195,9 +195,9 @@ static bool validateOtaUpgradeEndRequestMessage(uint8_t *buffer, uint16_t buffer
 
 static bool validateOtaUpgradeEndResponseMessage(uint8_t *buffer, uint16_t bufferLen);
 
-static void otaUpgradeMessageSent(void *ctx, OtaUpgradeEvent *otaEvent);
+static void otaUpgradeMessageSent(void *ctx, ZhalOtaUpgradeEvent *otaEvent);
 
-static void otaUpgradeMessageReceived(void *ctx, OtaUpgradeEvent *otaEvent);
+static void otaUpgradeMessageReceived(void *ctx, ZhalOtaUpgradeEvent *otaEvent);
 
 static void otaLegacyBootloadUpgradeStarted(void *ctx, uint64_t eui64, uint64_t timestamp);
 
@@ -244,7 +244,7 @@ static void deviceRejoined(void *ctx, uint64_t eui64, bool isSecure);
 
 static void deviceLeft(void *ctx, uint64_t eui64);
 
-static void deviceAnnounced(void *ctx, uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource);
+static void deviceAnnounced(void *ctx, uint64_t eui64, ZhalDeviceType deviceType, ZhalPowerSource powerSource);
 
 static void synchronizeDevice(void *ctx, icDevice *device);
 
@@ -1224,23 +1224,23 @@ static bool getAttributeInfos(uint64_t eui64,
 
     for (uint8_t i = 0; i < numClusterDetails; i++)
     {
-        zhalAttributeInfo *attributeInfos = NULL;
-        uint16_t numAttributeInfos = 0;
+        GPtrArray *attributeInfos = NULL;
 
         if (zhalGetAttributeInfos(eui64,
                                   endpointId,
                                   clusterDetails[i].clusterId,
                                   clusterDetails[i].isServer,
-                                  &attributeInfos,
-                                  &numAttributeInfos) == 0)
+                                  &attributeInfos) == 0)
         {
+            uint16_t numAttributeInfos = (attributeInfos != NULL) ? (uint16_t) attributeInfos->len : 0;
             clusterDetails[i].numAttributeIds = numAttributeInfos;
             // Cleanup the old stuff before allocating something new
             free(clusterDetails[i].attributeIds);
             clusterDetails[i].attributeIds = (uint16_t *) calloc(numAttributeInfos, sizeof(uint16_t));
             for (uint16_t j = 0; j < numAttributeInfos; j++)
             {
-                clusterDetails[i].attributeIds[j] = attributeInfos[j].id;
+                ZhalAttributeInfo *ai = (ZhalAttributeInfo *) g_ptr_array_index(attributeInfos, j);
+                clusterDetails[i].attributeIds[j] = ai->id;
             }
         }
         else
@@ -1249,7 +1249,10 @@ static bool getAttributeInfos(uint64_t eui64,
             result = false;
         }
 
-        free(attributeInfos);
+        if (attributeInfos != NULL)
+        {
+            g_ptr_array_unref(attributeInfos);
+        }
     }
 
     return result;
@@ -2479,9 +2482,14 @@ static bool validateOtaUpgradeEndResponseMessage(uint8_t *buffer, uint16_t buffe
     return true;
 }
 
-bool validateOtaUpgradeMessage(OtaUpgradeEvent *otaEvent)
+bool validateOtaUpgradeMessage(ZhalOtaUpgradeEvent *otaEvent)
 {
-    if ((otaEvent == NULL) || (otaEvent->buffer == NULL && otaEvent->bufferLen != 0))
+    gsize otaEventBufferLen = 0;
+    guint8 *otaEventBuffer = (otaEvent != NULL && otaEvent->buffer != NULL)
+                                 ? (guint8 *) g_bytes_get_data(otaEvent->buffer, &otaEventBufferLen)
+                                 : NULL;
+
+    if ((otaEvent == NULL) || (otaEventBuffer == NULL && otaEventBufferLen != 0))
     {
         return false;
     }
@@ -2492,55 +2500,55 @@ bool validateOtaUpgradeMessage(OtaUpgradeEvent *otaEvent)
     {
         case ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_STARTED_EVENT:
         {
-            isValid = validateOtaLegacyBootloadUpgradeStartedMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaLegacyBootloadUpgradeStartedMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_FAILED_EVENT:
         {
-            isValid = validateOtaLegacyBootloadUpgradeFailedMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaLegacyBootloadUpgradeFailedMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_COMPLETED_EVENT:
         {
-            isValid = validateOtaLegacyBootloadUpgradeCompletedMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaLegacyBootloadUpgradeCompletedMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_IMAGE_NOTIFY_EVENT:
         {
-            isValid = validateOtaImageNotifyMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaImageNotifyMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_QUERY_NEXT_IMAGE_REQUEST_EVENT:
         {
-            isValid = validateOtaQueryNextImageRequestMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaQueryNextImageRequestMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_QUERY_NEXT_IMAGE_RESPONSE_EVENT:
         {
-            isValid = validateOtaQueryNextImageResponseMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaQueryNextImageResponseMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_UPGRADE_STARTED_EVENT:
         {
-            isValid = validateOtaUpgradeStartedMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaUpgradeStartedMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_UPGRADE_END_REQUEST_EVENT:
         {
-            isValid = validateOtaUpgradeEndRequestMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaUpgradeEndRequestMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
         case ZHAL_OTA_UPGRADE_END_RESPONSE_EVENT:
         {
-            isValid = validateOtaUpgradeEndResponseMessage(otaEvent->buffer, otaEvent->bufferLen);
+            isValid = validateOtaUpgradeEndResponseMessage(otaEventBuffer, otaEventBufferLen);
             break;
         }
 
@@ -2554,9 +2562,14 @@ bool validateOtaUpgradeMessage(OtaUpgradeEvent *otaEvent)
     return isValid;
 }
 
-static void otaUpgradeMessageSent(void *ctx, OtaUpgradeEvent *otaEvent)
+static void otaUpgradeMessageSent(void *ctx, ZhalOtaUpgradeEvent *otaEvent)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
+
+    gsize otaEventBufferLen = 0;
+    guint8 *otaEventBuffer = (otaEvent != NULL && otaEvent->buffer != NULL)
+                                 ? (guint8 *) g_bytes_get_data(otaEvent->buffer, &otaEventBufferLen)
+                                 : NULL;
 
     if (validateOtaUpgradeMessage(otaEvent) == false)
     {
@@ -2574,7 +2587,7 @@ static void otaUpgradeMessageSent(void *ctx, OtaUpgradeEvent *otaEvent)
         case ZHAL_OTA_QUERY_NEXT_IMAGE_RESPONSE_EVENT:
         {
             sbZigbeeIOContext *zio =
-                zigbeeIOInit(otaEvent->buffer, 1, ZIO_READ); // We only need the first byte for image status
+                zigbeeIOInit(otaEventBuffer, 1, ZIO_READ); // We only need the first byte for image status
 
             uint8_t statusCode = zigbeeIOGetUint8(zio);
 
@@ -2584,7 +2597,7 @@ static void otaUpgradeMessageSent(void *ctx, OtaUpgradeEvent *otaEvent)
 
         case ZHAL_OTA_UPGRADE_END_RESPONSE_EVENT:
         {
-            sbZigbeeIOContext *zio = zigbeeIOInit(otaEvent->buffer, otaEvent->bufferLen, ZIO_READ);
+            sbZigbeeIOContext *zio = zigbeeIOInit(otaEventBuffer, otaEventBufferLen, ZIO_READ);
 
             uint32_t mfgCode = zigbeeIOGetUint32(zio);
             uint32_t newVersion = zigbeeIOGetUint32(zio);
@@ -2611,9 +2624,14 @@ static void otaUpgradeMessageSent(void *ctx, OtaUpgradeEvent *otaEvent)
     }
 }
 
-static void otaUpgradeMessageReceived(void *ctx, OtaUpgradeEvent *otaEvent)
+static void otaUpgradeMessageReceived(void *ctx, ZhalOtaUpgradeEvent *otaEvent)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
+
+    gsize otaEventBufferLen = 0;
+    guint8 *otaEventBuffer = (otaEvent != NULL && otaEvent->buffer != NULL)
+                                 ? (guint8 *) g_bytes_get_data(otaEvent->buffer, &otaEventBufferLen)
+                                 : NULL;
 
     if (validateOtaUpgradeMessage(otaEvent) == false)
     {
@@ -2642,7 +2660,7 @@ static void otaUpgradeMessageReceived(void *ctx, OtaUpgradeEvent *otaEvent)
 
         case ZHAL_OTA_QUERY_NEXT_IMAGE_REQUEST_EVENT:
         {
-            sbZigbeeIOContext *zio = zigbeeIOInit(otaEvent->buffer, otaEvent->bufferLen, ZIO_READ);
+            sbZigbeeIOContext *zio = zigbeeIOInit(otaEventBuffer, otaEventBufferLen, ZIO_READ);
 
             uint8_t fieldControl = zigbeeIOGetUint8(zio);
             uint16_t mfgCode = zigbeeIOGetUint16(zio);
@@ -2669,7 +2687,7 @@ static void otaUpgradeMessageReceived(void *ctx, OtaUpgradeEvent *otaEvent)
 
         case ZHAL_OTA_UPGRADE_END_REQUEST_EVENT:
         {
-            sbZigbeeIOContext *zio = zigbeeIOInit(otaEvent->buffer, otaEvent->bufferLen, ZIO_READ);
+            sbZigbeeIOContext *zio = zigbeeIOInit(otaEventBuffer, otaEventBufferLen, ZIO_READ);
 
             uint8_t upgradeStatus = zigbeeIOGetUint8(zio);
             uint16_t mfgCode = zigbeeIOGetUint16(zio);
@@ -2984,7 +3002,7 @@ static void deviceLeft(void *ctx, uint64_t eui64)
     }
 }
 
-static void deviceAnnounced(void *ctx, uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource)
+static void deviceAnnounced(void *ctx, uint64_t eui64, ZhalDeviceType deviceType, ZhalPowerSource powerSource)
 {
     ZigbeeDriverCommon *commonDriver = (ZigbeeDriverCommon *) ctx;
 
@@ -3937,7 +3955,7 @@ void zigbeeDriverCommonProcessPrematureClusterCommands(ZigbeeDriverCommon *drive
     }
     linkedListIteratorDestroy(iter);
 
-    linkedListDestroy(commands, (linkedListItemFreeFunc) freeReceivedClusterCommand);
+    linkedListDestroy(commands, (linkedListItemFreeFunc) ReceivedClusterCommand_release);
 }
 
 void zigbeeDriverCommonRegisterNewDevice(ZigbeeDriverCommon *driver, icDevice *device)

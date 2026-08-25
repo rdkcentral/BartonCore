@@ -80,8 +80,8 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig *fanReportingConfigs =
-        (zhalAttributeReportingConfig *) calloc(1, sizeof(zhalAttributeReportingConfig));
+    ZhalAttributeReportingConfig *fanReportingConfigs =
+        (ZhalAttributeReportingConfig *) calloc(1, sizeof(ZhalAttributeReportingConfig));
     fanReportingConfigs[0].attributeInfo.id = FAN_CONTROL_FAN_MODE_ATTRIBUTE_ID;
     fanReportingConfigs[0].attributeInfo.type = ZCL_ENUM8_ATTRIBUTE_TYPE;
     fanReportingConfigs[0].minInterval = 1;
@@ -119,12 +119,15 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     FanControlCluster *fanControlCluster = (FanControlCluster *) ctx;
 
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
     if (fanControlCluster->callbacks->fanModeChanged != NULL)
     {
-        if (report->reportDataLen == 4)
+        if (reportDataLen == 4)
         {
             fanControlCluster->callbacks->fanModeChanged(
-                report->eui64, report->sourceEndpoint, report->reportData[3], fanControlCluster->callbackContext);
+                report->eui64, report->sourceEndpoint, reportData[3], fanControlCluster->callbackContext);
         }
     }
 
