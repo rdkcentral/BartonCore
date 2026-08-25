@@ -37,7 +37,7 @@
 #include "icTypes/icLinkedList.h"
 
 #ifdef BARTON_CONFIG_ZIGBEE
-#include "zhal/zhal.h"
+#include <zhal-client.h>
 #endif
 
 #include <glib.h>
@@ -77,7 +77,7 @@ static icDevice device = {.uuid = "deviceUuid",
                           .metadata = NULL};
 
 #ifdef BARTON_CONFIG_ZIGBEE
-static zhalEnergyScanResult zigbeeEnergyScanResult = {.channel = 14,
+static ZhalEnergyScanResult zigbeeEnergyScanResult = {.channel = 14,
                                                       .maxRssi = -10,
                                                       .minRssi = -50,
                                                       .averageRssi = -30,

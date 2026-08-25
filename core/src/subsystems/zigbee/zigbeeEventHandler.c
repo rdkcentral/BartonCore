@@ -39,7 +39,7 @@
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
 #include <pthread.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #define LOG_TAG "zigbeeEventHandler"
 
@@ -57,12 +57,13 @@ static pthread_mutex_t devicesProcessedMtx = PTHREAD_MUTEX_INITIALIZER;
 typedef struct
 {
     bool hasJoined;
-    zhalDeviceType deviceType;
-    zhalPowerSource powerSource;
+    ZhalDeviceType deviceType;
+    ZhalPowerSource powerSource;
 } AnnouncedDevice;
 
-static void startup(void *ctx)
+static void startup(void *ctx, guint32 serverApiVersion)
 {
+    (void) serverApiVersion;
     icLogDebug(LOG_TAG, "startup callback");
 
     zigbeeSubsystemHandleZhalStartupEvent();
@@ -73,7 +74,7 @@ static void startup(void *ctx)
  *
  * Return true if we have both announce and join info ready.
  */
-static bool saveJoinAnnounceInfo(uint64_t eui64, bool isJoin, zhalDeviceType deviceType, zhalPowerSource powerSource)
+static bool saveJoinAnnounceInfo(uint64_t eui64, bool isJoin, ZhalDeviceType deviceType, ZhalPowerSource powerSource)
 {
     bool result = false;
 
@@ -193,7 +194,7 @@ static void processNewDevice(uint64_t eui64)
  * @param deviceType the {@link DeviceType} of the zigbee device (end device, router, etc)
  * @param powerSource  the {@link PowerSource} for the device (mains, battery, etc)
  */
-static void deviceAnnounced(void *ctx, uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource)
+static void deviceAnnounced(void *ctx, guint64 eui64, ZhalDeviceType deviceType, ZhalPowerSource powerSource)
 {
     icLogDebug(LOG_TAG, "deviceAnnounced callback: %016" PRIx64, eui64);
 
@@ -233,7 +234,7 @@ static void deviceAnnounced(void *ctx, uint64_t eui64, zhalDeviceType deviceType
  *
  * @param eui64
  */
-static void deviceJoined(void *ctx, uint64_t eui64)
+static void deviceJoined(gpointer ctx, guint64 eui64)
 {
     icLogDebug(LOG_TAG, "deviceJoined callback: %016" PRIx64, eui64);
 
@@ -287,18 +288,18 @@ static void deviceJoined(void *ctx, uint64_t eui64)
     }
 }
 
-static void deviceLeft(void *ctx, uint64_t eui64)
+static void deviceLeft(gpointer ctx, guint64 eui64)
 {
     icLogDebug(LOG_TAG, "deviceLeft callback: %016" PRIx64, eui64);
 }
 
-static void deviceRejoined(void *ctx, uint64_t eui64, bool isSecure)
+static void deviceRejoined(gpointer ctx, guint64 eui64, gboolean isSecure)
 {
     icLogDebug(LOG_TAG, "deviceRejoined callback: %016" PRIx64 " isSecure %s", eui64, isSecure ? "true" : "false");
     zigbeeSubsystemDeviceRejoined(eui64, isSecure);
 }
 
-static void linkKeyUpdated(void *ctx, uint64_t eui64, bool isUsingHashBasedKey)
+static void linkKeyUpdated(gpointer ctx, guint64 eui64, gboolean isUsingHashBasedKey)
 {
     icLogDebug(LOG_TAG,
                "linkKeyUpdated callback: %016" PRIx64 " and isUsingHashBasedKey : %s",
@@ -307,13 +308,13 @@ static void linkKeyUpdated(void *ctx, uint64_t eui64, bool isUsingHashBasedKey)
     zigbeeSubsystemLinkKeyUpdated(eui64, isUsingHashBasedKey);
 }
 
-static void apsAckFailure(void *ctx, uint64_t eui64)
+static void apsAckFailure(gpointer ctx, guint64 eui64)
 {
     icLogDebug(LOG_TAG, "apsAckFailure callback: %016" PRIx64, eui64);
     zigbeeSubsystemApsAckFailure(eui64);
 }
 
-static void attributeReportReceived(void *ctx, ReceivedAttributeReport *report)
+static void attributeReportReceived(gpointer ctx, ReceivedAttributeReport *report)
 {
     icLogDebug(LOG_TAG,
                "attributeReportReceived callback: %016" PRIx64 " ep %d, cluster %04x",
@@ -321,9 +322,11 @@ static void attributeReportReceived(void *ctx, ReceivedAttributeReport *report)
                report->sourceEndpoint,
                report->clusterId);
     zigbeeSubsystemAttributeReportReceived(report);
+    // Ownership of the report is transferred to this callback by the new zhal client.
+    ReceivedAttributeReport_release(report);
 }
 
-static void clusterCommandReceived(void *ctx, ReceivedClusterCommand *command)
+static void clusterCommandReceived(gpointer ctx, ReceivedClusterCommand *command)
 {
     // The Zigbee UART cluster used by M1 LTE adapter get this cluster command
     // a lot when it is paired and any communication with server is going on
@@ -339,21 +342,25 @@ static void clusterCommandReceived(void *ctx, ReceivedClusterCommand *command)
     }
 
     zigbeeSubsystemClusterCommandReceived(command);
+    // Ownership of the command is transferred to this callback by the new zhal client.
+    ReceivedClusterCommand_release(command);
 }
 
-static void zigbeeDeviceOtaUpgradeMessageSent(void *ctx, OtaUpgradeEvent *otaEvent)
+static void zigbeeDeviceOtaUpgradeMessageSent(gpointer ctx, ZhalOtaUpgradeEvent *otaEvent)
 {
     icLogDebug(LOG_TAG, "%s callback: %016" PRIx64, __func__, otaEvent->eui64);
     zigbeeSubsystemDeviceOtaUpgradeMessageSent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 }
 
-static void zigbeeDeviceOtaUpgradeMessageReceived(void *ctx, OtaUpgradeEvent *otaEvent)
+static void zigbeeDeviceOtaUpgradeMessageReceived(gpointer ctx, ZhalOtaUpgradeEvent *otaEvent)
 {
     icLogDebug(LOG_TAG, "%s callback: %016" PRIx64, __func__, otaEvent->eui64);
     zigbeeSubsystemDeviceOtaUpgradeMessageReceived(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 }
 
-static void deviceCommunicationSucceeded(void *ctx, uint64_t eui64)
+static void deviceCommunicationSucceeded(gpointer ctx, guint64 eui64)
 {
     icLogDebug(LOG_TAG, "deviceCommunicationSucceeded callback: %016" PRIx64, eui64);
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
@@ -363,7 +370,7 @@ static void deviceCommunicationSucceeded(void *ctx, uint64_t eui64)
     free(uuid);
 }
 
-static void deviceCommunicationFailed(void *ctx, uint64_t eui64)
+static void deviceCommunicationFailed(gpointer ctx, guint64 eui64)
 {
     icLogDebug(LOG_TAG, "deviceCommunicationFailed callback: %016" PRIx64, eui64);
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
@@ -373,7 +380,7 @@ static void deviceCommunicationFailed(void *ctx, uint64_t eui64)
     free(uuid);
 }
 
-static void networkConfigChanged(void *ctx, char *networkConfigData)
+static void networkConfigChanged(gpointer ctx, const gchar *networkConfigData)
 {
     icLogDebug(LOG_TAG, "networkConfigChanged callback");
     if (systemReady)
@@ -388,43 +395,43 @@ static void networkConfigChanged(void *ctx, char *networkConfigData)
     }
 }
 
-static void networkHealthProblem(void *ctx)
+static void networkHealthProblem(gpointer ctx)
 {
     icLogDebug(LOG_TAG, "networkHealthProblem callback");
     zigbeeHealthCheckSetProblem(true);
 }
 
-static void networkHealthProblemRestored(void *ctx)
+static void networkHealthProblemRestored(gpointer ctx)
 {
     icLogDebug(LOG_TAG, "networkHealthProblemRestored callback");
     zigbeeHealthCheckSetProblem(false);
 }
 
-static void panIdAttackDetected(void *ctx)
+static void panIdAttackDetected(gpointer ctx)
 {
     icLogDebug(LOG_TAG, "panIdAttackDetected callback");
     zigbeeDefenderSetPanIdAttack(true);
 }
 
-static void panIdAttackCleared(void *ctx)
+static void panIdAttackCleared(gpointer ctx)
 {
     icLogDebug(LOG_TAG, "panIdAttackCleared callback");
     zigbeeDefenderSetPanIdAttack(false);
 }
 
-static void beaconReceived(void *ctx,
-                           uint64_t eui64,
-                           uint16_t panId,
-                           bool isOpen,
-                           bool hasEndDeviceCapacity,
-                           bool hasRouterCapability,
-                           uint8_t depth)
+static void beaconReceived(gpointer ctx,
+                           guint64  eui64,
+                           guint16  panId,
+                           gboolean isOpen,
+                           gboolean hasEndDeviceCapacity,
+                           gboolean hasRouterCapability,
+                           guint8   depth)
 {
     zigbeeSubsystemDeviceBeaconReceived(eui64, panId, isOpen, hasEndDeviceCapacity, hasRouterCapability, depth);
 }
 
 
-int zigbeeEventHandlerInit(zhalCallbacks *callbacks)
+int zigbeeEventHandlerInit(ZhalCallbacks *callbacks)
 {
     callbacks->startup = startup;
     callbacks->deviceAnnounced = deviceAnnounced;

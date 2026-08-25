@@ -21,28 +21,18 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-/*
- * Created by Raiyan Chowdhury on 2/21/25.
+#pragma once
+
+#include "category.h"
+
+/**
+ * Build the Zigbee command category.
+ *
+ * The first set of commands exercises BartonCore's public API as it relates to
+ * Zigbee.  The second set drops down to the (private) zigbeeSubsystem API to
+ * exercise functionality that is not otherwise reachable through the public
+ * client API.
+ *
+ * This unit is only compiled when the BCORE_ZIGBEE CMake option is enabled.
  */
-
-#include <pthread.h>
-#include <icUtil/regexUtils.h>
-#include "zhalDataScrubber.h"
-
-REGEX_SIMPLE_REPLACER(NETWORK_CONFIG_DATA_REPLACER, "\"networkConfigData\":\"\\([^\"]*\\)\"", NULL, "<REDACTED>");
-static RegexReplacer *SENSITIVE_DATA_REPLACERS[] = { &NETWORK_CONFIG_DATA_REPLACER, NULL };
-
-static pthread_once_t init_once = PTHREAD_ONCE_INIT;
-
-static void initializeZhalDataScrubber()
-{
-    regexInitReplacers(SENSITIVE_DATA_REPLACERS);
-}
-
-char *zhalFilterJsonForLog(const cJSON *event)
-{
-    pthread_once(&init_once, initializeZhalDataScrubber);
-
-    scoped_generic char *eventString = cJSON_PrintUnformatted(event);
-    return regexReplace(eventString, SENSITIVE_DATA_REPLACERS);
-}
+Category *buildZigbeeCategory(void);

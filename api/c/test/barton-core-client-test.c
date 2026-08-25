@@ -81,7 +81,7 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"
-#include "zhal/zhal.h"
+#include <zhal-client.h>
 #endif
 
 #include <cmocka.h>
@@ -217,7 +217,7 @@ ChannelChangeResponse __wrap_zigbeeSubsystemChangeChannel(uint8_t channel, bool 
 
 icLinkedList *__wrap_deviceServiceGetMetadataByUriPattern(const char *uriPattern);
 void __wrap_deviceServiceProcessDeviceDescriptors(void);
-char *__wrap_zhalTest(void);
+ZHAL_STATUS __wrap_zhalTest(gchar **resultJson);
 icLinkedList *__wrap_zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,
                                                       uint8_t numChannelsToScan,
                                                       uint32_t scanDurationMillis,
@@ -416,12 +416,12 @@ static void *zhalEnergyScanResultsLinkedListCloneFunction(void *input, void *con
 {
     (void) context;
 
-    zhalEnergyScanResult *retVal = NULL;
-    zhalEnergyScanResult *inputResult = (zhalEnergyScanResult *) input;
+    ZhalEnergyScanResult *retVal = NULL;
+    ZhalEnergyScanResult *inputResult = (ZhalEnergyScanResult *) input;
 
     if (inputResult != NULL)
     {
-        retVal = (zhalEnergyScanResult *) calloc(1, sizeof(zhalEnergyScanResult));
+        retVal = (ZhalEnergyScanResult *) calloc(1, sizeof(ZhalEnergyScanResult));
         retVal->channel = inputResult->channel;
         retVal->maxRssi = inputResult->maxRssi;
         retVal->minRssi = inputResult->minRssi;
@@ -1877,7 +1877,7 @@ static void test_b_core_client_zigbee_energy_scan(void **state)
     uint8_t *channelsArray = (uint8_t *) malloc(1 * sizeof(uint8_t));
     channelsArray[0] = expectedChannel;
 
-    zhalEnergyScanResult *scanResult = calloc(1, sizeof(zhalEnergyScanResult));
+    ZhalEnergyScanResult *scanResult = calloc(1, sizeof(ZhalEnergyScanResult));
     scanResult->channel = expectedChannel;
     scanResult->maxRssi = -10;
     scanResult->minRssi = -80;
@@ -1921,7 +1921,7 @@ static void test_b_core_client_zigbee_energy_scan(void **state)
         if (curr->data)
         {
             BCoreZigbeeEnergyScanResult *self = (BCoreZigbeeEnergyScanResult *) curr->data;
-            zhalEnergyScanResult *icResult = linkedListIteratorGetNext(iter);
+            ZhalEnergyScanResult *icResult = linkedListIteratorGetNext(iter);
 
             guint dsChannel = 0;
             gint dsMaxRssi = 0;
@@ -5376,10 +5376,14 @@ void __wrap_deviceServiceProcessDeviceDescriptors(void)
     return;
 }
 
-char *__wrap_zhalTest(void)
+ZHAL_STATUS __wrap_zhalTest(gchar **resultJson)
 {
     function_called();
-    return mock_type(char *);
+    if (resultJson != NULL)
+    {
+        *resultJson = mock_type(char *);
+    }
+    return ZHAL_STATUS_OK;
 }
 
 icLinkedList *__wrap_zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,

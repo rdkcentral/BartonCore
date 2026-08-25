@@ -465,6 +465,9 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
     PollControlCluster *pollControlCluster = (PollControlCluster *) ctx;
 
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
+
     switch (command->commandId)
     {
         case POLL_CONTROL_CHECKIN_COMMAND_ID:
@@ -474,7 +477,7 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
             // if this is a comcast enhanced mfg specific checkin message, parse and handle its payload
             if (command->mfgSpecific && command->mfgCode == COMCAST_MFG_ID)
             {
-                batterySavingData = comcastBatterySavingDataParse(command->commandData, command->commandDataLen);
+                batterySavingData = comcastBatterySavingDataParse(commandData, (uint16_t)commandDataLen);
             }
 
             scoped_icLinkedListIterator *iter = linkedListIteratorCreate(pollControlCluster->callbackList);

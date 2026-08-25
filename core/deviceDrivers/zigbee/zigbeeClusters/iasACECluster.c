@@ -327,9 +327,12 @@ static int readArmCommandPayload(ReceivedClusterCommand *command, ZCLArmCommandP
     memset(payload, 0, sizeof(*payload));
     errno = 0;
 
-    icLogDebug(LOG_TAG, "Arm command len %d", command->commandDataLen);
+    gsize commandDataLen = 0;
+    guint8 *commandData = (guint8 *) ((command->commandData != NULL) ? g_bytes_get_data(command->commandData, &commandDataLen) : NULL);
 
-    sbZigbeeIOContext *ctx = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
+    icLogDebug(LOG_TAG, "Arm command len %d", (int)commandDataLen);
+
+    sbZigbeeIOContext *ctx = zigbeeIOInit(commandData, commandDataLen, ZIO_READ);
     payload->armMode = zigbeeIOGetUint8(ctx);
     payload->accessCode = zigbeeIOGetString(ctx);
     payload->zoneId = zigbeeIOGetUint8(ctx);
