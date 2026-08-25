@@ -96,15 +96,11 @@ The SBMD runtime SHALL record the time a request spends waiting to acquire the J
 - **THEN** `sbmd.js.mutex.wait_ms` records an observation close to zero
 
 ### Requirement: Driver load cost tracking
-The SBMD runtime SHALL record, for each successfully loaded driver: the wall-clock time to evaluate and activate its `.sbmd.js` file as a histogram named `sbmd.driver.load.duration_ms` with attribute `"driver"`, and the net heap bytes consumed during load and activation as a histogram named `sbmd.driver.load.heap_bytes` with attribute `"driver"`. Both SHALL be recorded once per driver at startup in `SbmdFactory::RegisterDriversFromDirectory`.
+The SBMD runtime SHALL record, for each successfully loaded driver, the wall-clock time to evaluate and activate its `.sbmd.js` file as a histogram named `sbmd.driver.load.duration_ms` with attribute `"driver"`. It SHALL be recorded once per driver at startup in `SbmdFactory::RegisterDriversFromDirectory`.
 
 #### Scenario: Load duration recorded per driver
 - **WHEN** a `.sbmd.js` file is successfully loaded and activated
 - **THEN** `sbmd.driver.load.duration_ms` contains one observation attributed to that driver's name
-
-#### Scenario: Load heap cost recorded per driver
-- **WHEN** a `.sbmd.js` file is successfully loaded and activated
-- **THEN** `sbmd.driver.load.heap_bytes` contains one observation reflecting the heap consumed
 
 ### Requirement: Registered driver count tracking
 The SBMD runtime SHALL record the total number of successfully registered drivers as a gauge named `sbmd.driver.registered.count` once after all drivers have been loaded in `SbmdFactory::RegisterDriversFromDirectory`.

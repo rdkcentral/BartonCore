@@ -87,6 +87,15 @@ namespace barton
         void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
 
         /**
+         * Fold a heap_used measurement into the all-time peak gauge
+         * (sbmd.js.heap.peak_bytes) without touching the per-invocation histogram
+         * or free gauge. Called from the GC-start callback to capture the
+         * pre-compaction high-water mark. Must be called while holding
+         * MQuickJsRuntime::GetMutex() (the GC callback runs under that lock).
+         */
+        void RecordPeakCandidate(size_t heapUsed);
+
+        /**
          * Record the arena size gauge (called once at initialization time
          * with the configured memory-pool size).
          */
@@ -108,7 +117,10 @@ namespace barton
          * GC instrumentation callback — registered with JS_SetGCCallback with
          * this instance as opaque. Records GC cycle frequency (sbmd.js.gc.count)
          * and per-cycle duration (sbmd.js.gc.duration_ms). Called by the mquickjs
-         * engine at GC start (isEnd == 0) and end (isEnd == 1).
+         * engine at GC start (isEnd == 0) and end (isEnd == 1). At GC start it also
+         * captures the pre-compaction heap_used as a peak_bytes candidate, which is
+         * how transient loading spikes reach the all-time high-water mark before the
+         * compacting GC reclaims them.
          */
         static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
 
@@ -152,6 +164,8 @@ namespace barton
         void TickleSampler() {}
 
         void RecordHeapSnapshot(const JSMemoryUsage &, size_t) {}
+
+        void RecordPeakCandidate(size_t) {}
 
         void RecordArenaSize(int64_t) {}
 

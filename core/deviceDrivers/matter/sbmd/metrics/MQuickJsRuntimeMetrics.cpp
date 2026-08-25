@@ -49,7 +49,12 @@ namespace barton
         heapFreeGauge = observabilityGaugeCreate(
             "sbmd.js.heap.free_bytes", "Bytes between top of heap and bottom of JS call stack", "By");
         heapPeakGauge = observabilityGaugeCreate(
-            "sbmd.js.heap.peak_bytes", "All-time peak heap bytes observed since last init", "By");
+            "sbmd.js.heap.peak_bytes",
+            "All-time high-water mark of heap_used since last init. Captured at GC start "
+            "(pre-compaction) as well as at every heap snapshot, so it includes transient "
+            "allocation spikes — notably driver loading — that the compacting GC would otherwise "
+            "reclaim before the next sample could observe them",
+            "By");
         mutexWaitHisto = observabilityHistogramCreate(
             "sbmd.js.mutex.wait_ms", "Time spent waiting to acquire the JS mutex before a handler call", "ms");
         jsExceptionCounter =
@@ -181,6 +186,15 @@ namespace barton
         observabilityGaugeRecord(gcRootsGauge, static_cast<int64_t>(gcRootCount));
     }
 
+    void MQuickJsRuntimeMetrics::RecordPeakCandidate(size_t heapUsed)
+    {
+        if (static_cast<int64_t>(heapUsed) > peakHeapRecorded)
+        {
+            peakHeapRecorded = static_cast<int64_t>(heapUsed);
+            observabilityGaugeRecord(heapPeakGauge, peakHeapRecorded);
+        }
+    }
+
     void MQuickJsRuntimeMetrics::RecordArenaSize(int64_t bytes)
     {
         observabilityGaugeRecord(heapArenaGauge, bytes);
@@ -203,7 +217,7 @@ namespace barton
         }
     }
 
-    void MQuickJsRuntimeMetrics::GCCallback(JSContext * /*ctx*/, int isEnd, void *opaque) noexcept
+    void MQuickJsRuntimeMetrics::GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept
     {
         auto *metrics = static_cast<MQuickJsRuntimeMetrics *>(opaque);
 
@@ -215,6 +229,22 @@ namespace barton
         if (isEnd == 0)
         {
             metrics->gcStartTime = std::chrono::steady_clock::now();
+
+            // At GC start the heap has not yet been compacted, so heap_used is at its maximum
+            // for this cycle. This is the only point where transient allocation spikes (notably
+            // driver loading, which drives the arena toward its limit and triggers these very GC
+            // cycles) are observable before the compacting GC reclaims them. Fold it into the
+            // all-time peak. We are already on the thread holding the JS mutex, so read usage
+            // directly without re-locking.
+            if (ctx)
+            {
+                JSMemoryUsage usage = {};
+
+                if (JS_GetMemoryUsage(ctx, &usage, 0) == 0)
+                {
+                    metrics->RecordPeakCandidate(usage.heap_used);
+                }
+            }
 
             return;
         }
