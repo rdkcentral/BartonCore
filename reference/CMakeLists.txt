@@ -35,6 +35,13 @@ if (NOT BCORE_REFERENCE_CAMERA_SUPPORT)
     list(FILTER B_CORE_REFERENCE_SOURCES EXCLUDE REGEX "cameraCategory\\.c$|cameraDeviceSession\\.c$|cameraWebrtcClient\\.c$|cameraMediaServer\\.c$")
 endif()
 
+# The Zigbee command unit exercises the (private) zigbeeSubsystem API and must
+# only be compiled when Zigbee support is enabled.
+list(REMOVE_ITEM B_CORE_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/zigbeeCategory.c)
+if (BCORE_ZIGBEE)
+    list(APPEND B_CORE_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/zigbeeCategory.c)
+endif()
+
 add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})
 
 # add library dependencies for this binary
@@ -49,6 +56,17 @@ if (BCORE_REFERENCE_CAMERA_SUPPORT)
     target_include_directories(barton-core-reference PRIVATE ${GST_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS})
     target_link_libraries(barton-core-reference ${GST_LIBRARIES} ${GIO_LIBRARIES})
     target_compile_definitions(barton-core-reference PRIVATE BCORE_REFERENCE_CAMERA_SUPPORT)
+endif()
+
+if (BCORE_ZIGBEE)
+    # zigbeeCategory.c reaches into Barton's private API tree for the
+    # zigbeeSubsystem interface. The BARTON_CONFIG_ZIGBEE definition and the
+    # include dirs for the zhal/cjson/deviceDescriptor/icTypes headers are
+    # inherited transitively from BartonCore; we only need the private API
+    # include root and an explicit link to the zhal client.
+    target_link_libraries(barton-core-reference bCoreConfig zhal-client)
+    target_include_directories(barton-core-reference PRIVATE
+                               ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/private)
 endif()
 
 bcore_configure_glib()

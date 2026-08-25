@@ -107,9 +107,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     bool result = true;
 
     // configure attribute reporting on measured value
-    zhalAttributeReportingConfig valueConfigs[1];
+    ZhalAttributeReportingConfig valueConfigs[1];
     uint8_t numConfigs = 1;
-    memset(&valueConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+    memset(&valueConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
     valueConfigs[0].attributeInfo.id = RELATIVE_HUMIDITY_MEASURED_VALUE_ATTRIBUTE_ID;
     valueConfigs[0].attributeInfo.type = ZCL_INT16U_ATTRIBUTE_TYPE;
     valueConfigs[0].minInterval = 1;
@@ -141,7 +141,10 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     RelativeHumidityMeasurementCluster *cluster = (RelativeHumidityMeasurementCluster *) ctx;
 
-    sbZigbeeIOContext *zio = zigbeeIOInit(report->reportData, report->reportDataLen, ZIO_READ);
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
+    sbZigbeeIOContext *zio = zigbeeIOInit(reportData, reportDataLen, ZIO_READ);
     uint16_t attributeId = zigbeeIOGetUint16(zio);
     // Pull out the type and throw it away
     zigbeeIOGetUint8(zio);

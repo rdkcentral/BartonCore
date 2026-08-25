@@ -44,15 +44,15 @@
 #include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #define LOG_TAG                         "zigbeeDriverCommonTest"
 #define ZIGBEE_LIGHT_DEVICE_DRIVER_NAME "zigbeeLight"
 
 icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem);
 
-static OtaUpgradeEvent *
-createDummyOtaEvent(zhalOtaEventType eventType, uint8_t *buffer, uint16_t bufferLen, bool isSent);
+static ZhalOtaUpgradeEvent *
+createDummyOtaEvent(ZhalOtaEventType eventType, uint8_t *buffer, uint16_t bufferLen, bool isSent);
 static uint8_t *createDummyZclPayload(uint8_t buffer[], uint16_t bufferLen);
 static uint64_t getTimestamp();
 
@@ -60,103 +60,103 @@ static uint64_t getTimestamp();
 // Tests
 // ******************************
 
-// As of now there are only OtaUpgradeEvent tests from zigbeeDriverCommon
+// As of now there are only ZhalOtaUpgradeEvent tests from zigbeeDriverCommon
 
 static void test_zigbeeDriverCommonVerifyLegacyBootloadUpgradeStartedMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_STARTED_EVENT, NULL, 0, false);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_STARTED_EVENT, NULL, 0, false);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // NULL payload is valid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyLegacyBootloadUpgradeCompletedMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_COMPLETED_EVENT, NULL, 0, false);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_COMPLETED_EVENT, NULL, 0, false);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // NULL payload is valid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyLegacyBootloadUpgradeFailedMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_FAILED_EVENT, NULL, 0, false);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_FAILED_EVENT, NULL, 0, false);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // NULL payload is valid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyImageNotifyMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, NULL, 0, true);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, NULL, 0, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // NULL payload is invalid for imageNotify!
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x00}, 1), 1, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // need atleast 2 bytes for payload type 0x00
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x00, 0x32}, 2), 2, true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // payload type is from 0x00 - 0x03
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x04, 0x32}, 2), 2, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // payload type is from 0x00 - 0x03
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x00, 0x01}, 2), 2, true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // query jitter is from 0x01 - 0x64
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x00, 0x00}, 2), 2, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // query jitter is from 0x01 - 0x64
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x00, 0x64}, 2), 2, true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // query jitter is from 0x01 - 0x64
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x00, 0x65}, 2), 2, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // query jitter is from 0x01 - 0x64
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x01, 0x32}, 2), 2, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // For payload type 0x01 we need atleast 4 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x01, 0x32, 0x00, 0x00}, 4), 4, true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // For payload type 0x01 we need atleast 4 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_IMAGE_NOTIFY_EVENT, createDummyZclPayload((uint8_t[]) {0x02, 0x32, 0x00, 0x00}, 4), 4, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // For payload type 0x02 we need atleast 6 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT,
                                    createDummyZclPayload((uint8_t[]) {0x02, 0x32, 0x00, 0x00, 0x00, 0x00}, 6),
                                    6,
                                    true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // For payload type 0x02 we need atleast 6 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(ZHAL_OTA_IMAGE_NOTIFY_EVENT,
                                    createDummyZclPayload((uint8_t[]) {0x03, 0x32, 0x00, 0x00, 0x00, 0x00}, 6),
                                    6,
                                    true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // For payload type 0x03 we need atleast 10 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_IMAGE_NOTIFY_EVENT,
@@ -164,16 +164,16 @@ static void test_zigbeeDriverCommonVerifyImageNotifyMessage(void **state)
         10,
         true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // For payload type 0x03 we need atleast 10 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyQueryNextImageRequestMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_QUERY_NEXT_IMAGE_REQUEST_EVENT, NULL, 0, false);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_QUERY_NEXT_IMAGE_REQUEST_EVENT, NULL, 0, false);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // NULL payload is invalid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_QUERY_NEXT_IMAGE_REQUEST_EVENT,
@@ -181,7 +181,7 @@ static void test_zigbeeDriverCommonVerifyQueryNextImageRequestMessage(void **sta
                             8,
                             false);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // need atleast 9 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_QUERY_NEXT_IMAGE_REQUEST_EVENT,
@@ -189,39 +189,39 @@ static void test_zigbeeDriverCommonVerifyQueryNextImageRequestMessage(void **sta
         9,
         false);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // need atleast 9 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyQueryNextImageResponseMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_QUERY_NEXT_IMAGE_RESPONSE_EVENT, NULL, 0, true);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_QUERY_NEXT_IMAGE_RESPONSE_EVENT, NULL, 0, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // NULL payload is invalid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_QUERY_NEXT_IMAGE_RESPONSE_EVENT, createDummyZclPayload((uint8_t[]) {0x00}, 1), 1, true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // need atleast 1 byte
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyUpgradeStartedMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_UPGRADE_STARTED_EVENT, NULL, 0, false);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_UPGRADE_STARTED_EVENT, NULL, 0, false);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // NULL payload is valid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyUpgradeEndRequestMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_UPGRADE_END_REQUEST_EVENT, NULL, 0, false);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_UPGRADE_END_REQUEST_EVENT, NULL, 0, false);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // NULL payload is invalid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent =
         createDummyOtaEvent(ZHAL_OTA_UPGRADE_END_REQUEST_EVENT,
@@ -229,7 +229,7 @@ static void test_zigbeeDriverCommonVerifyUpgradeEndRequestMessage(void **state)
                             8,
                             false);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // should have atleast 9 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_UPGRADE_END_REQUEST_EVENT,
@@ -237,16 +237,16 @@ static void test_zigbeeDriverCommonVerifyUpgradeEndRequestMessage(void **state)
         9,
         false);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // should have atleast 9 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
 
 static void test_zigbeeDriverCommonVerifyUpgradeEndResponseMessage(void **state)
 {
-    OtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_UPGRADE_END_RESPONSE_EVENT, NULL, 0, true);
+    ZhalOtaUpgradeEvent *otaEvent = createDummyOtaEvent(ZHAL_OTA_UPGRADE_END_RESPONSE_EVENT, NULL, 0, true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // NULL payload is invalid
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_UPGRADE_END_RESPONSE_EVENT,
@@ -255,7 +255,7 @@ static void test_zigbeeDriverCommonVerifyUpgradeEndResponseMessage(void **state)
         15,
         true);
     assert_false(validateOtaUpgradeMessage(otaEvent)); // should have atleast 16 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     otaEvent = createDummyOtaEvent(
         ZHAL_OTA_UPGRADE_END_RESPONSE_EVENT,
@@ -266,7 +266,7 @@ static void test_zigbeeDriverCommonVerifyUpgradeEndResponseMessage(void **state)
         16,
         true);
     assert_true(validateOtaUpgradeMessage(otaEvent)); // should have atleast 16 bytes
-    freeOtaUpgradeEvent(otaEvent);
+    ZhalOtaUpgradeEvent_release(otaEvent);
 
     (void) state;
 }
@@ -310,19 +310,20 @@ static uint8_t *createDummyZclPayload(uint8_t buffer[], uint16_t bufferLen)
     return payload;
 }
 
-static OtaUpgradeEvent *
-createDummyOtaEvent(zhalOtaEventType eventType, uint8_t *buffer, uint16_t bufferLen, bool isSent)
+static ZhalOtaUpgradeEvent *
+createDummyOtaEvent(ZhalOtaEventType eventType, uint8_t *buffer, uint16_t bufferLen, bool isSent)
 {
-    OtaUpgradeEvent *otaEvent = (OtaUpgradeEvent *) calloc(1, sizeof(OtaUpgradeEvent));
+    ZhalOtaUpgradeEvent *otaEvent = ZhalOtaUpgradeEvent_new();
     otaEvent->eventType = eventType;
     otaEvent->eui64 = 0x000000000;
     otaEvent->timestamp = getTimestamp();
-    otaEvent->buffer = buffer;
-    otaEvent->bufferLen = bufferLen;
+    // Take ownership of the caller-provided (malloc'd) buffer, matching the old
+    // semantics where the event owned and freed it.
+    otaEvent->buffer = (buffer != NULL) ? g_bytes_new_take(buffer, bufferLen) : NULL;
 
     if (isSent)
     {
-        otaEvent->sentStatus = (ZHAL_STATUS *) malloc(sizeof(ZHAL_STATUS));
+        otaEvent->sentStatus = (ZHAL_STATUS *) g_malloc(sizeof(ZHAL_STATUS));
         *otaEvent->sentStatus = ZHAL_STATUS_OK;
     }
 

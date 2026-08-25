@@ -34,6 +34,12 @@ else()
     find_package(BartonCommon REQUIRED)
 endif()
 
+# zhal lives in its own repo; pull it in as a third-party dependency only when
+# Zigbee support is enabled. Only the client library is consumed by BartonCore.
+if (BCORE_ZIGBEE)
+    add_subdirectory(zhal)
+endif()
+
 # TODO: Integrate matter more strongly with CMake.
 if (BCORE_MATTER AND NOT BCORE_MATTER_SKIP_SDK)
     # Only search default locations. Mostly this is for clients who build matter out of band

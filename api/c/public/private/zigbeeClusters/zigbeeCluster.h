@@ -31,7 +31,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 

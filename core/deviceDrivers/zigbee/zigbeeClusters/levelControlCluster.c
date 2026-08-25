@@ -189,9 +189,9 @@ bool levelControlClusterSetAttributeReporting(uint64_t eui64, uint8_t endpointId
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig levelConfigs[1];
+    ZhalAttributeReportingConfig levelConfigs[1];
     uint8_t numConfigs = 1;
-    memset(&levelConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+    memset(&levelConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
     levelConfigs[0].attributeInfo.id = LEVEL_CONTROL_CURRENT_LEVEL_ATTRIBUTE_ID;
     levelConfigs[0].attributeInfo.type = ZCL_INT8U_ATTRIBUTE_TYPE;
     levelConfigs[0].minInterval = 1;
@@ -259,16 +259,19 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     LevelControlCluster *levelControlCluster = (LevelControlCluster *) ctx;
 
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
     if (levelControlCluster->callbacks->levelChanged != NULL)
     {
         char *uuid = zigbeeSubsystemEui64ToId(report->eui64);
         char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, report->sourceEndpoint);
 
-        if (report->reportDataLen == 4)
+        if (reportDataLen == 4)
         {
             levelControlCluster->callbacks->levelChanged(
-                report->eui64, report->sourceEndpoint, report->reportData[3], levelControlCluster->callbackContext);
+                report->eui64, report->sourceEndpoint, reportData[3], levelControlCluster->callbackContext);
         }
 
         free(uuid);

@@ -33,8 +33,9 @@
 #include <cjson/cJSON.h>
 #include <deviceDescriptor.h>
 #include <icTypes/icLinkedList.h>
+#include <inttypes.h>
 #include <stdbool.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 #define ZIGBEE_SUBSYSTEM_NAME             "zigbee"
 #define NETWORK_BLOB_PROPERTY_NAME        "ZIGBEE_NETWORK_CONFIG_DATA"
@@ -72,15 +73,15 @@ typedef struct
     // callback frees command with freeReceivedClusterCommand()
     void (*clusterCommandReceived)(void *ctx, ReceivedClusterCommand *command);
 
-    void (*otaUpgradeMessageSent)(void *ctx, OtaUpgradeEvent *otaEvent);
+    void (*otaUpgradeMessageSent)(void *ctx, ZhalOtaUpgradeEvent *otaEvent);
 
-    void (*otaUpgradeMessageReceived)(void *ctx, OtaUpgradeEvent *otaEvent);
+    void (*otaUpgradeMessageReceived)(void *ctx, ZhalOtaUpgradeEvent *otaEvent);
 
     void (*deviceRejoined)(void *ctx, uint64_t eui64, bool isSecure);
 
     void (*deviceLeft)(void *ctx, uint64_t eui64);
 
-    void (*deviceAnnounced)(void *ctx, uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource);
+    void (*deviceAnnounced)(void *ctx, uint64_t eui64, ZhalDeviceType deviceType, ZhalPowerSource powerSource);
 
 } ZigbeeSubsystemDeviceCallbacks;
 
@@ -123,8 +124,8 @@ typedef struct
     uint64_t appVersion;
     uint8_t numEndpoints;
     IcDiscoveredEndpointDetails *endpointDetails;
-    zhalDeviceType deviceType;
-    zhalPowerSource powerSource;
+    ZhalDeviceType deviceType;
+    ZhalPowerSource powerSource;
 
 } IcDiscoveredDeviceDetails;
 
@@ -341,7 +342,7 @@ int zigbeeSubsystemWriteNumberMfgSpecific(uint64_t eui64,
 
 int zigbeeSubsystemBindingSet(uint64_t eui64, uint8_t endpointId, uint16_t clusterId);
 
-// returns linked list of zhalBindingTableEntry on success or NULL on failure
+// returns linked list of ZhalBindingTableEntry on success or NULL on failure
 icLinkedList *zigbeeSubsystemBindingGet(uint64_t eui64);
 
 int zigbeeSubsystemBindingClear(uint64_t eui64, uint8_t endpointId, uint16_t clusterId);
@@ -357,14 +358,14 @@ int zigbeeSubsystemBindingClearTarget(uint64_t eui64,
 int zigbeeSubsystemAttributesSetReporting(uint64_t eui64,
                                           uint8_t endpointId,
                                           uint16_t clusterId,
-                                          zhalAttributeReportingConfig *configs,
+                                          ZhalAttributeReportingConfig *configs,
                                           uint8_t numConfigs);
 
 int zigbeeSubsystemAttributesSetReportingMfgSpecific(uint64_t eui64,
                                                      uint8_t endpointId,
                                                      uint16_t clusterId,
                                                      uint16_t mfgId,
-                                                     zhalAttributeReportingConfig *configs,
+                                                     ZhalAttributeReportingConfig *configs,
                                                      uint8_t numConfigs);
 
 /*
@@ -387,7 +388,7 @@ int zigbeeSubsystemDiscoverAttributes(uint64_t eui64,
                                       uint8_t endpointId,
                                       uint16_t clusterId,
                                       bool toServer,
-                                      zhalAttributeInfo **infos,
+                                      ZhalAttributeInfo **infos,
                                       uint16_t *numInfos);
 
 /*
@@ -564,7 +565,7 @@ void zigbeeSubsystemDumpDeviceDiscovered(IcDiscoveredDeviceDetails *details);
  *
  * Return 0 on success
  */
-int zigbeeSubsystemGetSystemStatus(zhalSystemStatus *status);
+int zigbeeSubsystemGetSystemStatus(ZhalSystemStatus *status);
 
 /*
  * Retrieve the currently supported zigbee stack counters as a JSON object.  This also clears/resets
@@ -684,7 +685,7 @@ bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64, bool withRejoin, bool isE
  * @param deviceType
  * @param powerSource
  */
-void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource);
+void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, ZhalDeviceType deviceType, ZhalPowerSource powerSource);
 
 /*
  * Convert string formatted linkQuality to enum
