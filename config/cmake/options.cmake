@@ -186,6 +186,10 @@ bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
            DEFINITION BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON
            DESCRIPTION "Build the third-party BartonCommon component"
            ENABLE)
+bcore_option(NAME BCORE_BUILD_THIRD_PARTY_ZHAL
+           DEFINITION BARTON_CONFIG_BUILD_THIRD_PARTY_ZHAL
+           DESCRIPTION "Build the third-party zhal component (fetched from git). When OFF, zhal is found via find_package(zhal CONFIG)"
+           ENABLE)
 
 bcore_string_option(NAME BCORE_OBSERVABILITY_BACKEND
                     DEFINITION BARTON_CONFIG_OBSERVABILITY_BACKEND

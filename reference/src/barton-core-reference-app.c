@@ -36,6 +36,9 @@
 #ifdef BCORE_REFERENCE_CAMERA_SUPPORT
 #include "cameraCategory.h"
 #endif
+#ifdef BARTON_CONFIG_ZIGBEE
+#include "zigbeeCategory.h"
+#endif
 #include "provider/barton-core-property-provider.h"
 #include "reference-network-credentials-provider.h"
 #include <icLog/logging.h>
@@ -84,6 +87,9 @@ static void buildCategories()
     categories = g_list_append(categories, buildThreadCategory());
 #ifdef BCORE_REFERENCE_CAMERA_SUPPORT
     categories = g_list_append(categories, buildCameraCategory());
+#endif
+#ifdef BARTON_CONFIG_ZIGBEE
+    categories = g_list_append(categories, buildZigbeeCategory());
 #endif
 }
 

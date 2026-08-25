@@ -110,9 +110,9 @@ bool onOffClusterSetAttributeReporting(uint64_t eui64, uint8_t endpointId)
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig onOffConfigs[1];
+    ZhalAttributeReportingConfig onOffConfigs[1];
     uint8_t numConfigs = 1;
-    memset(&onOffConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
+    memset(&onOffConfigs[0], 0, sizeof(ZhalAttributeReportingConfig));
     onOffConfigs[0].attributeInfo.id = ON_OFF_ATTRIBUTE_ID;
     onOffConfigs[0].attributeInfo.type = ZCL_BOOLEAN_ATTRIBUTE_TYPE;
     onOffConfigs[0].minInterval = 1;
@@ -158,12 +158,15 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
     OnOffCluster *onOffCluster = (OnOffCluster *) ctx;
 
+    gsize reportDataLen = 0;
+    guint8 *reportData = (guint8 *) ((report->reportData != NULL) ? g_bytes_get_data(report->reportData, &reportDataLen) : NULL);
+
     if (onOffCluster->callbacks->onOffStateChanged != NULL)
     {
-        if (report->reportDataLen == 4)
+        if (reportDataLen == 4)
         {
             onOffCluster->callbacks->onOffStateChanged(
-                report->eui64, report->sourceEndpoint, report->reportData[3] != 0, onOffCluster->callbackContext);
+                report->eui64, report->sourceEndpoint, reportData[3] != 0, onOffCluster->callbackContext);
         }
     }
 

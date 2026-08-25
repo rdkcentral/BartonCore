@@ -46,7 +46,7 @@
 #include <string.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <sys/stat.h>
-#include <zhal/zhal.h>
+#include <zhal-client.h>
 
 
 #define LOG_TAG                 "zigbeeSubsystemTest"
