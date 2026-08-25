@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Agent Skill: Validate SBMD
+
+## Purpose
+
+Defines the structure and required content of the `validate-sbmd` agent skill, covering SBMD spec validation, stub generation, and spec file locations.
+
+## Requirements
 
 ### Requirement: SBMD validation skill SKILL.md conforms to Agent Skills spec
 The `validate-sbmd` skill SHALL be located at `.github/skills/validate-sbmd/SKILL.md`. The frontmatter SHALL include `name: validate-sbmd`, a `description` field explaining the skill covers validating SBMD specification files, and `compatibility` noting the BartonCore Docker development container.

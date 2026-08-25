@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Matter Test Infrastructure
+
+## Purpose
+
+Specifies the matter.js-based Matter test infrastructure: the refactored `MatterDevice` backend, device classes (light, door lock) migrated to matter.js side-band control, test fixtures, conditional execution markers, and Docker environment setup.
+
+## Requirements
 
 ### Requirement: MatterDevice refactored for matter.js-only backend
 The `MatterDevice` base class SHALL exclusively use matter.js virtual devices. The `_app_name` attribute and all CHIP SDK sample app subprocess code SHALL be removed. `MatterDevice.__init__()` SHALL require a `matterjs_entry_point` parameter specifying the JavaScript file to run. `MatterDevice.start()` SHALL spawn a Node.js subprocess, wait for the JSON ready signal on stdout, and configure the `SidebandClient`.
