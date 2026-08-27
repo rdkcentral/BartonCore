@@ -164,12 +164,14 @@ def format_heap_snapshot(label, metrics):
     arena_dps = metrics.get("sbmd.js.heap.arena_bytes", {}).get("dataPoints", [])
     free_dps  = metrics.get("sbmd.js.heap.free_bytes",  {}).get("dataPoints", [])
     peak_dps  = metrics.get("sbmd.js.heap.peak_bytes",  {}).get("dataPoints", [])
+    live_dps = metrics.get("sbmd.js.heap.live_bytes", {}).get("dataPoints", [])
     roots_dps = metrics.get("sbmd.js.gc_roots",         {}).get("dataPoints", [])
     used_dps  = metrics.get("sbmd.js.heap.used_bytes",  {}).get("dataPoints", [])
 
     arena = arena_dps[0]["value"] if arena_dps else 0
     free  = free_dps[0]["value"]  if free_dps  else 0
     peak  = peak_dps[0]["value"]  if peak_dps  else 0
+    live = live_dps[0]["value"] if live_dps else None
     roots = roots_dps[0]["value"] if roots_dps else "n/a"
 
     total_count = sum(dp["count"] for dp in used_dps)
@@ -183,5 +185,9 @@ def format_heap_snapshot(label, metrics):
     print(f"  free:     {free:>12,} bytes  ({pct(free)})")
     print(f"  peak:     {peak:>12,} bytes  ({pct(peak)})  ← all-time high, never decreases")
     print(f"  avg used: {avg_used:>12,.0f} bytes  ({pct(avg_used)})")
+    if live is not None:
+        print(
+            f"  live set: {live:>12,} bytes  ({pct(live)})  ← retained, post-GC (true occupancy)"
+        )
     if roots != "n/a":
         print(f"  gc_roots: {roots}")

@@ -50,7 +50,12 @@ from pathlib import Path
 
 from testing.helpers.sbmd_metrics_helpers import HISTOGRAM_LABELS
 
-REPORT_DIR = Path(__file__).resolve().parent.parent / ".metrics-reports"
+REPORT_DIR = Path(
+    os.environ.get(
+        "SBMD_REPORT_DIR",
+        str(Path(__file__).resolve().parent.parent / ".metrics-reports"),
+    )
+)
 JSON_PATH = REPORT_DIR / "sbmd_metrics.json"
 TXT_PATH = REPORT_DIR / "sbmd_metrics.txt"
 
@@ -145,6 +150,12 @@ ARENA_BYTES = 1_048_576          # configured mquickjs arena (BCORE_MQUICKJS_MEM
 SCRIPT_TIMEOUT_MS = 5000         # BCORE_SBMD_SCRIPT_TIMEOUT_MS (handler watchdog)
 MAX_DEFERRAL_DEPTH = 10          # SbmdDeferredExecutor re-arm circuit-breaker
 
+# Per-call transient allocation is graded per (driver, op_type) series against an
+# absolute ceiling scaled to the arena — NOT a scenario-wide average, which
+# conflates test composition with per-handler cost and hides a single hot series.
+HEAP_DELTA_WATCH_FRAC = 0.008  # ~8 KB @ 1 MiB — above every known-good handler
+HEAP_DELTA_CONCERN_FRAC = 0.03  # ~32 KB @ 1 MiB — a genuinely pathological call
+
 _MARK = {"ok": "✅", "watch": "⚠️", "concern": "🚫", "devonly": "🔬", "info": "ℹ️"}
 _SEV = {"concern": 3, "watch": 2, "devonly": 1, "info": 0, "ok": 0}
 _BADGE = {
@@ -210,14 +221,46 @@ def _assess(name, summary):
         return ("concern" if v > 0 else "ok", f"in_flight={v} at rest")
 
     if name == "sbmd.handler.heap_delta_bytes":
-        avg = _hist_avg(summary)
-        if avg is None:
+        dps = summary.get("dataPoints", [])
+        if not dps:
             return "info", "no observations"
-        if avg >= 4096:
-            return "concern", f"avg {avg:+.0f} B/call — likely per-call leak"
-        if avg >= 1024:
-            return "watch", f"avg {avg:+.0f} B/call"
-        return "ok", f"avg {avg:+.0f} B/call (bounded/reclaimed)"
+        # Grade the WORST per-(driver, op_type) series' max against an absolute
+        # per-call ceiling, not the scenario average: the average moves with the
+        # mix of ops a test happens to fire and would dilute a single hot series.
+        # TODO(regression): the complementary half — flag a series that DRIFTS
+        # from its own baseline even while under the ceiling — needs a persisted
+        # per-series history to compare against. Not wired yet, so today we only
+        # enforce the absolute ceiling.
+        watch_ceil = ARENA_BYTES * HEAP_DELTA_WATCH_FRAC
+        concern_ceil = ARENA_BYTES * HEAP_DELTA_CONCERN_FRAC
+        worst, worst_attrs = None, {}
+        for dp in dps:
+            mx = dp.get("max")
+            if mx is not None and (worst is None or mx > worst):
+                worst, worst_attrs = mx, dp.get("attributes", {})
+        if worst is None:
+            return "info", "no observations"
+        who = (
+            " ".join(
+                f"{k}={worst_attrs[k]}"
+                for k in ("driver", "op_type", "resource_id")
+                if worst_attrs.get(k)
+            )
+            or "(unlabeled)"
+        )
+        avg = _hist_avg(summary) or 0
+        if worst >= concern_ceil:
+            return "concern", (
+                f"peak {worst:+,.0f} B/call on {who} "
+                f"(≥{HEAP_DELTA_CONCERN_FRAC:.0%} arena) — likely per-call leak"
+            )
+        if worst >= watch_ceil:
+            return "watch", (
+                f"peak {worst:+,.0f} B/call on {who} (≥{HEAP_DELTA_WATCH_FRAC:.1%} arena)"
+            )
+        return "ok", (
+            f"peak {worst:+,.0f} B/call on {who}, avg {avg:+.0f} (bounded/reclaimed)"
+        )
 
     if name == "sbmd.deferred.depth":
         mx = _hist_max(summary)
@@ -245,6 +288,24 @@ def _assess(name, summary):
         if not v:
             return "info", "0 = unmeasured baseline (recorded only during handler calls)"
         return "info", f"{v} live roots (leak signal is growth over time — see heap_progression)"
+
+    if name == "sbmd.js.heap.live_bytes":
+        # Post-GC (compacted) live set — the one heap metric that is TRUE
+        # occupancy and therefore graded.  Sampled at GC end, so it excludes the
+        # transient garbage that inflates used_bytes/peak_bytes.  A rising floor
+        # here (see heap_progression time-series) is a genuine retained leak.
+        v = _gauge(summary)
+        if not v:
+            return "info", "no post-GC sample yet (recorded only when a GC fires)"
+        frac = v / ARENA_BYTES
+        if frac >= 0.75:
+            return (
+                "concern",
+                f"live set {frac:.1%} of arena — genuine occupancy near OOM",
+            )
+        if frac >= 0.50:
+            return "watch", f"live set {frac:.1%} of arena (retained, post-GC)"
+        return "ok", f"live set {v:,} B ({frac:.1%} of arena, retained post-GC)"
 
     if name == "sbmd.js.heap.peak_bytes":
         # All-time high-water of bytes outstanding *before* a GC ran.  Under
@@ -359,9 +420,19 @@ def _render_datapoint(dp, indent):
     return out
 
 
-def _render_metric(name, summary, indent):
+def _render_metric(name, summary, indent, fault_injection=False):
     pad = " " * indent
     status, note = _assess(name, summary)
+    # In a fault-injection scenario the deliberate timeout/runaway trips record a
+    # non-success handler.outcome; that is expected, not a real fault, so it must
+    # not drive the verdict. The test itself is the real correctness gate.
+    if fault_injection and name == "sbmd.handler.outcome" and status == "concern":
+        status = "info"
+        note = (
+            f"{note} (expected — fault-injection scenario)"
+            if note
+            else "expected — fault-injection scenario"
+        )
     tail = f" — {note}" if note else ""
     out = [f"{pad}{_MARK[status]} {name}{tail}"]
 
@@ -377,12 +448,12 @@ def _render_metric(name, summary, indent):
     return out, status
 
 
-def _render_metrics_map(metrics, indent):
+def _render_metrics_map(metrics, indent, fault_injection=False):
     out = []
     worst = "ok"
 
     for name, summary in metrics.items():
-        lines, status = _render_metric(name, summary, indent)
+        lines, status = _render_metric(name, summary, indent, fault_injection)
         out.extend(lines)
         worst = _worse(worst, status)
 
@@ -416,6 +487,9 @@ def _render_scenario(name, payload):
     worst = "ok"
 
     context = payload.get("context")
+    fault_injection = (
+        bool(context.get("fault_injection")) if isinstance(context, dict) else False
+    )
     if context:
         body.append(f"  context: {context}")
 
@@ -427,7 +501,9 @@ def _render_scenario(name, payload):
                 body.append(f"  [{key}]")
 
             lines, section_worst = _render_metrics_map(
-                section, indent=2 if key == "metrics" else 4
+                section,
+                indent=2 if key == "metrics" else 4,
+                fault_injection=fault_injection,
             )
             body.extend(lines)
             worst = _worse(worst, section_worst)

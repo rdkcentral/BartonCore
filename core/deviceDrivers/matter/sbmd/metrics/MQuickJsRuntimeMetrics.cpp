@@ -64,6 +64,15 @@ namespace barton
         gcDurationHisto = observabilityHistogramCreate("sbmd.js.gc.duration_ms", "Duration of each GC cycle", "ms");
         gcRootsGauge = observabilityGaugeCreate(
             "sbmd.js.gc_roots", "Live GC roots registered on the JS context (push/pop + add/delete lists)", "1");
+        heapLiveGauge = observabilityGaugeCreate(
+            "sbmd.js.heap.live_bytes",
+            "Retained live set: heap_used sampled immediately after a GC compaction, when transient "
+            "garbage has been reclaimed and heap_used equals the true live set. Unlike used_bytes "
+            "(instantaneous, carries uncollected garbage under lazy GC) and peak_bytes (transient "
+            "high-water), this is the metric that reveals genuine retained-memory growth — a slow "
+            "leak shows here as a rising post-GC floor. Sampled opportunistically on engine-driven "
+            "GC cycles only, so it adds no forced collections",
+            "By");
 #endif
     }
 
@@ -255,6 +264,20 @@ namespace barton
         double ms = std::chrono::duration<double, std::milli>(elapsed).count();
 
         observabilityHistogramRecord(metrics->gcDurationHisto, ms);
+
+        // GC end: the heap has just been compacted, so heap_used now equals the true retained
+        // live set (transient garbage reclaimed). Record it as sbmd.js.heap.live_bytes. This is
+        // the leak-visible occupancy signal that used_bytes/peak_bytes cannot provide under lazy
+        // compacting GC. We are on the thread holding the JS mutex; read usage without re-locking.
+        if (ctx)
+        {
+            JSMemoryUsage usage = {};
+
+            if (JS_GetMemoryUsage(ctx, &usage, 0) == 0)
+            {
+                observabilityGaugeRecord(metrics->heapLiveGauge, static_cast<int64_t>(usage.heap_used));
+            }
+        }
     }
 
 #endif // BARTON_CONFIG_SBMD_METRICS

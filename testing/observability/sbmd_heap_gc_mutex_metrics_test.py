@@ -69,8 +69,14 @@ pytestmark = [pytest.mark.requires_matterjs]
 _LIGHT_DRIVER  = "light"
 _DEFERRED_DRIVER = "deferred-command-test"
 
-# OOM safety threshold: peak heap must not exceed this fraction of the arena.
-_PEAK_OOM_THRESHOLD = 0.75
+# OOM safety threshold: the retained live set (post-GC occupancy) must not
+# exceed this fraction of the arena.  This is graded against live_bytes, NOT
+# peak_bytes: under mquickjs's lazy compacting GC, peak_bytes is an all-time
+# high-water mark of transient (already-reclaimed) eval garbage and routinely
+# pins at ~99.9 % even with a tiny live set, so it is a churn indicator, not a
+# capacity gauge.  live_bytes (heap_used sampled right after a GC compaction) is
+# the true occupancy signal an OOM gate must watch.
+_LIVE_OOM_THRESHOLD = 0.75
 
 # Average heap delta bound: per-call net allocation must be below this limit.
 # Exceeding this over many calls would indicate a per-call heap leak.
@@ -81,6 +87,18 @@ _N_SUSTAINED = 200
 
 # Number of gcPressure executes (each allocates 500k array elements).
 _N_GC_PRESSURE = 20
+
+# Soak parameters: sustained writes with periodic post-GC live-set sampling to
+# prove the retained floor does not creep upward (a slow leak).  Kept modest so
+# the test stays under a few minutes; a real multi-hour soak scales _N_SOAK up.
+_N_SOAK = 900
+_SOAK_SAMPLE_INTERVAL = 100
+
+# Allowed upward drift of the post-GC live-set floor from the first sampling
+# window to the last.  A genuine leak shows unbounded, monotonic floor growth;
+# this tolerance absorbs the small one-time rise as the steady-state working set
+# settles plus GC-timing jitter in the opportunistic samples.
+_SOAK_FLOOR_DRIFT_TOLERANCE_BYTES = 65536
 
 # Warmup writes before sampling the gc_roots baseline.  gc_roots is only recorded
 # during handler invocations, so its pre-handler value is an unmeasured 0;
@@ -146,37 +164,58 @@ def test_gc_roots_stable_across_identical_calls(default_environment, matter_ligh
     )
 
 
-# ── Peak heap ceiling ─────────────────────────────────────────────────────────
+# ── Retained live-set ceiling (true OOM gate) ─────────────────────────────────
 
-def test_heap_peak_stays_below_oom_threshold(default_environment, matter_light):
+
+def test_live_set_stays_below_oom_threshold(default_environment, matter_light):
     """
-    After 200 isOn writes, sbmd.js.heap.peak_bytes is below 75 % of the arena.
+    After 200 isOn writes, the retained live set (sbmd.js.heap.live_bytes) is
+    below 75 % of the arena.
 
-    peak_bytes is an all-time high-water mark that never decreases.  Staying
-    below 75 % means there is enough headroom for GC to operate and for burst
-    allocations during concurrent handlers.
+    live_bytes is heap_used sampled immediately after a GC compaction, so it
+    reflects only memory that actually survived collection — the true occupancy.
+    This is the sound OOM gate: unlike peak_bytes (a monotonic high-water mark of
+    already-reclaimed transient garbage that pins near 100 % even at idle), a high
+    live_bytes genuinely means the arena is filling with retained state.
 
-    NOTE: peak_bytes is a monotonic high-water mark: it can only increase, never
-    decrease, even after GC.
+    peak_bytes/free_bytes are reported for context only, not graded.
+
+    NOTE: Skipped when live_bytes is absent — either
+    BCORE_SBMD_GC_INSTRUMENTATION=OFF (no GC callback compiled in) or no GC
+    happened to fire during the run (live_bytes is sampled opportunistically on
+    engine-driven collections, never forced).
     """
+
     device = commission_device(default_environment, matter_light, _LIGHT_DRIVER)
     client = default_environment.get_client()
     _write_is_on_n_times(client, device, _N_SUSTAINED)
     time.sleep(1)
 
     metrics = get_metrics(client)
+
+    if "sbmd.js.heap.live_bytes" not in metrics:
+        pytest.skip(
+            "sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF "
+            "or no GC fired during the run"
+        )
+
     arena = metrics["sbmd.js.heap.arena_bytes"]["dataPoints"][0]["value"]
+    live = metrics["sbmd.js.heap.live_bytes"]["dataPoints"][0]["value"]
     peak  = metrics["sbmd.js.heap.peak_bytes"]["dataPoints"][0]["value"]
 
     print(f"\n  arena:       {arena:,} bytes")
-    print(f"  peak:        {peak:,} bytes  ({peak / arena:.1%})")
-    print(f"  threshold:   {arena * _PEAK_OOM_THRESHOLD:,.0f} bytes  ({_PEAK_OOM_THRESHOLD:.0%})")
-    print(f"  remaining:   {arena - peak:,} bytes")
+    print(f"  live set:    {live:,} bytes  ({live / arena:.1%})  <- graded")
+    print(
+        f"  peak:        {peak:,} bytes  ({peak / arena:.1%})  (reported, not graded)"
+    )
+    print(
+        f"  threshold:   {arena * _LIVE_OOM_THRESHOLD:,.0f} bytes  ({_LIVE_OOM_THRESHOLD:.0%})"
+    )
 
-    assert peak < arena * _PEAK_OOM_THRESHOLD, (
-        f"Peak heap ({peak:,} bytes, {peak / arena:.1%}) is above the "
-        f"{_PEAK_OOM_THRESHOLD:.0%} threshold. "
-        f"Arena={arena:,} bytes.  Risk of OOM under concurrent load."
+    assert live < arena * _LIVE_OOM_THRESHOLD, (
+        f"Retained live set ({live:,} bytes, {live / arena:.1%}) is above the "
+        f"{_LIVE_OOM_THRESHOLD:.0%} threshold. Arena={arena:,} bytes. "
+        f"This is real occupancy (post-GC), not transient high-water — genuine OOM risk."
     )
 
 
@@ -296,6 +335,229 @@ def test_gc_fires_under_allocation_pressure(
             f"Some GC cycles exceeded 25 ms.  "
             f"Bucket distribution: {dp.get('buckets')}, max={dp.get('max')} ms"
         )
+
+
+# ── Post-GC live-set gauge ────────────────────────────────────────────────────
+
+
+def test_live_bytes_recorded_after_gc(
+    default_environment, matter_deferred_cmd_test_device
+):
+    """
+    After GC pressure forces collections, sbmd.js.heap.live_bytes is recorded and
+    reflects the compacted live set: positive, below the arena, and never above
+    peak_bytes.
+
+    live_bytes is sampled at GC end (post-compaction), so it can only ever be a
+    subset of the arena and can never exceed the transient high-water (peak_bytes).
+    Confirming live_bytes <= peak proves the gauge captures the reclaimed floor
+    rather than the churn high-water — the whole point of the metric.
+
+    NOTE: Skipped when BCORE_SBMD_GC_INSTRUMENTATION=OFF (no GC callback compiled
+    in, so the gauge is never written).
+    """
+    device = commission_device(
+        default_environment, matter_deferred_cmd_test_device, "deferredCmdTest"
+    )
+    client = default_environment.get_client()
+
+    if "sbmd.js.gc_roots" not in get_metrics(client):
+        pytest.skip("sbmd.js.gc_roots not present — BCORE_SBMD_GC_INSTRUMENTATION=OFF")
+
+    for _ in range(_N_GC_PRESSURE):
+        client.execute_resource(
+            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+        )
+    time.sleep(2)
+
+    metrics = get_metrics(client)
+
+    assert "sbmd.js.heap.live_bytes" in metrics, (
+        "sbmd.js.heap.live_bytes was not recorded even though GC instrumentation "
+        "is on and GC pressure was applied — the GC-end sampling path is not firing."
+    )
+
+    arena = metrics["sbmd.js.heap.arena_bytes"]["dataPoints"][0]["value"]
+    live = metrics["sbmd.js.heap.live_bytes"]["dataPoints"][0]["value"]
+    peak = metrics["sbmd.js.heap.peak_bytes"]["dataPoints"][0]["value"]
+
+    print(f"\n  arena:     {arena:,} bytes")
+    print(f"  live set:  {live:,} bytes  ({live / arena:.1%})")
+    print(f"  peak:      {peak:,} bytes  ({peak / arena:.1%})")
+    print(
+        "  NOTE: live_bytes is the post-GC (compacted) live set; it must be a "
+        "subset of both the arena and the transient high-water peak_bytes."
+    )
+
+    assert (
+        0 < live <= arena
+    ), f"live_bytes ({live:,}) is out of range for a {arena:,}-byte arena."
+    assert live <= peak, (
+        f"live_bytes ({live:,}) exceeds peak_bytes ({peak:,}); the post-GC live "
+        f"set cannot be larger than the all-time transient high-water mark."
+    )
+
+
+# ── Retained-allocation guardrail ─────────────────────────────────────────────
+
+
+def test_heavy_transient_allocation_is_not_retained(
+    default_environment, matter_deferred_cmd_test_device
+):
+    """
+    After _N_GC_PRESSURE gcPressure calls (each allocating 500k array elements
+    that go out of scope when the handler returns), the post-GC live set
+    (live_bytes) returns to its pre-pressure level.
+
+    This is the guardrail that live_bytes (#1) uniquely enables: a driver that
+    *retains* a large allocation (vs. the transient churn gcPressure produces)
+    would leave live_bytes elevated after the pressure stops.  peak_bytes/
+    used_bytes cannot distinguish retained from transient; live_bytes can.  All
+    drivers share one 1 MiB context, so a retained blow-up would starve the rest.
+
+    NOTE: Skipped when live_bytes is absent (BCORE_SBMD_GC_INSTRUMENTATION=OFF or
+    no GC fired).
+    """
+    device = commission_device(
+        default_environment, matter_deferred_cmd_test_device, "deferredCmdTest"
+    )
+    client = default_environment.get_client()
+
+    def _pressure_and_read():
+        # A gcPressure call allocates then releases, and (under any build) drives
+        # a GC — so live_bytes is refreshed to the post-GC live set afterwards.
+        client.execute_resource(
+            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+        )
+        time.sleep(0.3)
+        m = get_metrics(client)
+        dps = m.get("sbmd.js.heap.live_bytes", {}).get("dataPoints", [])
+        return dps[0]["value"] if dps else None
+
+    baseline = _pressure_and_read()
+    if baseline is None:
+        pytest.skip(
+            "sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF "
+            "or no GC fired"
+        )
+
+    for _ in range(_N_GC_PRESSURE):
+        client.execute_resource(
+            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+        )
+    time.sleep(1)
+
+    after = _pressure_and_read()
+    assert after is not None, "live_bytes disappeared after GC pressure"
+
+    arena = get_metrics(client)["sbmd.js.heap.arena_bytes"]["dataPoints"][0]["value"]
+    growth = after - baseline
+
+    print(f"\n  live set before pressure: {baseline:,} B ({baseline / arena:.1%})")
+    print(f"  live set after pressure:  {after:,} B ({after / arena:.1%})")
+    print(f"  retained growth:          {growth:+,} B")
+    print(
+        "  NOTE: gcPressure allocates multi-MB of transient arrays; a flat live "
+        "set proves they were reclaimed, not retained."
+    )
+
+    # The transient arrays must be fully reclaimed: the retained floor should not
+    # climb.  Tolerance absorbs GC-timing jitter in the opportunistic samples.
+    assert growth <= _SOAK_FLOOR_DRIFT_TOLERANCE_BYTES, (
+        f"Live set grew by {growth:,} B after transient GC pressure "
+        f"(before {baseline:,} -> after {after:,}). The gcPressure allocations "
+        f"appear to be RETAINED, not transient — a driver holding a large live "
+        f"object would starve the shared 1 MiB context."
+    )
+
+
+# ── Soak: retained live-set floor stays flat ──────────────────────────────────
+
+
+@pytest.mark.slow
+def test_live_set_floor_flat_under_sustained_load(default_environment, matter_light):
+    """
+    Over _N_SOAK sustained isOn writes, the post-GC live-set floor
+    (min sbmd.js.heap.live_bytes) does not creep upward beyond a small tolerance.
+
+    This is the leak proof that #1 (live_bytes) unlocks.  used_bytes/free_bytes
+    swing with the lazy-GC sawtooth, so a slow retained leak is indistinguishable
+    from healthy churn in them.  live_bytes is the compacted live set, so its
+    FLOOR is the retained working set — if that floor climbs steadily across the
+    soak, memory is genuinely accumulating; if it stays flat, the sawtooth is
+    just transient garbage.  We compare the floor of the first sampling window to
+    the floor of the last and require the drift to stay within tolerance.
+
+    NOTE: A production-representative soak runs for hours; this scaled-down
+    version proves the mechanism and catches gross leaks in CI-adjacent time.
+    Skipped when live_bytes is absent (BCORE_SBMD_GC_INSTRUMENTATION=OFF or no GC
+    fired).
+    """
+    device = commission_device(default_environment, matter_light, _LIGHT_DRIVER)
+    client = default_environment.get_client()
+
+    def _live_now():
+        m = get_metrics(client)
+        dps = m.get("sbmd.js.heap.live_bytes", {}).get("dataPoints", [])
+        return dps[0]["value"] if dps else None
+
+    if _live_now() is None:
+        # Nudge a few writes in case no GC has fired at idle yet.
+        _write_is_on_n_times(client, device, 10)
+        time.sleep(0.5)
+        if _live_now() is None:
+            pytest.skip(
+                "sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF "
+                "or no GC fired"
+            )
+
+    samples = []  # (ops, live_bytes)
+    for i in range(_N_SOAK):
+        value = "true" if i % 2 == 0 else "false"
+        client.write_resource(resource_uri(device, "isOn", endpoint_id=1), value)
+
+        if (i + 1) % _SOAK_SAMPLE_INTERVAL == 0:
+            time.sleep(0.3)
+            live = _live_now()
+            if live is not None:
+                samples.append((i + 1, live))
+
+    time.sleep(1)
+    final = _live_now()
+    if final is not None:
+        samples.append((_N_SOAK, final))
+
+    assert (
+        len(samples) >= 4
+    ), f"Too few post-GC live-set samples ({len(samples)}) to assess drift."
+
+    arena = get_metrics(client)["sbmd.js.heap.arena_bytes"]["dataPoints"][0]["value"]
+
+    # Compare the floor (min) of the first third of samples to the last third.
+    third = max(1, len(samples) // 3)
+    early_floor = min(v for _, v in samples[:third])
+    late_floor = min(v for _, v in samples[-third:])
+    drift = late_floor - early_floor
+
+    print(f"\n  live-set samples (ops -> bytes):")
+    for ops, v in samples:
+        print(f"    {ops:>5} ops: {v:>10,} B  ({v / arena:.1%})")
+    print(f"  early-window floor: {early_floor:,} B")
+    print(f"  late-window floor:  {late_floor:,} B")
+    print(
+        f"  drift:              {drift:+,} B  (tolerance {_SOAK_FLOOR_DRIFT_TOLERANCE_BYTES:,} B)"
+    )
+    print(
+        "  NOTE: a steadily climbing floor across the soak indicates a genuine "
+        "retained leak; a flat floor means the sawtooth is transient garbage."
+    )
+
+    assert drift <= _SOAK_FLOOR_DRIFT_TOLERANCE_BYTES, (
+        f"Post-GC live-set floor drifted up by {drift:,} B over {_N_SOAK} writes "
+        f"(early {early_floor:,} -> late {late_floor:,}), exceeding the "
+        f"{_SOAK_FLOOR_DRIFT_TOLERANCE_BYTES:,} B tolerance. This is a candidate "
+        f"retained-memory leak — the live set is accumulating, not just churning."
+    )
 
 
 # ── Mutex — uncontended ───────────────────────────────────────────────────────

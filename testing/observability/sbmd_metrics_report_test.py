@@ -82,6 +82,7 @@ def _heap_row(ops, metrics):
         gauge("sbmd.js.heap.peak_bytes"),
         gauge("sbmd.js.heap.free_bytes"),
         used_avg,
+        gauge("sbmd.js.heap.live_bytes"),
         gauge("sbmd.js.gc_roots"),
         gauge("sbmd.js.heap.arena_bytes"),
     ]
@@ -141,21 +142,28 @@ def test_report_startup_metrics_snapshot(default_environment):
     else:
         print("  js.exception: (no observations — expected at startup)")
 
-    emit_report("startup_snapshot", {
-        "context": {"commissioned_devices": 0},
-        "metrics": collect(metrics, [
-            "sbmd.js.heap.arena_bytes",
-            "sbmd.js.heap.free_bytes",
-            "sbmd.js.heap.peak_bytes",
-            "sbmd.js.heap.used_bytes",
-            "sbmd.js.gc_roots",
-            "sbmd.driver.load.duration_ms",
-            "sbmd.driver.load.failure",
-            "sbmd.driver.registered.count",
-            "sbmd.deferred.in_flight",
-            "sbmd.js.exception",
-        ]),
-    })
+    emit_report(
+        "startup_snapshot",
+        {
+            "context": {"commissioned_devices": 0},
+            "metrics": collect(
+                metrics,
+                [
+                    "sbmd.js.heap.arena_bytes",
+                    "sbmd.js.heap.free_bytes",
+                    "sbmd.js.heap.peak_bytes",
+                    "sbmd.js.heap.live_bytes",
+                    "sbmd.js.heap.used_bytes",
+                    "sbmd.js.gc_roots",
+                    "sbmd.driver.load.duration_ms",
+                    "sbmd.driver.load.failure",
+                    "sbmd.driver.registered.count",
+                    "sbmd.deferred.in_flight",
+                    "sbmd.js.exception",
+                ],
+            ),
+        },
+    )
 
     print("\n" + "=" * 60)
 
@@ -281,20 +289,29 @@ def test_report_handler_invocation_profile(default_environment, matter_light):
         f"Heap after {_N_HANDLER_CALLS} handler calls:", metrics
     )
 
-    emit_report("handler_profile", {
-        "context": {
-            "driver": "light", "op_type": "write",
-            "resource_id": "isOn", "calls": _N_HANDLER_CALLS,
+    emit_report(
+        "handler_profile",
+        {
+            "context": {
+                "driver": "light",
+                "op_type": "write",
+                "resource_id": "isOn",
+                "calls": _N_HANDLER_CALLS,
+            },
+            "metrics": collect(
+                metrics,
+                [
+                    "sbmd.handler.duration_ms",
+                    "sbmd.handler.heap_delta_bytes",
+                    "sbmd.handler.outcome",
+                    "sbmd.js.heap.peak_bytes",
+                    "sbmd.js.heap.free_bytes",
+                    "sbmd.js.heap.live_bytes",
+                    "sbmd.js.gc_roots",
+                ],
+            ),
         },
-        "metrics": collect(metrics, [
-            "sbmd.handler.duration_ms",
-            "sbmd.handler.heap_delta_bytes",
-            "sbmd.handler.outcome",
-            "sbmd.js.heap.peak_bytes",
-            "sbmd.js.heap.free_bytes",
-            "sbmd.js.gc_roots",
-        ]),
-    })
+    )
     print(f"{'=' * 60}")
 
 
@@ -358,19 +375,33 @@ def test_report_heap_progression_over_ops(default_environment, matter_light):
 
     emit_timeseries(
         "heap_progression",
-        ["ops", "peak_bytes", "free_bytes", "used_avg_bytes", "gc_roots", "arena_bytes"],
+        [
+            "ops",
+            "peak_bytes",
+            "free_bytes",
+            "used_avg_bytes",
+            "live_bytes",
+            "gc_roots",
+            "arena_bytes",
+        ],
         rows,
         payload={
             "context": {
-                "driver": "light", "op_type": "write",
-                "resource_id": "isOn", "calls": _N_HEAP_CALLS,
+                "driver": "light",
+                "op_type": "write",
+                "resource_id": "isOn",
+                "calls": _N_HEAP_CALLS,
             },
-            "metrics": collect(metrics, [
-                "sbmd.js.heap.peak_bytes",
-                "sbmd.js.heap.free_bytes",
-                "sbmd.js.gc_roots",
-                "sbmd.handler.heap_delta_bytes",
-            ]),
+            "metrics": collect(
+                metrics,
+                [
+                    "sbmd.js.heap.peak_bytes",
+                    "sbmd.js.heap.free_bytes",
+                    "sbmd.js.heap.live_bytes",
+                    "sbmd.js.gc_roots",
+                    "sbmd.handler.heap_delta_bytes",
+                ],
+            ),
         },
     )
     print(f"{'=' * 60}")

@@ -120,7 +120,11 @@ namespace barton
          * engine at GC start (isEnd == 0) and end (isEnd == 1). At GC start it also
          * captures the pre-compaction heap_used as a peak_bytes candidate, which is
          * how transient loading spikes reach the all-time high-water mark before the
-         * compacting GC reclaims them.
+         * compacting GC reclaims them. At GC end it samples the just-compacted
+         * heap_used into sbmd.js.heap.live_bytes — the true retained live set, with
+         * transient garbage reclaimed. This is opportunistic (only when the engine
+         * runs a GC on its own) so it adds no forced collections and cannot perturb
+         * peak_bytes or the runtime's GC cadence.
          */
         static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
 
@@ -134,6 +138,7 @@ namespace barton
         ObservabilityCounter *gcCountCounter = nullptr;
         ObservabilityHistogram *gcDurationHisto = nullptr;
         ObservabilityGauge *gcRootsGauge = nullptr;
+        ObservabilityGauge *heapLiveGauge = nullptr;
 
         void RunSampler();
 
