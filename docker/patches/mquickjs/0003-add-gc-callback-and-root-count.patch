@@ -27,9 +27,9 @@ index be3932d..86b8bd7 100644
 +    void *gc_opaque;
      JSValue *class_obj; /* same as class_proto + class_count */
      JSStringPosCacheEntry string_pos_cache[JS_STRING_POS_CACHE_SIZE];
-                                            
+
 @@ -12523,7 +12525,38 @@ static void JS_GC2(JSContext *ctx, BOOL keep_atoms)
- 
+
  void JS_GC(JSContext *ctx)
  {
 +    if (ctx->gc_callback)
@@ -65,13 +65,13 @@ index be3932d..86b8bd7 100644
 +
 +    return count;
  }
- 
+
  /* bytecode saving and loading */
 diff --git a/mquickjs.h b/mquickjs.h
 index db8f649..9bef038 100644
 --- a/mquickjs.h
 +++ b/mquickjs.h
-@@ -303,6 +303,19 @@ JSValue JS_Run(JSContext *ctx, JSValue val);
+@@ -303,6 +303,21 @@ JSValue JS_Run(JSContext *ctx, JSValue val);
  JSValue JS_Eval(JSContext *ctx, const char *input, size_t input_len,
                  const char *filename, int eval_flags);
  void JS_GC(JSContext *ctx);
@@ -87,10 +87,12 @@ index db8f649..9bef038 100644
 +typedef void JSGCCallback(JSContext *ctx, int is_end, void *opaque);
 +void JS_SetGCCallback(JSContext *ctx, JSGCCallback *callback, void *opaque);
 +size_t JS_GetGCRootCount(JSContext *ctx);
++/* Presence of this macro signals the GC callback / root-count API is compiled in. */
++#define MQUICKJS_HAS_GC_CALLBACK 1
 +
  JSValue JS_NewStringLen(JSContext *ctx, const char *buf, size_t buf_len);
  JSValue JS_NewString(JSContext *ctx, const char *buf);
  const char *JS_ToCStringLen(JSContext *ctx, size_t *plen, JSValue val, JSCStringBuf *buf);
 
--- 
+--
 2.51.0
