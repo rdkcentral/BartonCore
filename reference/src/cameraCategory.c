@@ -567,19 +567,10 @@ static bool runCameraStream(BCoreClient *client,
 
     if (answerer)
     {
-        // Answerer (SolicitOffer flow): open signaling by posting an empty local SDP, which tells
-        // the driver to allocate a stream and ask the camera to generate the offer. Then wait for
-        // that offer, set it as the remote description (which makes the client create our answer),
-        // and send the answer back.
-        emitOutput("[camera-stream] Requesting camera SDP offer...\n");
-
-        if (!cameraDeviceSessionSendOffer(session, ""))
-        {
-            emitError("[camera-stream] Failed to request camera SDP offer\n");
-
-            return false;
-        }
-
+        // Answerer (SolicitOffer flow): the stream execute already asked the camera to generate the
+        // offer, so wait for it, set it as the remote description (which makes the client create
+        // our answer), and send the answer back. The offer may already have arrived while the
+        // stream execute was in flight; onRemoteSdp buffers it, so the wait returns immediately.
         emitOutput("[camera-stream] Waiting for camera SDP offer...\n");
 
         if (!waitForCondition(state, &state->remoteSdpReady, 30))

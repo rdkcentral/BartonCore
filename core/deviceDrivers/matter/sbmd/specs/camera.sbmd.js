@@ -71,6 +71,12 @@
 //      subscribe to the protocol endpoint's event resources
 //   5. Execute destroySession with sessionId when finished
 //
+// The stream execute owns any protocol kickoff: for WebRTC, when the camera is
+// the offerer it allocates a video stream and solicits the camera's offer before
+// completing. r/localSdp therefore always means "here is my SDP" — the client's
+// answer when the camera offered, its offer when the camera answers — and is
+// never used as a trigger.
+//
 // Session State
 // -------------
 // Sessions are stored in transient data as a JSON object keyed by sessionId.
@@ -214,7 +220,10 @@ SbmdDriver({
                     type: 'function',
 
                     execute: {
-                        supplements: {transientData: [TD_SESSIONS]},
+                        supplements: {
+                            transientData: [TD_SESSIONS],
+                            attributes: ['providerAcceptedCommands']
+                        },
                         handler: executeStream
                     }
                 },
@@ -246,10 +255,7 @@ SbmdDriver({
                     type: 'function',
 
                     execute: {
-                        supplements: {
-                            transientData: [TD_SESSIONS],
-                            attributes: ['providerAcceptedCommands']
-                        },
+                        supplements: {transientData: [TD_SESSIONS]},
                         handler: executeLocalSdp
                     }
                 },
@@ -279,6 +285,13 @@ SbmdDriver({
 
                 webrtcError: {
                     type: 'string',
+                    // Carries failure detail to the client. Two kinds of failure land here: those
+                    // with no execute to fail (camera-initiated EndSession), and those on the
+                    // ProvideOffer path, whose handlers deliberately return success so the event is
+                    // the only report. Failures in the stream() solicit chain do the opposite —
+                    // they fail the execute and emit nothing, so one failure is never reported
+                    // over both channels.
+                    //
                     // 'volatile' registers this as non-cached so every updateResource emits an
                     // event even when the value is unchanged (e.g. two 'failed' across sessions).
                     modes: ['volatile']
@@ -408,6 +421,15 @@ function executeCreateSession(args) {
 }
 
 function cameraIsOfferer(args) {
+    // TODO: always solicit for now. The check below reads the camera's advertised
+    // AcceptedCommandList, but that advertisement is not trustworthy: devices have been seen
+    // omitting SolicitOffer from the list while implementing it on the wire, which routes them
+    // into the ProvideOffer flow they do not actually want. Both commands are mandatory in the
+    // 1.5.1 data model, so the omission is a device conformance bug. Decide whether to detect the
+    // role from behavior (attempt SolicitOffer, fall back when it is rejected as an unsupported
+    // command) or to keep reading the list with per-device overrides.
+    return true;
+
     // Determine, from the camera's advertised capabilities, whether the CAMERA generates the SDP
     // offer (the SolicitOffer flow) or answers the client's offer (the ProvideOffer flow). Prefer
     // SolicitOffer (real cameras favor it); fall back to ProvideOffer only when SolicitOffer is not
@@ -488,13 +510,19 @@ function executeStream(args) {
         entryPoint: entryPoint
     };
 
-    var result = Sbmd.result().storage.setTransientData(
-        TD_SESSIONS,
-        JSON.stringify(sessions),
-        ONE_HOUR_SECS
-    );
+    if (cameraIsOfferer(args)) {
+        // The camera generates the offer, so open that flow here rather than making the client
+        // trigger it: allocate a video stream, then SolicitOffer. This execute completes only when
+        // that chain settles, returning streamInfo. The camera's offer then arrives asynchronously
+        // as a remoteSdp event and the client posts its answer to r/localSdp.
+        return allocateThenSolicitOffer(args, sessions, sessionId, JSON.stringify(streamInfo));
+    }
 
-    return result.success(JSON.stringify(streamInfo));
+    // The camera answers, so there is nothing to kick off; the client posts its offer to
+    // r/localSdp when it is ready.
+    return Sbmd.result()
+        .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
+        .success(JSON.stringify(streamInfo));
 }
 
 function executeTakePicture(args) {
@@ -576,29 +604,21 @@ function executeLocalSdp(args) {
     var input = args.resource.input;
     var sdp = input ? input.toString() : '';
 
-    if (cameraIsOfferer(args)) {
-        // SolicitOffer flow (the camera generates the offer). Route by how far negotiation has
-        // progressed rather than by the SDP payload: until the camera has offered there is no
-        // webRTCSessionID, so this call opens the flow (allocate a stream, then SolicitOffer in
-        // handleAllocateForSolicit). Once the camera's offer has arrived (webRTCSessionID recorded,
-        // remoteSdp emitted) the next call carries our answer, which we relay via ProvideAnswer.
-        var haveCameraSession =
-            sessions[sessionId].webRTCSessionID !== undefined &&
-            sessions[sessionId].webRTCSessionID !== null;
-
-        if (!haveCameraSession) {
-            return allocateThenSolicitOffer(args, sessions, sessionId);
-        }
-
-        return sendProvideAnswer(sessions, sessionId, sdp);
-    }
-
-    // ProvideOffer flow (the camera answers): this local SDP is our offer — allocate a stream, then
-    // send it directly.
     if (sdp === '') {
         return Sbmd.result().error('SDP string required');
     }
 
+    // Route on what actually happened rather than on the camera's advertised role: a recorded
+    // webRTCSessionID means stream() solicited an offer and the camera accepted, so this SDP
+    // answers it. Deriving the flow from session state also keeps this handler from disagreeing
+    // with the choice stream() already made.
+    var webRTCSessionID = sessions[sessionId].webRTCSessionID;
+
+    if (webRTCSessionID !== undefined && webRTCSessionID !== null) {
+        return sendProvideAnswer(sessions, sessionId, sdp);
+    }
+
+    // The camera did not offer, so this local SDP is our offer: allocate a stream, then send it.
     return allocateThenProvideOffer(args, sessions, sessionId, sdp);
 }
 
@@ -627,10 +647,12 @@ function sendProvideAnswer(sessions, sessionId, sdp) {
     );
 }
 
-function allocateThenSolicitOffer(args, sessions, sessionId) {
+function allocateThenSolicitOffer(args, sessions, sessionId, streamInfoJson) {
     // SolicitOffer flow, step 1: allocate a video stream (the camera requires one before it will
     // honor SolicitOffer). handleAllocateForSolicit then sends SolicitOffer for the allocated
-    // stream. Both legs use requestCommand so their promises stay alive across the deferred chain.
+    // stream. Both legs use requestCommand so their promises stay alive across the deferred chain,
+    // which also keeps the stream() execute parked until the chain settles — streamInfoJson rides
+    // along as the value stream() ultimately returns.
     var featureMap = args.clusterFeatureMaps[CL_CAMERA_AV_STREAM_MGMT] || 0;
     var allocPayload = buildVideoStreamAllocatePayload(featureMap);
 
@@ -639,8 +661,8 @@ function allocateThenSolicitOffer(args, sessions, sessionId) {
         .device.requestCommand(CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE, allocPayload, {
             responseCommandId: CMD_VIDEO_STREAM_ALLOCATE_RESP,
             onResponse: handleAllocateForSolicit,
-            onError: handleVideoStreamAllocateError,
-            context: {sessionId: sessionId, sessions: sessions},
+            onError: handleSolicitAllocateError,
+            context: {sessionId: sessionId, sessions: sessions, streamInfo: streamInfoJson},
             timeoutMs: 5000
         });
 }
@@ -752,9 +774,10 @@ function handleVideoStreamAllocateResponse(args) {
 }
 
 function handleVideoStreamAllocateError(args) {
-    // Async failure after the local SDP was posted: deliver it to the client via the
-    // webrtcError event (a bare .error() here has no client channel). Covers timeouts too,
-    // since a requestCommand deadline is reported through onError with type 'timeout'.
+    // ProvideOffer path: report via webrtcError and still return success, so the client's localSdp
+    // execute succeeds and the event is the sole failure report. (localSdp is in fact still parked
+    // here, so .error() would propagate — returning success is a deliberate choice, not a
+    // limitation.) Covers timeouts too, since a requestCommand deadline arrives as type 'timeout'.
     var metadata = {
         sessionId: args.handlerContext ? args.handlerContext.sessionId : 'unknown',
         reason: args.error ? args.error.type : 'error',
@@ -803,9 +826,28 @@ function handleAllocateForSolicit(args) {
             responseCommandId: CMD_SOLICIT_OFFER_RESP,
             onResponse: handleSolicitOfferResponse,
             onError: handleSolicitOfferError,
-            context: {sessionId: ctx.sessionId, sessions: ctx.sessions},
+            context: {
+                sessionId: ctx.sessionId,
+                sessions: ctx.sessions,
+                streamInfo: ctx.streamInfo
+            },
             timeoutMs: 10000
         });
+}
+
+function handleSolicitAllocateError(args) {
+    // Fail the parked stream() execute rather than emitting webrtcError: the client is still
+    // waiting on that call, and doing both would report one failure over two channels - the
+    // detail is logged.
+    // TODO: revisit how failures reach the client. This reports the mirror image of the
+    // ProvideOffer path (which emits the event and returns success), so the two flows disagree,
+    // and neither gets the detail to the client: an error terminal's message never reaches the
+    // caller, so the client sees only a generic failure.
+    var err = args.error;
+
+    return Sbmd.result().error(
+        'VideoStreamAllocate failed: ' + (err && err.message ? err.message : 'unknown')
+    );
 }
 
 function handleSolicitOfferResponse(args) {
@@ -822,23 +864,22 @@ function handleSolicitOfferResponse(args) {
         ctx.sessions[ctx.sessionId].webRTCSessionID = webRTCSessionID;
     }
 
-    return Sbmd.result()
-        .storage.setTransientData(TD_SESSIONS, JSON.stringify(ctx.sessions), ONE_HOUR_SECS)
-        .success();
+    return (
+        Sbmd.result()
+            .storage.setTransientData(TD_SESSIONS, JSON.stringify(ctx.sessions), ONE_HOUR_SECS)
+            // Finally, return the expected {protocol, entrypoint} return value to the client.
+            .success(ctx.streamInfo)
+    );
 }
 
 function handleSolicitOfferError(args) {
-    // Async failure in the allocate -> SolicitOffer chain: deliver it to the client via the
-    // webrtcError event (covers timeouts too, reported as onError type 'timeout').
-    var metadata = {
-        sessionId: args.handlerContext ? args.handlerContext.sessionId : 'unknown',
-        reason: args.error ? args.error.type : 'error',
-        detail: 'SolicitOffer failed: ' + (args.error ? args.error.message : 'unknown')
-    };
+    // As with the allocate leg, fail the parked stream() execute instead of emitting webrtcError.
+    // Covers timeouts too (onError type 'timeout').
+    var err = args.error;
 
-    return Sbmd.result()
-        .dataModel.updateResource(EP_WEBRTC, 'webrtcError', WEBRTC_ERROR_FAILED, metadata)
-        .success();
+    return Sbmd.result().error(
+        'SolicitOffer failed: ' + (err && err.message ? err.message : 'unknown')
+    );
 }
 
 function handleProvideOfferResponse(args) {
@@ -858,8 +899,8 @@ function handleProvideOfferResponse(args) {
 }
 
 function handleProvideOfferError(args) {
-    // Async failure after the local SDP was posted: deliver it to the client via the
-    // webrtcError event. Covers timeouts too (onError type 'timeout').
+    // Same choice as handleVideoStreamAllocateError: report via webrtcError and return success so
+    // the failure is not also raised through the parked localSdp execute. Covers timeouts too.
     var metadata = {
         sessionId: args.handlerContext ? args.handlerContext.sessionId : 'unknown',
         reason: args.error ? args.error.type : 'error',

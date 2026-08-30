@@ -29,6 +29,8 @@
  *
  * Tests cover:
  *   - readNegotiationRole: reports the CAMERA's role (offerer/answerer) from the AcceptedCommandList
+ *   - executeStream: returns { protocol, entryPoint }, and when the camera is the offerer first
+ *     drives the allocate -> SolicitOffer chain
  *   - executeLocalSdp (client-offers / ProvideOffer flow): TLV encoding (null webRTCSessionID, tags), error paths
  *   - executeLocalIceCandidates: valid JSON array → sendCommand, invalid JSON → error
  *   - handleIncomingOffer / handleIncomingAnswer / handleIncomingIceCandidates / handleIncomingEndSession
@@ -61,6 +63,9 @@ namespace
     constexpr uint32_t CL_CAMERA_AV_STREAM_MGMT = 0x0551;
     constexpr uint32_t CMD_PROVIDE_OFFER = 0x02;
     constexpr uint32_t CMD_PROVIDE_OFFER_RESP = 0x03;
+    constexpr uint32_t CMD_SOLICIT_OFFER = 0x00;
+    constexpr uint32_t CMD_SOLICIT_OFFER_RESP = 0x01;
+    constexpr uint32_t CMD_PROVIDE_ANSWER = 0x04;
     constexpr uint32_t CMD_PROVIDE_ICE = 0x05;
     constexpr uint32_t CMD_END_SESSION = 0x06;
     constexpr uint32_t CMD_VIDEO_STREAM_ALLOCATE = 0x03;
@@ -433,17 +438,18 @@ namespace
 
     TEST_F(SbmdCameraWebrtcTest, NegotiationRoleReportsCameraRole)
     {
-        // SolicitOffer accepted: the camera generates the offer, so its role is 'offerer'.
+        // cameraIsOfferer() currently hardcodes 'always solicit' because advertised
+        // AcceptedCommandLists are not trustworthy (see the TODO in camera.sbmd.js), so the role is
+        // 'offerer' regardless of what the camera advertises. Restore the per-list expectations
+        // here once that predicate reads the advertisement again.
         auto solicit = InvokeReadHandler("webrtc", "negotiationRole", CAMERA_OFFERER_ACCEPTED_CMDS);
         ExpectSuccess(solicit);
         EXPECT_EQ(std::get<ResultTerminal::Success>(solicit->terminal.data).value, "offerer");
 
-        // ProvideOffer only: the camera answers the client's offer, so its role is 'answerer'.
         auto provide = InvokeReadHandler("webrtc", "negotiationRole", CAMERA_ANSWERER_ACCEPTED_CMDS);
         ExpectSuccess(provide);
-        EXPECT_EQ(std::get<ResultTerminal::Success>(provide->terminal.data).value, "answerer");
+        EXPECT_EQ(std::get<ResultTerminal::Success>(provide->terminal.data).value, "offerer");
 
-        // AcceptedCommandList unavailable: default SolicitOffer flow, camera's role is 'offerer'.
         auto def = InvokeReadHandler("webrtc", "negotiationRole", "");
         ExpectSuccess(def);
         EXPECT_EQ(std::get<ResultTerminal::Success>(def->terminal.data).value, "offerer");
@@ -867,18 +873,96 @@ namespace
         EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"unknown\"") != std::string::npos);
     }
 
-    TEST_F(SbmdCameraWebrtcTest, ExecuteStreamReturnsProtocolAndEntryPoint)
+    TEST_F(SbmdCameraWebrtcTest, ExecuteStreamSolicitsOfferWhenCameraIsOfferer)
     {
+        // The camera offers (SolicitOffer flow), so stream() itself opens signaling: allocate a
+        // video stream, then SolicitOffer. The client never triggers it via localSdp.
         std::string sessions = SessionsJson("1", "created");
-        auto result = InvokeExecuteHandler("camera", "stream", "1", sessions);
+        auto result = InvokeExecuteHandler("camera", "stream", "1", sessions, "", {}, CAMERA_OFFERER_ACCEPTED_CMDS);
 
-        // The stream execute returns { protocol, entryPoint } rather than emitting a status event.
-        const auto &value = std::get<ResultTerminal::Success>(result->terminal.data).value;
-        EXPECT_TRUE(value.find("\"protocol\":\"webrtc\"") != std::string::npos) << "Got: " << value;
-        EXPECT_TRUE(value.find("/ep/webrtc/r/localSdp") != std::string::npos) << "Got: " << value;
+        auto &alloc = ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
+        EXPECT_EQ(alloc.responseCommandId, CMD_VIDEO_STREAM_ALLOCATE_RESP);
 
         // It must not emit a sessionStatus event (the abstract endpoint has no such resource).
         EXPECT_EQ(FindUpdateResource(*result, "sessionStatus"), nullptr);
+
+        // The streamInfo the execute must ultimately return rides along in the chain's context.
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            JSValue streamInfo = JS_GetPropertyStr(Ctx(), alloc.context, "streamInfo");
+            ASSERT_TRUE(JS_IsString(Ctx(), streamInfo)) << "context.streamInfo must be a string";
+            JSCStringBuf buf;
+            const char *str = JS_ToCString(Ctx(), streamInfo, &buf);
+            EXPECT_TRUE(std::string(str).find("/ep/webrtc/r/localSdp") != std::string::npos) << "Got: " << str;
+        }
+
+        // Allocate response -> SolicitOffer.
+        auto allocRespTlv = EncodeTlv("{videoStreamID:{tag:0,type:'uint16'}}", "{videoStreamID: 5}");
+        std::string allocRespArgs =
+            "({response:{data:'" + allocRespTlv +
+            "'}, handlerContext:{sessionId:'1', "
+            "sessions:{'1':{state:'streaming',protocol:'webrtc'}}, "
+            "streamInfo:'{\"protocol\":\"webrtc\",\"entryPoint\":\"/d/ep/webrtc/r/localSdp\"}'}})";
+        auto solicit = InvokeCallback(alloc.onResponse, allocRespArgs);
+        auto &so = ExpectRequestCommand(solicit, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_SOLICIT_OFFER);
+        EXPECT_EQ(so.responseCommandId, CMD_SOLICIT_OFFER_RESP);
+
+        // SolicitOfferResponse completes the execute with the streamInfo carried through.
+        auto solicitRespTlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}}", "{webRTCSessionID: 7}");
+        std::string solicitRespArgs =
+            "({response:{data:'" + solicitRespTlv +
+            "'}, handlerContext:{sessionId:'1', "
+            "sessions:{'1':{state:'streaming',protocol:'webrtc'}}, "
+            "streamInfo:'{\"protocol\":\"webrtc\",\"entryPoint\":\"/d/ep/webrtc/r/localSdp\"}'}})";
+        auto done = InvokeCallback(so.onResponse, solicitRespArgs);
+
+        ExpectSuccess(done);
+        const auto &value = std::get<ResultTerminal::Success>(done->terminal.data).value;
+        EXPECT_TRUE(value.find("/ep/webrtc/r/localSdp") != std::string::npos) << "Got: " << value;
+
+        // The camera-allocated webRTCSessionID must be recorded for ProvideAnswer/ICE/EndSession.
+        auto *td = FindTransientData(*done, "sessions");
+        ASSERT_NE(td, nullptr);
+        EXPECT_TRUE(td->value.find("\"webRTCSessionID\":7") != std::string::npos) << "Got: " << td->value;
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, ExecuteStreamFailsWhenSolicitOfferFails)
+    {
+        // The solicit chain runs inside stream(), so its failure must fail the execute rather than
+        // resolving to an empty success.
+        std::string sessions = SessionsJson("1", "created");
+        auto result = InvokeExecuteHandler("camera", "stream", "1", sessions, "", {}, CAMERA_OFFERER_ACCEPTED_CMDS);
+        auto &alloc = ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
+
+        auto allocFailed = InvokeCallback(
+            alloc.onError,
+            "({error:{type:'commandError',message:'DYNAMIC_CONSTRAINT_ERROR'}, handlerContext:{sessionId:'1'}})");
+        ExpectErrorContains(allocFailed, "VideoStreamAllocate failed");
+
+        auto allocRespTlv = EncodeTlv("{videoStreamID:{tag:0,type:'uint16'}}", "{videoStreamID: 5}");
+        std::string allocRespArgs = "({response:{data:'" + allocRespTlv +
+                                    "'}, handlerContext:{sessionId:'1', "
+                                    "sessions:{'1':{state:'streaming',protocol:'webrtc'}}, streamInfo:'{}'}})";
+        auto solicit = InvokeCallback(alloc.onResponse, allocRespArgs);
+        auto &so = ExpectRequestCommand(solicit, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_SOLICIT_OFFER);
+
+        auto solicitFailed = InvokeCallback(so.onError,
+                                            "({error:{type:'timeout',message:'Overall operation deadline exceeded'}, "
+                                            "handlerContext:{sessionId:'1'}})");
+        ExpectErrorContains(solicitFailed, "SolicitOffer failed");
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, LocalSdpDoesNotSolicitWhenCameraIsOfferer)
+    {
+        // localSdp means "here is my SDP", never "solicit one": with the camera as offerer the SDP
+        // is our answer, relayed via ProvideAnswer, and an empty SDP is simply invalid.
+        std::string sessions = SessionsJson("1", "streaming", 42);
+        auto result =
+            InvokeExecuteHandler("webrtc", "localSdp", "answer-sdp", sessions, "", {}, CAMERA_OFFERER_ACCEPTED_CMDS);
+        ExpectSendCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_PROVIDE_ANSWER);
+
+        ExpectError(InvokeExecuteHandler("webrtc", "localSdp", "", sessions, "", {}, CAMERA_OFFERER_ACCEPTED_CMDS),
+                    "SDP string required");
     }
 
     TEST_F(SbmdCameraWebrtcTest, HandleVideoStreamAllocateErrorEmitsWebrtcErrorFailed)
