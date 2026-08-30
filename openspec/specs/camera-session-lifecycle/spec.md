@@ -30,7 +30,7 @@ The `createSession` execute handler SHALL allocate a new session, persist it in 
 
 ### Requirement: stream execute returns the active protocol and entry point
 
-The `stream` execute handler SHALL mark the identified session as streaming and return, as its synchronous execute result, a JSON object identifying the active protocol and the entry-point resource URI the client must use next: `{ "protocol": "<protocol>", "entryPoint": "/<deviceId>/ep/<protocol>/r/<resource>" }`. The handler SHALL NOT emit a separate event to convey the next action.
+The `stream` execute handler SHALL mark the identified session as streaming and return, upon successful completion, a JSON object identifying the active protocol and the entry-point resource URI the client must use next: `{ "protocol": "<protocol>", "entryPoint": "/<deviceId>/ep/<protocol>/r/<resource>" }`. The handler SHALL NOT emit a separate event to convey the next action. A protocol may complete required signaling initialization before `stream` returns.
 
 #### Scenario: Stream returns protocol and entry point for a WebRTC camera
 - **WHEN** a client executes `stream` with a valid `sessionId` on a Matter WebRTC camera

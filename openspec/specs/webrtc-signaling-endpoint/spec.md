@@ -26,24 +26,28 @@ The endpoint SHALL be declared within the same `camera.sbmd.js` file as the `ep/
 - **WHEN** a client attempts to read `remoteSdp`, `remoteIceCandidates`, or `webrtcError`
 - **THEN** the read SHALL fail or return no value (modes list is empty — no read mode)
 
-### Requirement: localSdp execute drives role-appropriate signaling
+### Requirement: localSdp execute relays role-appropriate SDP
 
-The `localSdp` execute handler SHALL determine the client's negotiation role from the camera's advertised WebRTCTransportProvider commands (its `AcceptedCommandList`) and drive the corresponding Matter signaling. In every case that requires it, the handler SHALL first allocate a video stream via `VideoStreamAllocate` (cluster 0x0551, command 0x03) before the WebRTC-provider command, and SHALL pass the requestor's `originatingEndpointID` (the endpoint hosting the `WebRTCTransportRequestor` cluster) so the camera knows where to send its commands.
+The `localSdp` execute handler SHALL accept only a non-empty client-produced SDP. It SHALL determine the client's negotiation role from the camera's advertised WebRTCTransportProvider commands (its `AcceptedCommandList`) and relay that SDP through the corresponding Matter signaling. Whenever a flow allocates a video stream, the driver SHALL allocate it via `VideoStreamAllocate` (cluster 0x0551, command 0x03) before the WebRTC-provider command, and SHALL pass the requestor's `originatingEndpointID` (the endpoint hosting the `WebRTCTransportRequestor` cluster) so the camera knows where to send its commands.
 
 - **Offerer flow** (camera accepts `ProvideOffer`): the execute input is the client's SDP offer. The handler SHALL allocate a video stream and then send a `ProvideOffer` command (ID 0x02) to the camera's `WebRTCTransportProvider` cluster (0x0553), carrying the SDP and the allocated `videoStreamID`.
-- **Answerer flow** (camera accepts `SolicitOffer`): while no camera `webRTCSessionID` has been recorded yet, an execute (with empty input) SHALL allocate a video stream and then send a `SolicitOffer` command (ID 0x00) so the camera generates the offer. Once the camera's offer has arrived (its `webRTCSessionID` recorded), a subsequent execute SHALL carry the client's SDP answer and send a `ProvideAnswer` command (ID 0x04) with the SDP and the recorded `webRTCSessionID`.
+- **Answerer flow** (camera accepts `SolicitOffer`): the `stream` execute SHALL allocate a video stream and then send a `SolicitOffer` command (ID 0x00) so the camera generates the offer. Once the camera's offer has arrived (its `webRTCSessionID` recorded), `localSdp` SHALL carry the client's SDP answer and send a `ProvideAnswer` command (ID 0x04) with the SDP and the recorded `webRTCSessionID`.
 
 #### Scenario: Offerer posts an SDP offer
 - **WHEN** the camera accepts `ProvideOffer` and a client executes `localSdp` with a valid SDP offer
 - **THEN** the handler SHALL allocate a video stream and send a `ProvideOffer` command to the camera with the SDP and the allocated `videoStreamID`
 
-#### Scenario: Answerer opens the flow
-- **WHEN** the camera accepts `SolicitOffer` and a client executes `localSdp` with empty input before any camera offer has arrived
-- **THEN** the handler SHALL allocate a video stream and send a `SolicitOffer` command so the camera generates the offer
+#### Scenario: Answerer flow is opened by stream
+- **WHEN** the camera accepts `SolicitOffer` and a client executes `stream` for a valid session
+- **THEN** the handler SHALL allocate a video stream and send a `SolicitOffer` command before returning the stream result so the camera generates the offer
 
 #### Scenario: Answerer posts its SDP answer
 - **WHEN** the camera has offered (its `webRTCSessionID` is recorded) and a client executes `localSdp` with an SDP answer
 - **THEN** the handler SHALL send a `ProvideAnswer` command to the camera with the SDP and the recorded `webRTCSessionID`
+
+#### Scenario: Empty local SDP is rejected
+- **WHEN** a client executes `localSdp` with empty input
+- **THEN** the handler SHALL return an error result
 
 #### Scenario: No active session
 - **WHEN** a client executes `localSdp` but no session is in `streaming` state
@@ -98,7 +102,7 @@ The SBMD driver SHALL register a command handler for the `End` command (ID 0x03)
 Each asynchronous WebRTC signaling failure that occurs after the originating execute has returned SHALL emit a `webrtcError` event so the client is notified rather than left to time out. This SHALL cover at least: a `VideoStreamAllocate` error, a `ProvideOffer` error (offerer flow), a `SolicitOffer` error (answerer flow), and a `requestCommand` overall-deadline timeout in the signaling flow.
 
 #### Scenario: VideoStreamAllocate rejected by camera
-- **WHEN** the camera rejects the `VideoStreamAllocate` command during the `localSdp` flow
+- **WHEN** the camera rejects the `VideoStreamAllocate` command during the signaling flow
 - **THEN** the SBMD handler SHALL emit a `webrtcError` event with a failure value and metadata describing the allocate error
 
 #### Scenario: ProvideOffer rejected by camera
@@ -110,7 +114,7 @@ Each asynchronous WebRTC signaling failure that occurs after the originating exe
 - **THEN** the SBMD handler SHALL emit a `webrtcError` event with a failure value and metadata describing the solicit-offer error
 
 #### Scenario: Signaling command times out
-- **WHEN** a `requestCommand` in the `localSdp` flow exceeds its overall deadline
+- **WHEN** a `requestCommand` in the signaling flow exceeds its overall deadline
 - **THEN** the SBMD handler SHALL emit a `webrtcError` event with a failure value and a timeout reason
 
 ### Requirement: destroySession sends EndSession to camera
