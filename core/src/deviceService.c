@@ -66,8 +66,8 @@
 #include <resourceTypes.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include "subsystems/zigbee/zigbeeEventTracker.h"
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 #endif
 
 #ifdef BARTON_CONFIG_MATTER
@@ -255,10 +255,10 @@ static icHashMap *pendingReconfiguration = NULL;
 static uint16_t discoveryTimeoutSeconds = 0;
 
 static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const char *deviceClass,
-                                                                icLinkedList *filters,
-                                                                uint16_t timeoutSeconds,
-                                                                bool findOrphanedDevices,
-                                                                RcDriverList *startedDrivers);
+                                                                       icLinkedList *filters,
+                                                                       uint16_t timeoutSeconds,
+                                                                       bool findOrphanedDevices,
+                                                                       RcDriverList *startedDrivers);
 
 static bool deviceServiceIsUriAccessible(const char *uri);
 
@@ -554,7 +554,8 @@ static bool checkDescriptorReadinessForDiscovery(const char *deviceClass, icLink
  * The returned list is never NULL but may be empty if all drivers failed.
  * Caller receives ownership of one reference and must call rc_driver_list_unref().
  */
-static RcDriverList *startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
+static RcDriverList *
+startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
 {
     RcDriverList *startedDrivers = rc_driver_list_new();
     icLinkedList *drivers = deviceDriverManagerGetDeviceDriversByDeviceClass(deviceClass);
@@ -657,7 +658,8 @@ static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool find
                 DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
                 if (driver->stopDiscoveringDevices != NULL)
                 {
-                    icLogDebug(LOG_TAG, "stopping %s for device class %s due to rollback", driver->driverName, deviceClass);
+                    icLogDebug(
+                        LOG_TAG, "stopping %s for device class %s due to rollback", driver->driverName, deviceClass);
                     driver->stopDiscoveringDevices(driver->callbackContext, deviceClass);
                 }
             }
@@ -698,8 +700,8 @@ static void startDiscoveryMonitors(icLinkedList *newDeviceClassDiscoveries,
         // Take a reference for the monitor context
         rc_driver_list_ref(startedDrivers);
 
-        discoverDeviceClassContext *ctx =
-            startDiscoveryMonitorForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
+        discoverDeviceClassContext *ctx = startDiscoveryMonitorForDeviceClass(
+            deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
         hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
     }
 
@@ -799,14 +801,16 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
             const char *deviceClass = linkedListIteratorGetNext(driverStartIterator);
             bool driverFailed = false;
 
-            RcDriverList *startedDrivers = startDriverDiscoveryForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
+            RcDriverList *startedDrivers =
+                startDriverDiscoveryForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
 
             if (driverFailed)
             {
                 anyDriverFailed = true;
             }
 
-            hashMapPut(startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
+            hashMapPut(
+                startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
         }
 
         // Phase 3: Handle success or rollback
@@ -883,6 +887,7 @@ struct OnboardMatterDeviceArgs
         char *setupPayload;
         uint64_t nodeId;
     };
+
     uint16_t timeoutSeconds;
 };
 
@@ -1855,10 +1860,10 @@ bool deviceServiceInitialize(BCoreClient *service)
 }
 
 static void OnCommFailMonitorIntervalPropertyChanged(BCorePropertyProvider *provider,
-                                                      const gchar *propertyName,
-                                                      const gchar *oldValue,
-                                                      const gchar *newValue,
-                                                      gpointer userData)
+                                                     const gchar *propertyName,
+                                                     const gchar *oldValue,
+                                                     const gchar *newValue,
+                                                     gpointer userData)
 {
     (void) provider;
     (void) oldValue;
@@ -2202,6 +2207,36 @@ static bool addCommonResources(icDevice *device, icInitialResourceValues *initia
 }
 
 /*
+ * Determine whether a discovered device was brought in via Zigbee Direct
+ * zero-touch commissioning. Such devices are auto-paired (no user-initiated
+ * discovery window), so a rejection here must NOT poison the in-memory
+ * "rejected" set: doing so would permanently block the device from re-pairing
+ * until an explicit descriptor reprocess. Leaving it out of the rejected set
+ * lets a subsequent attempt succeed once the blocking condition is cleared
+ * (e.g. the zeroTouchEui64s policy or the deviceDescriptorBypass flag changes).
+ *
+ * The uuid must parse as a 16-hex-digit EUI64 for this to apply; non-zigbee
+ * uuids (e.g. Matter) are never considered zero-touch.
+ */
+static bool isZeroTouchDevice(const char *deviceUuid)
+{
+    if (deviceUuid == NULL)
+    {
+        return false;
+    }
+
+    // Require a well-formed EUI64 uuid so we don't misclassify non-zigbee
+    // devices (zigbeeSubsystemIdToEui64 returns 0 on parse failure).
+    uint64_t eui64 = 0;
+    if (sscanf(deviceUuid, "%016" PRIx64, &eui64) != 1)
+    {
+        return false;
+    }
+
+    return zigbeeSubsystemIsZeroTouchEui64Allowed(eui64);
+}
+
+/*
  * check the system properties to see if device descriptors are bypassed
  */
 static bool isDeviceDescriptorBypassed()
@@ -2341,7 +2376,12 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
                   __FUNCTION__,
                   deviceFoundDetails->deviceUuid);
 
-        markDeviceRejected(deviceFoundDetails->deviceUuid);
+        // Zero-touch (Zigbee Direct) devices are auto-paired; don't add them to the
+        // in-memory rejected set or they can never re-pair without a descriptor reprocess.
+        if (isZeroTouchDevice(deviceFoundDetails->deviceUuid) == false)
+        {
+            markDeviceRejected(deviceFoundDetails->deviceUuid);
+        }
         sendDeviceRejectedEvent(deviceFoundDetails, inRepairMode);
 
         // tell the device driver that we have rejected this device so it can do any cleanup
@@ -2390,7 +2430,12 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
                   __FUNCTION__,
                   deviceFoundDetails->deviceUuid);
 
-        markDeviceRejected(deviceFoundDetails->deviceUuid);
+        // Zero-touch (Zigbee Direct) devices are auto-paired; don't add them to the
+        // in-memory rejected set or they can never re-pair without a descriptor reprocess.
+        if (isZeroTouchDevice(deviceFoundDetails->deviceUuid) == false)
+        {
+            markDeviceRejected(deviceFoundDetails->deviceUuid);
+        }
         sendDeviceRejectedEvent(deviceFoundDetails, inRepairMode);
 
         // tell the device driver that we have rejected this device so it can do any cleanup
@@ -2678,8 +2723,7 @@ static bool finalizeNewDevice(icDevice *device, bool sendEvents, bool inRepairMo
     if (tzResource != NULL)
     {
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        char *posixTZ =
-            b_core_property_provider_get_property_as_string(propertyProvider, POSIX_TIME_ZONE_PROP, NULL);
+        char *posixTZ = b_core_property_provider_get_property_as_string(propertyProvider, POSIX_TIME_ZONE_PROP, NULL);
         if (posixTZ != NULL)
         {
             deviceServiceWriteResource(tzResource->uri, posixTZ);
@@ -3224,8 +3268,7 @@ static void scheduleDeviceDescriptorsProcessingTask(void)
 
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-        if (b_core_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false) ==
-            true)
+        if (b_core_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false) == true)
         {
             delayTimeUnits = DELAY_MILLIS;
         }
@@ -3333,8 +3376,8 @@ static void denylistDevice(const char *uuid)
     {
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         AUTO_CLEAN(free_generic__auto)
-        char *propValue = b_core_property_provider_get_property_as_string(
-            propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
+        char *propValue =
+            b_core_property_provider_get_property_as_string(propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
         AUTO_CLEAN(cJSON_Delete__auto) cJSON *denylistedDevicesArray = cJSON_Parse(propValue);
 
         if (cJSON_IsArray(denylistedDevicesArray) == false)
@@ -3364,8 +3407,8 @@ bool deviceServiceIsDeviceDenylisted(const char *uuid)
 
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     AUTO_CLEAN(free_generic__auto)
-    char *denylistedDevices = b_core_property_provider_get_property_as_string(
-        propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
+    char *denylistedDevices =
+        b_core_property_provider_get_property_as_string(propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
 
     if (stringIsEmpty(denylistedDevices) == false)
     {

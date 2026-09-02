@@ -34,6 +34,7 @@
 #include "icLog/logging.h"
 #include "icUtil/stringUtils.h"
 #include "provider/barton-core-property-provider.h"
+#include <barton-core-properties.h>
 #include <glib-object.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -139,7 +140,8 @@ propertyChangedHandler(GObject *source, gchar *propertyName, gchar *oldPropertyV
     }
 #ifdef BARTON_CONFIG_ZIGBEE
     else if (g_str_has_prefix(propertyName, ZIGBEE_PROPS_PREFIX) ||
-             g_str_has_prefix(propertyName, TELEMETRY_PROPS_PREFIX))
+             g_str_has_prefix(propertyName, TELEMETRY_PROPS_PREFIX) ||
+             g_str_has_prefix(propertyName, B_CORE_BARTON_PREFIX B_CORE_ZIGBEE_PREFIX))
     {
         zigbeeSubsystemHandlePropertyChange(propertyName, newPropertyValue);
     }

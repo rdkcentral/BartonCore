@@ -331,7 +331,6 @@ static void updateJsonMetadata(const char *deviceUuid,
                                const char *key,
                                const char *value);
 
-
 typedef struct
 {
     uint64_t eui64;
@@ -3019,8 +3018,11 @@ static bool deviceDiscoveredCallback(void *ctx, IcDiscoveredDeviceDetails *detai
 
     ZigbeeDriverCommon *commonDriver = (ZigbeeDriverCommon *) ctx;
 
-    // silently ignore if this driver instance is not discovering and we aren't migrating
-    if (commonDriver->discoveryActive == false && deviceMigrator == NULL)
+    // silently ignore if this driver instance is not discovering, we aren't migrating, and this
+    // device's eui64 is not explicitly permitted to zero-touch pair via the
+    // B_CORE_BARTON_ZIGBEE_ZERO_TOUCH_EUI64S property
+    if (commonDriver->discoveryActive == false && deviceMigrator == NULL &&
+        zigbeeSubsystemIsZeroTouchEui64Allowed(details->eui64) == false)
     {
         return false;
     }

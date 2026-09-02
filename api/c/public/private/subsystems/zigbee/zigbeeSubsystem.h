@@ -426,6 +426,15 @@ char *zigbeeSubsystemEndpointIdAsString(uint8_t epId);
 uint64_t zigbeeSubsystemIdToEui64(const char *uuid);
 
 /*
+ * Determine whether the provided eui64 is permitted to "zero-touch" pair, i.e. be claimed by a
+ * device driver even though no discovery session is currently active for it.  This is controlled
+ * by the B_CORE_BARTON_ZIGBEE_ZERO_TOUCH_EUI64S property: a comma delimited list of eui64s (hex,
+ * no leading 0x) allows only matching devices, and an empty/missing value disallows all (i.e.
+ * current/default behavior of requiring active discovery).
+ */
+bool zigbeeSubsystemIsZeroTouchEui64Allowed(uint64_t eui64);
+
+/*
  * Retrieve the list of cluster commands received during discovery for the specified device which was
  * unknown at the time.  Used for supporting legacy sensors.
  *

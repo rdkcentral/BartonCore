@@ -24,6 +24,7 @@
  * Created by Thomas Lea on 3/10/16.
  */
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -53,6 +54,7 @@
 #include "zigbeeHealthCheck.h"
 #include "zigbeeSubsystemPrivate.h"
 #include "zigbeeTelemetry.h"
+#include <barton-core-properties.h>
 #include <commonDeviceDefs.h>
 #include <device-driver/device-driver.h>
 #include <deviceDescriptors.h>
@@ -92,6 +94,9 @@
 #define ZIGBEE_DEFENDER_PROPS_PREFIX                       "cpe.zigbee.defender"
 #define ZIGBEE_WATCHDOG_ENABLED_PROP                       "cpe.zigbee.watchdog.enabled.flag"
 #define ZIGBEE_LINK_QUALITY_PROPS_PREFIX                   "cpe.zigbee.linkQuality"
+// Prefix for zigbee properties defined in barton-core-properties.h that should also be forwarded
+// to ZigbeeCore/zhal, similar to the legacy "cpe.zigbee." properties.
+#define BARTON_ZIGBEE_PROPS_PREFIX                         B_CORE_BARTON_PREFIX B_CORE_ZIGBEE_PREFIX
 #define ZIGBEE_LINK_QUALITY_LQI_ENABLED_PROP               ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".lqi.enabled"
 #define ZIGBEE_LINK_QUALITY_LQI_WARN_THRESHOLD_PROP        ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".lqi.warnThreshold"
 #define ZIGBEE_LINK_QUALITY_LQI_BAD_THRESHOLD_PROP         ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".lqi.badThreshold"
@@ -758,29 +763,38 @@ static bool initializeNetwork(void)
     g_hash_table_iter_init(&iter, allProps);
     while (g_hash_table_iter_next(&iter, &key, &value))
     {
-        if (g_str_has_prefix(key, ZIGBEE_PROPS_PREFIX))
+        if (g_str_has_prefix(key, ZIGBEE_PROPS_PREFIX) || g_str_has_prefix(key, BARTON_ZIGBEE_PROPS_PREFIX))
         {
             stringHashMapPutCopy(properties, key, value);
         }
     }
 
     /*
-     * zhal receives properties with the ZIGBEE_PROPS_PREFIX chopped off, since
-     * the cpe.zigbee namespace makes no sense to ZigbeeCore.
+     * zhal receives properties with the ZIGBEE_PROPS_PREFIX (or BARTON_ZIGBEE_PROPS_PREFIX) chopped
+     * off, since neither the cpe.zigbee nor barton.zigbee namespace makes any sense to ZigbeeCore.
      */
     scoped_icStringHashMapIterator *it = stringHashMapIteratorCreate(properties);
     scoped_icStringHashMap *zhalProps = stringHashMapCreate();
     const size_t prefixLen = strlen(ZIGBEE_PROPS_PREFIX);
+    const size_t bartonPrefixLen = strlen(BARTON_ZIGBEE_PROPS_PREFIX);
 
     while (stringHashMapIteratorHasNext(it) == true)
     {
         char *key = NULL;
         char *val = NULL;
 
-        if (stringHashMapIteratorGetNext(it, &key, &val) == true && strlen(key) > prefixLen)
+        if (stringHashMapIteratorGetNext(it, &key, &val) == true)
         {
-            char *newKey = strdup(key + strlen(ZIGBEE_PROPS_PREFIX));
-            stringHashMapPut(zhalProps, newKey, strdupOpt(val));
+            if (g_str_has_prefix(key, BARTON_ZIGBEE_PROPS_PREFIX) && strlen(key) > bartonPrefixLen)
+            {
+                char *newKey = strdup(key + bartonPrefixLen);
+                stringHashMapPut(zhalProps, newKey, strdupOpt(val));
+            }
+            else if (strlen(key) > prefixLen)
+            {
+                char *newKey = strdup(key + prefixLen);
+                stringHashMapPut(zhalProps, newKey, strdupOpt(val));
+            }
         }
     }
 
@@ -1949,6 +1963,61 @@ uint64_t zigbeeSubsystemIdToEui64(const char *uuid)
     }
 
     return eui64;
+}
+
+bool zigbeeSubsystemIsZeroTouchEui64Allowed(uint64_t eui64)
+{
+    bool allowed = false;
+
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    scoped_generic char *zeroTouchEui64s =
+        b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_ZIGBEE_ZERO_TOUCH_EUI64S, NULL);
+
+    if (stringIsEmpty(zeroTouchEui64s) == true)
+    {
+        // property unset/empty: preserve default behavior, disallow zero-touch pairing
+        return false;
+    }
+
+    // split the comma delimited list and look for a match. Compare numeric values (rather than
+    // strings) since the configured eui64s are not required to be zero-padded to 16 hex digits.
+    char *saveptr = NULL;
+    scoped_generic char *listCopy = strdup(zeroTouchEui64s);
+    char *token = strtok_r(listCopy, ",", &saveptr);
+    while (token != NULL)
+    {
+        // trim any surrounding whitespace
+        while (isspace((unsigned char) *token))
+        {
+            token++;
+        }
+        size_t len = strlen(token);
+        while (len > 0 && isspace((unsigned char) token[len - 1]))
+        {
+            token[--len] = '\0';
+        }
+
+        if (len > 0)
+        {
+            char *endptr = NULL;
+            errno = 0;
+            uint64_t candidate = strtoull(token, &endptr, 16);
+            if (errno == 0 && endptr != token && *endptr == '\0' && candidate == eui64)
+            {
+                allowed = true;
+                break;
+            }
+        }
+
+        token = strtok_r(NULL, ",", &saveptr);
+    }
+
+    if (allowed == true)
+    {
+        icLogInfo(LOG_TAG, "%s: %016" PRIx64 " is in the configured zero-touch eui64 list, allowing", __FUNCTION__, eui64);
+    }
+
+    return allowed;
 }
 
 /*
@@ -4088,6 +4157,19 @@ void zigbeeSubsystemHandlePropertyChange(const char *prop, const char *value)
         if (strlen(prop) > prefixLen)
         {
             zhalSetProperty(prop + prefixLen, value);
+        }
+        else
+        {
+            icLogWarn(LOG_TAG, "Property has no name, ignoring!");
+        }
+    }
+    else if (stringStartsWith(prop, BARTON_ZIGBEE_PROPS_PREFIX, false) == true)
+    {
+        // pass barton.zigbee.* properties down to the stack as well, chopping the prefix off.
+        const size_t bartonPrefixLen = strlen(BARTON_ZIGBEE_PROPS_PREFIX);
+        if (strlen(prop) > bartonPrefixLen)
+        {
+            zhalSetProperty(prop + bartonPrefixLen, value);
         }
         else
         {
