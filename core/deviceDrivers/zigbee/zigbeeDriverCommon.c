@@ -331,7 +331,6 @@ static void updateJsonMetadata(const char *deviceUuid,
                                const char *key,
                                const char *value);
 
-
 typedef struct
 {
     uint64_t eui64;
@@ -1226,6 +1225,24 @@ static bool getAttributeInfos(uint64_t eui64,
     {
         zhalAttributeInfo *attributeInfos = NULL;
         uint16_t numAttributeInfos = 0;
+
+        // The Zigbee Direct configuration cluster only answers over an encrypted
+        // Zigbee Direct session, so plain ZCL attribute discovery against it never
+        // gets a response and times out (30s), which fails the whole device
+        // configuration/pairing. Skip it during attribute discovery. The cluster
+        // remains in the device descriptor with no discovered attributes.
+        if (clusterDetails[i].clusterId == ZIGBEE_DIRECT_CONFIGURATION_CLUSTER_ID)
+        {
+            icLogDebug(LOG_TAG,
+                       "%s: skipping attribute discovery for Zigbee Direct cluster 0x%04" PRIx16
+                       " (requires encrypted access)",
+                       __FUNCTION__,
+                       clusterDetails[i].clusterId);
+            clusterDetails[i].numAttributeIds = 0;
+            free(clusterDetails[i].attributeIds);
+            clusterDetails[i].attributeIds = NULL;
+            continue;
+        }
 
         if (zhalGetAttributeInfos(eui64,
                                   endpointId,
@@ -3019,8 +3036,11 @@ static bool deviceDiscoveredCallback(void *ctx, IcDiscoveredDeviceDetails *detai
 
     ZigbeeDriverCommon *commonDriver = (ZigbeeDriverCommon *) ctx;
 
-    // silently ignore if this driver instance is not discovering and we aren't migrating
-    if (commonDriver->discoveryActive == false && deviceMigrator == NULL)
+    // silently ignore if this driver instance is not discovering, we aren't migrating, and this
+    // device's eui64 is not explicitly permitted to zero-touch pair via the
+    // B_CORE_BARTON_ZIGBEE_ZERO_TOUCH_EUI64S property
+    if (commonDriver->discoveryActive == false && deviceMigrator == NULL &&
+        zigbeeSubsystemIsZeroTouchEui64Allowed(details->eui64) == false)
     {
         return false;
     }

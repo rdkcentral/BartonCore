@@ -98,6 +98,13 @@
 // Poll Control Cluster
 #define POLL_CONTROL_CLUSTER_ID                                                              0x0020
 
+// Zigbee Direct Configuration Cluster.
+// This cluster's attributes can only be accessed over an encrypted Zigbee Direct
+// session (per the Zigbee Direct spec), so ordinary ZCL attribute discovery against
+// it never receives a response and simply times out. It is skipped during device
+// attribute discovery so pairing (including zero-touch commissioning) can complete.
+#define ZIGBEE_DIRECT_CONFIGURATION_CLUSTER_ID                                               0x003D
+
 // Door Lock Cluster
 #define DOORLOCK_CLUSTER_ID                                                                  0x0101
 #define DOORLOCK_LOCK_STATE_ATTRIBUTE_ID                                                     0x0000

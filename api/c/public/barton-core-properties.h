@@ -55,6 +55,8 @@ G_BEGIN_DECLS
 #define B_CORE_THREAD_PREFIX             "thread."
 // Prefix for 802.15.4 related properties
 #define B_CORE_FIFTEEN_FOUR_PREFIX       "fifteenfour."
+// Prefix for zigbee properties
+#define B_CORE_ZIGBEE_PREFIX             "zigbee."
 
 /**
  * FIFTEEN_FOUR_EUI64: (value "barton.fifteenfour.eui64")
@@ -237,6 +239,21 @@ G_BEGIN_DECLS
  */
 #define B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER                                                                \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "spake2pVerifier"
+
+/**
+ * ZIGBEE_ZERO_TOUCH_EUI64S: (value "barton.zigbee.zeroTouchEui64s")
+ *
+ * A comma delimited list of one or more zigbee eui64s (hex, no leading "0x") that are permitted
+ * to pair without an active discovery session having been started by Barton (e.g. devices that
+ * were commissioned out-of-band and joined the zigbee network on their own).
+ *
+ * If this property is empty, null, or unset, out-of-band pairing is rejected (default behavior).
+ *
+ * This property is forwarded to ZigbeeCore, similar to "cpe.zigbee.*" properties.
+ * Property Value Type: string
+ */
+#define B_CORE_BARTON_ZIGBEE_ZERO_TOUCH_EUI64S                                                               \
+    B_CORE_BARTON_PREFIX B_CORE_ZIGBEE_PREFIX "zeroTouchEui64s"
 
 
 G_END_DECLS
