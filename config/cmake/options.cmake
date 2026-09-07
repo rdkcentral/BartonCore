@@ -186,6 +186,9 @@ bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
            DEFINITION BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON
            DESCRIPTION "Build the third-party BartonCommon component"
            ENABLE)
+bcore_option(NAME BCORE_TELEMETRY2
+           DEFINITION CONFIG_TELEMETRY2
+           DESCRIPTION "Enable Telemetry 2.0 macros from BartonCommon")
 
 bcore_string_option(NAME BCORE_OBSERVABILITY_BACKEND
                     DEFINITION BARTON_CONFIG_OBSERVABILITY_BACKEND
