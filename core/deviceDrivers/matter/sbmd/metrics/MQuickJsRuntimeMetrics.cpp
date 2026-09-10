@@ -49,7 +49,12 @@ namespace barton
         heapFreeGauge = observabilityGaugeCreate(
             "sbmd.js.heap.free_bytes", "Bytes between top of heap and bottom of JS call stack", "By");
         heapPeakGauge = observabilityGaugeCreate(
-            "sbmd.js.heap.peak_bytes", "All-time peak heap bytes observed since last init", "By");
+            "sbmd.js.heap.peak_bytes",
+            "All-time high-water mark of heap_used since last init. Captured at GC start "
+            "(pre-compaction) as well as at every heap snapshot, so it includes transient "
+            "allocation spikes — notably driver loading — that the compacting GC would otherwise "
+            "reclaim before the next sample could observe them",
+            "By");
         mutexWaitHisto = observabilityHistogramCreate(
             "sbmd.js.mutex.wait_ms", "Time spent waiting to acquire the JS mutex before a handler call", "ms");
         jsExceptionCounter =
@@ -59,6 +64,15 @@ namespace barton
         gcDurationHisto = observabilityHistogramCreate("sbmd.js.gc.duration_ms", "Duration of each GC cycle", "ms");
         gcRootsGauge = observabilityGaugeCreate(
             "sbmd.js.gc_roots", "Live GC roots registered on the JS context (push/pop + add/delete lists)", "1");
+        heapLiveGauge = observabilityGaugeCreate(
+            "sbmd.js.heap.live_bytes",
+            "Retained live set: heap_used sampled immediately after a GC compaction, when transient "
+            "garbage has been reclaimed and heap_used equals the true live set. Unlike used_bytes "
+            "(instantaneous, carries uncollected garbage under lazy GC) and peak_bytes (transient "
+            "high-water), this is the metric that reveals genuine retained-memory growth — a slow "
+            "leak shows here as a rising post-GC floor. Sampled opportunistically on engine-driven "
+            "GC cycles only, so it adds no forced collections",
+            "By");
 #endif
     }
 
@@ -181,6 +195,15 @@ namespace barton
         observabilityGaugeRecord(gcRootsGauge, static_cast<int64_t>(gcRootCount));
     }
 
+    void MQuickJsRuntimeMetrics::RecordPeakCandidate(size_t heapUsed)
+    {
+        if (static_cast<int64_t>(heapUsed) > peakHeapRecorded)
+        {
+            peakHeapRecorded = static_cast<int64_t>(heapUsed);
+            observabilityGaugeRecord(heapPeakGauge, peakHeapRecorded);
+        }
+    }
+
     void MQuickJsRuntimeMetrics::RecordArenaSize(int64_t bytes)
     {
         observabilityGaugeRecord(heapArenaGauge, bytes);
@@ -203,7 +226,7 @@ namespace barton
         }
     }
 
-    void MQuickJsRuntimeMetrics::GCCallback(JSContext * /*ctx*/, int isEnd, void *opaque) noexcept
+    void MQuickJsRuntimeMetrics::GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept
     {
         auto *metrics = static_cast<MQuickJsRuntimeMetrics *>(opaque);
 
@@ -216,6 +239,22 @@ namespace barton
         {
             metrics->gcStartTime = std::chrono::steady_clock::now();
 
+            // At GC start the heap has not yet been compacted, so heap_used is at its maximum
+            // for this cycle. This is the only point where transient allocation spikes (notably
+            // driver loading, which drives the arena toward its limit and triggers these very GC
+            // cycles) are observable before the compacting GC reclaims them. Fold it into the
+            // all-time peak. We are already on the thread holding the JS mutex, so read usage
+            // directly without re-locking.
+            if (ctx)
+            {
+                JSMemoryUsage usage = {};
+
+                if (JS_GetMemoryUsage(ctx, &usage, 0) == 0)
+                {
+                    metrics->RecordPeakCandidate(usage.heap_used);
+                }
+            }
+
             return;
         }
 
@@ -225,6 +264,20 @@ namespace barton
         double ms = std::chrono::duration<double, std::milli>(elapsed).count();
 
         observabilityHistogramRecord(metrics->gcDurationHisto, ms);
+
+        // GC end: the heap has just been compacted, so heap_used now equals the true retained
+        // live set (transient garbage reclaimed). Record it as sbmd.js.heap.live_bytes. This is
+        // the leak-visible occupancy signal that used_bytes/peak_bytes cannot provide under lazy
+        // compacting GC. We are on the thread holding the JS mutex; read usage without re-locking.
+        if (ctx)
+        {
+            JSMemoryUsage usage = {};
+
+            if (JS_GetMemoryUsage(ctx, &usage, 0) == 0)
+            {
+                observabilityGaugeRecord(metrics->heapLiveGauge, static_cast<int64_t>(usage.heap_used));
+            }
+        }
     }
 
 #endif // BARTON_CONFIG_SBMD_METRICS

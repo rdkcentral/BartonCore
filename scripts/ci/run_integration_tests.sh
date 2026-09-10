@@ -55,4 +55,9 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
-"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing"
+# The SBMD observability characterization/report suite (testing/observability/)
+# is intentionally excluded here: it is heavy and produces a metrics report
+# rather than gating merges.  Run it on demand with
+# `python3 testing/run_observability_suite.py`.  The pre-existing observability
+# coverage under testing/test/ still runs as part of this suite.
+"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" --ignore="$REPO_ROOT/testing/observability"

@@ -29,6 +29,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from threading import Condition
+import os
 import shutil
 
 # Get the expected gir version dynamically. There is some additional information
@@ -113,6 +114,11 @@ class BaseEnvironmentOrchestrator(ABC):
         )
         test_specs = str(workspace_root / "testing" / "resources" / "sbmd-specs")
         self._sbmd_dirs = production_specs + ";" + test_specs
+        # Test-only hook: append extra spec directories (e.g. generated stub
+        # drivers for scale tests).  Unset in production, so this is a no-op there.
+        extra_sbmd_dirs = os.environ.get("BARTON_EXTRA_SBMD_DIRS")
+        if extra_sbmd_dirs:
+            self._sbmd_dirs = self._sbmd_dirs + ";" + extra_sbmd_dirs
         self._init_client()
         self._configure_client()
 

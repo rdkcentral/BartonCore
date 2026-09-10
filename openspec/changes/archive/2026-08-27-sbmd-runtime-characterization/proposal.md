@@ -1,0 +1,49 @@
+## Why
+
+SBMD's resource requirements (the JS heap/arena budget it actually needs per device and per driver) and its behavior under realistic scale had never been measured. The `sbmd-runtime-observability` capability shipped the metrics needed in principle, but no test exercised them at the scale that matters — many concurrently active devices, many concurrently active *distinct* drivers, or a large registered-driver count — and no report made the results legible enough to answer "does SBMD's memory footprint scale with device/driver count?" or "does anything in its behavior at scale expose a correctness defect?" Answering those questions with data neccessarily meant first trusting the data: exercising the existing metrics under real load surfaced that a few of them were unsound or incomplete for exactly the questions being asked — `sbmd.driver.load.heap_bytes` could read negative under the moving GC, `sbmd.js.heap.peak_bytes` missed transient allocation spikes the compacting GC reclaims before the next sample, and no metric could distinguish a genuine retained-memory leak from ordinary GC churn, which is the specific signal a resource-requirements characterization needs. Those corrections, and DEBUG_GC build-flip automation to get production-representative magnitudes without a manual rebuild, were necessary groundwork — not the goal — for the actual deliverable: a repeatable characterization test suite that can be run at any time to answer those two questions with current data.
+
+## What Changes
+
+- **New capability: an SBMD observability characterization test suite** (`testing/observability/`), built to answer SBMD's resource-requirements and at-scale-correctness questions with real data rather than assertion alone:
+  - Multi-device concurrent-load scenario (20 devices + a deferred device, asserting every runtime metric family — heap, GC, handler, mutex, deferred-operation — under concurrent, fault-injected load) to answer whether SBMD's footprint and behavior scale with device count.
+  - Heterogeneous-driver scenario: one of each drivable device type (light, door lock, thermostat, temperature/humidity sensors) plus a deferred device, driven concurrently, to answer the same questions under *distinct* active drivers contending on the single shared JS context at once — an axis device-count scaling alone cannot exercise.
+  - Driver-count scaling scenario: 100 generated inert stub drivers, scoped to load/registry/footprint metrics only (the only metrics inert stubs can meaningfully exercise), to answer whether registry size alone pressures the arena or load time.
+  - Single-device baseline, handler-profile, GC-pressure, and deferred-edge-case scenarios retained/extended as the controlled-isolation foundation the scale scenarios build on.
+  - A consolidated, human- and machine-readable metrics report (`sbmd_metrics.txt` / `.json` / per-scenario `.csv`) with a graded verdict (ok/watch/concern/info) per metric — the mechanism that turns raw telemetry into a legible answer to "is this healthy at scale?" This report is regenerated fresh on every run and is not itself a checked-in artifact; the suite's value is that anyone can produce current, trustworthy findings on demand rather than relying on a point-in-time snapshot that would go stale.
+  - `gcflip.sh`: a cached DEBUG_GC on/off flip for mquickjs so magnitude-sensitive scale measurements can run under the production-representative (`off`) build without a manual rebuild, and always restore the dev default (`on`) afterward.
+  - `run_observability_suite.py` updated with a `--debug-gc {on,off,both}` flag that automates the flip/restore around a full suite run.
+  - Documentation (`testing/observability/README.md`) covering how to run the suite, where results land, and how to read the report.
+- **Metric corrections made to get trustworthy scale data** (necessary groundwork, not the primary goal):
+  - **Fix `sbmd.js.heap.peak_bytes`** to also sample at GC-start (pre-compaction), so transient allocation spikes (notably driver loading) are captured before the compacting GC reclaims them and the peak no longer under-reports.
+  - **Remove `sbmd.driver.load.heap_bytes`** (**BREAKING**: metric removed). The per-driver before/after heap delta could read negative when a compaction landed mid-load, making it unsound as shipped.
+  - **Add `sbmd.js.heap.live_bytes`** gauge: `heap_used` sampled at GC-end (post-compaction), giving a true-occupancy signal that reveals a genuine retained-memory leak — something no existing heap metric (`used_bytes`, `peak_bytes`, `free_bytes`) can do under a lazy compacting GC, and the specific signal the resource-requirements question needed. Sampling is opportunistic (only on engine-driven GC cycles); it forces no extra collections.
+  - **Add `sbmd.driver.registration.total_ms`** (total wall time to discover, load, activate, and register all SBMD drivers) and **`sbmd.driver.bundle_load_ms`** (one-time SBMD utilities bundle load + capture-function injection time) — needed to separate real driver-load cost from a DEBUG_GC measurement artifact once the dev-container "~5s to load drivers" figure came under scrutiny.
+  - **Add a compile-time guard** in `MQuickJsRuntime.cpp`: enabling `BCORE_SBMD_GC_INSTRUMENTATION` without the mquickjs GC-callback patch (`0003-add-gc-callback-and-root-count.patch`) now fails with a clear `#error` instead of an opaque link failure. The patch itself gains a `MQUICKJS_HAS_GC_CALLBACK` capability macro to make the check possible.
+
+## Capabilities
+
+### New Capabilities
+
+- `sbmd-observability-test-suite`: Defines the SBMD runtime characterization test suite — built to answer SBMD's resource-requirements and at-scale-correctness questions with data — its scenarios (single-device, concurrent multi-device, heterogeneous multi-driver, driver-count scaling), the consolidated report format and per-metric grading, and the DEBUG_GC build-flip tooling that makes production-representative runs reproducible without manual intervention.
+
+### Modified Capabilities
+
+- `sbmd-runtime-observability`: metric corrections made so the characterization suite's data could be trusted — `sbmd.driver.load.heap_bytes` requirement removed (unsound); `sbmd.js.heap.peak_bytes` requirement updated to also sample at GC-start; new `sbmd.js.heap.live_bytes`, `sbmd.driver.registration.total_ms`, and `sbmd.driver.bundle_load_ms` requirements added; a new requirement added for the `BCORE_SBMD_GC_INSTRUMENTATION` / mquickjs-patch compile-time guard.
+
+## Impact
+
+- **Affected code**: `core/deviceDrivers/matter/sbmd/metrics/MQuickJsRuntimeMetrics.{h,cpp}`, `core/deviceDrivers/matter/sbmd/metrics/SbmdFactoryMetrics.{h,cpp}`, `core/deviceDrivers/matter/sbmd/SbmdFactory.cpp`, `core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp`, `docker/patches/mquickjs/0003-add-gc-callback-and-root-count.patch`.
+- **New test infrastructure**: `testing/observability/` (baseline/handler/heap-gc-mutex/deferred-edge-case/failure-mode/metrics-report tests plus the new `sbmd_scale_metrics_test.py`), `testing/helpers/sbmd_metrics_helpers.py`, `testing/helpers/sbmd_report_writer.py`, `testing/run_observability_suite.py`, `testing/gcflip.sh`, `testing/observability/README.md`. `testing/environment/base_environment_orchestrator.py` gains a `BARTON_EXTRA_SBMD_DIRS` test-only hook for injecting generated stub driver directories.
+- **CI**: `scripts/ci/run_integration_tests.sh` excludes `testing/observability/` from the default integration run (it is heavy and produces a report rather than gating merges); it is run on demand via `run_observability_suite.py`.
+- **CMake flags**: no new flags; relies on the existing `BCORE_SBMD_METRICS` and `BCORE_SBMD_GC_INSTRUMENTATION` options.
+- **Dependencies**: no new external dependencies. The mquickjs patch set (`0001`–`0003`) is unchanged in shape; `0003` gains one new preprocessor macro definition.
+- **Tests**: existing C/C++ unit tests and Python integration tests for `sbmd-runtime-observability` are updated for the removed/added metrics; the new observability test suite is Python/pytest only (no new GTest coverage).
+
+## Non-Goals
+
+- **Per-driver retained-memory attribution**: the shared 1 MiB JS context has no per-driver partitioning, so a rising `live_bytes` floor cannot be attributed to a specific driver in production. Deferred; see `openspec/changes/archive/2026-07-30-sbmd-observability-instrumentation` Non-Goals ("per-device-instance heap cost"), which this change's empirical findings substantially close for the *device-count* axis (flat live-set slope) but not for cross-driver attribution.
+- **Persisted per-series `heap_delta` regression baseline**: catching a handler whose per-call allocation drifts upward while still under the absolute ceiling would need a checked-in, continuously-updated baseline file. Parked — the maintenance cost (keeping it current, risk of rubber-stamping a real drift) is not yet judged worth it.
+- **Demand-side / throughput metrics**: no metric captures inbound event rate or a saturation ceiling for the single-threaded JS engine. Out of scope for this change.
+- **Rate/windowed metrics and cross-run trending**: all current metrics are cumulative-since-init; there is no periodic rate derivation or historical baseline comparison across suite runs.
+- **Runtime-configurable heap-sample period, `deviceId`/fleet attributes, explicit-GC production call sites, and swapping the test-only deferred driver for a production one**: all remain open from the archived change and are unaffected by this change.
+- **Shipping `BCORE_SBMD_GC_INSTRUMENTATION` (and mquickjs patch `0003`) to the production gateway build**: remains an open product decision; this change only makes enabling it without the patch a clear compile error instead of an opaque link failure.
