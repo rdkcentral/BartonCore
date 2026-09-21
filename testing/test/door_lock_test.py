@@ -242,16 +242,82 @@ def test_locked_resource_updated_by_event(default_environment, matter_door_lock)
     # From here, use event-driven updates via RESOURCE_UPDATED.
     resource_updated_queue = resource_update_listener(client, "locked")
 
-    # Trigger sideband unlock — the device's LockState attribute transitions to Unlocked
+    # Trigger sideband unlock — the device emits a LockOperation event
     result = matter_door_lock.sideband.send("unlock")
     assert result["lockState"] == "unlocked"
 
-    # Barton receives the LockState attribute report and updates the resource (RESOURCE_UPDATED)
+    # Barton receives the LockOperation event and updates the resource (RESOURCE_UPDATED)
     wait_for_resource_value(resource_updated_queue, "false", timeout=10)
 
-    # Trigger sideband lock — the device's LockState attribute transitions to Locked
+    # Trigger sideband lock — the device emits a LockOperation event
     result = matter_door_lock.sideband.send("lock")
     assert result["lockState"] == "locked"
 
-    # Barton receives the LockState attribute report and updates the resource (RESOURCE_UPDATED)
+    # Barton receives the LockOperation event and updates the resource (RESOURCE_UPDATED)
     wait_for_resource_value(resource_updated_queue, "true", timeout=10)
+
+
+def test_alarm_jammed_sets_jammed_resource(default_environment, matter_door_lock):
+    """Verify that a DoorLockAlarm(LockJammed) event sets the jammed resource to true."""
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    jammed_queue = resource_update_listener(client, "jammed")
+
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x00})
+
+    wait_for_resource_value(jammed_queue, "true", timeout=10)
+
+
+def test_alarm_wrong_code_sets_invalid_code_entry_limit_resource(
+    default_environment, matter_door_lock
+):
+    """Verify that a DoorLockAlarm(WrongCodeEntryLimit) event sets invalidCodeEntryLimit to true."""
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    queue = resource_update_listener(client, "invalidCodeEntryLimit")
+
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x04})
+
+    wait_for_resource_value(queue, "true", timeout=10)
+
+
+def test_alarm_escutcheon_sets_tampered_resource(default_environment, matter_door_lock):
+    """Verify that a DoorLockAlarm(FrontEscutcheonRemoved) event sets tampered to true."""
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    tampered_queue = resource_update_listener(client, "tampered")
+
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x05})
+
+    wait_for_resource_value(tampered_queue, "true", timeout=10)
+
+
+def test_lock_operation_clears_tampered_and_invalid_code(
+    default_environment, matter_door_lock
+):
+    """Verify that a LockOperation event clears tampered and invalidCodeEntryLimit.
+
+    Trigger a WrongCodeEntryLimit alarm to set invalidCodeEntryLimit=true, then
+    trigger a lock sideband operation and verify both tampered and
+    invalidCodeEntryLimit are cleared to false.
+    """
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    invalid_code_queue = resource_update_listener(client, "invalidCodeEntryLimit")
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x04})
+    wait_for_resource_value(invalid_code_queue, "true", timeout=10)
+
+    # Re-register listeners before triggering the lock operation
+    tampered_cleared_queue = resource_update_listener(client, "tampered")
+    invalid_code_cleared_queue = resource_update_listener(
+        client, "invalidCodeEntryLimit"
+    )
+
+    matter_door_lock.sideband.send("lock")
+
+    wait_for_resource_value(tampered_cleared_queue, "false", timeout=10)
+    wait_for_resource_value(invalid_code_cleared_queue, "false", timeout=10)

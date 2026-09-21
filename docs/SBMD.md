@@ -680,7 +680,7 @@ A handler can inspect which trigger field is present to determine the context.
 | Field | Type | Present when invoked as | Description |
 |---|---|---|---|
 | `args.attribute` | `{ clusterId, attributeId, value, alias }` | attribute handler | The attribute that triggered the handler. `value` is the decoded attribute value. `alias` is the alias name if the handler was registered via `aliases`, otherwise `null`. |
-| `args.event` | `{ clusterId, eventId, data, alias }` | event handler | The event that triggered the handler. `data` is the decoded event payload (array of TLV field values). `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.event` | `{ clusterId, eventId, tlvBase64 }` | event handler | The event that triggered the handler. `tlvBase64` is the base64-encoded TLV event payload; decode it with `Sbmd.Tlv.decode()` to get the array of field values. |
 | `args.command` | `{ clusterId, commandId, data, alias }` | command handler | The command that triggered the handler. `data` is the decoded command payload. `alias` is the alias name if registered via `aliases`, otherwise `null`. |
 | `args.response` | `{ clusterId, commandId, data }` | command response handler | The response to a pending `requestCommand`. `data` is the base64-encoded TLV payload, or `null`. |
 | `args.resource` | `{ resourceId, input }` | resource handler (read/write/execute/seed) | The resource being operated on. `input` is the write value or execute argument (string), `null` for reads. |
@@ -1021,7 +1021,7 @@ previously cached value.
 
 ```js
 function handleLockOperation(args) {
-  var opType = args.event.data[0];
+  var opType = Sbmd.Tlv.decode(args.event.tlvBase64)[0];
 
   if (opType !== 0 && opType !== 1) {
     // Non-state-change event — nothing to do
@@ -1907,7 +1907,7 @@ function handleLockDiagnostics(args) {
 // ---------------------------------------------------------------------------
 
 function handleLockOperation(args) {
-  var opType = args.event.data[0];
+  var opType = Sbmd.Tlv.decode(args.event.tlvBase64)[0];
   var actuatorEnabled = args.supplements.attributes.actuatorEnabled;
 
   if (!actuatorEnabled) {
@@ -1932,7 +1932,7 @@ function handleLockOperation(args) {
 }
 
 function handleLockAlarms(args) {
-  var alarmCode = args.event.data[0];
+  var alarmCode = Sbmd.Tlv.decode(args.event.tlvBase64)[0];
   var prev = args.supplements.persistentData.alarmCount;
   var count = parseInt(prev || "0", 10) + 1;
 

@@ -80,6 +80,7 @@ export class DoorLockDevice extends VirtualDevice {
 
         this.registerOperation('lock', () => this.handleLock());
         this.registerOperation('unlock', () => this.handleUnlock());
+        this.registerOperation('alarm', ({alarmCode}) => this.handleAlarm(alarmCode));
         this.registerOperation('getState', () => this.handleGetState());
     }
 
@@ -166,6 +167,14 @@ export class DoorLockDevice extends VirtualDevice {
         }
 
         return super.handleComeOnline();
+    }
+
+    async handleAlarm(alarmCode) {
+        await this.endpoints[0].act(async (agent) => {
+            await this.endpoints[0].events.doorLock.doorLockAlarm.emit({alarmCode}, agent.context);
+        });
+
+        return {alarmCode};
     }
 
     async handleGetState() {
