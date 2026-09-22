@@ -37,8 +37,9 @@
 - [x] 5.2 Remove `attributeHandlers.handleLockState` from `door-lock.sbmd.js`
 - [x] 5.3 Add `eventHandlers.handleDoorLockAlarm`: decode TLV, branch on alarm code per the alarm-to-resource table, log unresourced codes
 - [x] 5.4 Add `eventHandlers.handleLockOperation`: decode TLV fields 0 (opType) and 1 (source), update `locked`, clear `tampered` and `invalidCodeEntryLimit` always, clear `jammed` only if source == `OP_SOURCE_MANUAL`
-- [x] 5.5 Bump `driverVersion` to `2` in `door-lock.sbmd.js`
+- [x] 5.5 Bump `driverVersion` to `2` in `door-lock.sbmd.js` (content marker only)
 - [x] 5.6 Validate `door-lock.sbmd.js` against the v5 JSON schema
+- [x] 5.7 Bump the endpoint `1` `profileVersion` from `3` to `4` so `deviceServiceDeviceNeedsReconfiguring` reconfigures already-commissioned devices and registers the new resources (the top-level `driverVersion` does not trigger reconfiguration)
 
 ## 6. Door Lock Integration Tests
 
@@ -46,8 +47,10 @@
 - [x] 6.2 Add `test_alarm_jammed_sets_jammed_resource` to `testing/test/door_lock_test.py` (AlarmCode 0x00 → `jammed = "true"`)
 - [x] 6.3 Add `test_alarm_wrong_code_sets_invalid_code_entry_limit_resource` (AlarmCode 0x04 → `invalidCodeEntryLimit = "true"`)
 - [x] 6.4 Add `test_alarm_escutcheon_sets_tampered_resource` (AlarmCode 0x05 → `tampered = "true"`)
-- [x] 6.5 Add `test_lock_operation_clears_tampered_and_invalid_code` (alarm sets a fault, then a lock operation clears `tampered` and `invalidCodeEntryLimit`)
-- [x] 6.6 Update the existing `test_locked_resource_updated_by_event` comments to reflect that live `locked` updates now arrive via `LockOperation` events rather than the attribute subscription
+- [x] 6.5 Add `test_lock_operation_clears_tampered_and_invalid_code` (set both `tampered` (0x05) and `invalidCodeEntryLimit` (0x04) true first, then a lock operation clears both)
+- [x] 6.6 Update the existing `test_locked_resource_updated_by_event` comments and docstring to reflect that live `locked` updates now arrive via `LockOperation` events rather than the attribute subscription
+- [x] 6.7 Add a `manualOperation` side-band to `DoorLockDevice.js` that emits a `LockOperation` with `OperationSource == Manual`
+- [x] 6.8 Add `test_manual_lock_operation_clears_jammed` (Manual operation clears `jammed`) and `test_non_manual_lock_operation_leaves_jammed_set` (ProprietaryRemote operation clears `tampered` but leaves `jammed` set)
 
 ## 7. Sensor Integration Tests (Mocks, Fixtures, Tests)
 

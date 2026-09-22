@@ -81,6 +81,7 @@ export class DoorLockDevice extends VirtualDevice {
         this.registerOperation('lock', () => this.handleLock());
         this.registerOperation('unlock', () => this.handleUnlock());
         this.registerOperation('alarm', ({alarmCode}) => this.handleAlarm(alarmCode));
+        this.registerOperation('manualOperation', ({lock} = {}) => this.handleManualOperation(lock));
         this.registerOperation('getState', () => this.handleGetState());
     }
 
@@ -175,6 +176,32 @@ export class DoorLockDevice extends VirtualDevice {
         });
 
         return {alarmCode};
+    }
+
+    /**
+     * Emit a LockOperation with OperationSource=Manual, simulating a person
+     * physically operating the lock. Defaults to a Lock operation; pass
+     * { lock: false } for an Unlock.
+     */
+    async handleManualOperation(lock = true) {
+        const lockOperationType = lock ? DoorLock.LockOperationType.Lock : DoorLock.LockOperationType.Unlock;
+        const lockState = lock ? DoorLock.LockState.Locked : DoorLock.LockState.Unlocked;
+
+        await this.endpoints[0].act(async (agent) => {
+            agent.doorLock.state.lockState = lockState;
+            await this.endpoints[0].events.doorLock.lockOperation.emit(
+                {
+                    lockOperationType,
+                    operationSource: DoorLock.OperationSource.Manual,
+                    userIndex: null,
+                    fabricIndex: null,
+                    sourceNode: null
+                },
+                agent.context
+            );
+        });
+
+        return {lockState: lock ? 'locked' : 'unlocked'};
     }
 
     async handleGetState() {

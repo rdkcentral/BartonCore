@@ -4,7 +4,7 @@ Matter Critical events (Informational or Critical priority) are delivered with h
 
 ## What Changes
 
-- **Door Lock driver** (`door-lock.sbmd.js`): Add event handlers for `DoorLockAlarm` and `LockOperation`. Introduce three new resources: `jammed`, `tampered`, and `invalidCodeEntryLimit` (all pre-defined in `commonDeviceDefs.h`). Bump `driverVersion` to 2.
+- **Door Lock driver** (`door-lock.sbmd.js`): Add event handlers for `DoorLockAlarm` and `LockOperation`. Introduce three new resources: `jammed`, `tampered`, and `invalidCodeEntryLimit` (all pre-defined in `commonDeviceDefs.h`). Bump the endpoint `profileVersion` to 4 to trigger reconfiguration for the new resources, and bump `driverVersion` to 2 as a content marker.
 - **Contact Sensor driver** (`contact-sensor.sbmd.js`): Add event handler for `BooleanState.StateChange`. Bump `driverVersion` to 2.
 - **Water Leak Detector driver** (`water-leak-detector.sbmd.js`): Add event handler for `BooleanState.StateChange`. Bump `driverVersion` to 2.
 - **SBMD.md documentation fix**: Correct `args.event.data` → `args.event.tlvBase64` in the API table and all affected examples.
@@ -38,4 +38,4 @@ Matter Critical events (Informational or Critical priority) are delivered with h
 - **CMake flags**: `BCORE_MATTER` (no new flags required)
 - **Consumers**: Any client observing `jammed`, `tampered`, or `invalidCodeEntryLimit` on a Matter door lock endpoint will now receive live updates from Critical events. Previously these resources were never updated.
 - **No breaking changes**: New resources (`jammed`, `tampered`, `invalidCodeEntryLimit`) are additive. Attribute-based handlers (`handleLockState`, `handleStateValue`) are removed; live state updates now arrive exclusively via event handlers. Clients observing existing resources see no behavioral change other than the source of updates.
-- **Driver versioning**: `driverVersion` bumped to 2 in all three drivers to trigger reconfiguration on existing commissioned devices, registering the new resources.
+- **Driver versioning**: The door lock bumps its endpoint `profileVersion` from 3 to 4 so `deviceServiceDeviceNeedsReconfiguring` reconfigures already-commissioned devices and registers the new resources. `driverVersion` is bumped to 2 in all three drivers as a content marker, but it does not itself trigger reconfiguration (it is only recorded and logged). The sensors add no new resources and need no reconfiguration.

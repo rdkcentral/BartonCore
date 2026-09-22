@@ -109,7 +109,7 @@ SbmdDriver({
     endpoints: {
         '1': {
             profile: 'doorLock',
-            profileVersion: 3,
+            profileVersion: 4,
             resources: {
                 locked: {
                     type: 'boolean',

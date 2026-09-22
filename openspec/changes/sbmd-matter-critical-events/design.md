@@ -39,20 +39,20 @@ All three drivers switch to event-only live updates. The `attributeHandlers` blo
 
 ### Decision 2: TLV decoding pattern
 
-Event payloads are decoded via `Sbmd.Tlv.decode(args.event.tlvBase64)`, which returns an array of the struct's field values in tag order. Fields are accessed by index (e.g., `fields[0]` for the first field's value).
+Event payloads are decoded via `Sbmd.Tlv.decode(args.event.tlvBase64)`. A struct payload decodes to an **object keyed by each field's numeric TLV context tag** (e.g. `{0: <alarmCode>}`); a single scalar payload decodes to the value directly. Fields are accessed by tag number (e.g. `fields[0]` reads the field with context tag 0).
 
 ```
 args.event.tlvBase64 (base64 struct TLV)
   │
   └─► Sbmd.Tlv.decode()
-        └─► [<alarmCode>, ...]
+        └─► { 0: <alarmCode>, 1: <source>, ... }   // object keyed by context tag
                   ↑
-              fields[0]
+              fields[0]  // key "0", not an array index
 ```
 
-**Rationale**: Matches the implementation in `BuildEventArgs` (which sets `tlvBase64`, not `data`). `Sbmd.Tlv.decode()` returns each field value directly (a scalar for single-value attribute payloads, an array of values for struct event payloads). Index-based access is safe for these well-known single-or-small-field structs where tag order is fixed by the Matter spec.
+**Rationale**: Matches the implementation in `BuildEventArgs` (which sets `tlvBase64`, not `data`) and `sbmd-tlv.js`, which converts struct fields into an object keyed by their context tags (verified by `SbmdTlvTest.DecodeStruct`, which decodes to `{"1":5,"2":true}`). Numeric access such as `fields[0]` works because tag `0` is an object key `"0"`, not because the payload is an array. Tag-number access is safe for these well-known events where the Matter spec fixes each field's context tag.
 
-**Alternative considered**: Tag-based search. More robust but verbose for simple single-field events. Not needed given fixed Matter TLV encoding order.
+**Alternative considered**: Iterating keys to find a tag. More defensive but verbose for these fixed single-or-small-field events. Not needed given the Matter-defined tag assignments.
 
 ---
 
@@ -64,7 +64,7 @@ args.event.tlvBase64 (base64 struct TLV)
 | LockFactoryReset | 0x01 | log only | `LOCK_RESET_TO_FACTORY_DEFAULTS` → log |
 | LockRadioPowerCycled | 0x03 | log only | `RF_MODULE_POWER_CYCLED` → log |
 | WrongCodeEntryLimit | 0x04 | `invalidCodeEntryLimit = true` | `TAMPER_ALARM_WRONG_CODE_ENTRY_LIMIT` → `invalidCodeEntryLimitChanged(true)` |
-| FrontEsceutcheonRemoved | 0x05 | `tampered = true` | `TAMPER_ALARM_FRONT_ESCUTCHEON_REMOVED` → `tamperedStateChanged(true)` |
+| FrontEscutcheonRemoved | 0x05 | `tampered = true` | `TAMPER_ALARM_FRONT_ESCUTCHEON_REMOVED` → `tamperedStateChanged(true)` |
 | DoorForcedOpen | 0x06 | `tampered = true` | `DOOR_FORCED_OPEN_WHILE_LOCKED` → `tamperedStateChanged(true)` |
 | DoorAjar | 0x07 | log only | (Matter-only; no Zigbee precedent) |
 | ForcedUser | 0x08 | log only | (Matter-only; no Zigbee precedent) |
@@ -101,9 +101,13 @@ The `OperationSource` field is at TLV tag 1 in the `LockOperation` struct.
 
 ---
 
-### Decision 6: `driverVersion` bump to 2
+### Decision 6: Trigger reconfiguration via the endpoint `profileVersion`
 
-All three drivers bump from `driverVersion: 1` to `driverVersion: 2`. This triggers `DoConfigureDevice` reconfiguration on reconnect for already-commissioned devices, registering the new resources.
+Reconfiguration of already-commissioned devices is decided by `deviceServiceDeviceNeedsReconfiguring`, which compares the Barton **device-class version** and the **endpoint profile version** against the current driver — it does **not** look at the SBMD top-level `driverVersion` (that field is only recorded and logged by `SbmdLoader`).
+
+Because the door lock adds new endpoint resources, its endpoint `profileVersion` is bumped from `3` to `4` so `deviceServiceDeviceNeedsReconfiguring` detects the mismatch, reruns configuration on reconnect, and registers `jammed`, `tampered`, and `invalidCodeEntryLimit`. `driverVersion` is also bumped to `2` as a content marker, but it does not itself drive reconfiguration.
+
+The contact sensor and water leak detector add no new resources (event-only live updates plus a one-time seed on the existing `faulted` resource). Barton subscribes to every device with a full wildcard (all attributes **and** all events — see `DeviceDataCache::OnDeviceConnected`), so already-commissioned sensors already receive `BooleanState.StateChange`; after a normal restart the new event handler picks it up with no per-device reconfiguration. They therefore need no version bump; their `driverVersion` bump to `2` is a content marker only.
 
 ## Risks / Trade-offs
 
@@ -114,7 +118,7 @@ All three drivers bump from `driverVersion: 1` to `driverVersion: 2`. This trigg
 → *Mitigation*: Clearing is inferred from `LockOperation`. This is the same design as Zigbee. No further mitigation possible without a richer event model from the device.
 
 **[Risk 3] `jammed`/`tampered`/`invalidCodeEntryLimit` start with no value until first event**
-→ *Mitigation*: Resources are registered at commission time but have no initial value. Consumers must handle `null`/absent value. This matches the Zigbee driver's behavior. Marked in the spec.
+→ *Mitigation*: Resources are registered at commission time but have no initial value. Consumers must handle `null`/absent value. This **intentionally differs** from the Zigbee driver, which seeds these to `"false"` at commission; the SBMD driver leaves them unseeded (first qualifying event sets them). Marked in the spec.
 
 **[Risk 4] SBMD.md `args.event` doc fix may conflict with an upstream fix**
 → *Mitigation*: The fix is scoped to the event API table and the door-lock example. If another author fixes the same lines, a merge conflict will surface it cleanly.

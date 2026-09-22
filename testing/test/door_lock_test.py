@@ -220,12 +220,12 @@ def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_
 
 
 def test_locked_resource_updated_by_event(default_environment, matter_door_lock):
-    """Verify that the locked resource updates when the LockState attribute changes.
+    """Verify that the locked resource updates from LockOperation events.
 
     Confirm the initial seeded value via direct read (the seed handler runs inside
     DoRegisterDriverResources and bakes the value in without emitting RESOURCE_UPDATED),
     then trigger sideband unlock and verify the resource transitions to "false" via the
-    LockState attribute subscription report. Then lock and verify "true".
+    LockOperation event handler. Then lock and verify "true".
     """
 
     lock = _commission_door_lock(default_environment, matter_door_lock)
@@ -300,13 +300,21 @@ def test_lock_operation_clears_tampered_and_invalid_code(
 ):
     """Verify that a LockOperation event clears tampered and invalidCodeEntryLimit.
 
-    Trigger a WrongCodeEntryLimit alarm to set invalidCodeEntryLimit=true, then
-    trigger a lock sideband operation and verify both tampered and
-    invalidCodeEntryLimit are cleared to false.
+    Set both fault resources first (FrontEscutcheonRemoved alarm -> tampered,
+    WrongCodeEntryLimit alarm -> invalidCodeEntryLimit), wait for both to read
+    true, then trigger a lock sideband operation and verify both are cleared to
+    false.
     """
+
     _commission_door_lock(default_environment, matter_door_lock)
     client = default_environment.get_client()
 
+    # Set tampered=true via FrontEscutcheonRemoved (0x05).
+    tampered_set_queue = resource_update_listener(client, "tampered")
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x05})
+    wait_for_resource_value(tampered_set_queue, "true", timeout=10)
+
+    # Set invalidCodeEntryLimit=true via WrongCodeEntryLimit (0x04).
     invalid_code_queue = resource_update_listener(client, "invalidCodeEntryLimit")
     matter_door_lock.sideband.send("alarm", {"alarmCode": 0x04})
     wait_for_resource_value(invalid_code_queue, "true", timeout=10)
@@ -321,3 +329,54 @@ def test_lock_operation_clears_tampered_and_invalid_code(
 
     wait_for_resource_value(tampered_cleared_queue, "false", timeout=10)
     wait_for_resource_value(invalid_code_cleared_queue, "false", timeout=10)
+
+
+def test_manual_lock_operation_clears_jammed(default_environment, matter_door_lock):
+    """A LockOperation with OperationSource=Manual clears the jammed resource."""
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    # Jam the lock first.
+    jammed_set_queue = resource_update_listener(client, "jammed")
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x00})
+    wait_for_resource_value(jammed_set_queue, "true", timeout=10)
+
+    # A manual operation clears jammed.
+    jammed_cleared_queue = resource_update_listener(client, "jammed")
+    matter_door_lock.sideband.send("manualOperation", {"lock": True})
+    wait_for_resource_value(jammed_cleared_queue, "false", timeout=10)
+
+
+def test_non_manual_lock_operation_leaves_jammed_set(
+    default_environment, matter_door_lock
+):
+    """A non-manual LockOperation clears tampered but leaves jammed set.
+
+    The jammed resource is only cleared by a Manual-source operation. A
+    ProprietaryRemote sideband lock must clear tampered (proving the handler
+    ran) while leaving jammed = true.
+    """
+    lock = _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    # Jam the lock and set tampered.
+    jammed_set_queue = resource_update_listener(client, "jammed")
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x00})
+    wait_for_resource_value(jammed_set_queue, "true", timeout=10)
+
+    tampered_set_queue = resource_update_listener(client, "tampered")
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x05})
+    wait_for_resource_value(tampered_set_queue, "true", timeout=10)
+
+    # A non-manual (ProprietaryRemote) operation clears tampered but not jammed.
+    tampered_cleared_queue = resource_update_listener(client, "tampered")
+    matter_door_lock.sideband.send("lock")
+    wait_for_resource_value(tampered_cleared_queue, "false", timeout=10)
+
+    # jammed remains true (only a Manual operation clears it).
+    resource = client.get_resource_by_uri(resource_uri(lock, "jammed", endpoint_id=1))
+    assert resource is not None, "jammed resource not found"
+    assert resource.props.value == "true", (
+        f"Expected jammed to remain 'true' after a non-manual operation, "
+        f"got '{resource.props.value}'"
+    )

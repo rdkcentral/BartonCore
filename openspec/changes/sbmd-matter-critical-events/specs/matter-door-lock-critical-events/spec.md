@@ -8,7 +8,7 @@ Alarm code mapping:
 - 0x01 (LockFactoryReset) → log only
 - 0x03 (LockRadioPowerCycled) → log only
 - 0x04 (WrongCodeEntryLimit) → `invalidCodeEntryLimit = "true"`
-- 0x05 (FrontEsceutcheonRemoved) → `tampered = "true"`
+- 0x05 (FrontEscutcheonRemoved) → `tampered = "true"`
 - 0x06 (DoorForcedOpen) → `tampered = "true"`
 - 0x07 (DoorAjar) → log only
 - 0x08 (ForcedUser) → log only
@@ -22,7 +22,7 @@ Alarm code mapping:
 - **THEN** the `invalidCodeEntryLimit` resource SHALL be updated to `"true"`
 
 #### Scenario: Front escutcheon removed alarm sets tampered resource
-- **WHEN** a `DoorLockAlarm` event is received with AlarmCode = 0x05 (FrontEsceutcheonRemoved)
+- **WHEN** a `DoorLockAlarm` event is received with AlarmCode = 0x05 (FrontEscutcheonRemoved)
 - **THEN** the `tampered` resource SHALL be updated to `"true"`
 
 #### Scenario: Door forced open alarm sets tampered resource
@@ -89,12 +89,12 @@ These resources have no initial value until the first qualifying event fires.
 
 ---
 
-### Requirement: Door lock SBMD driver version is 2
-The door lock SBMD driver SHALL have `driverVersion: 2`. On reconnect of a device previously commissioned with `driverVersion: 1`, `DoConfigureDevice` SHALL trigger reconfiguration, registering the new resources.
+### Requirement: Door lock endpoint profile version triggers reconfiguration for new resources
+The door lock SBMD driver SHALL bump the endpoint `1` `profileVersion` (from `3` to `4`) so that `deviceServiceDeviceNeedsReconfiguring` detects the change and reconfigures already-commissioned devices, registering the new `jammed`, `tampered`, and `invalidCodeEntryLimit` resources. The top-level `driverVersion` is bumped to `2` as a content marker but does not itself trigger reconfiguration (it is only recorded and logged).
 
 #### Scenario: Reconfiguration registers new resources on upgrade
-- **WHEN** a device commissioned with `driverVersion: 1` reconnects
-- **THEN** the driver SHALL reconfigure and register `jammed`, `tampered`, and `invalidCodeEntryLimit` resources
+- **WHEN** a device commissioned with the prior door lock driver (endpoint profile version `3`) reconnects after the driver is upgraded to endpoint profile version `4`
+- **THEN** the driver SHALL reconfigure and register the `jammed`, `tampered`, and `invalidCodeEntryLimit` resources
 
 ---
 
