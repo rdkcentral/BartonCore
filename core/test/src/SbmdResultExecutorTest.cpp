@@ -46,15 +46,15 @@ namespace
     protected:
         static void SetUpTestSuite()
         {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(256 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(256 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
         }
 
         static void TearDownTestSuite()
         {
-            MQuickJsRuntime::Shutdown();
+            MQuickJsRuntime::Instance().Shutdown();
         }
 
         /**
@@ -63,7 +63,7 @@ namespace
          */
         JSValue Eval(const char *expr)
         {
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             return JS_Eval(ctx, expr, strlen(expr), "<test>", JS_EVAL_RETVAL);
         }
@@ -74,14 +74,14 @@ namespace
          */
         std::optional<ParsedResult> EvalAndParse(const char *expr)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             JSValue result = Eval(expr);
 
             if (JS_IsException(result))
             {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx);
                 return std::nullopt;
             }
 
@@ -374,8 +374,8 @@ namespace
         EXPECT_FALSE(JS_IsUndefined(rc.context));
 
         // Verify context content
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
         JSValue keyVal = JS_GetPropertyStr(ctx, rc.context, "key");
         JSCStringBuf buf;
         const char *str = JS_ToCString(ctx, keyVal, &buf);
@@ -427,8 +427,8 @@ namespace
         EXPECT_FALSE(JS_IsUndefined(ra.context));
 
         // Verify context content
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
         JSCStringBuf buf;
         const char *str = JS_ToCString(ctx, ra.context, &buf);
         ASSERT_NE(str, nullptr);
@@ -572,8 +572,8 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseNullResultReturnsNullopt)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         auto parsed = SbmdResultExecutor::Parse(ctx, JS_NULL);
         EXPECT_FALSE(parsed.has_value());
@@ -581,8 +581,8 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseUndefinedResultReturnsNullopt)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         auto parsed = SbmdResultExecutor::Parse(ctx, JS_UNDEFINED);
         EXPECT_FALSE(parsed.has_value());
@@ -591,8 +591,8 @@ namespace
     TEST_F(SbmdResultExecutorTest, ParseMissingTerminalReturnsNullopt)
     {
         // Construct a raw object with ops but no terminal
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         JSValue result = JS_Eval(ctx, "({ops: []})", 11, "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(result));
@@ -604,8 +604,8 @@ namespace
     TEST_F(SbmdResultExecutorTest, ParseUnknownOpTypeSkipped)
     {
         // Build a raw result with an unknown op type followed by a known one
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         const char *code = "({"
                            "  ops: [{op: 'futureOp', foo: 'bar'}, {op: 'log', message: 'hi'}],"
@@ -624,8 +624,8 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseUnknownTerminalReturnsNullopt)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         const char *code = "({ops: [], terminal: {op: 'unknownTerminal'}})";
 
