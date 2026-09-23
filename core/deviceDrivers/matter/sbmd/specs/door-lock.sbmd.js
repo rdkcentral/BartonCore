@@ -54,6 +54,7 @@ SbmdDriver({
         // DoorLockAlarm alarm codes
         ALARM_LOCK_JAMMED: 0x00,
         ALARM_WRONG_CODE_ENTRY_LIMIT: 0x04,
+        // Matter/CHIP spell this enum member "kFrontEsceutcheonRemoved" (typo); noting to avoid confusion
         ALARM_FRONT_ESCUTCHEON_REMOVED: 0x05,
         ALARM_DOOR_FORCED_OPEN: 0x06,
 
