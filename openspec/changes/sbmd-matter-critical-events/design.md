@@ -109,6 +109,15 @@ Because the door lock adds new endpoint resources, its endpoint `profileVersion`
 
 The contact sensor and water leak detector add no new resources (event-only live updates plus a one-time seed on the existing `faulted` resource). Barton subscribes to every device with a full wildcard (all attributes **and** all events — see `DeviceDataCache::OnDeviceConnected`), so already-commissioned sensors already receive `BooleanState.StateChange`; after a normal restart the new event handler picks it up with no per-device reconfiguration. They therefore need no version bump; their `driverVersion` bump to `2` is a content marker only.
 
+### Decision 7: Events that do not map to a resource are logged or deferred
+
+Resolves the open question of what to do with events that have no 1:1 resource mapping:
+
+- **Unresourced `DoorLockAlarm` codes** (`0x01` LockFactoryReset, `0x03` LockRadioPowerCycled, `0x07` DoorAjar, `0x08` ForcedUser) are **logged and ignored** — the handler exists but takes no resource action, so a diagnostic record is emitted without inventing a resource.
+- **Audit-trail / feature-gated events** (`DoorStateChange`, `LockOperationError`, `LockUserChange`) are **deferred / out of scope** — no handler is registered, so the wildcard-delivered event is silently dropped by the dispatch table.
+
+No new resources are invented to hold event data that has no established Barton mapping.
+
 ## Risks / Trade-offs
 
 **[Risk 1] `invalidCodeEntryLimit` clears on any LockOperation, not just after lockout expiry**

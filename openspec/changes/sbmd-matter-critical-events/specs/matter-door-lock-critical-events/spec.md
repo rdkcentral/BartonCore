@@ -104,3 +104,16 @@ The door lock SBMD driver SHALL NOT include a handler for `DoorStateChange` even
 #### Scenario: DoorStateChange events have no handler
 - **WHEN** a Matter Door Lock device emits a `DoorStateChange` event
 - **THEN** the event SHALL be silently ignored (no matching handler in the dispatch table)
+
+---
+
+### Requirement: LockOperationError and LockUserChange events are not handled (out of scope)
+The door lock SBMD driver SHALL NOT include handlers for the `LockOperationError` (event 0x0003) or `LockUserChange` (event 0x0004) audit-trail events. These carry failed-attempt and user-database-change records that do not map to any Barton doorLock resource in this change and are out of scope per the ticket decision.
+
+#### Scenario: LockOperationError events have no handler
+- **WHEN** a Matter Door Lock device emits a `LockOperationError` event
+- **THEN** the event SHALL be silently ignored (no matching handler in the dispatch table)
+
+#### Scenario: LockUserChange events have no handler
+- **WHEN** a Matter Door Lock device emits a `LockUserChange` event
+- **THEN** the event SHALL be silently ignored (no matching handler in the dispatch table)
