@@ -295,6 +295,20 @@ def test_alarm_escutcheon_sets_tampered_resource(default_environment, matter_doo
     wait_for_resource_value(tampered_queue, "true", timeout=10)
 
 
+def test_alarm_door_forced_open_sets_tampered_resource(
+    default_environment, matter_door_lock
+):
+    """Verify that a DoorLockAlarm(DoorForcedOpen) event sets tampered to true."""
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    tampered_queue = resource_update_listener(client, "tampered")
+
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x06})
+
+    wait_for_resource_value(tampered_queue, "true", timeout=10)
+
+
 def test_lock_operation_clears_tampered_and_invalid_code(
     default_environment, matter_door_lock
 ):

@@ -51,6 +51,7 @@
 - [x] 6.6 Update the existing `test_locked_resource_updated_by_event` comments and docstring to reflect that live `locked` updates now arrive via `LockOperation` events rather than the attribute subscription
 - [x] 6.7 Add a `manualOperation` side-band to `DoorLockDevice.js` that emits a `LockOperation` with `OperationSource == Manual`
 - [x] 6.8 Add `test_manual_lock_operation_clears_jammed` (Manual operation clears `jammed`) and `test_non_manual_lock_operation_leaves_jammed_set` (ProprietaryRemote operation clears `tampered` but leaves `jammed` set)
+- [x] 6.9 Add `test_alarm_door_forced_open_sets_tampered_resource` (AlarmCode 0x06 → `tampered = "true"`; covers the second alarm code in the shared tampered branch)
 
 ## 7. Sensor Integration Tests (Mocks, Fixtures, Tests)
 
