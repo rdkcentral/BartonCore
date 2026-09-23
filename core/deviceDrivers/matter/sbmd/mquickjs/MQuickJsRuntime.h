@@ -144,8 +144,8 @@ namespace barton
          * Log current mquickjs memory usage at the given label.
          * Also updates peak tracking when walkHeap is enabled.
          *
-         * Not thread-safe: callers must hold MQuickJsRuntime::GetMutex() while
-         * calling this function.
+         * Not thread-safe: callers must hold MQuickJsRuntime::Instance().GetMutex()
+         * while calling this function.
          *
          * @param label Descriptive label for the log entry (e.g. "post-init")
          * @param priority Log priority level (e.g. IC_LOG_DEBUG, IC_LOG_ERROR)
