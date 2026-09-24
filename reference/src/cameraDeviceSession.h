@@ -65,22 +65,55 @@ typedef void (*CameraDeviceOnRemoteIce)(const gchar *jsonCandidates, gpointer us
 typedef void (*CameraDeviceOnSessionError)(const gchar *message, gpointer userData);
 
 /**
- * Create a camera device session and subscribe to resource-updated events.
+ * Callback invoked (ONVIF path) when the camera reports the RTSP media URL from getMediaUrl.
  *
- * @param client       the Barton client
- * @param deviceId     the camera device id
- * @param onRemoteSdp  callback for the remote SDP answer
- * @param onRemoteIce  callback for remote ICE candidates
- * @param onError      callback for a session-ended-in-error status
- * @param userData     opaque data passed to callbacks
+ * @param url       the rtsp:// media URL (caller does not free)
+ * @param userData  opaque user data
+ */
+typedef void (*CameraDeviceOnMediaUrl)(const gchar *url, gpointer userData);
+
+/**
+ * Callback invoked (ONVIF path) when the camera reports the snapshot URL from getSnapshotUrl.
+ *
+ * @param url       the http(s):// snapshot URL (caller does not free)
+ * @param userData  opaque user data
+ */
+typedef void (*CameraDeviceOnSnapshotUrl)(const gchar *url, gpointer userData);
+
+/**
+ * Create a camera device session and subscribe to resource-updated events. The event callbacks
+ * are registered separately (see the Set*Callbacks functions) so each consumer -- the shared
+ * command context and the per-technology backends -- can own its own callback data.
+ *
+ * @param client   the Barton client
+ * @param deviceId the camera device id
  * @return the session, or NULL on error
  */
-CameraDeviceSession *cameraDeviceSessionCreate(BCoreClient *client,
-                                               const gchar *deviceId,
-                                               CameraDeviceOnRemoteSdp onRemoteSdp,
-                                               CameraDeviceOnRemoteIce onRemoteIce,
-                                               CameraDeviceOnSessionError onError,
-                                               gpointer userData);
+CameraDeviceSession *cameraDeviceSessionCreate(BCoreClient *client, const gchar *deviceId);
+
+/**
+ * Register the session-status callback, invoked when the camera reports the session ended.
+ *
+ * @param session  the session
+ * @param onError  callback for a session-ended-in-error status
+ * @param userData opaque data passed to the callback
+ */
+void cameraDeviceSessionSetStatusCallback(CameraDeviceSession *session,
+                                          CameraDeviceOnSessionError onError,
+                                          gpointer userData);
+
+/**
+ * Register the WebRTC-path callbacks (remote SDP and ICE candidates from the camera).
+ *
+ * @param session      the session
+ * @param onRemoteSdp  callback for the remote SDP answer/offer
+ * @param onRemoteIce  callback for remote ICE candidates
+ * @param userData     opaque data passed to the callbacks
+ */
+void cameraDeviceSessionSetWebrtcCallbacks(CameraDeviceSession *session,
+                                           CameraDeviceOnRemoteSdp onRemoteSdp,
+                                           CameraDeviceOnRemoteIce onRemoteIce,
+                                           gpointer userData);
 
 /**
  * Create the camera session (allocates a session id on the camera).
@@ -143,6 +176,60 @@ bool cameraDeviceSessionSendOffer(CameraDeviceSession *session, const gchar *sdp
  * @return true on success
  */
 bool cameraDeviceSessionSendIceCandidates(CameraDeviceSession *session, const gchar *jsonCandidates);
+
+/**
+ * Register the ONVIF-path callbacks that deliver the RTSP media URL and snapshot URL, which the
+ * driver reports asynchronously as resource-updated events. Optional; only the ONVIF flow uses
+ * them. Safe to call before requesting the URLs.
+ *
+ * @param session      the session
+ * @param onMediaUrl   callback for the RTSP media URL (may be NULL)
+ * @param onSnapshotUrl callback for the snapshot URL (may be NULL)
+ * @param userData     opaque data passed to the callbacks
+ */
+void cameraDeviceSessionSetOnvifCallbacks(CameraDeviceSession *session,
+                                          CameraDeviceOnMediaUrl onMediaUrl,
+                                          CameraDeviceOnSnapshotUrl onSnapshotUrl,
+                                          gpointer userData);
+
+/**
+ * ONVIF path: write the camera credentials to the onvif endpoint so the driver can authenticate
+ * its SOAP calls. Either value may be NULL/empty to leave it unset.
+ *
+ * @param session  the session
+ * @param user     the ONVIF username, or NULL/empty
+ * @param pass     the ONVIF password, or NULL/empty
+ * @return true if the writes succeeded
+ */
+bool cameraDeviceSessionOnvifSetCredentials(CameraDeviceSession *session, const gchar *user, const gchar *pass);
+
+/**
+ * ONVIF path: read the non-secret authRequired signal from the onvif endpoint. The caller owns
+ * the returned string.
+ *
+ * @param session  the session
+ * @return "true"/"false" (as reported by the camera), or NULL on error
+ */
+gchar *cameraDeviceSessionOnvifReadAuthRequired(CameraDeviceSession *session);
+
+/**
+ * ONVIF path: execute the stream entry point (getMediaUrl) so the driver fetches the RTSP URL
+ * on-demand and emits it as a mediaUrl event delivered via the onMediaUrl callback.
+ *
+ * @param session  the session
+ * @return true if the execute was accepted
+ */
+bool cameraDeviceSessionOnvifRequestMediaUrl(CameraDeviceSession *session);
+
+/**
+ * ONVIF path: take a picture. Executes the camera takePicture springboard, then its reported
+ * getSnapshotUrl entry point, so the driver fetches the snapshot URL on-demand and emits it as a
+ * snapshotUrl event delivered via the onSnapshotUrl callback.
+ *
+ * @param session  the session
+ * @return true if both executes were accepted
+ */
+bool cameraDeviceSessionOnvifRequestSnapshotUrl(CameraDeviceSession *session);
 
 /**
  * Unsubscribe from events and free the session. If the session was successfully

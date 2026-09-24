@@ -32,7 +32,7 @@ option(BCORE_REFERENCE_CAMERA_SUPPORT "Enable the reference app camera stream co
 file(GLOB_RECURSE B_CORE_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 
 if (NOT BCORE_REFERENCE_CAMERA_SUPPORT)
-    list(FILTER B_CORE_REFERENCE_SOURCES EXCLUDE REGEX "cameraCategory\\.c$|cameraDeviceSession\\.c$|cameraWebrtcClient\\.c$|cameraMediaServer\\.c$")
+    list(FILTER B_CORE_REFERENCE_SOURCES EXCLUDE REGEX "cameraCategory\\.c$|cameraDeviceSession\\.c$|cameraWebrtcClient\\.c$|cameraMediaServer\\.c$|cameraRtspClient\\.c$|cameraStreamContext\\.c$|cameraStreamBackend\\.c$|cameraWebrtcBackend\\.c$|cameraOnvifBackend\\.c$")
 endif()
 
 add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})
@@ -46,8 +46,10 @@ if (BCORE_REFERENCE_CAMERA_SUPPORT)
     # gio-2.0 provides GSocketService for the HTTP media server that streams to the browser.
     pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-webrtc-1.0 gstreamer-sdp-1.0 gstreamer-app-1.0)
     pkg_check_modules(GIO REQUIRED gio-2.0)
-    target_include_directories(barton-core-reference PRIVATE ${GST_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS})
-    target_link_libraries(barton-core-reference ${GST_LIBRARIES} ${GIO_LIBRARIES})
+    # libcurl fetches the ONVIF snapshot JPEG for the camera stream command's --snapshot option.
+    pkg_check_modules(CURL REQUIRED libcurl)
+    target_include_directories(barton-core-reference PRIVATE ${GST_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
+    target_link_libraries(barton-core-reference ${GST_LIBRARIES} ${GIO_LIBRARIES} ${CURL_LIBRARIES})
     target_compile_definitions(barton-core-reference PRIVATE BCORE_REFERENCE_CAMERA_SUPPORT)
 endif()
 
