@@ -58,9 +58,9 @@ namespace barton
         // on a dead context.
         if (registration)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
-            if (MQuickJsRuntime::GetSharedContext() == nullptr)
+            if (MQuickJsRuntime::Instance().GetSharedContext() == nullptr)
             {
                 VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
             }
