@@ -113,7 +113,7 @@ def test_deferred_duration_and_in_flight_metrics(
     # The virtual device starts with isOn=false.  Toggling produces an OnOff
     # attribute report that confirms end-to-end completion.
     resource_updated_queue = resource_update_listener(client, "isOn")
-    client.execute_resource(resource_uri(device, "toggle", endpoint_id=1), "", "")
+    client.execute_resource(resource_uri(device, "toggle", endpoint_id=1), "")
     wait_for_resource_value(resource_updated_queue, "true", timeout=10)
 
     telemetry = json.loads(client.get_telemetry())
@@ -169,7 +169,7 @@ def test_deferred_depth_zero_for_single_round_trip(
     client = default_environment.get_client()
 
     resource_updated_queue = resource_update_listener(client, "isOn")
-    client.execute_resource(resource_uri(device, "toggle", endpoint_id=1), "", "")
+    client.execute_resource(resource_uri(device, "toggle", endpoint_id=1), "")
     wait_for_resource_value(resource_updated_queue, "true", timeout=10)
 
     telemetry = json.loads(client.get_telemetry())
