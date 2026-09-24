@@ -451,6 +451,26 @@ if (BCORE_ONVIF AND BUILD_TESTING)
         INCLUDES ${ONVIF_DIR} ${ONVIF_TEST_XML_INCLUDE_DIRS}
     )
 
+    # Driver wiring test: compiles the driver with the device-service C API replaced by FFF fakes,
+    # so registration, the springboard executes, and the destroy path are covered without Matter.
+    bcore_add_cpp_test(
+        NAME testOnvifDeviceDriver
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/OnvifDeviceDriverTest.cpp
+                ${ONVIF_DIR}/OnvifDeviceDriver.cpp
+                ${ONVIF_DIR}/OnvifSoapClient.cpp
+                ${ONVIF_DIR}/OnvifWsDiscovery.cpp
+                ${ONVIF_DIR}/OnvifXml.cpp
+        LIBS ${ONVIF_TEST_CURL_LINK_LIBRARIES} ${ONVIF_TEST_XML_LINK_LIBRARIES} gmock
+             xhDeviceDescriptors BartonCommon::xhTypes BartonCommon::xhLog BartonCommon::xhUtil
+        INCLUDES ${ONVIF_DIR} ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/api/c/public ${FFF_INCLUDE_DIR}
+                 ${ONVIF_TEST_XML_INCLUDE_DIRS} ${ONVIF_TEST_CURL_INCLUDE_DIRS}
+    )
+
+    if (TARGET testOnvifDeviceDriver)
+        target_compile_definitions(testOnvifDeviceDriver PRIVATE BARTON_CONFIG_ONVIF)
+    endif()
+
     if (BUILD_TESTING)
         bcore_configure_glib()
     endif()

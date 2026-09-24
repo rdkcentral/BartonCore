@@ -136,6 +136,9 @@ bcore_option(NAME BCORE_MATTER
 bcore_option(NAME BCORE_PHILIPS_HUE
            DEFINITION BARTON_CONFIG_PHILIPS_HUE
            DESCRIPTION "Enable Philips Hue support")
+bcore_option(NAME BCORE_ONVIF
+           DEFINITION BARTON_CONFIG_ONVIF
+           DESCRIPTION "Enable ONVIF/RTSP IP camera support")
 bcore_option(NAME BCORE_GEN_GIR
            DEFINITION BARTON_CONFIG_GEN_GIR
            DESCRIPTION "Enable generating GIR and typelib information")
