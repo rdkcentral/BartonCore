@@ -74,6 +74,8 @@ pytest_plugins = [
     "testing.mocks.devices.matter.matter_ikea_timmerflotte",
     "testing.mocks.devices.matter.matter_temperature_sensor",
     "testing.mocks.devices.matter.matter_humidity_sensor",
+    "testing.mocks.devices.matter.matter_contact_sensor",
+    "testing.mocks.devices.matter.matter_water_leak_detector",
     # ZHAL
     ## events (load first so pytest can assert-rewrite these modules before
     ## they are imported transitively by other plugins)

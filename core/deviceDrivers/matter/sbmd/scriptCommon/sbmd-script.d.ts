@@ -265,11 +265,12 @@ interface SbmdAttributeTrigger {
 interface SbmdEventTrigger {
     clusterId: number;
     eventId: number;
-    /** Decoded event payload (array of TLV field values). */
-    data: any[];
-    /** Base64-encoded TLV data. */
+    /**
+     * Base64-encoded TLV event payload. Decode with `Sbmd.Tlv.decode()`: a
+     * struct payload decodes to an object keyed by each field's numeric TLV
+     * context tag (access by tag number, e.g. `decoded[0]`).
+     */
     tlvBase64: string;
-    alias: string | null;
 }
 
 /** Command trigger (present on unsolicited command handlers). */
