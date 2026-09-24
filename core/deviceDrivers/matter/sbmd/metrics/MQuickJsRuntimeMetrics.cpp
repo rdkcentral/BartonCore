@@ -132,28 +132,28 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::ForceSnapshot()
     {
-        if (!MQuickJsRuntime::IsContextReady())
+        if (!MQuickJsRuntime::Instance().IsContextReady())
         {
             return;
         }
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            JSContext *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            JSContext *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             if (!ctx)
             {
                 return;
             }
 
-            auto usage = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
+            auto usage = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
 
             if (!usage)
             {
                 return;
             }
 
-            MQuickJsRuntime::RecordHeapSnapshot(*usage);
+            MQuickJsRuntime::Instance().RecordHeapSnapshot(*usage);
         }
 
         TickleSampler();

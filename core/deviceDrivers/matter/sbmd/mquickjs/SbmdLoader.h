@@ -30,7 +30,7 @@
  *   Pass 1: Extract constants block, evaluate as object literal, produce var declarations.
  *   Pass 2: Prepend constants, IIFE-wrap, evaluate, extract SbmdDriver registration.
  *
- * All operations require the caller to hold MQuickJsRuntime::GetMutex().
+ * All operations require the caller to hold MQuickJsRuntime::Instance().GetMutex().
  */
 
 #pragma once
@@ -55,7 +55,7 @@ namespace barton
         /**
          * Inject the SbmdDriver capture function and __sbmd_registration global
          * into the shared mquickjs context. Must be called once during initialization,
-         * after MQuickJsRuntime::Initialize() and SbmdBundleLoader::LoadBundle().
+         * after MQuickJsRuntime::Instance().Initialize() and SbmdBundleLoader::LoadBundle().
          *
          * @param ctx The mquickjs context
          * @return true if injection succeeded

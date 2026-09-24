@@ -62,7 +62,7 @@ namespace barton
             if (JS_IsException(res))
             {
                 std::string exMsg;
-                MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx, &exMsg);
                 icError("Failed to reset __sbmd_registration for next driver load: %s", exMsg.c_str());
             }
         }
@@ -202,7 +202,7 @@ namespace barton
 
         std::string exMsg;
 
-        if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
+        if (MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx, &exMsg))
         {
             icError("SbmdDriver injection left a pending exception: %s", exMsg.c_str());
             return false;
@@ -478,8 +478,8 @@ namespace barton
             std::string msg = GetExceptionString(ctx);
             icError("Failed to evaluate driver %s: %s", filePath.c_str(), msg.c_str());
             std::string stem = driverStemFromPath(filePath);
-            MQuickJsRuntime::GetMetrics().RecordJsException("loading", stem.c_str());
-            MQuickJsRuntime::LogMemoryUsage("driver-eval-failed", IC_LOG_ERROR, true);
+            MQuickJsRuntime::Instance().GetMetrics().RecordJsException("loading", stem.c_str());
+            MQuickJsRuntime::Instance().LogMemoryUsage("driver-eval-failed", IC_LOG_ERROR, true);
             // Reset registration in case SbmdDriver() was called before the error
             ResetRegistration(ctx);
             return nullptr;
@@ -487,7 +487,7 @@ namespace barton
 
         std::string exMsg;
 
-        if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
+        if (MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx, &exMsg))
         {
             icError("Driver evaluation left a pending exception: %s", exMsg.c_str());
             ResetRegistration(ctx);
