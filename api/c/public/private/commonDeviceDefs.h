@@ -120,6 +120,30 @@
 #define CAMERA_PROFILE_FUNCTION_GET_PICTURE                          "getPicture"
 #define CAMERA_PROFILE_FUNCTION_UPLOAD_VIDEO_CLIP                    "uploadVideoClip"
 
+// Abstract camera session model (protocol-agnostic "camera" endpoint). The endpoint, resource, and
+// function names below match the shipped contract exposed by camera.sbmd.js and consumed by the
+// reference app; native camera drivers (e.g. ONVIF) create the same endpoint so a single client flow
+// works across technologies.
+#define CAMERA_SESSION_PROFILE                                       CAMERA_PROFILE
+#define CAMERA_SESSION_ENDPOINT_ID                                   CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID
+#define CAMERA_SESSION_FUNCTION_CREATE_SESSION                       "createSession"
+#define CAMERA_SESSION_FUNCTION_STREAM                               "stream"
+#define CAMERA_SESSION_FUNCTION_TAKE_PICTURE                         "takePicture"
+#define CAMERA_SESSION_FUNCTION_DESTROY_SESSION                      "destroySession"
+
+// ONVIF protocol endpoint. The abstract "stream"/"takePicture" executes springboard here via a
+// { protocol, entryPoint } result; media/snapshot URLs are delivered as events on this endpoint.
+#define ONVIF_PROFILE                                                "onvif"
+#define ONVIF_ENDPOINT_ID                                            ONVIF_PROFILE
+#define ONVIF_PROTOCOL_NAME                                          ONVIF_PROFILE
+#define ONVIF_FUNCTION_GET_MEDIA_URL                                 "getMediaUrl"
+#define ONVIF_RESOURCE_MEDIA_URL                                     "mediaUrl"
+#define ONVIF_FUNCTION_GET_SNAPSHOT_URL                              "getSnapshotUrl"
+#define ONVIF_RESOURCE_SNAPSHOT_URL                                  "snapshotUrl"
+#define ONVIF_RESOURCE_AUTH_REQUIRED                                 "authRequired"
+#define ONVIF_RESOURCE_USERNAME                                      "username"
+#define ONVIF_RESOURCE_PASSWORD                                      "password"
+
 // Sensor Stuff
 #define SENSOR_DC                                                    "sensor"
 #define SENSOR_PROFILE                                               "sensor"
