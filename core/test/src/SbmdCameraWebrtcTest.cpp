@@ -761,17 +761,26 @@ namespace
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingOfferUpdatesRemoteSdp)
     {
-        std::string sessions = SessionsJson("1", "streaming", 42);
+        // Model the first Offer: the active Barton session has no Matter WebRTC ID yet.
+        std::string sessions = SessionsJson("1", "streaming");
         auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, sdp:{tag:1,type:'string'}}",
                              "{webRTCSessionID: 42, sdp: 'remote-offer-sdp'}");
 
+        // Exercise the actual incoming Matter Offer handler with its transient session state.
         auto result =
             InvokeCommandHandler("handleIncomingOffer", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_OFFER, tlv, sessions);
 
         ExpectSuccess(result);
         const auto *ur = ExpectUpdateResource(*result, "remoteSdp", "remote-offer-sdp");
+        // The remote SDP event must identify the Barton session chosen by the fallback.
         ASSERT_TRUE(ur->metadata.has_value());
         EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"1\"") != std::string::npos);
+
+        // The mapping must be persisted for later ICE and EndSession correlation.
+        auto *td = FindTransientData(*result, "sessions");
+        ASSERT_NE(td, nullptr) << "Expected SetTransientData for sessions";
+        EXPECT_TRUE(td->value.find("\"webRTCSessionID\":42") != std::string::npos)
+            << "Sessions must store the webRTCSessionID from the initial offer. Got: " << td->value;
     }
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingAnswerUpdatesRemoteSdp)
