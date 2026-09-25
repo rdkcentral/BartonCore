@@ -74,6 +74,7 @@ namespace
     constexpr uint32_t CMD_ANSWER = 0x01;
     constexpr uint32_t CMD_ICE_CANDIDATES = 0x02;
     constexpr uint32_t CMD_END = 0x03;
+    constexpr int32_t COMMAND_STATUS_NOT_FOUND = 0x8B;
 
     // providerAcceptedCommands (AcceptedCommandList) as base64 TLV: a top-level TLV array of
     // command IDs advertising ProvideOffer (0x02) but NOT SolicitOffer (0x00). The camera answers
@@ -738,7 +739,7 @@ namespace
         // EndSession (0x0553 cmd 0x06): WebRTCSessionID(0), Reason(1)
         std::string sessions = SessionsJson("1", "streaming", 42);
         auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
-        auto &cmd = ExpectSendCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+        auto &cmd = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue decoded = DecodeTlv(cmd.tlvBase64);
@@ -758,6 +759,31 @@ namespace
         JS_ToInt32(Ctx(), &reason, tag1);
         EXPECT_GE(reason, 0);
         EXPECT_LE(reason, 12) << "Reason must be WebRTCEndReasonEnum (0..12)";
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionNotFoundCompletesSuccessfully)
+    {
+        std::string sessions = SessionsJson("1", "streaming", 42);
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &cmd = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        std::string notFoundArgs =
+            std::string("({error:{type:'commandFailed',message:'IM Status Code Received',matterCode:50,commandStatus:") +
+            std::to_string(COMMAND_STATUS_NOT_FOUND) + "},handlerContext:null})";
+        auto recovered = InvokeCallback(cmd.onError, notFoundArgs);
+        ExpectSuccess(recovered);
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionOtherCommandFailurePropagates)
+    {
+        std::string sessions = SessionsJson("1", "streaming", 42);
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &cmd = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto failed = InvokeCallback(cmd.onError,
+                                     "({error:{type:'commandFailed',message:'IM Status Code Received',matterCode:50,"
+                                     "commandStatus:1},handlerContext:null})");
+        ExpectErrorContains(failed, "EndSession failed");
     }
 
     // ========================================================================
@@ -1041,7 +1067,7 @@ namespace
     {
         std::string sessions = SessionsJson("1", "streaming", 42);
         auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
-        ExpectSendCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+        ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
 
         ASSERT_GE(result->ops.size(), 1u);
         EXPECT_TRUE(std::holds_alternative<ResultOp::SetTransientData>(result->ops[0].data));

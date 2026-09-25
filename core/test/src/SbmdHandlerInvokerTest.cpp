@@ -92,6 +92,7 @@ namespace
         EXPECT_EQ(GetUint32Prop(fm, "6"), 0x01u);
         EXPECT_EQ(GetUint32Prop(fm, "8"), 0x03u);
     }
+
     TEST_F(SbmdHandlerInvokerTest, BuildAttributeArgsEmptyTlv)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
@@ -1084,11 +1085,12 @@ namespace
         EXPECT_EQ(GetStringProp(error.Get(), "message"), "CHIP Error 0x00000032");
     }
 
-    TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsWithMatterCode)
+    TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsWithChipAndCommandStatuses)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
-        SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "commandFailed", "CHIP Error", 0x32);
+        SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+            Ctx(), hctx, "commandFailed", "CHIP Error", 0x32, JS_UNDEFINED, 0x8b);
 
         SafeJSValue error(Ctx(), JS_GetPropertyStr(Ctx(), args, "error"));
         EXPECT_EQ(GetStringProp(error.Get(), "type"), "commandFailed");
@@ -1101,6 +1103,12 @@ namespace
         int32_t code = 0;
         JS_ToInt32(Ctx(), &code, mc.Get());
         EXPECT_EQ(code, 0x32);
+
+        SafeJSValue commandStatus(Ctx(), JS_GetPropertyStr(Ctx(), error.Get(), "commandStatus"));
+        ASSERT_FALSE(JS_IsNull(commandStatus.Get()));
+        ASSERT_FALSE(JS_IsUndefined(commandStatus.Get()));
+        JS_ToInt32(Ctx(), &code, commandStatus.Get());
+        EXPECT_EQ(code, 0x8b);
     }
 
     TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsMatterCodeNullWhenNotProvided)

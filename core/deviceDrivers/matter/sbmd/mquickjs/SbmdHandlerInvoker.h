@@ -340,7 +340,8 @@ namespace barton
         /**
          * Build an args object for a deferred error handler.
          *
-         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, error: { type, message, matterCode } }
+         * Creates: { deviceUuid, endpointId, clusterFeatureMaps,
+         *            error: { type, message, matterCode, commandStatus } }
          *
          * @param ctx JS context (caller holds mutex)
          * @param hctx Device/handler context
@@ -348,6 +349,7 @@ namespace barton
          * @param errorMessage A descriptive error message
          * @param matterCode Optional numeric CHIP_ERROR code (-1 = not available)
          * @param handlerContext Optional JS value to set as args.handlerContext
+         * @param commandStatus Optional Interaction Model status from a command response
          * @return JS args object, or JS_EXCEPTION on failure
          */
         static SafeJSValue BuildDeferredErrorArgs(JSContext *ctx,
@@ -355,7 +357,8 @@ namespace barton
                                                   const std::string &errorType,
                                                   const std::string &errorMessage,
                                                   int32_t matterCode = -1,
-                                                  JSValue handlerContext = JS_UNDEFINED);
+                                                  JSValue handlerContext = JS_UNDEFINED,
+                                                  std::optional<int32_t> commandStatus = std::nullopt);
 
     private:
         /**
