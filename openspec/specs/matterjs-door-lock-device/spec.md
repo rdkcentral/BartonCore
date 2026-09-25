@@ -1,4 +1,10 @@
-## ADDED Requirements
+# matter.js Door Lock Device
+
+## Purpose
+
+Specifies the matter.js virtual door lock: its device type, Matter lock/unlock commands, side-band lock/unlock/getState operations, `LockOperation` event emission, initial lock state, and user and PIN-code management.
+
+## Requirements
 
 ### Requirement: Door lock device type
 The matter.js door lock virtual device SHALL present itself as a Matter Door Lock device type (Device Type ID `0x000A`) with a DoorLock cluster (Cluster ID `0x0101`) on endpoint 1.

@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Python Side-band Client
+
+## Purpose
+
+Specifies the Python side-band client used by integration tests to drive virtual devices: the client class, convenience methods, error handling, and timeout support.
+
+## Requirements
 
 ### Requirement: Sideband client class
 A Python `SidebandClient` class SHALL provide a simple interface for sending side-band operations to matter.js virtual devices over HTTP. The client SHALL be initialized with the device's side-band host and port.

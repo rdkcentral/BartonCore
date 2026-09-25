@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Core Services
+
+## Purpose
+
+Specifies the core device service orchestration layer: the two-phase `deviceService` lifecycle, driver manager, subsystem manager, communication watchdog, JSON file-based database, event producer and handler, discovery filters, storage monitor, and device scrubbing.
+
+## Requirements
 
 ### Requirement: DeviceService orchestrator lifecycle
 The `deviceService` SHALL orchestrate the complete service lifecycle in two phases: `deviceServiceInitialize()` (configuration, database init) and `deviceServiceStart()` (event system, drivers, subsystems). Shutdown SHALL follow a defined teardown order (event handler → storage monitor → comm-fail → drivers → subsystems → event producer → database).

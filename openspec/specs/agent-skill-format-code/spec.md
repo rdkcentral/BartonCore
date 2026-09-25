@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Agent Skill: Format Code
+
+## Purpose
+
+Defines the structure and required content of the `format-code` agent skill, covering `clang-format` usage, the diff-only formatting rule, the manual blank-line conventions `clang-format` cannot enforce, and the pre-commit hook.
+
+## Requirements
 
 ### Requirement: Format code skill SKILL.md conforms to Agent Skills spec
 The `format-code` skill SHALL be located at `.github/skills/format-code/SKILL.md`. The frontmatter SHALL include `name: format-code`, a `description` field explaining the skill covers C/C++ code formatting, and `compatibility` noting the BartonCore Docker development container.

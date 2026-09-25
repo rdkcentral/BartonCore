@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Thread Subsystem
+
+## Purpose
+
+Specifies the Thread subsystem's OTBR D-Bus integration: network backup and restore, Thread credentials for Matter commissioning, NAT64 support, ephemeral-key commissioning, border-router status monitoring, the default network name, and conditional compilation.
+
+## Requirements
 
 ### Requirement: OTBR D-Bus integration
 The Thread subsystem SHALL communicate with the OpenThread Border Router (OTBR) agent via D-Bus (using the `io.openthread.BorderRouter` interface on `DBUS_BUS_SYSTEM`). It SHALL wrap D-Bus access via an `OpenThreadClient` class that provides methods for `CreateNetwork()`, `RestoreNetwork()`, `GetChannel()`, `GetPanId()`, `GetExtPanId()`, `GetNetworkKey()`, `GetNetworkName()`, `GetDeviceRole()`, `SetNat64Enabled()`, and `ActivateEphemeralKeyMode()`. The `DeviceRole` enum SHALL include: UNKNOWN, DISABLED, DETACHED, CHILD, ROUTER, LEADER.

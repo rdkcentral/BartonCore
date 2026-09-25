@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Zigbee Subsystem
+
+## Purpose
+
+Specifies the Zigbee subsystem built on the ZHAL abstraction layer: device lifecycle and message-reception callbacks, communication tracking, network management and security events, OTA support, attribute-reporting configuration, DDL processing, network monitoring, energy scan, and channel change.
+
+## Requirements
 
 ### Requirement: ZHAL abstraction layer
 The system SHALL define a Zigbee Hardware Abstraction Layer (ZHAL) as a C API that abstracts the underlying Zigbee radio and stack. ZHAL SHALL support device lifecycle callbacks, attribute report reception, cluster command reception, and network management operations.

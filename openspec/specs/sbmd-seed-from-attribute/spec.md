@@ -1,3 +1,11 @@
+# SBMD seedFrom Attribute
+
+## Purpose
+
+Specifies the SBMD `seedFrom` mapper that seeds an event-backed resource from a Matter attribute at configure and synchronize time: its schema and structure, mutual exclusion with `read`, event requirement, non-subscription semantics, script interface, and JSON schema entry.
+
+## Requirements
+
 ### Requirement: seedFrom mapper — schema and structure
 A resource's mapper MAY contain a `seedFrom` section with an `alias` (a string naming an **attribute** alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The `seedFrom` mapper SHALL only appear when the same resource also declares a `mapper.event` section. The `alias` SHALL resolve to an attribute alias; event aliases SHALL NOT be accepted. The `script` SHALL be required; absence of `script` SHALL be a parse error.
 
