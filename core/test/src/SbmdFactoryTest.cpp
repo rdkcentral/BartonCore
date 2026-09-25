@@ -105,8 +105,8 @@ SbmdDriver({
     protected:
         static void SetUpTestSuite()
         {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(512 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
@@ -114,7 +114,7 @@ SbmdDriver({
 
         static void TearDownTestSuite()
         {
-            MQuickJsRuntime::Shutdown();
+            MQuickJsRuntime::Instance().Shutdown();
         }
 
         void SetUp() override
@@ -159,8 +159,8 @@ SbmdDriver({
         // Load via SbmdLoader
         std::unique_ptr<SbmdRegistration> reg;
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             reg = SbmdLoader::LoadDriver(ctx, filePath.string(), source.c_str(), source.size());
         }
 
@@ -191,8 +191,8 @@ SbmdDriver({
 
         std::unique_ptr<SbmdRegistration> reg;
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             reg = SbmdLoader::LoadDriver(ctx, filePath.string(), source.c_str(), source.size());
         }
         ASSERT_NE(reg, nullptr);
@@ -201,8 +201,8 @@ SbmdDriver({
         EXPECT_FALSE(driver->IsActivated());
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_TRUE(driver->Activate(ctx));
         }
 
@@ -213,8 +213,8 @@ SbmdDriver({
         EXPECT_GT(driver->GetAttributeDispatch().GetSpecificEntryCount(), 0u);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             driver->Deactivate(ctx);
         }
 

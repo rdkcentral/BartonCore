@@ -63,7 +63,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildAttributeArgsBasicFields)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
@@ -82,7 +82,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildAttributeArgsFeatureMaps)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
@@ -94,7 +94,7 @@ namespace
     }
     TEST_F(SbmdHandlerInvokerTest, BuildAttributeArgsEmptyTlv)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
@@ -110,7 +110,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildResourceArgsRead)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
@@ -129,7 +129,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildResourceArgsWrite)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "dimLevel", std::string("75"));
@@ -146,7 +146,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeSimpleSuccessHandler)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue handler(Ctx(), EvalFunc("(function(args) { return Sbmd.result().success(); })"));
@@ -162,7 +162,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeHandlerWithOps)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue handler(Ctx(),
@@ -188,7 +188,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeHandlerWithSendCommand)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue handler(Ctx(),
@@ -211,7 +211,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeThrowingHandlerReturnsNullopt)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue handler(Ctx(), EvalFunc("(function(args) { throw new Error('boom'); })"));
@@ -225,7 +225,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeUndefinedHandlerReturnsNullopt)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
@@ -372,7 +372,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue handler(Ctx(),
                             EvalFunc("(function(args) {"
@@ -404,7 +404,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -427,7 +427,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -473,7 +473,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -519,7 +519,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AQ==");
 
@@ -564,7 +564,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -597,7 +597,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue handler(Ctx(),
                             EvalFunc("(function(args) {"
@@ -652,7 +652,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         // Handler checks for null supplement gracefully
         SafeJSValue handler(Ctx(),
@@ -701,7 +701,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -748,7 +748,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -777,7 +777,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         // Mirrors a seed handler that reads a declared attribute. Even with no fetched
         // data, args.supplements.attributes.lockState must be null (defined), so the
@@ -817,7 +817,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -856,7 +856,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
@@ -892,7 +892,7 @@ namespace
     {
         auto hctx = MakeContext();
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         SafeJSValue handler(Ctx(),
                             EvalFunc("(function(args) {"
@@ -978,7 +978,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildCommandResponseArgsHasResponseFields)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 42, "AQID");
 
@@ -996,7 +996,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildCommandResponseArgsNullData)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0006, 1, "");
 
@@ -1010,7 +1010,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildCommandResponseArgsWithHandlerContext)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         // Create a context object
@@ -1027,7 +1027,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildAttributeReadResponseArgs)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "AB==");
 
@@ -1042,7 +1042,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildAttributeReadResponseArgsWithHandlerContext)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue context(Ctx(), JS_Eval(Ctx(), "('read-ctx')", 12, "<test>", JS_EVAL_RETVAL));
@@ -1059,7 +1059,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgs)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args =
             SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "Operation timed out after 5000ms");
@@ -1074,7 +1074,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsCommandFailed)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args =
             SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "commandFailed", "CHIP Error 0x00000032");
@@ -1086,7 +1086,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsWithMatterCode)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "commandFailed", "CHIP Error", 0x32);
 
@@ -1105,7 +1105,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsMatterCodeNullWhenNotProvided)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         // matterCode = -1 means "not available" → should be null
         SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "timed out", -1);
@@ -1117,7 +1117,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsWithHandlerContext)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue context(Ctx(), JS_Eval(Ctx(), "({retryCount: 3})", 18, "<test>", JS_EVAL_RETVAL));
@@ -1134,7 +1134,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeDeferredOnResponseHandler)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         // Create a deferred onResponse handler that reads the response data
@@ -1160,7 +1160,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeDeferredOnResponseHandlerWithContext)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         // Handler that reads handlerContext
@@ -1186,7 +1186,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeDeferredOnErrorHandler)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         // Create an onError handler that reads the error type
@@ -1213,7 +1213,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeDeferredOnResponseReturnsRequestCommand)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         // onResponse handler that returns another requestCommand (chaining)
@@ -1241,7 +1241,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeDeferredReadAttributeResponse)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         // onResponse handler that reads attribute value from args
@@ -1270,7 +1270,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildEventArgsHasEventFields)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0101, 0x02, "AQID");
 
@@ -1288,7 +1288,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildEventArgsEmptyTlv)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0006, 0, "");
 
@@ -1304,7 +1304,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeEventHandler)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue handler(Ctx(),
@@ -1331,7 +1331,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildCommandArgsHasCommandFields)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0101, 0x1C, "AQID");
 
@@ -1349,7 +1349,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, BuildCommandArgsEmptyTlv)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
         SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0006, 1, "");
 
@@ -1365,7 +1365,7 @@ namespace
 
     TEST_F(SbmdHandlerInvokerTest, InvokeCommandHandler)
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         auto hctx = MakeContext();
 
         SafeJSValue handler(Ctx(),

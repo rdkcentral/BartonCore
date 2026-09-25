@@ -127,7 +127,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
     // InjectCaptureFunction may acquire it internally.
     if (!runtimeReady)
     {
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         if (!SbmdBundleLoader::LoadBundle(ctx))
         {
@@ -137,7 +137,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         }
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
             if (!SbmdLoader::InjectCaptureFunction(ctx))
             {
@@ -213,9 +213,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 std::optional<JSMemoryUsage> usageBefore;
                 std::unique_ptr<SbmdRegistration> registration;
                 {
-                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-                    auto *ctx = MQuickJsRuntime::GetSharedContext();
-                    usageBefore = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+                    usageBefore = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
                     registration =
                         SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
                 }
@@ -233,8 +233,8 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 std::optional<JSMemoryUsage> usageAfter;
 
                 {
-                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-                    auto *ctx = MQuickJsRuntime::GetSharedContext();
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
                     if (!sbmdDriver->Activate(ctx))
                     {
@@ -244,7 +244,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                         continue;
                     }
 
-                    usageAfter = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
+                    usageAfter = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
                 }
 
                 auto loadEnd = std::chrono::steady_clock::now();

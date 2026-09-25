@@ -65,7 +65,7 @@ namespace barton
          */
         int ScriptInterruptHandler(JSContext * /*ctx*/, void * /*opaque*/)
         {
-            auto currentDeadline = MQuickJsRuntime::GetDeadline();
+            auto currentDeadline = MQuickJsRuntime::Instance().GetDeadline();
 
             // No deadline set, allow script to run uninterrupted
             if (currentDeadline == std::chrono::steady_clock::time_point {})
