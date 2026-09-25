@@ -237,10 +237,16 @@ namespace barton
                                            chip::TLV::TLVReader *data);
 
         /**
-         * Handle a deferred command error. Called from MatterDevice::OnError
-         * or MatterDevice::OnResponse (status failure) via the deferred callback.
+         * Handle a failed deferred command by invoking its SBMD error handler.
+         *
+         * @param pendingId Identifier of the parked deferred operation.
+         * @param error SDK error describing the failed command operation.
+         * @param commandStatus Device-reported Matter command status, empty for
+         *                      SDK errors that occur without a response.
          */
-        void HandleDeferredCommandError(uint64_t pendingId, CHIP_ERROR error);
+        void HandleDeferredCommandError(uint64_t pendingId,
+                                        CHIP_ERROR error,
+                                        std::optional<int32_t> commandStatus = std::nullopt);
 
         /**
          * Continue a deferred chain with a new result. Handles the terminal

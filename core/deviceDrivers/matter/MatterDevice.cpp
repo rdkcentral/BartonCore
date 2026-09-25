@@ -518,17 +518,17 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
     return true;
 }
 
-bool MatterDevice::SendCommandWithCallbacks(chip::ClusterId clusterId,
-                                            chip::CommandId commandId,
-                                            std::optional<uint16_t> timedInvokeTimeoutMs,
-                                            chip::EndpointId endpointId,
-                                            const uint8_t *tlvBuffer,
-                                            size_t encodedLength,
-                                            chip::Messaging::ExchangeManager &exchangeMgr,
-                                            const chip::SessionHandle &sessionHandle,
-                                            std::function<void(const chip::app::ConcreteCommandPath &,
-                                                               chip::TLV::TLVReader *)> onResponse,
-                                            std::function<void(CHIP_ERROR)> onError)
+bool MatterDevice::SendCommandWithCallbacks(
+    chip::ClusterId clusterId,
+    chip::CommandId commandId,
+    std::optional<uint16_t> timedInvokeTimeoutMs,
+    chip::EndpointId endpointId,
+    const uint8_t *tlvBuffer,
+    size_t encodedLength,
+    chip::Messaging::ExchangeManager &exchangeMgr,
+    const chip::SessionHandle &sessionHandle,
+    std::function<void(const chip::app::ConcreteCommandPath &, chip::TLV::TLVReader *)> onResponse,
+    std::function<void(CHIP_ERROR, std::optional<int32_t>)> onError)
 {
     // Empty TLV structure for commands with no arguments
     static const uint8_t emptyTlvStruct[] = {0x15, 0x18};
@@ -849,7 +849,8 @@ void MatterDevice::OnResponse(chip::app::CommandSender *apCommandSender,
         }
         else
         {
-            context.deferredOnError(CHIP_ERROR_IM_STATUS_CODE_RECEIVED);
+            context.deferredOnError(CHIP_ERROR_IM_STATUS_CODE_RECEIVED,
+                                    static_cast<int32_t>(aResponseData.statusIB.mStatus));
         }
 
         return;
@@ -888,7 +889,9 @@ void MatterDevice::OnError(const chip::app::CommandSender *apCommandSender,
     {
         if (it->second.IsDeferred())
         {
-            it->second.deferredOnError(aErrorData.error);
+            // This callback has no command response, so there is no device status to forward,
+            // hence the null arg passed to deferredOnError
+            it->second.deferredOnError(aErrorData.error, std::nullopt);
             return;
         }
 

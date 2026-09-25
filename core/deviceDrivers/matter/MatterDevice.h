@@ -300,7 +300,7 @@ namespace barton
                                       const chip::SessionHandle &sessionHandle,
                                       std::function<void(const chip::app::ConcreteCommandPath &,
                                                          chip::TLV::TLVReader *)> onResponse,
-                                      std::function<void(CHIP_ERROR)> onError);
+                                      std::function<void(CHIP_ERROR, std::optional<int32_t>)> onError);
 
         /**
          * Write an attribute to the device using pre-encoded TLV data.
@@ -487,7 +487,7 @@ namespace barton
             // Deferred mode: when set, OnResponse/OnError call these instead of resolving the promise
             std::function<void(const chip::app::ConcreteCommandPath &,
                                chip::TLV::TLVReader *)> deferredOnResponse;
-            std::function<void(CHIP_ERROR)> deferredOnError;
+            std::function<void(CHIP_ERROR, std::optional<int32_t>)> deferredOnError;
 
             bool IsDeferred() const { return deferredOnResponse != nullptr; }
         };

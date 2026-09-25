@@ -132,6 +132,9 @@ SbmdDriver({
         CMD_PROVIDE_ICE: 0x05,
         CMD_END_SESSION: 0x06,
 
+        // Interaction Model command statuses
+        COMMAND_STATUS_NOT_FOUND: 0x8b,
+
         // WebRTCEndReasonEnum used in the EndSession command's reason field. 2 = UserHangup.
         WEBRTC_END_REASON_USER_HANGUP: 2,
 
@@ -563,7 +566,27 @@ function executeDestroySession(args) {
             endSchema
         );
 
-        return result.device.sendCommand(CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION, endPayload);
+        return result.device.requestCommand(
+            CL_WEBRTC_TRANSPORT_PROVIDER,
+            CMD_END_SESSION,
+            endPayload,
+            {
+                responseCommandId: CMD_END_SESSION,
+                onResponse: function () {
+                    return Sbmd.result().success();
+                },
+                onError: function (args) {
+                    // A remote peer may already have ended the Matter session. The
+                    // requested terminal state has already been reached in that case.
+                    if (args.error.commandStatus === COMMAND_STATUS_NOT_FOUND) {
+                        return Sbmd.result().success();
+                    }
+
+                    return Sbmd.result().error('EndSession failed: ' + args.error.message);
+                },
+                timeoutMs: 5000
+            }
+        );
     }
 
     return result.success();

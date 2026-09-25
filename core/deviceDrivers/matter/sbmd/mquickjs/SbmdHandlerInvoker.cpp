@@ -488,7 +488,8 @@ namespace barton
                                                            const std::string &errorType,
                                                            const std::string &errorMessage,
                                                            int32_t matterCode,
-                                                           JSValue handlerContext)
+                                                           JSValue handlerContext,
+                                                           std::optional<int32_t> commandStatus)
     {
         SafeJSValue handlerContextRooted(ctx, handlerContext);
         SafeJSValue args = BuildBaseArgs(ctx, hctx);
@@ -504,6 +505,15 @@ namespace barton
         else
         {
             error.SetNull(SBMD_KEY_MATTER_CODE);
+        }
+
+        if (commandStatus.has_value())
+        {
+            error.SetInt32(SBMD_KEY_COMMAND_STATUS, *commandStatus);
+        }
+        else
+        {
+            error.SetNull(SBMD_KEY_COMMAND_STATUS);
         }
 
         if (!JS_IsUndefined(handlerContextRooted.Get()))
