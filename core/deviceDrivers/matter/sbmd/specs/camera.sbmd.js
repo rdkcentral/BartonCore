@@ -957,6 +957,12 @@ function handleIncomingOffer(args) {
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
     var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
+
+    // The first Offer establishes this ID, so it is not yet present in the session map.
+    if (sessionId === null) {
+        sessionId = findStreamingSessionId(sessions);
+    }
+
     var metadata = {sessionId: sessionId || 'unknown'};
 
     if (sessions === null) {
