@@ -153,19 +153,28 @@ SbmdDriver({
                     type: 'boolean',
                     modes: ['read'],
                     prerequisites: [CL_DOOR_LOCK],
-                    seed: {handler: seedFalse}
+                    seed: {
+                        supplements: {resources: ['1/jammed']},
+                        handler: seedFalse
+                    }
                 },
                 tampered: {
                     type: 'boolean',
                     modes: ['read'],
                     prerequisites: [CL_DOOR_LOCK],
-                    seed: {handler: seedFalse}
+                    seed: {
+                        supplements: {resources: ['1/tampered']},
+                        handler: seedFalse
+                    }
                 },
                 invalidCodeEntryLimit: {
                     type: 'boolean',
                     modes: ['read'],
                     prerequisites: [CL_DOOR_LOCK],
-                    seed: {handler: seedFalse}
+                    seed: {
+                        supplements: {resources: ['1/invalidCodeEntryLimit']},
+                        handler: seedFalse
+                    }
                 }
             }
         }
@@ -203,14 +212,22 @@ function seedLocked(args) {
 }
 
 /**
- * Seeds a fault resource to "false" at registration so a freshly commissioned
+ * Seeds a fault resource to "false" at commission so a freshly commissioned
  * lock reports a definite "not faulted" state (matching the Zigbee driver)
- * rather than a null/unknown value.
+ * rather than a null/unknown value. This seed also runs on every synchronize,
+ * so it preserves an existing value (a live fault set by an event) and only
+ * defaults to "false" when the resource has no cached value yet (commission).
+ * These resources have no backing Matter attribute, so there is nothing to
+ * re-read on reconnect.
  */
 function seedFalse(args) {
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, args.resource.resourceId, 'false')
-        .success();
+    var resourceId = args.resource.resourceId;
+    var key = args.endpointId + '/' + resourceId;
+    var existing =
+        args.supplements && args.supplements.resources ? args.supplements.resources[key] : null;
+    var value = existing !== null && existing !== undefined ? existing : 'false';
+
+    return Sbmd.result().dataModel.updateResource(args.endpointId, resourceId, value).success();
 }
 
 /**

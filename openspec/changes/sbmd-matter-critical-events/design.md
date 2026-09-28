@@ -99,9 +99,11 @@ The `OperationSource` field is at TLV tag 1 in the `LockOperation` struct.
 
 ### Decision 5: New door lock resources are additive and seeded to `"false"`
 
-`jammed`, `tampered`, and `invalidCodeEntryLimit` are declared in the driver's `endpoints['1'].resources` block with `type: 'boolean', modes: ['read'], prerequisites: [CL_DOOR_LOCK]`, each with a trivial `seed` handler that returns `'false'`.
+`jammed`, `tampered`, and `invalidCodeEntryLimit` are declared in the driver's `endpoints['1'].resources` block with `type: 'boolean', modes: ['read'], prerequisites: [CL_DOOR_LOCK]`, each with a `seed` handler that establishes `"false"` at commission time but preserves an already-set value on later re-seeds.
 
 **Rationale (parity with Zigbee)**: the Zigbee driver seeds all three to `"false"` at pairing via `initialResourceValuesPutEndpointValue(...)`. Seeding them the same way keeps the network-neutral resource interface consistent — a freshly commissioned Matter lock reports a definite `"false"` (not faulted) rather than a `null`/unknown value, so consumers do not need Matter-specific branching to distinguish "not tampered" from "unknown". The first qualifying event then flips the resource as needed.
+
+**Preserve-on-synchronize**: `SeedInitialResourceValues` re-runs every `seed` handler on each synchronize/reconnect, not just at commission. A naive handler that always returns `'false'` would clobber a live fault (e.g. a `jammed` raised while Barton was in comm-fail) the moment the device reconnected. Each fault seed handler therefore reads its own current resource value via `supplements: { resources: ['1/<name>'] }` and returns the existing value when set, falling back to `'false'` only when the resource has no value yet (commission). This yields `"false"` on first commission while leaving an existing fault intact across reconnects.
 
 **`locked` source/userId metadata**: the `LockOperation` handler attaches `{ source, userId }` metadata to the `locked` update (mapping Matter `OperationSourceEnum` → the canonical `DOORLOCK_PROFILE_LOCKED_SOURCE_*` strings and `UserIndex` at TLV tag 2), matching the Zigbee driver. The attribute-path `locked` update carries no source (an attribute report has none); when both paths fire, same-value suppression means whichever changes the value first wins.
 

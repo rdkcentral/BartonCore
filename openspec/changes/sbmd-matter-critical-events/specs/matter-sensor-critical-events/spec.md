@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-### Requirement: Contact Sensor SBMD driver uses event-only live updates for faulted
+### Requirement: Contact Sensor SBMD driver uses dual-path live updates for faulted
 The Contact Sensor SBMD driver SHALL add an `eventHandlers.handleStateChange` handler alongside the existing `attributeHandlers.handleStateValue` handler (both active). Live updates to `faulted` SHALL be driven by both the `StateValue` attribute report and the `BooleanState.StateChange` event (cluster 0x0045, event 0x0000); because `StateChange` is optional conformance in Matter 1.5.1, the attribute path is the reliable baseline and same-value updates are suppressed so the two paths do not produce duplicate events. A `seed` handler SHALL read the `StateValue` attribute once at commission time to establish the initial `faulted` value.
 
 On `StateChange` receipt: StateValue = `true` (closed/contact) → `faulted = "false"`; StateValue = `false` (open/no contact) → `faulted = "true"`.
@@ -24,7 +24,7 @@ The Contact Sensor SBMD driver SHALL have `driverVersion: 2`.
 
 ---
 
-### Requirement: Water Leak Detector SBMD driver uses event-only live updates for faulted
+### Requirement: Water Leak Detector SBMD driver uses dual-path live updates for faulted
 The Water Leak Detector SBMD driver SHALL add an `eventHandlers.handleStateChange` handler alongside the existing `attributeHandlers.handleStateValue` handler (both active). Live updates to `faulted` SHALL be driven by both the `StateValue` attribute report and the `BooleanState.StateChange` event (cluster 0x0045, event 0x0000); because `StateChange` is optional conformance in Matter 1.5.1, the attribute path is the reliable baseline and same-value updates are suppressed so the two paths do not produce duplicate events. A `seed` handler SHALL read the `StateValue` attribute once at commission time to establish the initial `faulted` value.
 
 On `StateChange` receipt: StateValue = `true` (water detected) → `faulted = "true"`; StateValue = `false` (no water) → `faulted = "false"`.

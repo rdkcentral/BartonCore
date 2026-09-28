@@ -269,8 +269,11 @@ interface SbmdEventTrigger {
      * Base64-encoded TLV event payload. Decode with `Sbmd.Tlv.decode()`: a
      * struct payload decodes to an object keyed by each field's numeric TLV
      * context tag (access by tag number, e.g. `decoded[0]`).
+     *
+     * Absent when the event has no payload (payload-less events), so guard for
+     * it before decoding.
      */
-    tlvBase64: string;
+    tlvBase64?: string;
 }
 
 /** Command trigger (present on unsolicited command handlers). */

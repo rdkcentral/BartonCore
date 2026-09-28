@@ -28,8 +28,10 @@ import pytest
 from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
+    resource_metadata_listener,
     resource_update_listener,
     resource_uri,
+    wait_for_resource_metadata,
     wait_for_resource_value,
 )
 
@@ -483,3 +485,90 @@ def test_non_lock_unlock_operation_is_noop(default_environment, matter_door_lock
     # spuriously set locked=true).
     matter_door_lock.sideband.send("emitLockOperation", {"opType": 0x00})  # Lock
     wait_for_resource_value(locked_queue, "true", timeout=10)
+
+
+def test_lock_operation_reports_source_and_user_metadata(
+    default_environment, matter_door_lock
+):
+    """A LockOperation event that drives the locked resource attaches source and
+    userId metadata derived from the event's operationSource and userIndex tags.
+
+    The event is emitted without also changing the lockState attribute
+    (setState=False) so the LockOperation handler is the update that changes the
+    locked value and its metadata reaches the client. When a physical operation
+    also reports the attribute, the attribute path may win the race and the
+    metadata is best-effort (design Decision 5).
+    """
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    metadata_queue = resource_metadata_listener(client, "locked")
+
+    # Unlock (0x01) performed via Keypad (0x03) by user index 7, event only.
+    matter_door_lock.sideband.send(
+        "emitLockOperation",
+        {"opType": 0x01, "source": 0x03, "userId": 7, "setState": False},
+    )
+
+    metadata = wait_for_resource_metadata(metadata_queue, "false", timeout=10)
+    assert metadata is not None, "expected metadata on the locked update"
+    assert (
+        metadata.get("source") == "keypad"
+    ), f"expected source 'keypad', got {metadata.get('source')!r}"
+    assert (
+        metadata.get("userId") == 7
+    ), f"expected userId 7, got {metadata.get('userId')!r}"
+
+
+def test_fault_resource_preserved_across_synchronize(
+    default_environment, matter_door_lock
+):
+    """A live fault (jammed) set before a synchronize survives the re-seed.
+
+    SeedInitialResourceValues re-runs the seed handlers on every synchronize.
+    The jammed/tampered/invalidCodeEntryLimit seed handler preserves an existing
+    value instead of forcing "false", so a fault raised while Barton was in
+    comm-fail is not clobbered when the device reconnects.
+
+    Uses the same comm-fail/liveness overrides as
+    test_locked_resource_seeded_on_synchronize to drive a fast reconnect. The
+    locked re-seed (which fires because lockState changed to unlocked offline)
+    confirms the synchronize actually ran; jammed is then read directly and must
+    still be "true".
+    """
+    lock = _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    # Raise a jammed fault (LockJammed alarm) and confirm it takes effect.
+    jammed_queue = resource_update_listener(client, "jammed")
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x00})
+    wait_for_resource_value(jammed_queue, "true", timeout=10)
+
+    # Shorten the watchdog check interval so comm-fail is detected promptly.
+    default_environment._barton_client_params.get_property_provider().set_property_string(
+        "barton.commFail.monitorIntervalSecs", "1"
+    )
+
+    metadata_base = f"/{lock.props.uuid}/m"
+    client.write_metadata(f"{metadata_base}/commFailOverrideSeconds", "1")
+
+    commfail_queue = resource_update_listener(client, "communicationFailure")
+    matter_door_lock.sideband.send("goOffline")
+    wait_for_resource_value(commfail_queue, "true", timeout=5)
+
+    # Change lockState offline so the locked re-seed produces an observable
+    # transition that proves the synchronize ran.
+    seed_queue = resource_update_listener(client, "locked")
+    matter_door_lock.sideband.send("comeOnline", {"lockState": "unlocked"})
+    client.write_metadata(f"{metadata_base}/matterLivenessTimeoutOverrideMs", "1")
+
+    wait_for_resource_value(seed_queue, "false", timeout=15)
+
+    # The synchronize re-ran every seed handler. jammed must have been preserved
+    # (not reset to "false") by its seed handler.
+    resource = client.get_resource_by_uri(resource_uri(lock, "jammed", endpoint_id=1))
+    assert resource is not None, "jammed resource not found"
+    assert resource.props.value == "true", (
+        f"expected jammed to remain 'true' across synchronize, "
+        f"got '{resource.props.value}'"
+    )

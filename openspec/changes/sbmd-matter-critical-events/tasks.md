@@ -82,4 +82,7 @@
 - [x] 9.10 Add `emitLockOperation` side-band + tests for Unlatch (0x04 → `locked=false`) and a non-lock/unlock (no-op) operation type
 - [x] 9.11 Add a contact-sensor synchronize-reseed test (goOffline → change state → reconnect → `faulted` re-seeded), plus a `stateValue`-aware `comeOnline` on the mock
 - [x] 9.12 Document, in the door-lock spec, the `invalidCodeEntryLimit` timer-vs-operation clearing interface difference and the DoorAjar/DPS out-of-scope consistency note
+- [x] 9.13 Make the door-lock fault seed handler preserve an already-set value (read via `supplements.resources`) so a live fault is not clobbered when `SeedInitialResourceValues` re-runs on synchronize; add a test asserting `jammed` survives a reconnect
+- [x] 9.14 Add a door-lock test asserting `LockOperation`-driven `locked` updates carry `{source, userId}` metadata (event-only emission via `setState=false` side-band)
+- [x] 9.15 Mark `args.event.tlvBase64` optional/absent-for-payload-less in `docs/SBMD.md` and `sbmd-script.d.ts`; rename the sensor spec requirement titles from "event-only" to "dual-path"
 - [ ] 9.8 (Deferred — see design.md Risks and the follow-up user stories) `lastUserInteractionDate` (SBMD loader does not extract device-level `resources`; needs a C++ runtime change), timer-based `invalidCodeEntryLimit` clearing (needs an SBMD scheduler primitive), the v3→v4 migration test (harness cannot swap driver versions mid-test), and `doorLock` profileVersion cross-stack reconciliation

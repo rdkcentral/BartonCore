@@ -81,7 +81,7 @@ The door lock SBMD driver (endpoint `1`, profile `doorLock`) SHALL declare the f
 - `tampered` (resource name per `DOORLOCK_PROFILE_RESOURCE_TAMPERED`)
 - `invalidCodeEntryLimit` (resource name per `DOORLOCK_PROFILE_RESOURCE_INVALID_CODE_ENTRY_LIMIT`)
 
-Each resource SHALL have a `seed` handler that establishes an initial value of `"false"` at commission time, matching the Zigbee driver, so a freshly commissioned lock reports a definite "not faulted" state rather than a null/unknown value.
+Each resource SHALL have a `seed` handler that establishes an initial value of `"false"` at commission time, matching the Zigbee driver, so a freshly commissioned lock reports a definite "not faulted" state rather than a null/unknown value. Because `SeedInitialResourceValues` re-runs seed handlers on every synchronize/reconnect, each seed handler SHALL preserve an already-set value instead of forcing `"false"`, so a fault raised while the device was unreachable is not cleared when it reconnects.
 
 #### Scenario: New resources registered on commission
 - **WHEN** a Matter Door Lock device is commissioned
@@ -90,6 +90,10 @@ Each resource SHALL have a `seed` handler that establishes an initial value of `
 #### Scenario: Resources seeded to false at commission
 - **WHEN** a Matter Door Lock device has been commissioned but no `DoorLockAlarm` or `LockOperation` event has been received
 - **THEN** `jammed`, `tampered`, and `invalidCodeEntryLimit` resources SHALL each have the cached value `"false"`
+
+#### Scenario: Existing fault preserved across synchronize
+- **WHEN** a fault resource (e.g. `jammed`) has value `"true"` and the device synchronizes/reconnects, re-running the seed handlers
+- **THEN** the fault resource SHALL retain its `"true"` value rather than being reset to `"false"`
 
 ---
 
