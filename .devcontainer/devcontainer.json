@@ -5,10 +5,15 @@
 {
     "name": "Barton Ubuntu Development Environment",
     "initializeCommand": ".devcontainer/setupDevcontainerEnv.sh",
+    // The real-radio overlay (compose.otbr-radio.yaml) is intentionally NOT
+    // listed here. Adding it unconditionally forces every devcontainer user to
+    // build/start the privileged otbr-radio container and repoints barton's
+    // DBUS_SYSTEM_BUS_ADDRESS at a private socket that only exists when
+    // RADIO_DEVICE/RADIO_PORT is set — breaking simulated Thread/Zigbee D-Bus
+    // for everyone else. Opt into the real radio via `dockerw -T` instead.
     "dockerComposeFile": [
         "../docker/compose.yaml",
-        "../docker/compose.devcontainer.yaml",
-        "../docker/compose.otbr-radio.yaml"
+        "../docker/compose.devcontainer.yaml"
     ],
     "service": "barton",
 

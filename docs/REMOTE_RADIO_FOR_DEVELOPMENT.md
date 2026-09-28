@@ -69,6 +69,24 @@ A background monitor in the entrypoint watches `btattach` and automatically
 restarts it if the connection drops, updating the `ble_adapter_id` file
 accordingly.
 
+### BlueZ in the `otbr-radio` Container
+
+The BLE chain relies on the **`bluez`** package, which is installed in the
+`otbr-radio` image (`docker/Dockerfile.otbr-radio`). It is required here — not
+in the `barton` image — because every BlueZ process runs inside the
+`otbr-radio` container (via `nsenter --net=/run/host-netns`). It provides:
+
+| Binary | Role in the chain |
+|--------|-------------------|
+| `btattach` | Attaches the virtual HCI serial device created by `bt_host_cpc_hci_bridge` as an HCI controller (e.g. `hci1`). |
+| `bluetoothd` | The BlueZ daemon that manages the HCI adapter and exposes `org.bluez` on the private D-Bus for the Matter SDK. |
+| `bluetoothctl` | Interactive CLI used by `validate.sh` and for manual debugging (e.g. `nsenter --net=/run/host-netns bluetoothctl list`). |
+
+The `barton` container consumes BLE purely over D-Bus (`org.bluez`) and via the
+`ble_adapter_id` file, so it does **not** need the `bluez` binaries itself — the
+Matter SDK talks to `bluetoothd` through GDBus. BlueZ lives entirely on the
+`otbr-radio` side of the split.
+
 ---
 
 ## Thread Modes
@@ -272,27 +290,28 @@ Expected log progression:
 
 ### Devcontainer (VS Code)
 
-`compose.otbr-radio.yaml` is included in the devcontainer by default — no
-manual edit to `.devcontainer/devcontainer.json` is required.
+`compose.otbr-radio.yaml` is **not** part of the default devcontainer stack.
+Including it unconditionally would force every devcontainer user to build and
+start the privileged `otbr-radio` container and would repoint `barton`'s
+`DBUS_SYSTEM_BUS_ADDRESS` at a private socket that only exists when a radio is
+configured — breaking simulated Thread/Zigbee D-Bus for everyone else. So the
+real radio is opt-in, matching the `dockerw -T` CLI path.
 
-The `otbr-radio` container starts automatically when the devcontainer launches.
-If neither `RADIO_DEVICE` nor `RADIO_PORT` is set, it exits with a clear error
-in its own logs, but **the `barton` devcontainer is unaffected and starts
-normally**.
-
-To enable real radio support, set the appropriate variable in `docker/.env`
-after running `docker/setupDockerEnv.sh`, or export it in your host shell
-before opening VS Code:
+To use the real radio from a devcontainer, open a terminal inside the `barton`
+container and start the stack with the CLI wrapper:
 
 ```bash
 # Local radio:
-export RADIO_DEVICE=/dev/ttyACM0
+RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T bash
 
 # Remote tunnel:
-export RADIO_PORT=21234
+RADIO_PORT=21234 ./dockerw -T bash
 ```
 
-Then rebuild the devcontainer (**Dev Containers: Rebuild Container**).
+`dockerw -T` layers in `compose.otbr-radio.yaml`, starts the `otbr-radio`
+container, and injects `DBUS_SYSTEM_BUS_ADDRESS` automatically. The default
+devcontainer continues to use the standard system bus, so simulated OTBR and
+other D-Bus flows keep working untouched.
 
 ---
 
@@ -354,17 +373,20 @@ reach the private D-Bus daemon, `DBUS_SYSTEM_BUS_ADDRESS` must point to it:
 
 ### BLE Verification
 
-Check the BLE adapter from inside the Barton container:
+The BlueZ CLIs (`hciconfig`, `bluetoothctl`) ship only in the `otbr-radio`
+container — the `barton` container talks to BlueZ over D-Bus and does not
+install the `bluez` package. Read the adapter ID file from either container,
+but run the BLE-adapter checks inside `otbr-radio`:
 
 ```bash
-# Verify the adapter ID file
+# Verify the adapter ID file (either container)
 cat /var/run/otbr-dbus/ble_adapter_id
 
-# Check HCI devices in the host network namespace
-sudo nsenter --net=/run/host-netns hciconfig
-
-# List Bluetooth controllers
-sudo nsenter --net=/run/host-netns bluetoothctl list
+# Check HCI devices and controllers from the otbr-radio container
+docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml \
+    exec otbr-radio nsenter --net=/run/host-netns hciconfig
+docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml \
+    exec otbr-radio nsenter --net=/run/host-netns bluetoothctl list
 ```
 
 Expected: two HCI devices — the host's built-in adapter (e.g. `hci0`) and the

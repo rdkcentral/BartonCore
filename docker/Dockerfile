@@ -256,6 +256,10 @@ RUN cd /tmp && \
     cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
     rm -rf /tmp/ot-br-posix
 
+# D-Bus system-bus policy so the simulated otbr-agent
+# (scripts/start-simulated-otbr.sh) can own io.openthread.BorderRouter.wpan0.
+COPY otbr-agent-system-bus.conf /etc/dbus-1/system.d/otbr-agent.conf
+
 # Simulated RCP for OpenThread
 RUN cd /tmp && \
     git clone --depth 1 --recursive https://github.com/openthread/openthread.git && \
@@ -370,8 +374,7 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     tcpdump \
     lcov \
     rsync \
-    bash-completion \
-    bluez
+    bash-completion
 
 # Disable debuginfod for the container. LeakSanitizer runs at the exit of every
 # (subprocess-isolated) integration test and symbolizes suppressed system-library

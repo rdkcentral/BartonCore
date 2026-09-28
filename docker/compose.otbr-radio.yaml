@@ -44,8 +44,10 @@
 #       ./dockerw -T bash
 #
 #   Devcontainer
-#       This overlay is included by default in the devcontainer
-#       compose stack.
+#       This overlay is NOT included in the default devcontainer stack (it
+#       would force a privileged container and repoint barton's D-Bus at a
+#       socket that may not exist).  Use the `dockerw -T` CLI path for the
+#       real radio from within a devcontainer.
 #
 # ─── Environment variables ────────────────────────────────────────────────────
 #
@@ -153,8 +155,8 @@ services:
     # simulated/default OTBR flows keep working unless the private socket is
     # explicitly selected by setting DBUS_SYSTEM_BUS_ADDRESS in the compose
     # environment before startup.
-    # In devcontainer mode, this file is layered into the compose stack via
-    # devcontainer.json, so this barton service fragment is merged in there.
+    # This overlay is only layered in when the real radio is requested (via
+    # `dockerw -T`); it is not part of the default devcontainer stack.
     barton:
         volumes:
             - dbus-socket:/var/run/otbr-dbus

@@ -41,6 +41,7 @@ Licensed under the BSD-3 License
 #include <chrono>
 #include <cinttypes>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -71,7 +72,27 @@ namespace
     // creating and replacing an existing network. CPC-based radio hardware (e.g., EFR32 via serial/SPI) can take 35+
     // seconds due to shared radio scheduling and slower transport. After the Attach callback fires, the OTBR may still
     // need 30-40 seconds to form the network (detached → leader) before the dataset TLVs become available.
-    constexpr int ATTACH_WAIT_SECONDS = 120;
+    constexpr int ATTACH_WAIT_SECONDS_DEFAULT = 120;
+
+    // The default ceiling is sized for the shared BLE/Thread radio.  Simulated/CI setups attach in seconds, so this
+    // env override lets those runs surface genuine attach failures quickly instead of waiting the full ceiling.
+    int GetAttachWaitSeconds()
+    {
+        const char *override = std::getenv("BARTON_THREAD_ATTACH_WAIT_SECONDS");
+
+        if (override != nullptr)
+        {
+            char *endPtr = nullptr;
+            long val = std::strtol(override, &endPtr, 10);
+
+            if (endPtr != override && *endPtr == '\0' && val > 0)
+            {
+                return static_cast<int>(val);
+            }
+        }
+
+        return ATTACH_WAIT_SECONDS_DEFAULT;
+    }
 } // namespace
 
 namespace barton
@@ -123,7 +144,7 @@ namespace barton
         {
             using namespace std::chrono;
 
-            auto totalTime = seconds(ATTACH_WAIT_SECONDS);
+            auto totalTime = seconds(GetAttachWaitSeconds());
             milliseconds timer = duration_cast<milliseconds>(totalTime);
             auto current = steady_clock::now();
 
