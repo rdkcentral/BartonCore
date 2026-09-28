@@ -6,7 +6,8 @@ A native (non-SBMD) ONVIF/RTSP camera device driver for the abstract `camera` de
 ## Requirements
 ### Requirement: Native ONVIF camera driver registers for the camera device class
 
-A native ONVIF camera device driver SHALL be provided that registers itself with `deviceService`,
+A native ONVIF camera device driver SHALL be provided that registers itself with the device driver
+manager (`deviceDriverManagerRegisterDriver`),
 declares support for the `camera` device class, and coexists with the Matter camera driver. Device
 ownership SHALL be determined by which driver discovers a device: the ONVIF driver SHALL only manage
 devices it discovers via ONVIF WS-Discovery.

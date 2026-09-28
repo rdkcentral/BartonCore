@@ -2,6 +2,7 @@
 
 ## Purpose
 The reference app's `cameraStream` (`cs`) command drives a camera through Barton's resource API, branching on the streaming protocol the `stream` execute reports — performing the WebRTC signaling handshake and acting as the in-container WebRTC peer for WebRTC cameras, or opening an RTSP source for ONVIF cameras — then routes the received media to a destination selected by `--out` (record to a file or serve over HTTP to a browser). It uses only `BCoreClient` APIs and is gated behind a CMake option.
+
 ## Requirements
 ### Requirement: cameraStream command exists in reference app
 
