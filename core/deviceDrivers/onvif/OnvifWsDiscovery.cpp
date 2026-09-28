@@ -169,6 +169,11 @@ namespace barton
                 if (headLower == prefix)
                 {
                     ref = ref.substr(prefix.size());
+
+                    // The value after "urn:uuid:" may itself have surrounding whitespace; re-trim it.
+                    size_t innerStart = ref.find_first_not_of(" \t\r\n");
+                    size_t innerEnd = ref.find_last_not_of(" \t\r\n");
+                    ref = (innerStart == std::string::npos) ? "" : ref.substr(innerStart, innerEnd - innerStart + 1);
                 }
             }
 

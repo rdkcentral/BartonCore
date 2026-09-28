@@ -2,7 +2,8 @@
 
 ### Requirement: Native ONVIF camera driver registers for the camera device class
 
-A native ONVIF camera device driver SHALL be provided that registers itself with `deviceService`,
+A native ONVIF camera device driver SHALL be provided that registers itself with the device driver
+manager (`deviceDriverManagerRegisterDriver`),
 declares support for the `camera` device class, and coexists with the Matter camera driver. Device
 ownership SHALL be determined by which driver discovers a device: the ONVIF driver SHALL only manage
 devices it discovers via ONVIF WS-Discovery.
@@ -23,7 +24,9 @@ WS-Discovery `Probe` on the local network. The call SHALL return immediately and
 a background thread. For each responding camera, the driver SHALL derive a stable device `uuid` from
 the WS-Discovery ProbeMatch endpoint reference (`urn:uuid:…`), obtain manufacturer, model, and
 firmware via an anonymous ONVIF `GetDeviceInformation`, and report the device with
-`deviceServiceDeviceFound`. Because a discovered ONVIF camera normally has no DDL descriptor entry,
+`deviceServiceDeviceFound`. The anonymous `GetDeviceInformation` SOAP call SHALL use the same bounded
+libcurl timeout as the on-demand calls so an unreachable ProbeMatch cannot stall the discovery worker.
+Because a discovered ONVIF camera normally has no DDL descriptor entry,
 the driver SHALL report it with `neverReject = true` so the device service does not reject it for
 lack of a matching descriptor.
 
@@ -112,8 +115,10 @@ The `authRequired` resource SHALL indicate whether the client must apply credent
 media/snapshot URLs. In this driver version the driver SHALL set `authRequired` to a constant `"true"`
 at configuration time — a static hint reflecting that ONVIF media/snapshot fetches reuse the stored
 credentials — rather than deriving it from a live authentication probe. The driver SHALL NOT place
-credentials in any resource value, event payload, or returned URL; secrets SHALL reside only in the
-`SENSITIVE` credential resources.
+credentials in any resource value, event payload, or returned URL other than the dedicated credential
+resources, which are flagged `RESOURCE_MODE_SENSITIVE` to request the platform's sensitive-value
+handling. `RESOURCE_MODE_SENSITIVE` is a marking the driver relies on; end-to-end redaction and
+at-rest protection are the platform's responsibility, not a guarantee the driver itself can make.
 
 #### Scenario: authRequired is readable and non-secret
 - **WHEN** a client reads `authRequired` on `ep/onvif`
