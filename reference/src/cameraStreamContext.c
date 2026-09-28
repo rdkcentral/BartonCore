@@ -212,14 +212,18 @@ bool cameraStreamContextStartSink(CameraStreamContext *ctx,
 {
     if (ctx->filePath != NULL)
     {
-        ctx->outFile = fopen(ctx->filePath, "wb");
+        FILE *outFile = fopen(ctx->filePath, "wb");
 
-        if (ctx->outFile == NULL)
+        if (outFile == NULL)
         {
             emitError("[camera-stream] Failed to open %s for writing\n", ctx->filePath);
 
             return false;
         }
+
+        g_mutex_lock(&ctx->mutex);
+        ctx->outFile = outFile;
+        g_mutex_unlock(&ctx->mutex);
 
         emitOutput("[camera-stream] Recording camera video to %s\n", ctx->filePath);
 
