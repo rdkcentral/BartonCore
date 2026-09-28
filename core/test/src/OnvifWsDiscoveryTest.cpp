@@ -78,6 +78,8 @@ TEST(OnvifWsDiscovery, DeviceUuidStripsUrnPrefixAndLowercases)
     EXPECT_EQ(OnvifDeviceUuidFromEndpointReference("URN:UUID:abc"), "abc");
     // With no urn:uuid prefix, the input is trimmed and lower-cased.
     EXPECT_EQ(OnvifDeviceUuidFromEndpointReference("  plainId  "), "plainid");
+    // Whitespace between the prefix and the UUID must also be trimmed.
+    EXPECT_EQ(OnvifDeviceUuidFromEndpointReference("urn:uuid:  AbC  "), "abc");
 }
 
 TEST(OnvifWsDiscovery, EmptyResponseYieldsNoMatches)

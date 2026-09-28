@@ -471,7 +471,5 @@ if (BCORE_ONVIF AND BUILD_TESTING)
         target_compile_definitions(testOnvifDeviceDriver PRIVATE BARTON_CONFIG_ONVIF)
     endif()
 
-    if (BUILD_TESTING)
-        bcore_configure_glib()
-    endif()
+    bcore_configure_glib()
 endif()
