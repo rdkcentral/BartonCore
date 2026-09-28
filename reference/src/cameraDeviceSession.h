@@ -25,11 +25,11 @@
  * Camera session flows over the Barton client interface for the camera stream
  * command.
  *
- * Owns the camera/webrtc resource URIs for a single device: creating and
- * destroying the camera session, starting the stream, relaying the local SDP
- * offer and ICE candidates to the camera, and subscribing to resource-updated
- * events to deliver the remote SDP answer, remote ICE candidates, and session
- * status back to the caller via callbacks.
+ * Owns the camera resource URIs for a single device across technologies: creating and
+ * destroying the camera session and starting the stream; for WebRTC, relaying the local SDP and ICE
+ * candidates and delivering the remote SDP answer / remote ICE; for ONVIF, delivering the media and
+ * snapshot URLs and carrying the credential surface; and subscribing to resource-updated events to
+ * deliver those plus session status back to the caller via callbacks.
  */
 
 #pragma once

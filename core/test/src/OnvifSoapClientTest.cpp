@@ -136,6 +136,21 @@ TEST(OnvifSoapClient, StripsEmbeddedCredentialsFromStreamUri)
     EXPECT_EQ(uri.find("secret"), std::string::npos);
 }
 
+TEST(OnvifSoapClient, StripsEmbeddedCredentialsFromIpv6StreamUri)
+{
+    std::string xml = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">"
+                      "<s:Body><trt:GetStreamUriResponse xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\" "
+                      "xmlns:tt=\"http://www.onvif.org/ver10/schema\"><trt:MediaUri>"
+                      "<tt:Uri>rtsp://admin:secret@[fe80::1]:554/stream1</tt:Uri></trt:MediaUri>"
+                      "</trt:GetStreamUriResponse></s:Body></s:Envelope>";
+
+    std::string uri = OnvifParseMediaUri(xml);
+    // The bracketed IPv6 host must survive while the userinfo is stripped.
+    EXPECT_EQ(uri, "rtsp://[fe80::1]:554/stream1");
+    EXPECT_EQ(uri.find('@'), std::string::npos);
+    EXPECT_EQ(uri.find("secret"), std::string::npos);
+}
+
 TEST(OnvifSoapClient, ParsesSnapshotUri)
 {
     std::string xml = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">"

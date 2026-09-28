@@ -142,6 +142,8 @@ static gboolean padIsH264Video(GstPad *pad)
         const GstStructure *structure = gst_caps_get_structure(caps, 0);
         const gchar *media = gst_structure_get_string(structure, "media");
         const gchar *encoding = gst_structure_get_string(structure, "encoding-name");
+        // A missing encoding-name (caps not yet fully negotiated) is optimistically treated as H.264;
+        // a non-H.264 video pad would then link here and fail later at negotiation.
         isVideo = (media != NULL && g_strcmp0(media, "video") == 0) &&
                   (encoding == NULL || g_ascii_strcasecmp(encoding, "H264") == 0);
     }
@@ -221,6 +223,14 @@ static void onPadAdded(GstElement *src, GstPad *pad, gpointer userData)
     if (depay == NULL || parse == NULL || timestamper == NULL || capsfilter == NULL || mux == NULL || sink == NULL)
     {
         emitError("[camera-stream] failed to create depay/parse/timestamper/capsfilter/mux/appsink elements\n");
+
+        // These were never added to the bin, so their floating refs are ours to drop.
+        gst_clear_object(&depay);
+        gst_clear_object(&parse);
+        gst_clear_object(&timestamper);
+        gst_clear_object(&capsfilter);
+        gst_clear_object(&mux);
+        gst_clear_object(&sink);
 
         if (self->onClosed != NULL)
         {

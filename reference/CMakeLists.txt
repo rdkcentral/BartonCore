@@ -32,7 +32,7 @@ option(BCORE_REFERENCE_CAMERA_SUPPORT "Enable the reference app camera stream co
 file(GLOB_RECURSE B_CORE_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 
 if (NOT BCORE_REFERENCE_CAMERA_SUPPORT)
-    list(FILTER B_CORE_REFERENCE_SOURCES EXCLUDE REGEX "cameraCategory\\.c$|cameraDeviceSession\\.c$|cameraWebrtcClient\\.c$|cameraMediaServer\\.c$|cameraRtspClient\\.c$|cameraStreamContext\\.c$|cameraStreamBackend\\.c$|cameraWebrtcBackend\\.c$|cameraOnvifBackend\\.c$")
+    list(FILTER B_CORE_REFERENCE_SOURCES EXCLUDE REGEX "/camera[^/]*\\.c$")
 endif()
 
 add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})

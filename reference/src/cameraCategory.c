@@ -137,6 +137,13 @@ static bool runCameraStream(BCoreClient *client,
         return false;
     }
 
+    // Create the context and register the session status callback before opening, so a webrtcError or
+    // session-ended event arriving during open/start is not dropped. Declaring ctx before the backend
+    // also makes g_autoptr tear down backend -> context -> session, matching the note above.
+    g_autoptr(CameraStreamContext) ctx =
+        cameraStreamContextCreate(session, filePath, serveHost, servePort, &sigintRequested);
+    cameraDeviceSessionSetStatusCallback(session, cameraStreamContextOnSessionEnded, ctx);
+
     emitOutput("[camera-stream] Creating session...\n");
 
     if (!cameraDeviceSessionOpen(session))
@@ -171,12 +178,6 @@ static bool runCameraStream(BCoreClient *client,
     {
         return false;
     }
-
-    g_autoptr(CameraStreamContext) ctx =
-        cameraStreamContextCreate(session, filePath, serveHost, servePort, &sigintRequested);
-
-    // Session-ended status is shared across technologies, so it is handled by the context.
-    cameraDeviceSessionSetStatusCallback(session, cameraStreamContextOnSessionEnded, ctx);
 
     bool result = cameraStreamBackendRun(backend, ctx);
 

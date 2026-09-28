@@ -43,6 +43,7 @@ namespace barton
         namespace
         {
 
+            // XML namespace (NS_*) URIs used to build SOAP envelopes and WS-Security headers.
             const char *const NS_SOAP = "http://www.w3.org/2003/05/soap-envelope";
             const char *const NS_TDS = "http://www.onvif.org/ver10/device/wsdl";
             const char *const NS_TRT = "http://www.onvif.org/ver10/media/wsdl";
@@ -75,7 +76,8 @@ namespace barton
             g_checksum_update(sha1, reinterpret_cast<const guchar *>(created.data()), created.size());
             g_checksum_update(sha1, reinterpret_cast<const guchar *>(password.data()), password.size());
 
-            guint8 digest[20];
+            static constexpr gsize SHA1_DIGEST_BYTES = 20; // WS-UsernameToken PasswordDigest is SHA-1
+            guint8 digest[SHA1_DIGEST_BYTES];
             gsize digestLen = sizeof(digest);
             g_checksum_get_digest(sha1, digest, &digestLen);
 
@@ -265,6 +267,8 @@ namespace barton
             struct curl_slist *headers = nullptr;
             headers = curl_slist_append(headers, "Content-Type: application/soap+xml; charset=utf-8");
 
+            // ONVIF service URLs are typically plain HTTP; default libcurl TLS verification applies to
+            // any https:// endpoint (a self-signed camera cert would fail closed -- HTTPS is out of scope).
             curl_easy_setopt(curl, CURLOPT_URL, serviceUrl.c_str());
             curl_easy_setopt(curl, CURLOPT_POST, 1L);
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, envelope.c_str());
@@ -272,7 +276,10 @@ namespace barton
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCb);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseOut);
+            // CURLOPT_TIMEOUT bounds the whole exchange; CONNECTTIMEOUT bounds the connect phase so an
+            // unreachable camera fails fast during discovery.
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeoutSeconds);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, timeoutSeconds);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
 
             CURLcode code = curl_easy_perform(curl);

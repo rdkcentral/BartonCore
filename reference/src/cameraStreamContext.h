@@ -57,7 +57,7 @@ typedef void (*CameraStreamViewerHandler)(gpointer userData);
  * @param servePort  serve port (ignored in record mode)
  * @param interrupt  an async-signal-safe flag set by the command's SIGINT handler; the wait loop
  *                   polls it to observe Ctrl+C (not owned)
- * @return the context, or NULL on error
+ * @return the newly created context (never NULL; aborts on allocation failure)
  */
 CameraStreamContext *cameraStreamContextCreate(CameraDeviceSession *session,
                                                const gchar *filePath,
