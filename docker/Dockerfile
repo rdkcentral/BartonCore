@@ -255,7 +255,10 @@ RUN cd /tmp && \
     ninja install && \
     cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
     rm -rf /tmp/ot-br-posix
-COPY otbr-agent.conf /etc/dbus-1/system.d/
+
+# D-Bus system-bus policy so the simulated otbr-agent
+# (scripts/start-simulated-otbr.sh) can own io.openthread.BorderRouter.wpan0.
+COPY otbr-agent-system-bus.conf /etc/dbus-1/system.d/otbr-agent.conf
 
 # Simulated RCP for OpenThread
 RUN cd /tmp && \

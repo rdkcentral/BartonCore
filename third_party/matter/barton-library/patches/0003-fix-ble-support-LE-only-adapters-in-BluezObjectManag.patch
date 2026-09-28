@@ -1,0 +1,61 @@
+From 84f4de0e1ae324a8958fa508a829c5e392102f17 Mon Sep 17 00:00:00 2001
+From: Thomas Lea <thomas_lea@comcast.com>
+Date: Mon, 8 Jun 2026 13:37:55 +0000
+Subject: [PATCH] fix(ble): support LE-only adapters in
+ BluezObjectManager::OnObjectAdded
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+LE-only BLE adapters (e.g. SiLabs CPC HCI bridges) have a BlueZ
+Class property of 0 because there is no BR/EDR device class to read
+via HCI.  The OnObjectAdded callback required Class != 0 to consider
+an adapter ready, which meant LE-only adapters were permanently
+ignored when they appeared on D-Bus after DriveBLEState init.
+
+Fix by also accepting an adapter as ready when its Powered property
+is true.  For dual-mode adapters the Class != 0 check still applies
+first; the Powered fallback only triggers for LE-only adapters where
+Class remains 0.
+
+OnInterfacePropertiesChanged is left unchanged — it still only
+watches for Class becoming non-zero.  The Powered check in
+OnObjectAdded is sufficient because LE-only adapters are already
+powered when they first appear on D-Bus.
+
+This resolves BLE_ERROR_ADAPTER_UNAVAILABLE (0x00000401) when
+commissioning Matter devices over BLE with CPC-bridged radios.
+---
+ src/platform/Linux/bluez/BluezObjectManager.cpp | 16 ++++++----------
+ 1 file changed, 6 insertions(+), 10 deletions(-)
+
+diff --git a/src/platform/Linux/bluez/BluezObjectManager.cpp b/src/platform/Linux/bluez/BluezObjectManager.cpp
+index 6071ce91..c2add9cc 100644
+--- a/src/platform/Linux/bluez/BluezObjectManager.cpp
++++ b/src/platform/Linux/bluez/BluezObjectManager.cpp
+@@ -196,16 +196,12 @@ BluezObjectManager::NotificationsDelegates BluezObjectManager::GetDeviceNotifica
+ void BluezObjectManager::OnObjectAdded(GDBusObjectManager * aMgr, BluezObject * aObj)
+ {
+     GAutoPtr<BluezAdapter1> adapter(bluez_object_get_adapter1(aObj));
+-    // Verify that the adapter is properly initialized - the class property must be set.
+-    // BlueZ can export adapter objects on the bus before it is fully initialized. Such
+-    // adapter objects are not usable and must be ignored.
+-    //
+-    // TODO: Find a better way to determine whether the adapter interface exposed by
+-    //       BlueZ D-Bus service is fully functional. The current approach is based on
+-    //       the assumption that the class property is non-zero, which is true only
+-    //       for BR/EDR + LE adapters. LE-only adapters do not have HCI command to read
+-    //       the class property and BlueZ sets it to 0 as a default value.
+-    if (adapter && bluez_adapter1_get_class(adapter.get()) != 0)
++    // Verify that the adapter is properly initialized.  For dual-mode (BR/EDR + LE) adapters
++    // the Class property is non-zero once BlueZ has read the device class via HCI.  LE-only
++    // adapters (e.g. CPC HCI bridges) never receive a device class from the controller, so
++    // BlueZ leaves Class at 0.  For those adapters, accept the adapter when Powered is true,
++    // which indicates BlueZ has completed its HCI setup sequence.
++    if (adapter && (bluez_adapter1_get_class(adapter.get()) != 0 || bluez_adapter1_get_powered(adapter.get())))
+     {
+         NotifyAdapterAdded(adapter.get());
+         return;
+-- 
+2.43.0
+

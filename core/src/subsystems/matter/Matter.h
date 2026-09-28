@@ -290,6 +290,19 @@ namespace barton
          */
         bool SetAccessRestrictionList();
 
+        /**
+         * Determine which BlueZ HCI adapter index to use for BLE operations.
+         *
+         * Selection order:
+         *   1. The device.matter.bleAdapterId runtime property (set by the reference
+         *      app from the BARTON_BLE_ADAPTER_ID environment variable or CLI argument).
+         *   2. The adapter index file written at /var/run/otbr-dbus/ble_adapter_id.
+         *   3. Falls back to hci0.
+         *
+         * @return the HCI adapter index to pass to BLEMgrImpl::ConfigureBle()
+         */
+        static uint32_t ResolveBleAdapterId();
+        
         bool OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeoutSecs, SetupPayload &setupPayload);
 
         bool serverIsInitialized = false;
