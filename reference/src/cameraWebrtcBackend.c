@@ -76,6 +76,14 @@ static gchar *buildSingleIceCandidateJson(const gchar *candidate)
 static void sendLocalIceCandidate(CameraDeviceSession *session, const gchar *candidate)
 {
     g_autofree gchar *json = buildSingleIceCandidateJson(candidate);
+
+    if (json == NULL)
+    {
+        emitError("[camera-stream] Failed to serialize local ICE candidate\n");
+
+        return;
+    }
+
     cameraDeviceSessionSendIceCandidates(session, json);
 }
 
