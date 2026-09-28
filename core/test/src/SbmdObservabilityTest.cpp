@@ -331,19 +331,19 @@ public:
         // Initialize observability backend first
         observabilityInit();
 
-        ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
+        ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(512 * 1024));
 
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
         ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
         // Load the test driver
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto reg = SbmdLoader::LoadDriver(ctx, "test-driver.sbmd.js", kMinimalDriver, strlen(kMinimalDriver));
             ASSERT_NE(reg, nullptr);
             testDriver = std::make_unique<SbmdDriver>(std::move(reg), kMinimalDriver);
@@ -355,7 +355,7 @@ public:
     {
         testDriver.reset();
 
-        MQuickJsRuntime::Shutdown();
+        MQuickJsRuntime::Instance().Shutdown();
         observabilityShutdown();
     }
 
@@ -365,8 +365,8 @@ protected:
     // Helper to invoke the read handler on "test.resource" and return the result.
     std::optional<ParsedResult> InvokeRead()
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         const auto &reg = testDriver->GetRegistration();
         const SbmdResource *res = nullptr;
@@ -424,7 +424,7 @@ TEST_F(SbmdObservabilityTest, ArenaSizeGaugeRecordedAtInit)
 TEST_F(SbmdObservabilityTest, ForceSnapshotPopulatesHeapHistogram)
 {
     int64_t countBefore = GetHistogramCount("sbmd.js.heap.used_bytes");
-    MQuickJsRuntime::GetMetrics().ForceSnapshot();
+    MQuickJsRuntime::Instance().GetMetrics().ForceSnapshot();
     int64_t countAfter = GetHistogramCount("sbmd.js.heap.used_bytes");
 
     EXPECT_GT(countAfter, countBefore);
@@ -493,8 +493,8 @@ TEST_F(SbmdObservabilityTest, ExceptionCounterIncrementsOnThrow)
     });
 
     // Load a driver that throws and invoke it
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
     // Evaluate a throwing JS function to simulate an exception
     const char *throwScript = "(function(args) { throw new Error('test throw'); })";
@@ -543,8 +543,8 @@ TEST_F(SbmdObservabilityTest, ErrorOutcomeCounterIncrements)
             {    "outcome",         "error"}
     });
 
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
     // A handler that returns an error terminal via the Sbmd result API
     const char *errorScript = "(function(args) { return Sbmd.result().error('test error'); })";
@@ -587,8 +587,8 @@ TEST_F(SbmdObservabilityTest, LoadingPhaseExceptionCounterIncrements)
     double countBefore = GetCounterValue("sbmd.js.exception");
 
     // Attempt to load invalid JS
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
     const char *badScript = "this is not valid javascript }{][";
     auto reg = SbmdLoader::LoadDriver(ctx, "bad.sbmd.js", badScript, strlen(badScript));
 
@@ -611,7 +611,7 @@ TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
     std::promise<void> releaseSignal;
 
     std::thread holder([&]() {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         holdingMutex.set_value();          // signal that the lock is held
         releaseSignal.get_future().wait(); // wait for main thread to release us
     });
@@ -623,9 +623,9 @@ TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
     releaseSignal.set_value(); // release the background thread
 
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         double waitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        MQuickJsRuntime::GetMetrics().RecordMutexWait(waitMs);
+        MQuickJsRuntime::Instance().GetMetrics().RecordMutexWait(waitMs);
     }
 
     holder.join();
@@ -639,8 +639,8 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
     double countBefore = GetCounterValue("sbmd.js.gc.count");
 
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
         ASSERT_NE(ctx, nullptr);
         JS_GC(ctx);
     }
@@ -651,7 +651,7 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
 
 TEST_F(SbmdObservabilityTest, GcRootsGaugeHasValue)
 {
-    MQuickJsRuntime::GetMetrics().ForceSnapshot();
+    MQuickJsRuntime::Instance().GetMetrics().ForceSnapshot();
     double roots = GetGaugeValue("sbmd.js.gc_roots");
     EXPECT_GT(roots, 0.0);
 }

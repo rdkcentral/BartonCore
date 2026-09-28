@@ -193,7 +193,7 @@ namespace barton
         }
 
         // Capture pre-call heap state
-        auto usageBefore = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
+        auto usageBefore = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
         auto callStart = std::chrono::steady_clock::now();
 
         // Stack order for JS_Call: arg, func, this
@@ -202,16 +202,16 @@ namespace barton
         JS_PushArg(ctx, JS_NULL);
 
         // Arm the execution timeout
-        MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::now() +
+        MQuickJsRuntime::Instance().SetDeadline(std::chrono::steady_clock::now() +
                                      std::chrono::milliseconds(BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS));
 
         JSValue result = JS_Call(ctx, 1);
 
-        bool timedOut = MQuickJsRuntime::WasTimedOut();
-        MQuickJsRuntime::ClearDeadline();
+        bool timedOut = MQuickJsRuntime::Instance().WasTimedOut();
+        MQuickJsRuntime::Instance().ClearDeadline();
 
         // Capture post-call state and record metrics
-        auto usageAfter = MQuickJsRuntime::GetMemoryUsage(ctx, 0);
+        auto usageAfter = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
 
         double durationMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - callStart).count();
@@ -229,18 +229,18 @@ namespace barton
         // Update running heap snapshot (ctx is live; caller holds JS mutex)
         if (usageAfter)
         {
-            MQuickJsRuntime::RecordHeapSnapshot(*usageAfter);
+            MQuickJsRuntime::Instance().RecordHeapSnapshot(*usageAfter);
         }
 
-        MQuickJsRuntime::GetMetrics().TickleSampler();
+        MQuickJsRuntime::Instance().GetMetrics().TickleSampler();
 
         if (JS_IsException(result))
         {
             std::string err;
-            MQuickJsRuntime::CheckAndClearPendingException(ctx, &err);
+            MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx, &err);
             icError("handler threw exception: %s", err.c_str());
 
-            MQuickJsRuntime::GetMetrics().RecordJsException("invocation", outDriver);
+            MQuickJsRuntime::Instance().GetMetrics().RecordJsException("invocation", outDriver);
 
             // Distinguish timeout from handler exception
             metrics.RecordOutcome(outDriver, outOpType, outResourceId, timedOut ? "timeout" : "exception");
