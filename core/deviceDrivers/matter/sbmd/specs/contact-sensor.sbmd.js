@@ -84,17 +84,39 @@ SbmdDriver({
                             var tlvBase64 = args.supplements.attributes.stateValue;
                             var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
 
-                            // StateValue=true means closed (not faulted)
+                            // StateValue=true means closed (not faulted); default to faulted when uncached
                             return Sbmd.result()
                                 .dataModel.updateResource(
                                     args.endpointId,
                                     RES_FAULTED,
-                                    value === false ? 'true' : 'false'
+                                    value === true ? 'false' : 'true'
                                 )
                                 .success();
                         }
                     }
                 }
+            }
+        }
+    },
+
+    attributeHandlers: {
+        handleStateValue: {
+            aliases: ['stateValue'],
+            handler: function (args) {
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for StateValue');
+                }
+
+                // StateValue=true means closed (not faulted)
+                return Sbmd.result()
+                    .dataModel.updateResource(
+                        args.endpointId,
+                        RES_FAULTED,
+                        value === true ? 'false' : 'true'
+                    )
+                    .success();
             }
         }
     },

@@ -8,7 +8,7 @@
 - [x] 2.1 Add `EVT_STATE_CHANGE: 0x0000` constant to `contact-sensor.sbmd.js`
 - [x] 2.2 Add `stateChange: { clusterId: CL_BOOLEAN_STATE, eventId: EVT_STATE_CHANGE }` alias to `contact-sensor.sbmd.js`
 - [x] 2.3 Add `seed` handler to `faulted` resource: reads `StateValue` attribute supplement to establish initial state (StateValue=true → `"false"`)
-- [x] 2.4 Remove `attributeHandlers.handleStateValue` from `contact-sensor.sbmd.js`
+- [x] 2.4 Retain `attributeHandlers.handleStateValue` in `contact-sensor.sbmd.js` alongside the new event handler (dual-path)
 - [x] 2.5 Add `eventHandlers.handleStateChange` to `contact-sensor.sbmd.js`: decode `args.event.tlvBase64`, map StateValue → `faulted` (StateValue=true → `"false"`)
 - [x] 2.6 Bump `driverVersion` to `2` in `contact-sensor.sbmd.js`
 - [x] 2.7 Validate `contact-sensor.sbmd.js` against the v5 JSON schema
@@ -18,7 +18,7 @@
 - [x] 3.1 Add `EVT_STATE_CHANGE: 0x0000` constant to `water-leak-detector.sbmd.js`
 - [x] 3.2 Add `stateChange: { clusterId: CL_BOOLEAN_STATE, eventId: EVT_STATE_CHANGE }` alias to `water-leak-detector.sbmd.js`
 - [x] 3.3 Add `seed` handler to `faulted` resource: reads `StateValue` attribute supplement to establish initial state (StateValue=true → `"true"`)
-- [x] 3.4 Remove `attributeHandlers.handleStateValue` from `water-leak-detector.sbmd.js`
+- [x] 3.4 Retain `attributeHandlers.handleStateValue` in `water-leak-detector.sbmd.js` alongside the new event handler (dual-path)
 - [x] 3.5 Add `eventHandlers.handleStateChange` to `water-leak-detector.sbmd.js`: decode `args.event.tlvBase64`, map StateValue → `faulted` (StateValue=true → `"true"`)
 - [x] 3.6 Bump `driverVersion` to `2` in `water-leak-detector.sbmd.js`
 - [x] 3.7 Validate `water-leak-detector.sbmd.js` against the v5 JSON schema
@@ -34,7 +34,7 @@
 ## 5. Door Lock Driver — Event Aliases and Handlers
 
 - [x] 5.1 Add event aliases to `door-lock.sbmd.js`: `doorLockAlarm: { clusterId: CL_DOOR_LOCK, eventId: EVT_DOOR_LOCK_ALARM }`, `lockOperation: { clusterId: CL_DOOR_LOCK, eventId: EVT_LOCK_OPERATION }`
-- [x] 5.2 Remove `attributeHandlers.handleLockState` from `door-lock.sbmd.js`
+- [x] 5.2 Retain `attributeHandlers.handleLockState` in `door-lock.sbmd.js` alongside the new event handlers (dual-path)
 - [x] 5.3 Add `eventHandlers.handleDoorLockAlarm`: decode TLV, branch on alarm code per the alarm-to-resource table, log unresourced codes
 - [x] 5.4 Add `eventHandlers.handleLockOperation`: decode TLV fields 0 (opType) and 1 (source), update `locked`, clear `tampered` and `invalidCodeEntryLimit` always, clear `jammed` only if source == `OP_SOURCE_MANUAL`
 - [x] 5.5 Bump `driverVersion` to `2` in `door-lock.sbmd.js` (content marker only)
@@ -68,3 +68,18 @@
 - [x] 8.1 Build BartonCore and confirm build-time SBMD schema validation passes for all three drivers
 - [x] 8.2 Run the full C/C++ unit test suite (401 tests) — all pass
 - [x] 8.3 Run the full integration test suite (68 tests, including the 12 new door-lock/sensor tests) — all pass
+
+## 9. Review response (Matter 1.5.1 conformance + Zigbee parity)
+
+- [x] 9.1 Restore dual-path live updates: keep `handleLockState` / `handleStateValue` alongside the event handlers (StateChange/LockOperation are optional/INFO in 1.5.1; same-value updates are suppressed so no duplicate events)
+- [x] 9.2 Seed `jammed`, `tampered`, `invalidCodeEntryLimit` to `'false'` at commission (Zigbee parity; avoids null/unknown ambiguity)
+- [x] 9.3 Attach `{source, userId}` metadata to the `locked` update from `LockOperation` (map `OperationSourceEnum` → `DOORLOCK_PROFILE_LOCKED_SOURCE_*`, UserIndex at TLV tag 2)
+- [x] 9.4 Guard `alarmCode.toString(16)` against a missing TLV tag 0
+- [x] 9.5 Align the contact-sensor seed polarity with its event handler (undefined → faulted)
+- [x] 9.6 Add `ContactSensorNoEventDevice.js` mock + fixture and a negative test asserting `faulted` still tracks state via the attribute when `StateChange` is absent
+- [x] 9.7 Add a door-lock test asserting `jammed`/`tampered`/`invalidCodeEntryLimit` are seeded `'false'` at commission
+- [x] 9.9 Add a test asserting unresourced `DoorLockAlarm` codes are log-only (no fault-resource change)
+- [x] 9.10 Add `emitLockOperation` side-band + tests for Unlatch (0x04 → `locked=false`) and a non-lock/unlock (no-op) operation type
+- [x] 9.11 Add a contact-sensor synchronize-reseed test (goOffline → change state → reconnect → `faulted` re-seeded), plus a `stateValue`-aware `comeOnline` on the mock
+- [x] 9.12 Document, in the door-lock spec, the `invalidCodeEntryLimit` timer-vs-operation clearing interface difference and the DoorAjar/DPS out-of-scope consistency note
+- [ ] 9.8 (Deferred — see design.md Risks and the follow-up user stories) `lastUserInteractionDate` (SBMD loader does not extract device-level `resources`; needs a C++ runtime change), timer-based `invalidCodeEntryLimit` clearing (needs an SBMD scheduler primitive), the v3→v4 migration test (harness cannot swap driver versions mid-test), and `doorLock` profileVersion cross-stack reconciliation

@@ -22,44 +22,36 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /**
- * ContactSensorDevice - A matter.js virtual contact sensor for integration
- * testing.
+ * ContactSensorNoEventDevice - A matter.js virtual contact sensor that does NOT
+ * emit BooleanState.StateChange.
  *
- * Extends VirtualDevice with:
- *   - Contact Sensor device type (0x0015) with BooleanState cluster on endpoint 1
- *   - Side-band operations: setStateValue, getState
- *   - Initial state: closed (stateValue=true, not faulted)
+ * BooleanState.StateChange is optional conformance in Matter 1.5.1, so a
+ * spec-conformant contact sensor may omit it and report state changes only via
+ * the StateValue attribute. This device models exactly that case: it uses the
+ * default (unaltered) Contact Sensor requirements, so the StateChange event is
+ * not enabled and setStateValue reports only the attribute.
  *
- * BooleanState.StateChange is optional on the base Contact Sensor device, so it
- * is enabled here; the BooleanStateServer then emits it automatically whenever
- * stateValue changes.
- *
- * Can be run directly:  node ContactSensorDevice.js --passcode ... --discriminator ...
+ * It exists to verify that live fault reporting still works through the
+ * driver's attribute handler when the event is absent.
  */
 
 import {pathToFileURL} from 'node:url';
 import {Endpoint} from '@matter/main';
-import {ContactSensorDevice as MatterContactSensorDevice, ContactSensorRequirements} from '@matter/main/devices';
+import {ContactSensorDevice as MatterContactSensorDevice} from '@matter/main/devices';
 import {VirtualDevice} from './VirtualDevice.js';
 import {parseArgs} from './parseArgs.js';
 
-const BooleanStateServerWithEvents = ContactSensorRequirements.BooleanStateServer.alter({
-    events: {stateChange: {optional: false}}
-});
-
-export class ContactSensorDevice extends VirtualDevice {
+export class ContactSensorNoEventDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
-            deviceName: 'Virtual Contact Sensor',
+            deviceName: 'Virtual Contact NoEvent',
             ...options
         });
 
         // StateValue=true means closed (contact present / not faulted)
         this.initialStateValue = true;
 
-        this.registerOperation('setStateValue', ({stateValue}) =>
-            this.handleSetStateValue(stateValue)
-        );
+        this.registerOperation('setStateValue', ({stateValue}) => this.handleSetStateValue(stateValue));
         this.registerOperation('getState', () => this.handleGetState());
     }
 
@@ -68,9 +60,10 @@ export class ContactSensorDevice extends VirtualDevice {
     }
 
     createEndpoints() {
+        // No .alter enabling stateChange, so the optional event is not emitted.
         return [
-            new Endpoint(MatterContactSensorDevice.with(BooleanStateServerWithEvents), {
-                id: 'contact-ep1',
+            new Endpoint(MatterContactSensorDevice, {
+                id: 'contact-noevt-ep1',
                 booleanState: {
                     stateValue: this.initialStateValue
                 }
@@ -84,22 +77,6 @@ export class ContactSensorDevice extends VirtualDevice {
         });
 
         return {stateValue};
-    }
-
-    /**
-     * Override handleComeOnline to accept an optional stateValue, so a test can
-     * simulate a state change that occurred while Barton was in comm-fail. The
-     * attribute is updated directly so the primed subscription report on
-     * reconnect reflects the new state (which drives the synchronize reseed).
-     */
-    async handleComeOnline({stateValue} = {}) {
-        if (this.endpoints && this.endpoints[0] && stateValue !== undefined) {
-            await this.endpoints[0].act(async (agent) => {
-                agent.booleanState.state.stateValue = stateValue;
-            });
-        }
-
-        return super.handleComeOnline();
     }
 
     async handleGetState() {
@@ -116,6 +93,6 @@ export class ContactSensorDevice extends VirtualDevice {
 // Entry point when run directly
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const config = parseArgs(process.argv);
-    const device = new ContactSensorDevice(config);
+    const device = new ContactSensorNoEventDevice(config);
     await device.start();
 }

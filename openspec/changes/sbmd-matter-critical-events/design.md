@@ -27,13 +27,17 @@ The Zigbee door lock driver (`zigbeeDoorLockDeviceDriver.c` + `doorLockCluster.c
 
 ## Decisions
 
-### Decision 1: Event-only live updates with one-time attribute seed
+### Decision 1: Dual-path live updates (attribute handler + event handler)
 
-All three drivers switch to event-only live updates. The `attributeHandlers` block for the live-update handler is removed. A `seed` handler reads the relevant attribute once at commission time to establish initial resource state. After that, only Critical events drive updates.
+All three drivers keep their existing `attributeHandlers` live-update handler **and** add an `eventHandlers` handler for the same state, both active. A `seed` handler additionally reads the relevant attribute once at commission time to establish initial resource state.
 
-**Rationale**: Critical events have higher delivery reliability than attribute reports on congested Matter networks — that is the entire point of the ticket. Keeping the attribute handler active alongside the event handler undermines this by producing two updates per state change and dilutes the signal, causing subscribers to see duplicate events for a single physical occurrence. The seed handler covers initial state; the subscription priming report that would have driven the live attribute handler is no longer needed.
+**Rationale**: The event alone is not a safe replacement for the attribute in released Matter 1.5.1:
+- `BooleanState.StateChange` is **optional** conformance (mandatory only under an in-progress spec ifdef) and **INFO** priority — a spec-conformant contact/leak sensor may never emit it. Removing `handleStateValue` would leave `faulted` frozen on such devices.
+- `DoorLock.LockOperation` is CRITICAL only for Unlock/ForcedUser; a Lock MAY be INFO. `DoorLockAlarm` is CRITICAL/mandatory, but `LockState` remains the mandatory attribute baseline.
 
-**Alternative considered**: Dual update path (attribute subscription AND event handler, both active). Rejected — subscribers receive two resource-changed events per physical state change (once from the attribute report, once from the Critical event). Violates expected semantics and degrades the consumer experience.
+Keeping both is safe because it does **not** produce duplicate resource-changed events: `jammed`/`tampered`/`invalidCodeEntryLimit`/`faulted`/`locked` are `CACHING_POLICY_ALWAYS` (read-only, non-volatile), and `deviceService.c` only emits `RESOURCE_UPDATED` when the value actually changes (`didChange`). A redundant same-value update from the second path is suppressed and emits nothing.
+
+**Alternative considered**: Event-only live updates (remove the attribute handler). Rejected — it breaks live reporting on devices that don't implement the optional event, and the duplicate-event cost that once motivated it does not exist given same-value suppression.
 
 ---
 
@@ -93,11 +97,13 @@ The `OperationSource` field is at TLV tag 1 in the `LockOperation` struct.
 
 ---
 
-### Decision 5: New door lock resources are additive, with no value until first event
+### Decision 5: New door lock resources are additive and seeded to `"false"`
 
-`jammed`, `tampered`, and `invalidCodeEntryLimit` are declared in the driver's `endpoints['1'].resources` block with `type: 'boolean', modes: ['read'], prerequisites: [CL_DOOR_LOCK]`. They have **no seed handler**, so they carry no cached value until the first qualifying event sets them; consumers must handle an absent value.
+`jammed`, `tampered`, and `invalidCodeEntryLimit` are declared in the driver's `endpoints['1'].resources` block with `type: 'boolean', modes: ['read'], prerequisites: [CL_DOOR_LOCK]`, each with a trivial `seed` handler that returns `'false'`.
 
-**Note on the Zigbee precedent**: the Zigbee driver explicitly seeds these to `"false"` via `initialResourceValuesPutEndpointValue(...)`. The SBMD driver intentionally leaves them unseeded (no value until first event), which matches the requirement in the spec ("Resources absent until first event").
+**Rationale (parity with Zigbee)**: the Zigbee driver seeds all three to `"false"` at pairing via `initialResourceValuesPutEndpointValue(...)`. Seeding them the same way keeps the network-neutral resource interface consistent — a freshly commissioned Matter lock reports a definite `"false"` (not faulted) rather than a `null`/unknown value, so consumers do not need Matter-specific branching to distinguish "not tampered" from "unknown". The first qualifying event then flips the resource as needed.
+
+**`locked` source/userId metadata**: the `LockOperation` handler attaches `{ source, userId }` metadata to the `locked` update (mapping Matter `OperationSourceEnum` → the canonical `DOORLOCK_PROFILE_LOCKED_SOURCE_*` strings and `UserIndex` at TLV tag 2), matching the Zigbee driver. The attribute-path `locked` update carries no source (an attribute report has none); when both paths fire, same-value suppression means whichever changes the value first wins.
 
 ---
 
@@ -121,13 +127,16 @@ No new resources are invented to hold event data that has no established Barton 
 ## Risks / Trade-offs
 
 **[Risk 1] `invalidCodeEntryLimit` clears on any LockOperation, not just after lockout expiry**
-→ *Mitigation*: This is the best approximation without a timer. A remote unlock during an active keypad lockout would incorrectly clear the resource. Acceptable for v1; time-based clearing tracked as a future enhancement (SBMD v5 needs a `scheduleCallback` result builder operation).
+→ *Mitigation*: This is the best approximation without a timer. A remote unlock during an active keypad lockout would incorrectly clear the resource. This is an observable interface difference from the Zigbee driver, which auto-clears on a lockout-duration timer (`restoreLockoutCallback`); the Matter equivalent (`UserCodeTemporaryDisableTime`, attribute 0x0031) exists, so once an SBMD scheduler/`scheduleCallback` result-builder op lands this becomes directly implementable. Acceptable for v1; tracked as a future enhancement.
 
 **[Risk 2] `DoorLockAlarm` has no "cleared" event in Matter**
 → *Mitigation*: Clearing is inferred from `LockOperation`. This is the same design as Zigbee. No further mitigation possible without a richer event model from the device.
 
-**[Risk 3] `jammed`/`tampered`/`invalidCodeEntryLimit` start with no value until first event**
-→ *Mitigation*: Resources are registered at commission time but have no initial value. Consumers must handle `null`/absent value. This **intentionally differs** from the Zigbee driver, which seeds these to `"false"` at commission; the SBMD driver leaves them unseeded (first qualifying event sets them). Marked in the spec.
+**[Risk 3] `lastUserInteractionDate` is not updated (Zigbee parity gap)**
+→ *Mitigation*: The Zigbee driver updates the device-level `lastUserInteractionDate` on each lock change. The SBMD driver does not, and this cannot be done in the driver alone today: while the SBMD result executor can *update* a device-level resource (omit the endpoint → device root) and `Date.now()` is available, the SBMD loader does **not** extract the schema's top-level device-level `resources` block into `SbmdRegistration`, so a `.sbmd.js` cannot *register* the resource. Closing this gap requires a C++ runtime change (loader extraction + registration + `SpecBasedMatterDeviceDriver` registration). Deferred to a follow-up; tracked as a user story.
 
-**[Risk 4] SBMD.md `args.event` doc fix may conflict with an upstream fix**
+**[Risk 4] `doorLock` profile version numbering has diverged across stacks**
+→ *Mitigation*: Zigbee registers `doorLock` profile version `2`; this change takes the Matter driver to `4`. Same profile, two independent counters. Pre-existing; a follow-up ticket should decide whether the profile version describes the shared profile contract or the per-stack driver.
+
+**[Risk 5] SBMD.md `args.event` doc fix may conflict with an upstream fix**
 → *Mitigation*: The fix is scoped to the event API table and the door-lock example. If another author fixes the same lines, a merge conflict will surface it cleanly.

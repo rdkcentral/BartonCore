@@ -91,3 +91,62 @@ def test_state_change_close_clears_faulted(default_environment, matter_contact_s
     # StateValue=true means closed (not faulted)
     matter_contact_sensor.sideband.send("setStateValue", {"stateValue": True})
     wait_for_resource_value(faulted_queue, "false", timeout=10)
+
+
+def test_faulted_tracks_via_attribute_when_event_absent(
+    default_environment, matter_contact_sensor_no_event
+):
+    """faulted still tracks state via the StateValue attribute when the device
+    does not emit the optional BooleanState.StateChange event.
+
+    BooleanState.StateChange is optional conformance in Matter 1.5.1, so the
+    driver must keep its attribute handler. This sensor emits no StateChange
+    event; live updates therefore arrive only via the StateValue attribute
+    report. If the attribute handler were removed, faulted would never move and
+    this test would fail.
+    """
+    commission_device(default_environment, matter_contact_sensor_no_event, "sensor")
+    client = default_environment.get_client()
+
+    faulted_queue = resource_update_listener(client, "faulted")
+
+    # Open the contact (StateValue=false) -> faulted true, via attribute report only.
+    matter_contact_sensor_no_event.sideband.send("setStateValue", {"stateValue": False})
+    wait_for_resource_value(faulted_queue, "true", timeout=10)
+
+    # Close again (StateValue=true) -> faulted false.
+    matter_contact_sensor_no_event.sideband.send("setStateValue", {"stateValue": True})
+    wait_for_resource_value(faulted_queue, "false", timeout=10)
+
+
+def test_faulted_reseeded_on_synchronize(default_environment, matter_contact_sensor):
+    """faulted is re-seeded from StateValue when the device reconnects after a
+    comm-fail, mirroring the door lock's seed-on-synchronize behavior.
+
+    The sensor starts closed (faulted=false). It goes offline, its StateValue
+    changes to open while Barton is in comm-fail, and on reconnect the primed
+    report drives synchronizeDevice -> SeedInitialResourceValues, re-seeding
+    faulted to "true".
+    """
+    sensor = _commission_contact_sensor(default_environment, matter_contact_sensor)
+    client = default_environment.get_client()
+
+    # Speed up comm-fail detection (see door_lock_test synchronize test for detail).
+    default_environment._barton_client_params.get_property_provider().set_property_string(
+        "barton.commFail.monitorIntervalSecs", "1"
+    )
+    metadata_base = f"/{sensor.props.uuid}/m"
+    client.write_metadata(f"{metadata_base}/commFailOverrideSeconds", "1")
+
+    commfail_queue = resource_update_listener(client, "communicationFailure")
+    matter_contact_sensor.sideband.send("goOffline")
+    wait_for_resource_value(commfail_queue, "true", timeout=5)
+
+    reseed_queue = resource_update_listener(client, "faulted")
+
+    # Open the contact (StateValue=false) while offline, then reconnect.
+    matter_contact_sensor.sideband.send("comeOnline", {"stateValue": False})
+    client.write_metadata(f"{metadata_base}/matterLivenessTimeoutOverrideMs", "1")
+
+    # On resync, faulted is re-seeded to "true" (open).
+    wait_for_resource_value(reseed_queue, "true", timeout=15)

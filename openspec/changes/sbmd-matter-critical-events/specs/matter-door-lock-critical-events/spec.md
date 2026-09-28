@@ -43,7 +43,11 @@ The door lock SBMD driver SHALL subscribe to and handle `LockOperation` events (
 - LockOperationType 0x04 (Unlatch) → `locked = "false"`, clear `tampered`, `invalidCodeEntryLimit`, and if OperationSource == 0x01 (Manual) also clear `jammed`
 - Other operation types → no-op
 
-The door lock driver SHALL remove the `attributeHandlers.handleLockState` live-update handler. Live updates to `locked` SHALL be driven exclusively by `LockOperation` events. The existing `seed` handler continues to establish initial `locked` state at commission time.
+The door lock driver SHALL retain the `attributeHandlers.handleLockState` live-update handler alongside the `LockOperation` event handler. Both update `locked`; because `LockOperation` is not CRITICAL for all operations (a Lock MAY be INFO) and `LockState` is the mandatory attribute, the attribute path is the reliable baseline. Duplicate resource-changed events are not produced because same-value resource updates are suppressed downstream. The `seed` handler establishes initial `locked` state at commission time.
+
+On a `LockOperation`, the driver SHALL attach `{ source, userId }` metadata to the `locked` resource update, mapping Matter `OperationSourceEnum` to the canonical `DOORLOCK_PROFILE_LOCKED_SOURCE_*` string and including `UserIndex` (TLV tag 2) when present.
+
+**Interface difference (invalidCodeEntryLimit clearing)**: the Zigbee driver auto-clears `invalidCodeEntryLimit` on a lockout-duration timer, whereas this driver clears it on the next `LockOperation`. This is an observable difference in the network-neutral interface, not just an internal detail: a client may see `invalidCodeEntryLimit` remain `"true"` longer (until an operation) or clear earlier (on an unrelated operation) than on Zigbee. The Matter equivalent attribute `UserCodeTemporaryDisableTime` (0x0031) exists, so timer-based clearing becomes directly implementable once an SBMD scheduler/`scheduleCallback` result-builder op lands. Deferred.
 
 #### Scenario: Lock operation updates locked resource
 - **WHEN** a `LockOperation` event is received with LockOperationType = 0x00 (Lock)
@@ -77,15 +81,15 @@ The door lock SBMD driver (endpoint `1`, profile `doorLock`) SHALL declare the f
 - `tampered` (resource name per `DOORLOCK_PROFILE_RESOURCE_TAMPERED`)
 - `invalidCodeEntryLimit` (resource name per `DOORLOCK_PROFILE_RESOURCE_INVALID_CODE_ENTRY_LIMIT`)
 
-These resources have no initial value until the first qualifying event fires.
+Each resource SHALL have a `seed` handler that establishes an initial value of `"false"` at commission time, matching the Zigbee driver, so a freshly commissioned lock reports a definite "not faulted" state rather than a null/unknown value.
 
 #### Scenario: New resources registered on commission
 - **WHEN** a Matter Door Lock device is commissioned
 - **THEN** `jammed`, `tampered`, and `invalidCodeEntryLimit` resources SHALL be registered on endpoint `1`
 
-#### Scenario: Resources absent until first event
+#### Scenario: Resources seeded to false at commission
 - **WHEN** a Matter Door Lock device has been commissioned but no `DoorLockAlarm` or `LockOperation` event has been received
-- **THEN** `jammed`, `tampered`, and `invalidCodeEntryLimit` resources SHALL have no cached value
+- **THEN** `jammed`, `tampered`, and `invalidCodeEntryLimit` resources SHALL each have the cached value `"false"`
 
 ---
 
@@ -100,6 +104,8 @@ The door lock SBMD driver SHALL bump the endpoint `1` `profileVersion` (from `3`
 
 ### Requirement: DoorStateChange events are not handled (punted)
 The door lock SBMD driver SHALL NOT include a handler for `DoorStateChange` events (cluster 0x0101, event 0x0001) in this change. This event requires the Door Position Sensor feature (DPS, bit 2 of the DoorLock feature map), which is not present on any currently field-deployed device (confirmed: Aqara Smart Lock U400 does not have DPS). DoorStateChange handling is deferred to a future change.
+
+Consistent with this, the `DoorLockAlarm` `DoorAjar` code (0x07) — which is meaningful only on DPS-capable locks — is intentionally in the log-only set (it has no resource mapping) rather than being surfaced as a door-position resource. Door-position semantics as a whole are out of scope until the DPS follow-up.
 
 #### Scenario: DoorStateChange events have no handler
 - **WHEN** a Matter Door Lock device emits a `DoorStateChange` event

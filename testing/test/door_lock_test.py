@@ -61,6 +61,27 @@ def test_commission_door_lock(default_environment, matter_door_lock):
     )
 
 
+def test_fault_resources_seeded_false_on_commission(
+    default_environment, matter_door_lock
+):
+    """jammed, tampered, and invalidCodeEntryLimit are seeded to "false" at
+    commission (matching the Zigbee driver), not left with no value."""
+    lock = _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    for resource_id in ("jammed", "tampered", "invalidCodeEntryLimit"):
+        resource = client.get_resource_by_uri(
+            resource_uri(lock, resource_id, endpoint_id=1)
+        )
+        assert (
+            resource is not None
+        ), f"{resource_id} resource not found after commission"
+        assert resource.props.value == "false", (
+            f"Expected {resource_id} to be seeded to 'false' at commission, "
+            f"got '{resource.props.value}'"
+        )
+
+
 def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     """Lock and unlock the door lock via Barton resource writes, verify via side-band."""
     lock = _commission_door_lock(default_environment, matter_door_lock)
@@ -394,3 +415,71 @@ def test_non_manual_lock_operation_leaves_jammed_set(
         f"Expected jammed to remain 'true' after a non-manual operation, "
         f"got '{resource.props.value}'"
     )
+
+
+def test_unresourced_alarm_codes_do_not_change_fault_resources(
+    default_environment, matter_door_lock
+):
+    """DoorLockAlarm codes with no resource mapping are logged and leave the
+    fault resources untouched.
+
+    0x03 (LockRadioPowerCycled) has no resource mapping. Fire it, then fire a
+    resourced alarm (0x00 -> jammed) and wait for jammed to prove the event
+    pipeline processed both in order. tampered and invalidCodeEntryLimit must
+    remain at their seeded "false" value.
+    """
+    lock = _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    jammed_queue = resource_update_listener(client, "jammed")
+
+    # Unresourced alarm — must not touch any resource.
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x03})
+
+    # Resourced alarm afterwards proves the pipeline processed the earlier one.
+    matter_door_lock.sideband.send("alarm", {"alarmCode": 0x00})
+    wait_for_resource_value(jammed_queue, "true", timeout=10)
+
+    for resource_id in ("tampered", "invalidCodeEntryLimit"):
+        resource = client.get_resource_by_uri(
+            resource_uri(lock, resource_id, endpoint_id=1)
+        )
+        assert resource is not None, f"{resource_id} resource not found"
+        assert resource.props.value == "false", (
+            f"Expected {resource_id} to remain 'false' after an unresourced "
+            f"alarm, got '{resource.props.value}'"
+        )
+
+
+def test_unlatch_operation_unlocks(default_environment, matter_door_lock):
+    """A LockOperation with LockOperationType=Unlatch (0x04) sets locked to false."""
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    locked_queue = resource_update_listener(client, "locked")
+
+    # 0x04 = Unlatch; the driver treats it as unlocked.
+    matter_door_lock.sideband.send("emitLockOperation", {"opType": 0x04})
+    wait_for_resource_value(locked_queue, "false", timeout=10)
+
+
+def test_non_lock_unlock_operation_is_noop(default_environment, matter_door_lock):
+    """A LockOperation whose type is neither Lock/Unlock/Unlatch does not change
+    locked, and does not wedge the event pipeline."""
+    _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    locked_queue = resource_update_listener(client, "locked")
+
+    # Establish a known unlocked state.
+    matter_door_lock.sideband.send("emitLockOperation", {"opType": 0x01})  # Unlock
+    wait_for_resource_value(locked_queue, "false", timeout=10)
+
+    # 0x02 = NonAccessUserEvent — the handler must no-op (no locked change).
+    matter_door_lock.sideband.send("emitLockOperation", {"opType": 0x02})
+
+    # A following Lock must still take effect, proving the no-op did not wedge
+    # the pipeline (and, since Lock changes false->true, that the no-op did not
+    # spuriously set locked=true).
+    matter_door_lock.sideband.send("emitLockOperation", {"opType": 0x00})  # Lock
+    wait_for_resource_value(locked_queue, "true", timeout=10)

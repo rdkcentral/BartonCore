@@ -82,6 +82,7 @@ export class DoorLockDevice extends VirtualDevice {
         this.registerOperation('unlock', () => this.handleUnlock());
         this.registerOperation('alarm', ({alarmCode}) => this.handleAlarm(alarmCode));
         this.registerOperation('manualOperation', ({lock} = {}) => this.handleManualOperation(lock));
+        this.registerOperation('emitLockOperation', (params = {}) => this.handleEmitLockOperation(params));
         this.registerOperation('getState', () => this.handleGetState());
     }
 
@@ -202,6 +203,37 @@ export class DoorLockDevice extends VirtualDevice {
         });
 
         return {lockState: lock ? 'locked' : 'unlocked'};
+    }
+
+    /**
+     * Emit a LockOperation with an arbitrary operationType and operationSource,
+     * for exercising Unlatch and non-lock/unlock (no-op) operation types.
+     * Updates lockState for Lock/Unlock/Unlatch; leaves it unchanged otherwise.
+     */
+    async handleEmitLockOperation({opType = DoorLock.LockOperationType.Lock, source = DoorLock.OperationSource.Manual, userId = null} = {}) {
+        await this.endpoints[0].act(async (agent) => {
+            if (opType === DoorLock.LockOperationType.Lock) {
+                agent.doorLock.state.lockState = DoorLock.LockState.Locked;
+            } else if (
+                opType === DoorLock.LockOperationType.Unlock ||
+                opType === DoorLock.LockOperationType.Unlatch
+            ) {
+                agent.doorLock.state.lockState = DoorLock.LockState.Unlocked;
+            }
+
+            await this.endpoints[0].events.doorLock.lockOperation.emit(
+                {
+                    lockOperationType: opType,
+                    operationSource: source,
+                    userIndex: userId,
+                    fabricIndex: null,
+                    sourceNode: null
+                },
+                agent.context
+            );
+        });
+
+        return {opType, source};
     }
 
     async handleGetState() {

@@ -22,7 +22,7 @@ Matter Critical events (Informational or Critical priority) are delivered with h
 ### New Capabilities
 
 - `matter-door-lock-critical-events`: Critical event handling for the Door Lock SBMD driver — `DoorLockAlarm` → `jammed`/`tampered`/`invalidCodeEntryLimit`; `LockOperation` → `locked` update and state clearing. Mirrors the Zigbee `doorLockCluster.c` alarm/operation semantics.
-- `matter-sensor-critical-events`: Critical event handling for Contact Sensor and Water Leak Detector SBMD drivers — `BooleanState.StateChange` → `faulted` resource update. Live state tracking moves to events exclusively; the attribute subscription path is removed.
+- `matter-sensor-critical-events`: Critical event handling for Contact Sensor and Water Leak Detector SBMD drivers — `BooleanState.StateChange` → `faulted` resource update, added alongside the existing `StateValue` attribute handler (dual-path). Because `StateChange` is optional conformance in Matter 1.5.1, the attribute path is retained as the reliable baseline.
 
 ### Modified Capabilities
 
@@ -37,5 +37,5 @@ Matter Critical events (Informational or Critical priority) are delivered with h
   - Test infrastructure (modified): `testing/mocks/devices/matterjs/src/DoorLockDevice.js` (alarm side-band), `testing/test/door_lock_test.py` (alarm/operation tests), `testing/conftest.py` (fixture registration)
 - **CMake flags**: `BCORE_MATTER` (no new flags required)
 - **Consumers**: Any client observing `jammed`, `tampered`, or `invalidCodeEntryLimit` on a Matter door lock endpoint will now receive live updates from Critical events. Previously these resources were never updated.
-- **No breaking changes**: New resources (`jammed`, `tampered`, `invalidCodeEntryLimit`) are additive. Attribute-based handlers (`handleLockState`, `handleStateValue`) are removed; live state updates now arrive exclusively via event handlers. Clients observing existing resources see no behavioral change other than the source of updates.
+- **No breaking changes**: New resources (`jammed`, `tampered`, `invalidCodeEntryLimit`) are additive and seeded to `"false"` at commission (matching Zigbee). The existing attribute handlers (`handleLockState`, `handleStateValue`) are retained alongside the new event handlers (dual-path); same-value updates are suppressed downstream so no duplicate resource-changed events are emitted. Clients observing existing resources see no behavioral change.
 - **Driver versioning**: The door lock bumps its endpoint `profileVersion` from 3 to 4 so `deviceServiceDeviceNeedsReconfiguring` reconfigures already-commissioned devices and registers the new resources. `driverVersion` is bumped to 2 in all three drivers as a content marker, but it does not itself trigger reconfiguration (it is only recorded and logged). The sensors add no new resources and need no reconfiguration.

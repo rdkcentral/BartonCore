@@ -99,6 +99,28 @@ SbmdDriver({
         }
     },
 
+    attributeHandlers: {
+        handleStateValue: {
+            aliases: ['stateValue'],
+            handler: function (args) {
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for StateValue');
+                }
+
+                // StateValue=true means water detected (faulted)
+                return Sbmd.result()
+                    .dataModel.updateResource(
+                        args.endpointId,
+                        RES_FAULTED,
+                        value === true ? 'true' : 'false'
+                    )
+                    .success();
+            }
+        }
+    },
+
     eventHandlers: {
         handleStateChange: {
             aliases: ['stateChange'],
