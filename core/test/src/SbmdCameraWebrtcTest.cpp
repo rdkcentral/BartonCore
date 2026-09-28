@@ -127,15 +127,20 @@ namespace
         HandlerContext MakeContext() { return SbmdDriverTestBase::MakeContext("test-camera-uuid"); }
 
         // Build a transient-data "sessions" JSON blob for a single session.
-        static std::string SessionsJson(const std::string &id, const std::string &state)
+        static std::string
+        SessionsJson(const std::string &id, const std::string &state, const std::string &deviceId = "test-camera-uuid")
         {
-            return R"({")" + id + R"(":{"state":")" + state + R"(","protocol":"webrtc"}})";
+            return R"({")" + id + R"(":{"state":")" + state + R"(","protocol":"webrtc","deviceId":")" + deviceId +
+                   R"("}})";
         }
 
-        static std::string SessionsJson(const std::string &id, const std::string &state, int webRtcSessionId)
+        static std::string SessionsJson(const std::string &id,
+                                        const std::string &state,
+                                        int webRtcSessionId,
+                                        const std::string &deviceId = "test-camera-uuid")
         {
-            return R"({")" + id + R"(":{"state":")" + state + R"(","protocol":"webrtc","webRTCSessionID":)" +
-                   std::to_string(webRtcSessionId) + R"(}})";
+            return R"({")" + id + R"(":{"state":")" + state + R"(","protocol":"webrtc","deviceId":")" + deviceId +
+                   R"(","webRTCSessionID":)" + std::to_string(webRtcSessionId) + R"(}})";
         }
 
         /**
@@ -781,6 +786,35 @@ namespace
         ASSERT_NE(td, nullptr) << "Expected SetTransientData for sessions";
         EXPECT_TRUE(td->value.find("\"webRTCSessionID\":42") != std::string::npos)
             << "Sessions must store the webRTCSessionID from the initial offer. Got: " << td->value;
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, HandleIncomingOfferUsesStreamingSessionForCurrentDevice)
+    {
+        std::string sessions = R"({"1":{"state":"streaming","protocol":"webrtc","deviceId":"other-camera"},)"
+                               R"("2":{"state":"streaming","protocol":"webrtc","deviceId":"test-camera-uuid"}})";
+        auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, sdp:{tag:1,type:'string'}}",
+                             "{webRTCSessionID: 42, sdp: 'remote-offer-sdp'}");
+
+        auto result =
+            InvokeCommandHandler("handleIncomingOffer", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_OFFER, tlv, sessions);
+
+        ExpectSuccess(result);
+        const auto *ur = ExpectUpdateResource(*result, "remoteSdp", "remote-offer-sdp");
+
+        // This initial Offer's webRTCSessionID is not stored on either session yet, so the exact
+        // lookup cannot resolve it. The fallback must select the streaming session for this camera
+        // instead of taking the first streaming session, which belongs to a different camera.
+        ASSERT_TRUE(ur->metadata.has_value());
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"2\"") != std::string::npos);
+
+        auto *td = FindTransientData(*result, "sessions");
+        ASSERT_NE(td, nullptr) << "Expected SetTransientData for sessions";
+
+        // Persisting the Matter ID on the selected Barton session lets later ICE and End commands
+        // resolve it exactly. Storing it on session 1 would misattribute those commands.
+        EXPECT_TRUE(td->value.find("\"2\":{\"state\":\"streaming\",\"protocol\":\"webrtc\","
+                                   "\"deviceId\":\"test-camera-uuid\",\"webRTCSessionID\":42}") != std::string::npos)
+            << "The matching device session must store the webRTCSessionID. Got: " << td->value;
     }
 
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingAnswerUpdatesRemoteSdp)

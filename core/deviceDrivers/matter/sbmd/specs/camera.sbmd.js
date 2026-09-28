@@ -335,14 +335,14 @@ function parseSessions(sessionsJson) {
     }
 }
 
-function findStreamingSessionId(sessions) {
-    if (sessions === null || sessions === undefined) {
+function findStreamingSessionIdForDevice(sessions, deviceId) {
+    if (sessions === null || sessions === undefined || !deviceId) {
         return null;
     }
 
-    // Return the id of the (single) session in the 'streaming' state, or null if there is none.
+    // Return the id of the streaming session for this camera, or null if there is none.
     for (var id in sessions) {
-        if (sessions[id].state === 'streaming') {
+        if (sessions[id].state === 'streaming' && sessions[id].deviceId === deviceId) {
             return id;
         }
     }
@@ -399,7 +399,7 @@ function executeCreateSession(args) {
     }
     var sessionId = nextId.toString();
 
-    sessions[sessionId] = {state: 'created', protocol: PROTO_WEBRTC};
+    sessions[sessionId] = {state: 'created', protocol: PROTO_WEBRTC, deviceId: args.deviceUuid};
 
     return Sbmd.result()
         .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
@@ -566,8 +566,8 @@ function executeLocalSdp(args) {
         return Sbmd.result().error('No active sessions');
     }
 
-    // Find the active streaming session
-    var sessionId = findStreamingSessionId(sessions);
+    // Find the active streaming session for this camera.
+    var sessionId = findStreamingSessionIdForDevice(sessions, args.deviceUuid);
 
     if (!sessionId) {
         return Sbmd.result().error('No active streaming session');
@@ -898,7 +898,7 @@ function executeLocalIceCandidates(args) {
     }
 
     // Find the active streaming session with a webRTCSessionID.
-    var sessionId = findStreamingSessionId(sessions);
+    var sessionId = findStreamingSessionIdForDevice(sessions, args.deviceUuid);
     var webRTCSessionID =
         sessionId !== null && sessions[sessionId].webRTCSessionID !== undefined
             ? sessions[sessionId].webRTCSessionID
@@ -956,12 +956,7 @@ function handleIncomingOffer(args) {
     // Store the Matter webRTCSessionID for correlation
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
     var sessions = parseSessions(sessionsJson);
-    var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
-
-    // The first Offer establishes this ID, so it is not yet present in the session map.
-    if (sessionId === null) {
-        sessionId = findStreamingSessionId(sessions);
-    }
+    var sessionId = findStreamingSessionIdForDevice(sessions, args.deviceUuid);
 
     var metadata = {sessionId: sessionId || 'unknown'};
 
@@ -1009,7 +1004,7 @@ function handleIncomingAnswer(args) {
     // Store the camera-allocated webRTCSessionID for use by subsequent commands
     // (ProvideICECandidates, EndSession)
     if (sessions && webRTCSessionID !== undefined && webRTCSessionID !== null) {
-        var answerSessionId = findStreamingSessionId(sessions);
+        var answerSessionId = findStreamingSessionIdForDevice(sessions, args.deviceUuid);
 
         if (answerSessionId) {
             sessions[answerSessionId].webRTCSessionID = webRTCSessionID;
