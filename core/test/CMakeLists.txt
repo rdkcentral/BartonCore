@@ -451,7 +451,5 @@ if (BCORE_ONVIF AND BUILD_TESTING)
         INCLUDES ${ONVIF_DIR} ${ONVIF_TEST_XML_INCLUDE_DIRS}
     )
 
-    if (BUILD_TESTING)
-        bcore_configure_glib()
-    endif()
+    bcore_configure_glib()
 endif()
