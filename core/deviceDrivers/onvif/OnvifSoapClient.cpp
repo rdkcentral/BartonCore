@@ -92,6 +92,8 @@ namespace barton
 
         bool OnvifParseDeviceInformation(const std::string &xml, OnvifDeviceInfo &out)
         {
+            out = OnvifDeviceInfo {};
+
             xmlDoc *doc = xmlReadMemory(xml.data(),
                                         static_cast<int>(xml.size()),
                                         nullptr,
