@@ -26,9 +26,10 @@
 //
 // Maps Matter Door Lock device type to Barton doorLock device class.
 // The locked resource is seeded from the cached LockState attribute at
-// commission time; live updates are driven exclusively by LockOperation
-// events. DoorLockAlarm events drive the jammed, tampered, and
-// invalidCodeEntryLimit resources.
+// commission time; live updates arrive via two paths: the LockState
+// attribute handler (the mandatory-attribute baseline) and the LockOperation
+// event handler (which also attaches source/userId metadata). DoorLockAlarm
+// events drive the jammed, tampered, and invalidCodeEntryLimit resources.
 // Lock/Unlock commands sent via execute handlers with optional PIN code.
 //
 

@@ -10,7 +10,7 @@ Alarm code mapping:
 - 0x04 (WrongCodeEntryLimit) → `invalidCodeEntryLimit = "true"`
 - 0x05 (FrontEscutcheonRemoved) → `tampered = "true"`
 - 0x06 (DoorForcedOpen) → `tampered = "true"`
-- 0x07 (DoorAjar) → log only
+- 0x07 (DoorAjar) → log only (door-position semantics require the DPS feature and are out of scope; see the DoorStateChange requirement)
 - 0x08 (ForcedUser) → log only
 
 #### Scenario: Lock bolt jammed alarm sets jammed resource
