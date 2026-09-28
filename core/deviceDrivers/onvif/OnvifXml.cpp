@@ -25,6 +25,7 @@
 
 // xmlHelper is a C library that also pulls in libxml2's parser; include libxml2 here (as C++) first
 // so those headers are processed before the extern "C" block below gives xmlHelper C linkage.
+#include <libxml/entities.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
@@ -41,33 +42,11 @@ namespace barton
 
         std::string OnvifXmlEscape(const std::string &in)
         {
-            std::string out;
-            out.reserve(in.size());
-
-            for (char c : in)
-            {
-                switch (c)
-                {
-                    case '&':
-                        out += "&amp;";
-                        break;
-                    case '<':
-                        out += "&lt;";
-                        break;
-                    case '>':
-                        out += "&gt;";
-                        break;
-                    case '"':
-                        out += "&quot;";
-                        break;
-                    case '\'':
-                        out += "&apos;";
-                        break;
-                    default:
-                        out += c;
-                        break;
-                }
-            }
+            // Delegate to libxml2 (escapes &, <, >, and ") rather than hand-rolling; sufficient for the
+            // element text these values are embedded in.
+            xmlChar *escaped = xmlEncodeSpecialChars(nullptr, reinterpret_cast<const xmlChar *>(in.c_str()));
+            std::string out = escaped != nullptr ? reinterpret_cast<const char *>(escaped) : "";
+            xmlFree(escaped);
 
             return out;
         }
