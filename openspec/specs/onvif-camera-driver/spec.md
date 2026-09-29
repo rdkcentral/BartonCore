@@ -139,8 +139,11 @@ at configuration time — a static hint reflecting that ONVIF media/snapshot fet
 credentials — rather than deriving it from a live authentication probe. The driver SHALL NOT place
 credentials in any resource value, event payload, or returned URL other than the dedicated credential
 resources, which are flagged `RESOURCE_MODE_SENSITIVE` to request the platform's sensitive-value
-handling. `RESOURCE_MODE_SENSITIVE` is a marking the driver relies on; end-to-end redaction and
-at-rest protection are the platform's responsibility, not a guarantee the driver itself can make.
+handling. The credential resources are created **write-only** (`RESOURCE_MODE_WRITEABLE`, not
+`RESOURCE_MODE_READABLE`), so a client read is rejected as not-readable; combined with the platform
+omitting `SENSITIVE` values from the resource-to-client conversion and the credentials not being
+event-emitting, no credential value is exposed through a resource read or event. `RESOURCE_MODE_SENSITIVE`
+also drives at-rest and log handling, which is the platform's responsibility.
 
 #### Scenario: authRequired is readable and non-secret
 - **WHEN** a client reads `authRequired` on `ep/onvif`
