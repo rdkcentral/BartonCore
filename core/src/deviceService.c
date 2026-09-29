@@ -2848,7 +2848,8 @@ void updateResource(const char *deviceUuid,
     if (resourceId != NULL && strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
     {
         // Redact the value of sensitive resources (e.g. credentials) so a secret is never logged.
-        bool sensitive = (resource != NULL && (resource->mode & RESOURCE_MODE_SENSITIVE) != 0);
+        // Fail closed when the resource cannot be looked up (deletion/race) rather than logging it.
+        bool sensitive = (resource == NULL) || (resource->mode & RESOURCE_MODE_SENSITIVE) != 0;
         icLogDebug(LOG_TAG,
                    "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
                    __FUNCTION__,
