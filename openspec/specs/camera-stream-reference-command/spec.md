@@ -157,7 +157,10 @@ resources on `ep/onvif` before streaming. This flag-based credential entry is an
 superseded by a configuration-driven credential model. The command's argument contract SHALL be
 extended accordingly: beyond `<deviceId> [--out <uri>]` it SHALL also accept the optional
 `--user`/`--pass` (and `--snapshot <path>`) flags, and its registered maximum-argument limit SHALL be
-raised to admit them.
+raised to admit them. Passing `--pass` on the command line places the password in the process
+argument vector (and commonly in shell history); this exposure is an accepted limitation of the
+interim flag mechanism and SHALL be documented as such (a future credential model is expected to use
+an interactive/stdin path instead).
 
 #### Scenario: Credentials supplied via flags
 - **WHEN** a user runs `cameraStream <onvifDeviceId> --user <u> --pass <p>`
