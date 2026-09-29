@@ -14,8 +14,9 @@ drivers, Philips Hue) and plug into `deviceService` through the C `DeviceDriver`
 pointers; the Matter driver is the only C++ one. Discovery flows through the public API
 (`b_core_client_discover_start(["camera"], …)` → `DeviceDriver.discoverDevices` → `deviceServiceDeviceFound`).
 
-The resource model already provides `RESOURCE_MODE_SENSITIVE` (encrypted at rest, redacted in logs)
-and `RESOURCE_TYPE_PASSWORD`, so camera credentials need no new infrastructure.
+The resource model already provides `RESOURCE_MODE_SENSITIVE` (a marker requesting best-effort
+encryption at rest and log redaction, enforced by the platform) and `RESOURCE_TYPE_PASSWORD`, so
+camera credentials need no new infrastructure.
 
 ```
                         public discovery API

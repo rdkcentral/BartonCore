@@ -26,6 +26,9 @@ the WS-Discovery ProbeMatch endpoint reference (`urn:uuid:…`), obtain manufact
 firmware via an anonymous ONVIF `GetDeviceInformation`, and report the device with
 `deviceServiceDeviceFound`. The anonymous `GetDeviceInformation` SOAP call SHALL use the same bounded
 libcurl timeout as the on-demand calls so an unreachable ProbeMatch cannot stall the discovery worker.
+The `GetDeviceInformation` lookup SHALL be **best-effort**: if it fails or the camera requires
+credentials for it, the driver SHALL still report the ProbeMatch with fallback metadata rather than
+dropping the camera (credentials are only provisioned after the device exists).
 Because a discovered ONVIF camera normally has no DDL descriptor entry,
 the driver SHALL report it with `neverReject = true` so the device service does not reject it for
 lack of a matching descriptor.
