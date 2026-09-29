@@ -30,7 +30,7 @@
  * chain, and executes non-terminal ops. Terminal execution is left to the
  * caller since it requires device/session context.
  *
- * All methods require the caller to hold MQuickJsRuntime::GetMutex().
+ * All methods require the caller to hold MQuickJsRuntime::Instance().GetMutex().
  */
 
 #pragma once
@@ -255,7 +255,7 @@ namespace barton
          * Runs each supplement fetcher and collects the results. This performs
          * only device-service I/O -- it touches no JS context and acquires no
          * runtime mutex -- so it is safe (and intended) to call *without* holding
-         * MQuickJsRuntime::GetMutex(). The returned FetchedSupplements is then
+         * MQuickJsRuntime::Instance().GetMutex(). The returned FetchedSupplements is then
          * handed to AddSupplements under the mutex.
          *
          * If supplements is empty (no declared keys), the result is empty.
@@ -284,7 +284,7 @@ namespace barton
          * omitted, and if nothing was declared this is a no-op.
          *
          * This only touches the JS context, so the caller must hold
-         * MQuickJsRuntime::GetMutex(). Pair it with PrefetchSupplements, which
+         * MQuickJsRuntime::Instance().GetMutex(). Pair it with PrefetchSupplements, which
          * gathers the values beforehand without the mutex.
          *
          * @param ctx JS context (caller holds mutex)

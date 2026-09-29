@@ -93,7 +93,7 @@ namespace
         static void SetUpTestSuite()
         {
             InitRuntime();
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             // Load the real camera.sbmd.js spec file
             std::string specPath = std::string(SBMD_SPEC_DIR) + "camera.sbmd.js";
@@ -116,7 +116,7 @@ namespace
         {
             if (s_driver)
             {
-                auto *ctx = MQuickJsRuntime::GetSharedContext();
+                auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
                 s_driver->Deactivate(ctx);
                 s_driver.reset();
             }
@@ -237,7 +237,7 @@ namespace
         {
             auto hctx = MakeContext();
             hctx.clusterFeatureMaps = featureMaps;
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
             // Root the handler: BuildResourceArgs/PrefetchSupplements/AddSupplements below allocate,
             // and mquickjs's moving GC can relocate an unrooted function object, leaving a raw JSValue
@@ -295,7 +295,7 @@ namespace
                                                       const std::string &acceptedCmdsBase64)
         {
             auto hctx = MakeContext();
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
             const SbmdHandler *readHandler = nullptr;
             const auto &reg = s_driver->GetRegistration();
@@ -359,7 +359,7 @@ namespace
                                                          const std::string &webrtcMapJson = "")
         {
             auto hctx = MakeContext();
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
             // Root the handler (see InvokeExecuteHandler): the arg/supplement building below allocates
             // and can relocate an unrooted function object under mquickjs's moving GC.
@@ -410,7 +410,7 @@ namespace
          */
         std::optional<ParsedResult> InvokeCallback(const SafeJSValue &fn, const std::string &argsExpr)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
             if (!fn.HasValue())
             {
@@ -475,7 +475,7 @@ namespace
             "webrtc", "localSdp", "test-offer-sdp", sessions, "", {}, CAMERA_ANSWERER_ACCEPTED_CMDS);
         auto &cmd = ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue decoded = DecodeTlv(cmd.tlvBase64);
 
         // Tag 0 = StreamUsage (enum8), value 3 = LiveView
@@ -493,7 +493,7 @@ namespace
             "webrtc", "localSdp", "test-offer-sdp", sessions, "", {}, CAMERA_ANSWERER_ACCEPTED_CMDS);
         auto &cmd = ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue decoded = DecodeTlv(cmd.tlvBase64);
 
         // Tag 0 = StreamUsage (enum8) = 3 (LiveView)
@@ -561,7 +561,7 @@ namespace
             "webrtc", "localSdp", "test-offer-sdp", sessions, "", featureMaps, CAMERA_ANSWERER_ACCEPTED_CMDS);
         auto &cmd = ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue decoded = DecodeTlv(cmd.tlvBase64);
 
         // Tag 9 = WatermarkEnabled (bool)
@@ -582,7 +582,7 @@ namespace
 
         // Verify context carries the SDP for the chained ProvideOffer
         ASSERT_FALSE(JS_IsUndefined(cmd.context));
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue sdpVal = JS_GetPropertyStr(Ctx(), cmd.context, "sdp");
         ASSERT_TRUE(JS_IsString(Ctx(), sdpVal)) << "context.sdp must be a string";
         JSCStringBuf buf;
@@ -639,7 +639,7 @@ namespace
         auto result = InvokeExecuteHandler("webrtc", "localIceCandidates", input, sessions);
         auto &cmd = ExpectSendCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_PROVIDE_ICE);
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue decoded = DecodeTlv(cmd.tlvBase64);
 
         // Tag 0 = WebRTCSessionID (uint16)
@@ -702,7 +702,7 @@ namespace
         for (int i = 0; i < 10; i++)
         {
             {
-                std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+                std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
                 const char *expr = "gc()";
                 JSValue v = JS_Eval(Ctx(), expr, strlen(expr), "<test>", JS_EVAL_RETVAL);
                 ASSERT_FALSE(JS_IsException(v)) << "gc() threw on iteration " << i;
@@ -735,7 +735,7 @@ namespace
         auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
         auto &cmd = ExpectSendCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
 
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue decoded = DecodeTlv(cmd.tlvBase64);
 
         // Tag 0 = WebRTCSessionID (uint16)
