@@ -75,10 +75,22 @@ namespace barton
         {
         public:
             // serviceUrl is the absolute ONVIF service endpoint (e.g. "http://<ip>/onvif/device_service").
+            // NOTE: every operation is sent to this single endpoint. Fully spec-compliant cameras expose the
+            // media operations (GetProfiles/GetStreamUri/GetSnapshotUri) on a separate media-service XAddr
+            // discovered via GetCapabilities; routing those calls to a distinct media URL is a planned
+            // follow-up. The current single-endpoint model works with the test mock and cameras that serve
+            // media on the device-service endpoint.
             explicit OnvifSoapClient(std::string serviceUrl);
 
-            // Optional override of the network timeout (seconds) for each request.
-            void SetTimeoutSeconds(long seconds) { timeoutSeconds = seconds; }
+            // Optional override of the network timeout (seconds) for each request. Non-positive values are
+            // ignored so the bounded timeout required for ONVIF calls cannot be disabled (0 = unlimited in curl).
+            void SetTimeoutSeconds(long seconds)
+            {
+                if (seconds > 0)
+                {
+                    timeoutSeconds = seconds;
+                }
+            }
 
             // Anonymous operation — most cameras allow GetDeviceInformation without auth, but a UsernameToken
             // is included when credentials are non-empty for cameras that require it.
