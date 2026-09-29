@@ -106,7 +106,9 @@ through an event or returned URL. RTSP/HTTP auth uses the **same persistent devi
 credentials** the ONVIF calls use; the client already holds them (it wrote them). The model surfaces
 only a non-secret `authRequired` resource so the client knows to apply those credentials. **Why:**
 never place secrets in a resource value, event, or URL (OWASP sensitive-data-exposure). Secrets live
-only in `SENSITIVE` resources.
+only in `SENSITIVE` resources. The credential resources are **write-only**, and the platform's
+resource-to-client (GObject) conversion omits the value of `SENSITIVE` resources, so credentials are
+not delivered to clients through the resource API or resource-updated events.
 
 ### D5a: The auth model is primitive and interim (v1)
 This version's authentication is deliberately minimal and **must be understood as a stopgap**. The
