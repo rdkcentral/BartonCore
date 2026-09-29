@@ -155,6 +155,13 @@ namespace
             return false;
         }
 
+        // Reject dot-segments: the uuid becomes a single URI path segment, so "."/".." could produce a
+        // traversal ("/../ep/...") after path normalization.
+        if (uuid == "." || uuid == "..")
+        {
+            return false;
+        }
+
         for (char c : uuid)
         {
             unsigned char uc = static_cast<unsigned char>(c);
@@ -328,7 +335,15 @@ bool OnvifDriver::LookupDiscovered(const std::string &uuid, DiscoveredCamera &ou
 
 std::string OnvifDriver::ReadServiceUrl(const std::string &uuid)
 {
-    // Prefer the persisted metadata (survives restarts); fall back to the in-memory discovery cache.
+    // Prefer the driver-owned discovered URL (immutable within this session) over the persisted
+    // metadata, which is client-writable and could be tampered with to redirect authenticated calls.
+    DiscoveredCamera cam;
+
+    if (LookupDiscovered(uuid, cam))
+    {
+        return cam.serviceUrl;
+    }
+
     char *meta = getMetadata(uuid.c_str(), nullptr, ONVIF_METADATA_SERVICE_URL);
 
     if (meta != nullptr)
@@ -344,13 +359,6 @@ std::string OnvifDriver::ReadServiceUrl(const std::string &uuid)
         }
 
         icLogWarn(LOG_TAG, "ignoring non-HTTP persisted ONVIF service URL for %s", uuid.c_str());
-    }
-
-    DiscoveredCamera cam;
-
-    if (LookupDiscovered(uuid, cam))
-    {
-        return cam.serviceUrl;
     }
 
     return "";
@@ -617,75 +625,97 @@ bool OnvifDriver::RegisterResources(icDevice *device)
         return false;
     }
 
-    // Abstract camera session lifecycle (springboard executes).
-    createEndpointResource(cameraEp,
-                           CAMERA_SESSION_FUNCTION_CREATE_SESSION,
-                           NULL,
-                           RESOURCE_TYPE_STRING,
-                           RESOURCE_MODE_EXECUTABLE,
-                           CACHING_POLICY_NEVER);
-    createEndpointResource(cameraEp,
-                           CAMERA_SESSION_FUNCTION_STREAM,
-                           NULL,
-                           RESOURCE_TYPE_STRING,
-                           RESOURCE_MODE_EXECUTABLE,
-                           CACHING_POLICY_NEVER);
-    createEndpointResource(cameraEp,
-                           CAMERA_SESSION_FUNCTION_TAKE_PICTURE,
-                           NULL,
-                           RESOURCE_TYPE_STRING,
-                           RESOURCE_MODE_EXECUTABLE,
-                           CACHING_POLICY_NEVER);
-    createEndpointResource(cameraEp,
-                           CAMERA_SESSION_FUNCTION_DESTROY_SESSION,
-                           NULL,
-                           RESOURCE_TYPE_STRING,
-                           RESOURCE_MODE_EXECUTABLE,
-                           CACHING_POLICY_NEVER);
+    // Abstract camera session lifecycle (springboard executes). Track every creation so a partial
+    // failure fails registration rather than persisting a half-configured camera.
+    bool allOk = true;
+    allOk = (createEndpointResource(cameraEp,
+                                    CAMERA_SESSION_FUNCTION_CREATE_SESSION,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EXECUTABLE,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
+    allOk = (createEndpointResource(cameraEp,
+                                    CAMERA_SESSION_FUNCTION_STREAM,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EXECUTABLE,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
+    allOk = (createEndpointResource(cameraEp,
+                                    CAMERA_SESSION_FUNCTION_TAKE_PICTURE,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EXECUTABLE,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
+    allOk = (createEndpointResource(cameraEp,
+                                    CAMERA_SESSION_FUNCTION_DESTROY_SESSION,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EXECUTABLE,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
 
     // ONVIF protocol endpoint: on-demand URL retrieval + event delivery + credentials.
-    createEndpointResource(onvifEp,
-                           ONVIF_FUNCTION_GET_MEDIA_URL,
-                           NULL,
-                           RESOURCE_TYPE_STRING,
-                           RESOURCE_MODE_EXECUTABLE,
-                           CACHING_POLICY_NEVER);
-    createEndpointResource(
-        onvifEp, ONVIF_RESOURCE_MEDIA_URL, NULL, RESOURCE_TYPE_STRING, RESOURCE_MODE_EMIT_EVENTS, CACHING_POLICY_NEVER);
-    createEndpointResource(onvifEp,
-                           ONVIF_FUNCTION_GET_SNAPSHOT_URL,
-                           NULL,
-                           RESOURCE_TYPE_STRING,
-                           RESOURCE_MODE_EXECUTABLE,
-                           CACHING_POLICY_NEVER);
-    createEndpointResource(onvifEp,
-                           ONVIF_RESOURCE_SNAPSHOT_URL,
-                           NULL,
-                           RESOURCE_TYPE_STRING,
-                           RESOURCE_MODE_EMIT_EVENTS,
-                           CACHING_POLICY_NEVER);
+    allOk = (createEndpointResource(onvifEp,
+                                    ONVIF_FUNCTION_GET_MEDIA_URL,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EXECUTABLE,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
+    allOk = (createEndpointResource(onvifEp,
+                                    ONVIF_RESOURCE_MEDIA_URL,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EMIT_EVENTS,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
+    allOk = (createEndpointResource(onvifEp,
+                                    ONVIF_FUNCTION_GET_SNAPSHOT_URL,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EXECUTABLE,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
+    allOk = (createEndpointResource(onvifEp,
+                                    ONVIF_RESOURCE_SNAPSHOT_URL,
+                                    NULL,
+                                    RESOURCE_TYPE_STRING,
+                                    RESOURCE_MODE_EMIT_EVENTS,
+                                    CACHING_POLICY_NEVER) != nullptr) &&
+            allOk;
     // Non-secret signal telling the client that credentials must be applied to the media/snapshot URLs.
-    createEndpointResource(onvifEp,
-                           ONVIF_RESOURCE_AUTH_REQUIRED,
-                           "true",
-                           RESOURCE_TYPE_BOOLEAN,
-                           RESOURCE_MODE_READABLE,
-                           CACHING_POLICY_ALWAYS);
+    allOk = (createEndpointResource(onvifEp,
+                                    ONVIF_RESOURCE_AUTH_REQUIRED,
+                                    "true",
+                                    RESOURCE_TYPE_BOOLEAN,
+                                    RESOURCE_MODE_READABLE,
+                                    CACHING_POLICY_ALWAYS) != nullptr) &&
+            allOk;
     // Credentials: write-only sensitive resources (encrypted at rest, redacted in logs).
-    createEndpointResource(onvifEp,
-                           ONVIF_RESOURCE_USERNAME,
-                           NULL,
-                           RESOURCE_TYPE_USER_ID,
-                           RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
-                           CACHING_POLICY_ALWAYS);
-    createEndpointResource(onvifEp,
-                           ONVIF_RESOURCE_PASSWORD,
-                           NULL,
-                           RESOURCE_TYPE_PASSWORD,
-                           RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
-                           CACHING_POLICY_ALWAYS);
+    allOk = (createEndpointResource(onvifEp,
+                                    ONVIF_RESOURCE_USERNAME,
+                                    NULL,
+                                    RESOURCE_TYPE_USER_ID,
+                                    RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
+                                    CACHING_POLICY_ALWAYS) != nullptr) &&
+            allOk;
+    allOk = (createEndpointResource(onvifEp,
+                                    ONVIF_RESOURCE_PASSWORD,
+                                    NULL,
+                                    RESOURCE_TYPE_PASSWORD,
+                                    RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
+                                    CACHING_POLICY_ALWAYS) != nullptr) &&
+            allOk;
 
-    return true;
+    if (!allOk)
+    {
+        icLogError(LOG_TAG, "registerResources: a resource failed to create for %s", device->uuid);
+    }
+
+    return allOk;
 }
 
 bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
