@@ -151,6 +151,20 @@ TEST(OnvifSoapClient, StripsEmbeddedCredentialsFromIpv6StreamUri)
     EXPECT_EQ(uri.find("secret"), std::string::npos);
 }
 
+TEST(OnvifSoapClient, StripsCredentialsWithEmbeddedAtSignInPassword)
+{
+    std::string xml = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">"
+                      "<s:Body><trt:GetStreamUriResponse xmlns:trt=\"http://www.onvif.org/ver10/media/wsdl\" "
+                      "xmlns:tt=\"http://www.onvif.org/ver10/schema\"><trt:MediaUri>"
+                      "<tt:Uri>rtsp://user:pa@ss@192.168.1.50:554/stream1</tt:Uri></trt:MediaUri>"
+                      "</trt:GetStreamUriResponse></s:Body></s:Envelope>";
+
+    std::string uri = OnvifParseMediaUri(xml);
+    // The last '@' in the authority delimits the userinfo, so the whole credential is removed.
+    EXPECT_EQ(uri, "rtsp://192.168.1.50:554/stream1");
+    EXPECT_EQ(uri.find('@'), std::string::npos);
+}
+
 TEST(OnvifSoapClient, ParsesSnapshotUri)
 {
     std::string xml = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">"
