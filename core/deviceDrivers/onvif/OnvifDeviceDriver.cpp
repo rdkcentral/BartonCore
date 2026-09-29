@@ -169,6 +169,32 @@ namespace
         return true;
     }
 
+    // Remove any "user:pass@" userinfo from an http(s) URL authority so a forged XAddr cannot smuggle
+    // credentials into the cached service URL (or its logs).
+    std::string StripUrlUserinfo(const std::string &url)
+    {
+        size_t schemeEnd = url.find("://");
+
+        if (schemeEnd == std::string::npos)
+        {
+            return url;
+        }
+
+        size_t authStart = schemeEnd + 3;
+        size_t authEnd = url.find('/', authStart);
+        std::string authority =
+            url.substr(authStart, authEnd == std::string::npos ? std::string::npos : authEnd - authStart);
+        size_t at = authority.rfind('@');
+
+        if (at == std::string::npos)
+        {
+            return url;
+        }
+
+        return url.substr(0, authStart) + authority.substr(at + 1) +
+               (authEnd == std::string::npos ? std::string() : url.substr(authEnd));
+    }
+
     // updateResource() is safe to call from a driver worker thread (the same pattern the Zigbee driver
     // uses from its receive threads). It emits the resource-updated event that carries the URL to clients.
     void EmitResourceUpdate(const std::string &uuid,
@@ -197,6 +223,7 @@ static void stopDiscoveringDevices(void *ctx, const char *deviceClass);
 static bool configureDevice(void *ctx, icDevice *device, DeviceDescriptor *descriptor);
 static bool registerResources(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues);
 static bool fetchInitialResourceValues(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues);
+static void synchronizeDevice(void *ctx, icDevice *device);
 static bool executeResource(void *ctx, icDeviceResource *resource, const char *arg, char **response);
 static bool writeResource(void *ctx, icDeviceResource *resource, const char *previousValue, const char *newValue);
 static void deviceRemoved(void *ctx, icDevice *device);
@@ -234,6 +261,7 @@ __attribute__((constructor)) static void onvifDriverRegister(void)
     driver->configureDevice = configureDevice;
     driver->registerResources = registerResources;
     driver->fetchInitialResourceValues = fetchInitialResourceValues;
+    driver->synchronizeDevice = synchronizeDevice;
     driver->executeResource = executeResource;
     driver->writeResource = writeResource;
     driver->deviceRemoved = deviceRemoved;
@@ -419,7 +447,7 @@ void OnvifDriver::DiscoveryWorker()
         }
 
         DiscoveredCamera cam;
-        cam.serviceUrl = match.xaddrs.front();
+        cam.serviceUrl = StripUrlUserinfo(match.xaddrs.front());
 
         // The XAddr comes from an unauthenticated ProbeMatch; accept only http(s) URLs before caching
         // it as the libcurl POST target so a forged response cannot redirect SOAP calls elsewhere.
@@ -667,6 +695,21 @@ bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
             return;
         }
 
+        // The URL is camera-controlled; only emit an rtsp:// media URL or an http(s):// snapshot URL so
+        // a malformed/compromised camera cannot make the client fetch a file:// or other-scheme target.
+        bool validScheme =
+            snapshot ? (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) : (url.rfind("rtsp://", 0) == 0);
+
+        if (!validScheme)
+        {
+            icLogError(LOG_TAG,
+                       "%s for %s returned an unexpected URL scheme; not emitting",
+                       snapshot ? "getSnapshotUrl" : "getMediaUrl",
+                       uuid.c_str());
+
+            return;
+        }
+
         EmitResourceUpdate(
             uuid, ONVIF_ENDPOINT_ID, snapshot ? ONVIF_RESOURCE_SNAPSHOT_URL : ONVIF_RESOURCE_MEDIA_URL, url);
     }).detach();
@@ -791,6 +834,10 @@ static bool fetchInitialResourceValues(void *, icDevice *, icInitialResourceValu
 {
     return true;
 }
+
+// No cached device state to refresh. The device service invokes this unconditionally when an ONVIF
+// device's reconfiguration fails, so a real (no-op) callback must exist to avoid a null dereference.
+static void synchronizeDevice(void *, icDevice *) {}
 
 static bool executeResource(void *ctx, icDeviceResource *resource, const char *arg, char **response)
 {
