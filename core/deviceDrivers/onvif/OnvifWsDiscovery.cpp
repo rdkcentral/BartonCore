@@ -48,7 +48,10 @@ namespace barton
         {
 
             const char *const NS_SOAP = "http://www.w3.org/2003/05/soap-envelope";
-            const char *const NS_WSA = "http://schemas.xmlsoap.org/ws/2004/08/addressing";
+            // ONVIF WS-Discovery uses the WS-Addressing 2005/08 namespace with the 2005/04 discovery
+            // namespace; cameras that validate the qualified Action/To/MessageID headers reject the
+            // older 2004/08 addressing namespace.
+            const char *const NS_WSA = "http://www.w3.org/2005/08/addressing";
             const char *const NS_WSD = "http://schemas.xmlsoap.org/ws/2005/04/discovery";
             const char *const NS_ONVIF_NET = "http://www.onvif.org/ver10/network/wsdl";
             const char *const WSD_TO = "urn:schemas-xmlsoap-org:ws:2005:04:discovery";
@@ -138,6 +141,29 @@ namespace barton
             xmlFreeDoc(doc);
 
             return matches;
+        }
+
+        std::string OnvifParseRelatesTo(const std::string &xml)
+        {
+            xmlDoc *doc = xmlReadMemory(xml.data(),
+                                        static_cast<int>(xml.size()),
+                                        nullptr,
+                                        nullptr,
+                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER | XML_PARSE_NONET);
+
+            if (doc == nullptr)
+            {
+                return "";
+            }
+
+            std::string relatesTo = OnvifXmlFindText(xmlDocGetRootElement(doc), "RelatesTo");
+            xmlFreeDoc(doc);
+
+            // Trim surrounding whitespace so it compares cleanly against the sent MessageID.
+            size_t start = relatesTo.find_first_not_of(" \t\r\n");
+            size_t end = relatesTo.find_last_not_of(" \t\r\n");
+
+            return (start == std::string::npos) ? "" : relatesTo.substr(start, end - start + 1);
         }
 
         std::string OnvifDeviceUuidFromEndpointReference(const std::string &endpointReference)
@@ -344,8 +370,19 @@ namespace barton
                 }
                 buffer[received] = '\0';
 
-                std::vector<OnvifProbeMatch> parsed =
-                    OnvifParseProbeMatches(std::string(buffer, static_cast<size_t>(received)));
+                std::string response(buffer, static_cast<size_t>(received));
+
+                // Discard responses correlated to a different probe (RelatesTo != our MessageID) so a
+                // concurrent probe's ProbeMatches on the same LAN are not attributed to this request.
+                // Responses that omit RelatesTo are accepted (lenient) for simple responders and the mock.
+                std::string relatesTo = OnvifParseRelatesTo(response);
+
+                if (!relatesTo.empty() && relatesTo != messageId)
+                {
+                    continue;
+                }
+
+                std::vector<OnvifProbeMatch> parsed = OnvifParseProbeMatches(response);
 
                 for (OnvifProbeMatch &match : parsed)
                 {
