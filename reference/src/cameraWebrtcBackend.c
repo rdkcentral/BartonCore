@@ -458,11 +458,22 @@ static bool runOffererSignaling(CameraWebrtcBackend *self,
 // Backend vfuncs
 // ============================================================================
 
+// Scope-bound cleanup: severs the media server's new-viewer callback when webrtcRun returns.
+static void clearViewerOnExit(CameraStreamContext **ctx)
+{
+    cameraStreamContextClearViewer(*ctx);
+}
+
 static bool webrtcRun(CameraStreamBackend *base, CameraStreamContext *ctx)
 {
     CameraWebrtcBackend *self = (CameraWebrtcBackend *) base;
     self->ctx = ctx;
     CameraDeviceSession *session = cameraStreamContextGetSession(ctx);
+
+    // Sever the media server's new-viewer callback on every exit (including the early failure paths
+    // below), so it cannot point at this backend after the g_autoptr scope frees it.
+    CameraStreamContext *viewerGuard __attribute__((cleanup(clearViewerOnExit))) = ctx;
+    (void) viewerGuard;
 
     // Deliver the camera's remote SDP and ICE candidates to this backend.
     cameraDeviceSessionSetWebrtcCallbacks(session, onRemoteSdp, onRemoteIce, self);

@@ -253,6 +253,14 @@ bool cameraStreamContextStartSink(CameraStreamContext *ctx,
     return true;
 }
 
+void cameraStreamContextClearViewer(CameraStreamContext *ctx)
+{
+    if (ctx != NULL && ctx->mediaServer != NULL)
+    {
+        cameraMediaServerSetOnViewer(ctx->mediaServer, NULL, NULL);
+    }
+}
+
 void cameraStreamContextAwaitTeardown(CameraStreamContext *ctx)
 {
     if (ctx->filePath != NULL)
@@ -290,8 +298,5 @@ void cameraStreamContextAwaitTeardown(CameraStreamContext *ctx)
 
     // Stop the media server from invoking the backend's new-viewer callback before the caller
     // tears the backend (and its media client) down.
-    if (ctx->mediaServer != NULL)
-    {
-        cameraMediaServerSetOnViewer(ctx->mediaServer, NULL, NULL);
-    }
+    cameraStreamContextClearViewer(ctx);
 }

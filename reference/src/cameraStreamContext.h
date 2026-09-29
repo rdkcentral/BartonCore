@@ -154,6 +154,15 @@ bool cameraStreamContextStartSink(CameraStreamContext *ctx,
                                   gpointer viewerUserData);
 
 /**
+ * Sever the media server's new-viewer callback so a late or in-flight invocation cannot reach a
+ * backend that is being torn down. Idempotent and safe to call on any teardown path (including
+ * backend setup failures) before the backend is freed.
+ *
+ * @param ctx the context
+ */
+void cameraStreamContextClearViewer(CameraStreamContext *ctx);
+
+/**
  * Announce that media is flowing, then block until Ctrl+C or the camera ends the session, and
  * finally sever the media server's callbacks so late invocations become no-ops. Backends call
  * this once their media pipeline is running.
