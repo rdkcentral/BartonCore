@@ -24,20 +24,22 @@
 
 """
 Remote Serial Tunnel — forward a local Silicon Labs radio's serial port to a
-remote dev server via SSH port forwarding.
+remote dev server via SSH.
 
-Run this on the WORKSTATION (Windows or Linux) where the BRD2703 xG24 radio is
+Run this on the WORKSTATION (Linux) where the Silabs Zigbee/Thread radio is
 physically connected via USB.  It:
 
   1. Auto-detects the Silicon Labs radio serial port.
-  2. Computes a per-user TCP port from the remote UID (base 20000 + UID)
-     to avoid conflicts on shared servers.
-  3. Starts a local TCP server that relays bytes between the serial port and
-     TCP clients.
-  4. Opens an SSH reverse tunnel so the remote dev server can reach the
-     local TCP server.  The otbr-radio container's entrypoint connects
-     socat to this port, creating a virtual serial device for cpcd.
-  5. Self-heals: reconnects serial and SSH on failure with backoff.
+  2. Starts a local TCP server that relays bytes between the serial port and
+     a local TCP client.
+  3. Opens an SSH reverse tunnel that binds a per-user UNIX socket on the
+     remote dev server (~/.remote-radios/<name>.sock) forwarding to the local
+     TCP server.  The remote-radios container bind-mounts that socket and runs
+     socat (UNIX -> PTY) so cpcd sees a virtual serial device.
+  4. Self-heals: reconnects serial and SSH on failure with backoff.
+
+Using a per-user UNIX socket (instead of a TCP port) gives natural per-user
+isolation via 0700 directory permissions and needs no sshd GatewayPorts change.
 
 Requirements (workstation):
   - Python 3.10+
@@ -47,11 +49,12 @@ Requirements (workstation):
 Usage:
   python remote-serial.py user@devserver.example.com
   python remote-serial.py user@devserver.example.com --port /dev/ttyACM0
-  python remote-serial.py user@devserver.example.com --port COM3
+  python remote-serial.py user@devserver.example.com --socket ~/.remote-radios/radios/silabs.sock
 
 The script keeps running until Ctrl-C.  The SSH tunnel and serial relay
 are restarted automatically if either side disconnects.
 
+Normally invoked by remote-radios-setup.sh rather than run directly.
 See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for full setup instructions.
 """
 
@@ -59,7 +62,6 @@ import argparse
 import datetime
 import os
 import platform
-import re
 import signal
 import socket
 import subprocess
@@ -213,18 +215,9 @@ def get_remote_uid(ssh_target: str) -> int:
     return int(uid_str)
 
 
-def compute_tunnel_addr(uid: int) -> tuple[str, int]:
-    """Derive per-user tunnel port from UID.
-
-    Port: 20000 + UID  (unique per user on shared servers)
-
-    The SSH reverse tunnel binds to 0.0.0.0 on the remote so it is
-    reachable from Docker containers (which cannot access the host's
-    loopback directly).  Per-user port isolation prevents conflicts.
-    """
-    port = BASE_PORT + uid
-
-    return "0.0.0.0", port
+def compute_default_socket(user: str) -> str:
+    """Default per-user remote socket path served by the SSH reverse tunnel."""
+    return f"/home/{user}/.remote-radios/radios/silabs.sock"
 
 
 # ---------------------------------------------------------------------------
@@ -450,17 +443,17 @@ class SerialRelay:
 # SSH tunnel
 # ---------------------------------------------------------------------------
 class SSHTunnel:
-    """Manage an SSH reverse tunnel with auto-reconnect.
+    """Manage an SSH reverse tunnel to a remote UNIX socket, auto-reconnecting.
 
-    Before opening the tunnel, kills any stale SSH processes on the remote
-    that are still holding the port.  After opening, verifies the -R forward
-    actually bound on the remote side.
+    Binds a per-user UNIX socket on the remote (remote_socket) that forwards to
+    the local TCP relay.  StreamLocalBindUnlink=yes makes sshd remove a stale
+    socket left behind by an unclean prior session.  The remote-radios
+    container bind-mounts remote_socket and runs socat (UNIX -> PTY) for cpcd.
     """
 
-    def __init__(self, ssh_target: str, remote_addr: str, remote_port: int, local_port: int):
+    def __init__(self, ssh_target: str, remote_socket: str, local_port: int):
         self.ssh_target = ssh_target
-        self.remote_addr = remote_addr
-        self.remote_port = remote_port
+        self.remote_socket = remote_socket
         self.local_port = local_port
         self._stop = threading.Event()
         self._process: subprocess.Popen | None = None
@@ -471,7 +464,7 @@ class SSHTunnel:
         t.start()
 
     def stop(self) -> None:
-        """Signal the tunnel to stop."""
+        """Signal the tunnel to stop and remove the remote socket."""
         self._stop.set()
 
         if self._process:
@@ -480,51 +473,62 @@ class SSHTunnel:
             except OSError:
                 pass
 
-    def _kill_stale_listeners(self) -> None:
-        """Kill any process on the remote that is holding our tunnel port."""
-        info(f"Checking for stale listeners on remote port {self.remote_port}...")
+        # Best-effort cleanup of the remote socket on shutdown.
+        try:
+            subprocess.run(
+                [
+                    "ssh", "-o", "ConnectTimeout=5",
+                    "-o", "ClearAllForwardings=yes",
+                    self.ssh_target,
+                    f"rm -f {self.remote_socket}",
+                ],
+                capture_output=True, timeout=10,
+            )
+        except Exception:
+            pass
+
+    def _ensure_remote_dir(self) -> None:
+        """Create the 0700 socket dir (and its ~/.remote-radios parent)."""
+        remote_dir = os.path.dirname(self.remote_socket)
+        # Also lock down the top-level ~/.remote-radios tree for per-user
+        # isolation (the socket lives under .../radios/).
+        parent_dir = os.path.dirname(remote_dir)
 
         try:
-            result = subprocess.run(
+            subprocess.run(
                 [
                     "ssh", "-o", "ConnectTimeout=10",
                     "-o", "ClearAllForwardings=yes",
                     self.ssh_target,
-                    f"fuser -k {self.remote_port}/tcp 2>/dev/null; echo done",
+                    f"mkdir -p {remote_dir} && chmod 700 {remote_dir} {parent_dir} && "
+                    f"rm -f {self.remote_socket}; echo done",
                 ],
-                capture_output=True,
-                text=True,
-                timeout=15,
+                capture_output=True, text=True, timeout=15,
             )
-
-            if result.returncode == 0:
-                info("Cleared stale listeners (if any).")
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            warn("Could not check for stale listeners — continuing anyway.")
+            warn("Could not prepare remote socket directory — continuing anyway.")
 
     def _verify_tunnel(self) -> bool:
-        """Check that the -R forward is actually listening on the remote."""
+        """Check that the remote UNIX socket exists (the -R forward bound)."""
         try:
             result = subprocess.run(
                 [
                     "ssh", "-o", "ConnectTimeout=5",
                     "-o", "ClearAllForwardings=yes",
                     self.ssh_target,
-                    f"ss -tlnp 2>/dev/null | grep -q ':{self.remote_port} ' && echo BOUND || echo NOTBOUND",
+                    f"test -S {self.remote_socket} && echo BOUND || echo NOTBOUND",
                 ],
-                capture_output=True,
-                text=True,
-                timeout=10,
+                capture_output=True, text=True, timeout=10,
             )
 
             output = result.stdout.strip()
 
             if "BOUND" in output and "NOTBOUND" not in output:
-                ok(f"Verified: remote port {self.remote_port} is bound.")
+                ok(f"Verified: remote socket {self.remote_socket} is present.")
                 return True
-            else:
-                warn(f"Remote port {self.remote_port} is NOT bound — tunnel -R forward may have failed.")
-                return False
+
+            warn(f"Remote socket {self.remote_socket} is NOT present — -R forward may have failed.")
+            return False
         except (subprocess.TimeoutExpired, FileNotFoundError):
             warn("Could not verify tunnel — continuing anyway.")
             return True  # assume OK if we can't check
@@ -533,29 +537,24 @@ class SSHTunnel:
         backoff = 2
 
         while not self._stop.is_set():
-            # Kill any stale SSH tunnels holding our port on the remote.
-            self._kill_stale_listeners()
+            self._ensure_remote_dir()
 
-            # Brief pause to let the port be released.
-            time.sleep(1)
-
-            tunnel_spec = f"{self.remote_addr}:{self.remote_port}:127.0.0.1:{self.local_port}"
+            # ssh -R <remote-socket>:127.0.0.1:<local-port>
+            tunnel_spec = f"{self.remote_socket}:127.0.0.1:{self.local_port}"
             cmd = [
                 "ssh",
                 "-N",                        # no remote command
                 "-o", "ServerAliveInterval=15",
                 "-o", "ServerAliveCountMax=3",
                 "-o", "ConnectTimeout=10",
-                # Do NOT use ClearAllForwardings — it also clears command-line
-                # -R forwards.  Instead, tolerate local forward failures from
-                # ~/.ssh/config with ExitOnForwardFailure=no.  Our reverse
-                # forward is verified separately after startup.
+                "-o", "StreamLocalBindUnlink=yes",
+                # Do NOT use ClearAllForwardings — it clears our -R too.
                 "-o", "ExitOnForwardFailure=no",
                 "-R", tunnel_spec,
                 self.ssh_target,
             ]
 
-            info(f"Opening SSH tunnel: {self.remote_addr}:{self.remote_port} → localhost:{self.local_port}")
+            info(f"Opening SSH tunnel: remote {self.remote_socket} → localhost:{self.local_port}")
 
             try:
                 self._process = subprocess.Popen(
@@ -567,11 +566,9 @@ class SSHTunnel:
             except FileNotFoundError:
                 die("ssh is not available on PATH.")
 
-            # Give SSH a moment to establish the connection and set up forwards.
             time.sleep(3)
 
             if self._process.poll() is not None:
-                # SSH already exited.
                 rc = self._process.returncode
                 stderr_out = ""
 
@@ -588,17 +585,14 @@ class SSHTunnel:
 
             ok("SSH connection established.")
 
-            # Verify the -R forward actually bound on the remote.
             if not self._verify_tunnel():
-                warn("Killing SSH and retrying with stale listener cleanup...")
+                warn("Killing SSH and retrying...")
                 self._process.terminate()
                 self._process.wait()
                 time.sleep(2)
                 continue
 
             backoff = 2
-
-            # Wait for the SSH process to exit.
             self._process.wait()
             rc = self._process.returncode
 
@@ -642,6 +636,21 @@ def main() -> None:
         default=SERIAL_BAUD,
         help=f"Serial baud rate (default: {SERIAL_BAUD}).",
     )
+    parser.add_argument(
+        "--socket", "-s",
+        dest="remote_socket",
+        default=None,
+        help="Remote UNIX socket path served by the SSH reverse tunnel "
+             "(default: /home/<remote-user>/.remote-radios/radios/silabs.sock).",
+    )
+    parser.add_argument(
+        "--local-port",
+        dest="local_port",
+        type=int,
+        default=BASE_PORT,
+        help=f"Local TCP port for the serial relay (default: {BASE_PORT}). "
+             "Loopback-only; the SSH tunnel forwards the remote socket to it.",
+    )
 
     args = parser.parse_args()
 
@@ -656,26 +665,25 @@ def main() -> None:
             die(
                 "No Silicon Labs radio found.\n"
                 "  Looked for USB VID:PID  10C4:EA60 (CP210x)  or  1366:0105 (SEGGER J-Link)\n"
-                "  Specify the port manually with --port /dev/ttyACM0  or  --port COM3"
+                "  Specify the port manually with --port /dev/ttyACM0"
             )
 
     ok(f"Radio serial port: {serial_port}")
 
-    # ── Resolve remote UID and compute tunnel parameters ──────────────────
-    remote_uid = get_remote_uid(args.ssh_target)
-    tunnel_addr, tunnel_port = compute_tunnel_addr(remote_uid)
-    ok(f"Remote UID: {remote_uid}")
-    ok(f"Tunnel port: {tunnel_port}")
+    # ── Resolve the remote socket path ────────────────────────────────────
+    remote_user, _ = parse_ssh_target(args.ssh_target)
+    remote_socket = args.remote_socket or compute_default_socket(remote_user)
+    ok(f"Remote socket: {remote_socket}")
 
     # ── Start the serial relay ────────────────────────────────────────────
-    # Use an ephemeral local port for the TCP server.  The SSH tunnel
-    # forwards from the remote side to this local port.
-    local_port = tunnel_port  # keep it simple — same port locally
+    # The relay listens on loopback; the SSH reverse tunnel forwards the
+    # remote UNIX socket to this local TCP port.
+    local_port = args.local_port
     relay = SerialRelay(serial_port, local_port, args.baud)
     relay.start()
 
     # ── Start the SSH tunnel ──────────────────────────────────────────────
-    tunnel = SSHTunnel(args.ssh_target, tunnel_addr, tunnel_port, local_port)
+    tunnel = SSHTunnel(args.ssh_target, remote_socket, local_port)
     tunnel.start()
 
     # ── Print summary ─────────────────────────────────────────────────────
@@ -683,22 +691,13 @@ def main() -> None:
     print(f"{GREEN}{BOLD}======================================={NC}")
     print(f"{GREEN}{BOLD} REMOTE SERIAL TUNNEL ACTIVE{NC}")
     print(f"{GREEN}{BOLD}======================================={NC}")
-    print(f"{GREEN} Radio:       {serial_port}{NC}")
-    print(f"{GREEN} Local TCP:   127.0.0.1:{local_port}{NC}")
-    print(f"{GREEN} Tunnel port: {tunnel_port} on remote (all interfaces){NC}")
-    print(f"{GREEN} Remote UID:  {remote_uid}{NC}")
+    print(f"{GREEN} Radio:         {serial_port}{NC}")
+    print(f"{GREEN} Local TCP:     127.0.0.1:{local_port}{NC}")
+    print(f"{GREEN} Remote socket: {remote_socket}{NC}")
     print(f"{GREEN}{BOLD}======================================={NC}")
     print()
-    info("Keep this terminal open while you work.")
+    info("Keep this terminal open while you work (or let remote-radios-setup.sh manage it).")
     info("Press Ctrl-C to stop the tunnel.")
-    print()
-    info("On the remote dev server, set in docker/.env or export:")
-    print()
-    print(f"    {BOLD}RADIO_PORT={tunnel_port}{NC}")
-    print()
-    info("Then rebuild the devcontainer or run:")
-    print()
-    print(f"    {BOLD}RADIO_PORT={tunnel_port} ./dockerw -T bash{NC}")
     print()
 
     # ── Wait for Ctrl-C ───────────────────────────────────────────────────
@@ -709,9 +708,7 @@ def main() -> None:
         stop_event.set()
 
     signal.signal(signal.SIGINT, handle_signal)
-
-    if platform.system() != "Windows":
-        signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
 
     stop_event.wait()
 

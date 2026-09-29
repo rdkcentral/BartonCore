@@ -24,7 +24,7 @@
 
 #
 # Set up IPv6 routes so the barton container can reach Thread devices via
-# the otbr-radio container.
+# the remote-radios container.
 #
 # Thread mesh-local and on-mesh prefix addresses are all in the ULA range
 # (fd00::/8).  The Docker bridge subnet (e.g. fd00:xxxx:yyyy::/64) is also
@@ -38,18 +38,18 @@
 
 set -e
 
-# Resolve the otbr-radio container's IPv6 address on the shared bridge.
-# Docker's embedded DNS makes the service name "otbr-radio" resolvable
+# Resolve the remote-radios container's IPv6 address on the shared bridge.
+# Docker's embedded DNS makes the service name "remote-radios" resolvable
 # from other containers on the same Compose network.
-OTBR_IPV6=$(getent ahostsv6 otbr-radio 2>/dev/null | grep STREAM | head -1 | awk '{print $1}')
+OTBR_IPV6=$(getent ahostsv6 remote-radios 2>/dev/null | grep STREAM | head -1 | awk '{print $1}')
 
 if [ -z "${OTBR_IPV6}" ]; then
-    echo "[setup-thread-routes] otbr-radio not resolvable — Thread routes not configured."
-    echo "[setup-thread-routes] This is normal when the otbr-radio container is not running."
+    echo "[setup-thread-routes] remote-radios not resolvable — Thread routes not configured."
+    echo "[setup-thread-routes] This is normal when the remote-radios container is not running."
     exit 0
 fi
 
-# Add a catch-all ULA route via the otbr-radio container.
+# Add a catch-all ULA route via the remote-radios container.
 # 'replace' is idempotent — updates the route if it already exists.
 sudo ip -6 route replace fd00::/8 via "${OTBR_IPV6}" dev eth0 2>/dev/null || true
 

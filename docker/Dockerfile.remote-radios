@@ -45,6 +45,9 @@ FROM ubuntu:24.04 AS base
 
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
     build-essential \
+    autoconf \
+    automake \
+    libtool \
     cmake \
     git \
     pkg-config \
@@ -76,7 +79,36 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     udev \
     libglib2.0-bin \
     bluez \
+    libudev-dev \
+    hwdata \
     && rm -rf /var/lib/apt/lists/*
+
+###############################################################################
+# usbip client tools
+#
+# On Ubuntu 24.04 the `usbip`/`usbipd` userspace lives only in the
+# kernel-version-specific `linux-tools-<ver>` packages, which are brittle to
+# pin in a container (they must match the host's running kernel).  Instead we
+# build the small, self-contained usbip utilities from the upstream kernel
+# `tools/usb/usbip` sources at a fixed version.  The kernel modules
+# (usbip-core, vhci-hcd) come from the privileged container's host at runtime;
+# only the userspace tools need to be in the image.
+###############################################################################
+ARG USBIP_LINUX_TAG="v6.6"
+RUN cd /tmp && \
+    git clone --depth 1 --branch ${USBIP_LINUX_TAG} --filter=blob:none --sparse \
+        https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git usbip-src && \
+    cd usbip-src && \
+    git sparse-checkout set tools/usb/usbip tools/include && \
+    cd tools/usb/usbip && \
+    ./autogen.sh && \
+    ./configure --prefix=/usr/local && \
+    make -j"$(nproc)" && \
+    make install && \
+    ldconfig && \
+    ln -sf /usr/local/sbin/usbip /usr/local/bin/usbip 2>/dev/null || true && \
+    ln -sf /usr/local/sbin/usbipd /usr/local/bin/usbipd 2>/dev/null || true && \
+    rm -rf /tmp/usbip-src
 
 # Copy over the third party patches (shared with the main Dockerfile)
 ADD patches /tmp/patches
@@ -184,31 +216,16 @@ RUN cd /tmp && \
     cd ../build/otbr/ && \
     ninja install && \
     cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
-    rm -rf /tmp/ot-br-posix
-
-###############################################################################
-# bt_host_cpc_hci_bridge — CPC-to-HCI bridge for Bluetooth
-#
-# Connects to cpcd via CPC and exposes a virtual HCI serial device (pts) that
-# BlueZ can attach to via btattach.  This enables bluetoothd / bluetoothctl
-# to use the Bluetooth radio on the multiprotocol EFR32 co-processor.
-#
-# Source: gecko_sdk/app/bluetooth/example_host/bt_host_cpc_hci_bridge
-# Docs:   https://docs.silabs.com/bluetooth/9.1.1/multiprotocol-solution-linux/running-local-processes-concurrently
-###############################################################################
-RUN cd /tmp/gecko_sdk/app/bluetooth/example_host/bt_host_cpc_hci_bridge && \
-    make -j$(nproc) && \
-    cp exe/bt_host_cpc_hci_bridge /usr/local/bin/ && \
-    rm -rf /tmp/gecko_sdk
+    rm -rf /tmp/ot-br-posix /tmp/gecko_sdk
 
 # Standalone D-Bus config for the private daemon (used with --config-file,
 # not --system, to bypass Ubuntu's mandatory deny policy in system.conf).
-COPY otbr-agent.conf /etc/otbr-dbus.conf
+COPY remote-radios-dbus.conf /etc/remote-radios-dbus.conf
 
 # Clean up patches
 RUN rm -rf /tmp/patches
 
-COPY otbr-radio-entrypoint.sh /entrypoint.sh
+COPY remote-radios-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

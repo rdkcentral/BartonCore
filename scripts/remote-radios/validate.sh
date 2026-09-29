@@ -23,15 +23,30 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 #
-# Radio Validation Script
+# Remote Radios Validation Script
 #
-# Performs a detailed check of all requirements for the real-radio chain
-# to function correctly.  Run this inside the Barton or otbr-radio
-# container to diagnose connectivity, BLE chain, and runtime issues.
+# Performs a detailed check of all requirements for the two independent
+# physical radios forwarded from a developer's workstation into the
+# remote-radios container:
+#
+#   * Silicon Labs Zigbee/Thread radio — reached over a serial-over-SSH
+#     tunnel to a per-user UNIX socket that is bind-mounted into the
+#     container (SILABS_SOCKET).  socat bridges that socket to a local PTY
+#     (/dev/ttyRadio) that cpcd opens as if it were a directly-attached USB
+#     serial device.  Alternatively, a locally attached Silabs USB serial
+#     device (SILABS_DEVICE) is opened by cpcd directly.
+#
+#   * Dedicated Bluetooth USB dongle — reached over usb-ip (BT_USBIP_SOCKET,
+#     a bind-mounted socket).  The container attaches it with `usbip attach`,
+#     producing a REAL HCI device in the host network namespace, which
+#     btattach/bluetoothd then manage.  This radio is optional — Thread /
+#     Zigbee works without it.
+#
+# Run this inside the Barton or remote-radios container to diagnose the
+# Silabs serial link, the Bluetooth dongle chain, and runtime issues.
 #
 # Usage:
 #   ./validate.sh              # Run all checks
-#   ./validate.sh --fix        # Attempt to fix common issues
 #   ./validate.sh --json       # Output results as JSON (for automation)
 #
 # Exit codes:
@@ -46,17 +61,17 @@ set -euo pipefail
 ###############################################################################
 # Auto-detect container and re-exec if needed
 #
-# This script must run inside the otbr-radio container.  If we detect we're
-# in the Barton devcontainer (or elsewhere), find the otbr-radio container
+# This script must run inside the remote-radios container.  If we detect we're
+# in the Barton devcontainer (or elsewhere), find the remote-radios container
 # and re-exec there automatically.
 ###############################################################################
-if [ ! -f /entrypoint.sh ] || ! grep -q "otbr-radio" /entrypoint.sh 2>/dev/null; then
-    # Not inside the otbr-radio container.  Try to find it and re-exec.
+if [ ! -f /entrypoint.sh ] || ! grep -q "remote-radios" /entrypoint.sh 2>/dev/null; then
+    # Not inside the remote-radios container.  Try to find it and re-exec.
     #
     # Multiple users may share the same Docker host.  Each user's containers
     # belong to a distinct Compose project whose name includes the username.
     # We scope the search to our own project to avoid matching another user's
-    # otbr-radio container.
+    # remote-radios container.
     OTBR_CONTAINER=""
 
     # Determine docker command (with or without sudo).
@@ -74,7 +89,7 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "otbr-radio" /entrypoint.sh 2>/dev/null;
     fi
 
     if [ "$USE_CURL_API" = true ]; then
-        # Use the Docker Engine API via curl to find the otbr-radio container.
+        # Use the Docker Engine API via curl to find the remote-radios container.
         _DOCKER_API="http://localhost/v1.45"
         _CURL="curl -s --unix-socket /var/run/docker.sock"
         _SUDO=""
@@ -88,17 +103,17 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "otbr-radio" /entrypoint.sh 2>/dev/null;
             | python3 -c "import json,sys; print(json.load(sys.stdin)['Config']['Labels'].get('com.docker.compose.project',''))" 2>/dev/null) || true
 
         if [ -n "$COMPOSE_PROJECT" ]; then
-            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22label%22%3A%5B%22com.docker.compose.project%3D${COMPOSE_PROJECT}%22%5D%2C%22name%22%3A%5B%22otbr-radio%22%5D%7D" 2>/dev/null \
+            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22label%22%3A%5B%22com.docker.compose.project%3D${COMPOSE_PROJECT}%22%5D%2C%22name%22%3A%5B%22remote-radios%22%5D%7D" 2>/dev/null \
                 | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
         fi
 
         if [ -z "$OTBR_CONTAINER" ]; then
-            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22name%22%3A%5B%22otbr-radio%22%5D%7D" 2>/dev/null \
+            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22name%22%3A%5B%22remote-radios%22%5D%7D" 2>/dev/null \
                 | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
         fi
 
         if [ -n "$OTBR_CONTAINER" ]; then
-            echo "Not in otbr-radio container — re-executing inside ${OTBR_CONTAINER}..."
+            echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
             echo ""
             # Use the Docker Engine API to exec into the container.
             # The script is base64-encoded and passed as a positional
@@ -146,7 +161,7 @@ sys.stdout.buffer.flush()
         if [ -n "$COMPOSE_PROJECT" ]; then
             OTBR_CONTAINER=$($DOCKER_CMD ps \
                 --filter "label=com.docker.compose.project=${COMPOSE_PROJECT}" \
-                --filter "name=otbr-radio" \
+                --filter "name=remote-radios" \
                 --format '{{.Names}}' 2>/dev/null | head -1) || true
         fi
 
@@ -154,20 +169,20 @@ sys.stdout.buffer.flush()
         # from the host outside any container).
         if [ -z "$OTBR_CONTAINER" ]; then
             OTBR_CONTAINER=$($DOCKER_CMD ps \
-                --filter "name=otbr-radio" \
+                --filter "name=remote-radios" \
                 --format '{{.Names}}' 2>/dev/null | head -1) || true
         fi
     fi
 
     if [ -n "$OTBR_CONTAINER" ]; then
-        echo "Not in otbr-radio container — re-executing inside ${OTBR_CONTAINER}..."
+        echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
         echo ""
         # Pass the script via stdin and forward arguments.
         exec $DOCKER_CMD exec -i "$OTBR_CONTAINER" bash -s -- "$@" < "$0"
     else
-        echo "ERROR: Not inside the otbr-radio container and could not find one running." >&2
-        echo "       Start the otbr-radio container first, or run this script inside it:" >&2
-        echo "       docker exec -i <otbr-radio-container> bash < $0" >&2
+        echo "ERROR: Not inside the remote-radios container and could not find one running." >&2
+        echo "       Start the remote-radios container first, or run this script inside it:" >&2
+        echo "       docker exec -i <remote-radios-container> bash < $0" >&2
         exit 2
     fi
 fi
@@ -176,22 +191,21 @@ fi
 # Configuration
 ###############################################################################
 CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
-RADIO_PORT="${RADIO_PORT:-}"
-RADIO_HOST="${RADIO_HOST:-host.docker.internal}"
-RADIO_DEVICE="${RADIO_DEVICE:-}"
+SILABS_SOCKET="${SILABS_SOCKET:-}"
+SILABS_DEVICE="${SILABS_DEVICE:-}"
+BT_USBIP_SOCKET="${BT_USBIP_SOCKET:-}"
+BT_USBIP_TCP_PORT="${BT_USBIP_TCP_PORT:-3240}"
+BT_USBIP_BUSID="${BT_USBIP_BUSID:-}"
 CPC_SOCKET_DIR="${CPC_SOCKET_DIR:-/dev/shm}"
 CPC_SOCKET_BASE="${CPC_SOCKET_DIR}/cpcd/${CPC_INSTANCE}"
-DBUS_DIR="${DBUS_DIR:-/var/run/otbr-dbus}"
+DBUS_DIR="${DBUS_DIR:-/var/run/remote-radios-dbus}"
 DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
 HOST_NETNS="/run/host-netns"
-BT_BRIDGE_DIR="/var/run/bt-hci-bridge"
-HCI_PROXY_SCRIPT="/opt/cpc-proxy/hci_pty_proxy.py"
+VIRTUAL_TTY="/dev/ttyRadio"
 
-FIX_MODE=false
 JSON_MODE=false
 for arg in "$@"; do
     case "$arg" in
-        --fix)  FIX_MODE=true ;;
         --json) JSON_MODE=true ;;
     esac
 done
@@ -277,18 +291,11 @@ check_container_env() {
             fail "Host netns accessible" "Cannot nsenter into ${HOST_NETNS}"
         fi
     else
-        fail "Host netns mount" "${HOST_NETNS} not found — BLE will not work"
-    fi
-
-    # HCI PTY proxy script
-    if [ -f "${HCI_PROXY_SCRIPT}" ]; then
-        pass "HCI PTY proxy script" "${HCI_PROXY_SCRIPT} present"
-    else
-        warn "HCI PTY proxy script" "${HCI_PROXY_SCRIPT} not found — Extended Advertising workaround unavailable"
+        fail "Host netns mount" "${HOST_NETNS} not found — Bluetooth will not work"
     fi
 
     # Required commands
-    for cmd in btattach bluetoothd hcitool hciconfig nsenter bt_host_cpc_hci_bridge python3 socat cpcd; do
+    for cmd in btattach bluetoothd hcitool hciconfig nsenter usbip python3 socat cpcd; do
         if command -v "$cmd" >/dev/null 2>&1; then
             pass "Command: $cmd" "$(command -v "$cmd")"
         else
@@ -342,32 +349,25 @@ check_dbus() {
 }
 
 ###############################################################################
-# Section 3: Radio Connection
+# Section 3: Silabs Radio (Zigbee/Thread) Connection
 ###############################################################################
 check_radio() {
-    section "Radio Connection"
+    section "Silabs Radio (Zigbee/Thread) Connection"
 
-    if [ -n "${RADIO_PORT}" ]; then
+    if [ -n "${SILABS_SOCKET}" ]; then
         #----------------------------------------------------------------------
-        # Remote serial tunnel mode
+        # Remote serial-over-SSH tunnel mode (bind-mounted UNIX socket)
         #----------------------------------------------------------------------
-        pass "Radio mode" "Remote serial tunnel (port ${RADIO_PORT})"
+        pass "Silabs mode" "Remote tunnel (socket ${SILABS_SOCKET})"
 
-        # Resolve to IPv4 (the SSH tunnel binds on 0.0.0.0)
-        local radio_host_v4
-        radio_host_v4=$(getent ahostsv4 "${RADIO_HOST}" 2>/dev/null | awk '{print $1; exit}') || true
-        if [ -z "${radio_host_v4}" ]; then
-            radio_host_v4="${RADIO_HOST}"
-        fi
-
-        # TCP connectivity to the tunnel endpoint
-        if timeout 3 bash -c "echo >/dev/tcp/${radio_host_v4}/${RADIO_PORT}" 2>/dev/null; then
-            pass "Tunnel TCP connectivity" "${radio_host_v4}:${RADIO_PORT} reachable"
+        # Bind-mounted UNIX socket must exist.
+        if [ -S "${SILABS_SOCKET}" ]; then
+            pass "Silabs tunnel socket" "${SILABS_SOCKET} present"
         else
-            fail "Tunnel TCP connectivity" "Cannot connect to ${radio_host_v4}:${RADIO_PORT} — is remote-serial.py running on your workstation?"
+            fail "Silabs tunnel socket" "${SILABS_SOCKET} not found — is remote-serial.py running on your workstation?"
         fi
 
-        # socat process
+        # socat process bridging the socket to the PTY.
         local socat_pid
         socat_pid=$(pgrep -x socat 2>/dev/null | head -1) || true
         if [ -n "$socat_pid" ]; then
@@ -377,41 +377,41 @@ check_radio() {
                 fail "socat bridge" "PID $socat_pid (ZOMBIE)"
             fi
         else
-            fail "socat bridge" "socat not running — virtual serial device will not exist"
+            fail "socat bridge" "socat not running — ${VIRTUAL_TTY} will not exist"
         fi
 
-        # Virtual PTY device
-        if [ -L "/dev/ttyRadio" ]; then
+        # Virtual PTY device that cpcd opens.
+        if [ -e "${VIRTUAL_TTY}" ]; then
             local pty_target
-            pty_target=$(readlink -f "/dev/ttyRadio" 2>/dev/null) || pty_target=""
+            pty_target=$(readlink -f "${VIRTUAL_TTY}" 2>/dev/null) || pty_target="${VIRTUAL_TTY}"
             if [ -c "$pty_target" ]; then
-                pass "Virtual serial device" "/dev/ttyRadio → ${pty_target}"
+                pass "Virtual serial device" "${VIRTUAL_TTY} → ${pty_target} (char device)"
             else
-                fail "Virtual serial device" "/dev/ttyRadio exists but target ${pty_target} is not a character device"
+                fail "Virtual serial device" "${VIRTUAL_TTY} exists but ${pty_target} is not a character device"
             fi
         else
-            fail "Virtual serial device" "/dev/ttyRadio not found — socat may not have started"
+            fail "Virtual serial device" "${VIRTUAL_TTY} not found — socat may not have started"
         fi
 
-    elif [ -n "${RADIO_DEVICE}" ]; then
+    elif [ -n "${SILABS_DEVICE}" ]; then
         #----------------------------------------------------------------------
         # Local USB radio mode
         #----------------------------------------------------------------------
-        pass "Radio mode" "Local USB (${RADIO_DEVICE})"
+        pass "Silabs mode" "Local USB (${SILABS_DEVICE})"
 
-        if [ -e "${RADIO_DEVICE}" ]; then
-            pass "Radio device" "${RADIO_DEVICE} exists"
-            if [ -c "${RADIO_DEVICE}" ]; then
-                pass "Radio device type" "Character device"
+        if [ -e "${SILABS_DEVICE}" ]; then
+            pass "Silabs device" "${SILABS_DEVICE} exists"
+            if [ -c "${SILABS_DEVICE}" ]; then
+                pass "Silabs device type" "Character device"
             else
-                warn "Radio device type" "Not a character device"
+                fail "Silabs device type" "Not a character device"
             fi
         else
-            fail "Radio device" "${RADIO_DEVICE} not found — is the radio connected?"
+            fail "Silabs device" "${SILABS_DEVICE} not found — is the radio connected?"
         fi
 
     else
-        fail "Radio mode" "Neither RADIO_PORT nor RADIO_DEVICE is set"
+        fail "Silabs mode" "Neither SILABS_SOCKET nor SILABS_DEVICE is set"
         return
     fi
 
@@ -446,84 +446,50 @@ check_radio() {
         fi
     done
 
-    # Endpoint sockets (ep14 = BLE, ep12 = Thread/Spinel)
-    for ep in 14 12; do
-        local sockpath="${CPC_SOCKET_BASE}/ep${ep}.cpcd.sock"
-        if [ -S "$sockpath" ]; then
-            pass "CPC socket: ep${ep} data" "Present"
-        else
-            fail "CPC socket: ep${ep} data" "Not found — endpoint may be in EAGAIN state"
-        fi
-
-        local eventsock="${CPC_SOCKET_BASE}/ep${ep}.event.cpcd.sock"
-        if [ -S "$eventsock" ]; then
-            pass "CPC socket: ep${ep} event" "Present"
-        else
-            warn "CPC socket: ep${ep} event" "Not found (events may not be available)"
-        fi
-    done
+    # Thread/Spinel endpoint socket (ep12).  It is created once otbr-agent
+    # connects to cpcd, so treat its absence as a warning (may still be starting)
+    # rather than a hard failure.  BLE no longer uses a CPC endpoint (ep14) — it
+    # is a dedicated usb-ip dongle now — so ep14 is intentionally not checked.
+    local ep12sock="${CPC_SOCKET_BASE}/ep12.cpcd.sock"
+    if [ -S "$ep12sock" ]; then
+        pass "CPC socket: ep12 (Thread/Spinel)" "Present"
+    else
+        warn "CPC socket: ep12 (Thread/Spinel)" "Not found yet — otbr-agent may still be connecting to cpcd"
+    fi
 }
 
 ###############################################################################
-# Section 4: BLE Chain
+# Section 4: Bluetooth Dongle (usb-ip → HCI → bluetoothd)
 ###############################################################################
 check_ble_chain() {
-    section "BLE Chain (bridge → pty_proxy → btattach → bluetoothd)"
+    section "Bluetooth Dongle (usb-ip → HCI → bluetoothd)"
 
-    # bt_host_cpc_hci_bridge
-    local bridge_pid
-    bridge_pid=$(pgrep -f "bt_host_cpc_hci_bridge" 2>/dev/null | head -1) || true
-    if [ -n "$bridge_pid" ]; then
-        if is_process_alive "$bridge_pid"; then
-            pass "bt_host_cpc_hci_bridge" "PID $bridge_pid (alive)"
-        else
-            fail "bt_host_cpc_hci_bridge" "PID $bridge_pid (ZOMBIE)"
-        fi
-    else
-        fail "bt_host_cpc_hci_bridge" "Not running"
+    if [ -z "${BT_USBIP_SOCKET}" ]; then
+        skip "Bluetooth dongle" "No Bluetooth dongle configured (BT_USBIP_SOCKET unset)"
+        return
     fi
 
-    # PTY from bridge
-    if [ -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
-        local pts_target
-        pts_target=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
-        if [ -c "$pts_target" ]; then
-            pass "Bridge PTY (pts_hci)" "${pts_target}"
-        else
-            fail "Bridge PTY (pts_hci)" "Symlink exists but ${pts_target} is not a character device"
-        fi
+    # usb-ip socket bridge present (workstation usbipd reverse-tunnelled here).
+    if [ -S "${BT_USBIP_SOCKET}" ]; then
+        pass "usb-ip socket" "${BT_USBIP_SOCKET} present"
     else
-        fail "Bridge PTY (pts_hci)" "Symlink not found at ${BT_BRIDGE_DIR}/pts_hci"
+        fail "usb-ip socket" "${BT_USBIP_SOCKET} missing — is remote-radios-setup.sh running on your workstation?"
     fi
 
-    # HCI PTY proxy
-    local proxy_pid
-    proxy_pid=$(pgrep -f "hci_pty_proxy.py" 2>/dev/null | head -1) || true
-    if [ -n "$proxy_pid" ]; then
-        if is_process_alive "$proxy_pid"; then
-            pass "HCI PTY proxy" "PID $proxy_pid (alive)"
-        else
-            fail "HCI PTY proxy" "PID $proxy_pid (ZOMBIE)"
-        fi
+    # Imported usb-ip device.
+    if usbip port 2>/dev/null | grep -q "^Port [0-9]"; then
+        pass "usb-ip imported device" "usbip port shows an attached device"
     else
-        if [ -f "${HCI_PROXY_SCRIPT}" ]; then
-            fail "HCI PTY proxy" "Not running (script present but process missing)"
-        else
-            skip "HCI PTY proxy" "Script not installed — Extended Advertising workaround unavailable"
-        fi
+        fail "usb-ip imported device" "usbip port shows no imported device — dongle not attached"
     fi
 
-    # btattach
-    local btattach_pid
-    btattach_pid=$(pgrep -x btattach 2>/dev/null | head -1) || true
-    if [ -n "$btattach_pid" ]; then
-        if is_process_alive "$btattach_pid"; then
-            pass "btattach" "PID $btattach_pid (alive)"
-        else
-            fail "btattach" "PID $btattach_pid (ZOMBIE)"
-        fi
+    # Bluetooth HCI device present in the host netns.
+    local hci_list
+    hci_list=$(nsenter --net="${HOST_NETNS}" ls /sys/class/bluetooth/ 2>/dev/null) || true
+    if [ -n "$hci_list" ]; then
+        pass "Bluetooth HCI device" "Present in host netns: $(echo "$hci_list" | tr '\n' ' ')"
     else
-        fail "btattach" "Not running — no HCI device will be created"
+        fail "Bluetooth HCI device" "No HCI device in host netns — usb-ip attach may have failed"
     fi
 
     # bluetoothd
@@ -536,22 +502,31 @@ check_ble_chain() {
             fail "bluetoothd" "PID $bluetoothd_pid (ZOMBIE)"
         fi
     else
-        fail "bluetoothd" "Not running — BLE operations will fail"
+        fail "bluetoothd" "Not running — Bluetooth operations will fail"
     fi
 
-    # BLE monitor
-    local monitor_found=false
-    for child_pid in $(pgrep -P 1 2>/dev/null); do
-        local child_cmd
-        child_cmd=$(cat /proc/"$child_pid"/cmdline 2>/dev/null | tr '\0' ' ') || continue
-        if echo "$child_cmd" | grep -q "entrypoint.sh"; then
-            pass "BLE monitor" "PID $child_pid (entrypoint subshell)"
-            monitor_found=true
-            break
+    # ble_adapter_id must exist and match an existing hci device.
+    local adapter_file="${DBUS_DIR}/ble_adapter_id"
+    if [ -f "$adapter_file" ]; then
+        local idx
+        idx=$(cat "$adapter_file" 2>/dev/null) || idx=""
+        if [ -z "$idx" ]; then
+            fail "BLE adapter ID file" "${adapter_file} exists but is empty"
+        elif nsenter --net="${HOST_NETNS}" test -e "/sys/class/bluetooth/hci${idx}" 2>/dev/null; then
+            pass "BLE adapter ID file" "Index ${idx} matches hci${idx}"
+
+            # Reuse the HCI health idea against the dongle's adapter index.
+            if timeout 5 nsenter --net="${HOST_NETNS}" \
+               hciconfig "hci${idx}" version >/dev/null 2>&1; then
+                pass "Dongle HCI health" "hci${idx} responsive (hciconfig version)"
+            else
+                fail "Dongle HCI health" "hci${idx} unresponsive — usb-ip session may be dead"
+            fi
+        else
+            fail "BLE adapter ID file" "Index ${idx} but hci${idx} does not exist in host netns"
         fi
-    done
-    if ! $monitor_found; then
-        warn "BLE monitor" "No monitor subshell found — BLE chain may not auto-recover"
+    else
+        fail "BLE adapter ID file" "${adapter_file} not found — Matter won't know which adapter to use"
     fi
 }
 
@@ -561,6 +536,11 @@ check_ble_chain() {
 check_hci() {
     section "HCI Adapter & Transport"
 
+    if [ -z "${BT_USBIP_SOCKET}" ]; then
+        skip "HCI checks" "No Bluetooth dongle configured (BT_USBIP_SOCKET unset)"
+        return
+    fi
+
     if [ ! -e "${HOST_NETNS}" ]; then
         skip "HCI checks" "Host netns not available"
         return
@@ -568,13 +548,13 @@ check_hci() {
 
     # List all HCI adapters in host netns
     local hci_list
-    hci_list=$(ls /sys/class/bluetooth/ 2>/dev/null) || true
+    hci_list=$(nsenter --net="${HOST_NETNS}" ls /sys/class/bluetooth/ 2>/dev/null) || true
     if [ -z "$hci_list" ]; then
         fail "HCI adapters" "No HCI adapters found in host netns"
         return
     fi
 
-    # BLE adapter ID file
+    # BLE adapter ID file (the dongle's adapter index)
     local adapter_file="${DBUS_DIR}/ble_adapter_id"
     local expected_idx=""
     if [ -f "$adapter_file" ]; then
@@ -590,18 +570,9 @@ check_hci() {
 
     for hci in $hci_list; do
         local idx="${hci#hci}"
-        local info=""
-        local is_cpc=false
-
-        # The CPC bridge adapter uses UART bus type
-        if nsenter --net="${HOST_NETNS}" hciconfig "$hci" 2>/dev/null | grep -q "Bus: UART"; then
-            is_cpc=true
-            info="UART (CPC bridge)"
-        else
-            local usb_product
-            usb_product=$(cat "/sys/class/bluetooth/${hci}/device/../product" 2>/dev/null) || usb_product=""
-            info="USB${usb_product:+ ($usb_product)}"
-        fi
+        local usb_product
+        usb_product=$(nsenter --net="${HOST_NETNS}" cat "/sys/class/bluetooth/${hci}/device/../product" 2>/dev/null) || usb_product=""
+        local info="USB${usb_product:+ ($usb_product)}"
 
         local up_state
         if nsenter --net="${HOST_NETNS}" hciconfig "$hci" 2>/dev/null | grep -q "UP RUNNING"; then
@@ -611,65 +582,35 @@ check_hci() {
         fi
 
         if [ "$idx" = "$expected_idx" ]; then
-            if $is_cpc; then
-                pass "HCI adapter: ${hci}" "${info} — state=${up_state} [SELECTED]"
-            else
-                warn "HCI adapter: ${hci}" "${info} — state=${up_state} [SELECTED but not CPC!]"
-            fi
+            pass "HCI adapter: ${hci}" "${info} — state=${up_state} [SELECTED — Bluetooth dongle]"
         else
-            if $is_cpc; then
-                warn "HCI adapter: ${hci}" "${info} — state=${up_state} (CPC adapter not selected?)"
+            if [ "$up_state" = "UP" ]; then
+                warn "HCI adapter: ${hci}" "${info} — state=${up_state} (other adapter — may confuse bluetoothd)"
             else
-                if [ "$up_state" = "UP" ]; then
-                    warn "HCI adapter: ${hci}" "${info} — state=${up_state} (host adapter — may confuse bluetoothd)"
-                else
-                    pass "HCI adapter: ${hci}" "${info} — state=${up_state} (host adapter, powered down)"
-                fi
+                pass "HCI adapter: ${hci}" "${info} — state=${up_state} (other adapter, powered down)"
             fi
         fi
     done
 
-    # HCI transport health — use Read BD ADDR (0x04|0x0009).
-    # IMPORTANT: Do NOT use hciconfig name / Read Local Name (0x03|0x0014).
-    # The Silicon Labs CPC BLE firmware does NOT support it and returns
-    # "Unknown HCI Command", which hciconfig misreports as "I/O error".
+    # HCI transport health against the dongle's adapter index.
     if [ -n "$expected_idx" ]; then
         local target_hci="hci${expected_idx}"
         if nsenter --net="${HOST_NETNS}" hciconfig "${target_hci}" 2>/dev/null | grep -q "UP RUNNING"; then
             if timeout 5 nsenter --net="${HOST_NETNS}" \
-               hcitool -i "${target_hci}" cmd 0x04 0x0009 >/dev/null 2>&1; then
-                pass "HCI transport (Read BD ADDR)" "Responsive on ${target_hci}"
-
-                local bd_addr
-                bd_addr=$(timeout 5 nsenter --net="${HOST_NETNS}" \
-                    hcitool -i "${target_hci}" cmd 0x04 0x0009 2>/dev/null \
-                    | grep "HCI Event" -A1 | tail -1 | awk '{
-                        printf "%s:%s:%s:%s:%s:%s", $10, $9, $8, $7, $6, $5
-                    }') || bd_addr=""
-                if [ -n "$bd_addr" ]; then
-                    pass "BLE BD Address" "$bd_addr"
-                fi
+               hciconfig "${target_hci}" version >/dev/null 2>&1; then
+                pass "HCI transport (version)" "Responsive on ${target_hci}"
             else
-                fail "HCI transport (Read BD ADDR)" "No response from ${target_hci} within 5s — transport dead"
+                fail "HCI transport (version)" "No response from ${target_hci} within 5s — transport dead"
             fi
 
-            if timeout 5 nsenter --net="${HOST_NETNS}" \
-               hcitool -i "${target_hci}" cmd 0x04 0x0001 >/dev/null 2>&1; then
-                pass "HCI transport (Read Version)" "Responsive"
-            else
-                warn "HCI transport (Read Version)" "No response (unusual)"
-            fi
-
-            local name_result
-            name_result=$(timeout 3 nsenter --net="${HOST_NETNS}" \
-                hciconfig "${target_hci}" name 2>&1) || true
-            if echo "$name_result" | grep -qi "error\|can't read"; then
-                pass "Read Local Name (known unsupported)" "Correctly rejected by firmware — do NOT use for health checks"
-            else
-                pass "Read Local Name" "Supported (unexpected for CPC firmware)"
+            local bd_addr
+            bd_addr=$(nsenter --net="${HOST_NETNS}" hciconfig "${target_hci}" 2>/dev/null \
+                | awk '/BD Address:/{print $3}') || bd_addr=""
+            if [ -n "$bd_addr" ]; then
+                pass "BLE BD Address" "$bd_addr"
             fi
         else
-            fail "HCI transport" "${target_hci} is not UP — btattach may have died"
+            fail "HCI transport" "${target_hci} is not UP — usb-ip session or bluetoothd may have died"
         fi
     fi
 }
@@ -680,6 +621,11 @@ check_hci() {
 
 check_ble_scan() {
     section "BLE Scanning"
+
+    if [ -z "${BT_USBIP_SOCKET}" ]; then
+        skip "BLE scan test" "No Bluetooth dongle configured (BT_USBIP_SOCKET unset)"
+        return
+    fi
 
     local adapter_file="${DBUS_DIR}/ble_adapter_id"
     if [ ! -f "$adapter_file" ]; then
@@ -775,7 +721,7 @@ check_otbr() {
             warn "wpan0 IPv6 addresses" "No global IPv6 — Thread network may not be formed"
         fi
     else
-        fail "wpan0 interface" "Not found — otbr-agent may not be running or CPC link is down"
+        warn "wpan0 interface" "Not found yet — otbr-agent may still be starting (created a few seconds after cpcd is ready)"
     fi
 
     # Check avahi-daemon
@@ -805,18 +751,16 @@ check_known_pitfalls() {
         fi
     fi
 
-    # ep14 EAGAIN state check
-    local bridge_pid
-    bridge_pid=$(pgrep -f "bt_host_cpc_hci_bridge" 2>/dev/null | head -1) || true
-    if [ -z "$bridge_pid" ]; then
-        warn "ep14 EAGAIN check" "Bridge not running — if it keeps failing, restart cpcd"
+    # ep12 (Thread/Spinel) endpoint check
+    if [ -S "${CPC_SOCKET_BASE}/ep12.cpcd.sock" ]; then
+        pass "ep12 Spinel endpoint" "Thread/Spinel CPC endpoint present"
     else
-        pass "ep14 EAGAIN check" "Bridge alive (PID $bridge_pid)"
+        warn "ep12 Spinel endpoint" "ep12 socket missing — if cpcd keeps failing, restart it"
     fi
 
     # Multiple HCI adapters
     local hci_count
-    hci_count=$(ls /sys/class/bluetooth/ 2>/dev/null | wc -w) || hci_count=0
+    hci_count=$(nsenter --net="${HOST_NETNS}" ls /sys/class/bluetooth/ 2>/dev/null | wc -w) || hci_count=0
     if [ "$hci_count" -gt 1 ]; then
         local adapter_file="${DBUS_DIR}/ble_adapter_id"
         if [ -f "$adapter_file" ] && [ -n "$(cat "$adapter_file" 2>/dev/null)" ]; then
@@ -828,25 +772,11 @@ check_known_pitfalls() {
         pass "Single HCI adapter" "Only one adapter — no confusion risk"
     fi
 
-    # Dangerous health check command
-    if grep -rq "hciconfig.*name" /entrypoint.sh 2>/dev/null; then
-        fail "Health check command" "entrypoint.sh uses 'hciconfig name' — this ALWAYS fails on CPC firmware (use hcitool cmd 0x04 0x0009)"
-    else
-        pass "Health check command" "Not using unsupported 'hciconfig name'"
-    fi
-
     # Dangerous HCI Reset
     if grep -q "hcitool.*cmd.*0x03.*0x0003" /entrypoint.sh 2>/dev/null; then
-        warn "HCI Reset in entrypoint" "Found HCI Reset command — this can kill the CPC transport"
+        warn "HCI Reset in entrypoint" "Found HCI Reset command — this can disrupt the dongle transport"
     else
         pass "No HCI Reset in entrypoint" "Dangerous reset sequence not present"
-    fi
-
-    # kill-0 bug
-    if grep -q 'BTATTACH_PID=0' /entrypoint.sh 2>/dev/null; then
-        fail "BTATTACH_PID init" "Initialized to 0 — 'kill 0' will SIGTERM the entire process group!"
-    else
-        pass "BTATTACH_PID init" "Not initialized to 0 (safe)"
     fi
 
     # Raw HCI scan
@@ -912,23 +842,29 @@ print_summary() {
 # Main
 ###############################################################################
 
-# Detect radio mode for header
-RADIO_MODE_DISPLAY="Unknown"
-if [ -n "${RADIO_PORT}" ]; then
-    RADIO_MODE_DISPLAY="Remote serial tunnel (${RADIO_HOST}:${RADIO_PORT})"
-elif [ -n "${RADIO_DEVICE}" ]; then
-    RADIO_MODE_DISPLAY="Local USB (${RADIO_DEVICE})"
+# Detect Silabs radio mode for header
+SILABS_MODE_DISPLAY="Not configured"
+if [ -n "${SILABS_SOCKET}" ]; then
+    SILABS_MODE_DISPLAY="Remote tunnel (${SILABS_SOCKET})"
+elif [ -n "${SILABS_DEVICE}" ]; then
+    SILABS_MODE_DISPLAY="Local USB (${SILABS_DEVICE})"
+fi
+
+# Detect Bluetooth dongle mode for header
+if [ -n "${BT_USBIP_SOCKET}" ]; then
+    BT_MODE_DISPLAY="usb-ip (${BT_USBIP_SOCKET})"
 else
-    RADIO_MODE_DISPLAY="Not configured"
+    BT_MODE_DISPLAY="Not configured (BT_USBIP_SOCKET unset)"
 fi
 
 if ! $JSON_MODE; then
     echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║         Radio Stack Validation                             ║"
+    echo "║         Remote Radios Validation                           ║"
     echo "╠══════════════════════════════════════════════════════════════╣"
-    printf "║  Instance: %-49s║\n" "${CPC_INSTANCE}"
-    printf "║  Radio:    %-49s║\n" "${RADIO_MODE_DISPLAY}"
-    printf "║  Date:     %-49s║\n" "$(date -Iseconds)"
+    printf "║  Instance:   %-47s║\n" "${CPC_INSTANCE}"
+    printf "║  Silabs:     %-47s║\n" "${SILABS_MODE_DISPLAY}"
+    printf "║  Bluetooth:  %-47s║\n" "${BT_MODE_DISPLAY}"
+    printf "║  Date:       %-47s║\n" "$(date -Iseconds)"
     echo "╚══════════════════════════════════════════════════════════════╝"
 fi
 
@@ -938,16 +874,6 @@ check_radio
 check_ble_chain
 check_hci
 check_ble_scan
-
-# After BLE scanning, the HCI proxy forwards scan-disable to firmware.
-# Allow a few seconds for the firmware to process the stop so the radio
-# is available for Thread (802.15.4) operations.
-if ! $JSON_MODE; then
-    echo ""
-    echo "  ⏳ Waiting 3s for BLE scan cleanup (radio shared with Thread)..."
-fi
-sleep 3
-
 check_otbr
 check_known_pitfalls
 print_summary

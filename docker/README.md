@@ -16,7 +16,7 @@ service, and optional overlays add or override behavior:
 | `compose.yaml` | Base service definition (`barton`), network, volumes |
 | `compose.devcontainer.yaml` | Overrides the `barton` service image/build for VS Code devcontainers (bakes the user into the image at build time) |
 | `compose.host-network.yaml` | Switches to host networking for direct device access (e.g., Thread border routers) |
-| `compose.otbr-radio.yaml` | Optional — adds the `otbr-radio` container (cpcd + otbr-agent) for real USB Thread radio support |
+| `compose.remote-radios.yaml` | Optional — adds the `remote-radios` container (cpcd + otbr-agent + BlueZ) for a developer's forwarded Silabs Zigbee/Thread radio and Bluetooth dongle |
 
 All overlays operate on the same `barton` service from `compose.yaml`. They are combined by
 listing them in order -- either in the `dockerComposeFile` array in `.devcontainer/devcontainer.json`
@@ -41,7 +41,7 @@ It always includes `compose.yaml` as the base, and accepts flags to layer on ove
 | `-e <env>` | Pass extra environment variables |
 | `-d` | Mount development volumes |
 | `-n` | Disable TTY (non-interactive mode) |
-| `-T` | Start the optional `otbr-radio` container for real USB Thread radio support (see `docs/REMOTE_RADIO_FOR_DEVELOPMENT.md`) |
+| `-T` | Start the optional `remote-radios` container for forwarded Silabs Zigbee/Thread + Bluetooth radios (see `docs/REMOTE_RADIO_FOR_DEVELOPMENT.md`) |
 
 Example:
 

@@ -78,16 +78,20 @@ fi
 HIGHEST_BUILDER_TAG=$(cat "$VERSION_FILE")
 IMAGE_TAG=$HIGHEST_BUILDER_TAG
 BUILDER_TAG_CHANGED=false
-existingRadioDevice=""
+existingSilabsDevice=""
 existingBackboneIf=""
-existingRadioPort=""
-existingRadioHost=""
+existingSilabsSocket=""
+existingSilabsSocketHost=""
+existingBtUsbipSocket=""
+existingBtUsbipSocketHost=""
 
 if [ -f "$OUTFILE" ]; then
-    existingRadioDevice=$(grep '^RADIO_DEVICE=' "$OUTFILE" | sed 's/^RADIO_DEVICE=//' || true)
+    existingSilabsDevice=$(grep '^SILABS_DEVICE=' "$OUTFILE" | sed 's/^SILABS_DEVICE=//' || true)
     existingBackboneIf=$(grep '^BACKBONE_IF=' "$OUTFILE" | sed 's/^BACKBONE_IF=//' || true)
-    existingRadioPort=$(grep '^RADIO_PORT=' "$OUTFILE" | sed 's/^RADIO_PORT=//' || true)
-    existingRadioHost=$(grep '^RADIO_HOST=' "$OUTFILE" | sed 's/^RADIO_HOST=//' || true)
+    existingSilabsSocket=$(grep '^SILABS_SOCKET=' "$OUTFILE" | sed 's/^SILABS_SOCKET=//' || true)
+    existingSilabsSocketHost=$(grep '^SILABS_SOCKET_HOST=' "$OUTFILE" | sed 's/^SILABS_SOCKET_HOST=//' || true)
+    existingBtUsbipSocket=$(grep '^BT_USBIP_SOCKET=' "$OUTFILE" | sed 's/^BT_USBIP_SOCKET=//' || true)
+    existingBtUsbipSocketHost=$(grep '^BT_USBIP_SOCKET_HOST=' "$OUTFILE" | sed 's/^BT_USBIP_SOCKET_HOST=//' || true)
 
     CURRENT_BUILDER_TAG=$(grep "CURRENT_BUILDER_TAG=" "$OUTFILE" | sed 's/CURRENT_BUILDER_TAG=//')
 
@@ -191,35 +195,36 @@ echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 ##############################################################################
 
 ##############################################################################
-# Optional Thread real-radio variables (used by docker/compose.otbr-radio.yaml).
+# Optional remote-radio variables (used by docker/compose.remote-radios.yaml).
 #
-# RADIO_DEVICE: host path of the USB radio serial device.
-#   - Must be set explicitly when using a locally-attached radio.
-#   - On shared build servers the forwarded radio may appear at a non-default
-#     path (e.g. /dev/ttyACM8), so silently defaulting to /dev/ttyACM0 is not
-#     safe.
-#   - If already present in docker/.env, preserve that value unless overridden
-#     by exporting RADIO_DEVICE before running setupDockerEnv.sh or dockerw.
+# These are populated automatically from the developer's radio config written
+# by scripts/remote-radios/remote-radios-setup.sh, which drops a file at
+# ~/.remote-radios/radios.env on the dev server.  If that file is absent (the
+# developer has no forwarded radios), all values stay empty and the overlay is
+# simply not used — the environment behaves exactly as before.
 #
-# BACKBONE_IF: network interface used by otbr-agent for Thread backbone routing.
-#   - Defaults to the host default-route interface when detectable.
-#   - Left empty if detection fails; the container entrypoint will re-detect at
-#     runtime and exit with an error if no interface can be found.
-#   - If already present in docker/.env, preserve that value unless overridden
-#     by exporting BACKBONE_IF before running setupDockerEnv.sh or dockerw,
-#     e.g.: export BACKBONE_IF=enp6s0
+# SILABS_SOCKET_HOST: host path of the bind-mounted Silabs serial tunnel socket.
+# SILABS_SOCKET:      path of that socket INSIDE the container.
+# SILABS_DEVICE:      host path of a locally-attached Silabs USB radio (instead
+#                     of the remote tunnel socket).
+# BACKBONE_IF:        network interface used by otbr-agent for Thread backbone
+#                     routing.  Defaults to the host default-route interface.
+# BT_USBIP_SOCKET_HOST: host path of the bind-mounted usbipd UNIX socket.
+# BT_USBIP_SOCKET:      path of that socket INSIDE the container.
 #
-# RADIO_PORT: TCP port for the remote serial tunnel (set by remote-serial.py).
-#   - When set, the otbr-radio container uses socat to bridge the TCP tunnel
-#     to a virtual serial device instead of using a local USB radio.
-#   - If already present in docker/.env, preserve that value unless overridden.
-#
-# RADIO_HOST: hostname/IP for the remote serial tunnel.
-#   - Defaults to host.docker.internal (Docker host gateway).
-#   - If already present in docker/.env, preserve that value unless overridden.
-#
-# These variables are only consumed when compose.otbr-radio.yaml is included
-# in the compose stack (dockerw -T, or devcontainer override).
+# Existing values in docker/.env are preserved unless overridden by exporting
+# the variable, or by a fresher ~/.remote-radios/radios.env.
+##############################################################################
+
+# Source the developer's radios.env (written by remote-radios-setup.sh) so the
+# radio parameters flow through automatically without any manual export.
+RADIOS_ENV="${REMOTE_RADIOS_ENV:-$HOME/.remote-radios/radios.env}"
+if [ -f "$RADIOS_ENV" ]; then
+    echo "Using remote-radios config from $RADIOS_ENV"
+    # shellcheck disable=SC1090
+    . "$RADIOS_ENV"
+fi
+
 # Auto-detect the default-route network interface for the Thread backbone.
 # The entrypoint will also re-detect at runtime, so this is only used when
 # BACKBONE_IF is not already set in the environment.
@@ -228,15 +233,38 @@ if command -v ip >/dev/null 2>&1; then
     detectedBackboneIf=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
 fi
 
-radioDeviceValue="${RADIO_DEVICE:-$existingRadioDevice}"
+silabsSocketValue="${SILABS_SOCKET:-${existingSilabsSocket:-/run/remote-radios/radios/silabs.sock}}"
+silabsSocketHostValue="${SILABS_SOCKET_HOST:-${existingSilabsSocketHost:-$silabsSocketValue}}"
+silabsDeviceValue="${SILABS_DEVICE:-$existingSilabsDevice}"
 backboneIfValue="${BACKBONE_IF:-${existingBackboneIf:-$detectedBackboneIf}}"
-radioPortValue="${RADIO_PORT:-$existingRadioPort}"
-radioHostValue="${RADIO_HOST:-${existingRadioHost:-host.docker.internal}}"
+btUsbipSocketValue="${BT_USBIP_SOCKET:-$existingBtUsbipSocket}"
+btUsbipSocketHostValue="${BT_USBIP_SOCKET_HOST:-$existingBtUsbipSocketHost}"
 
-echo "RADIO_DEVICE=$radioDeviceValue" >> $OUTFILE
+# The compose overlay bind-mounts the socket's parent DIRECTORY (not the file)
+# to avoid Docker auto-creating a bogus directory when the tunnel is not up.
+silabsSocketDirValue=$(dirname "$silabsSocketValue")
+silabsSocketDirHostValue=$(dirname "$silabsSocketHostValue")
+# Ensure the host-side socket directory exists so the bind-mount source is a
+# real directory (Docker would otherwise create it as root-owned).
+mkdir -p "$silabsSocketDirHostValue" 2>/dev/null || true
+
+echo "SILABS_SOCKET=$silabsSocketValue" >> $OUTFILE
+echo "SILABS_SOCKET_HOST=$silabsSocketHostValue" >> $OUTFILE
+echo "SILABS_SOCKET_DIR=$silabsSocketDirValue" >> $OUTFILE
+echo "SILABS_SOCKET_DIR_HOST=$silabsSocketDirHostValue" >> $OUTFILE
+echo "SILABS_DEVICE=$silabsDeviceValue" >> $OUTFILE
 echo "BACKBONE_IF=$backboneIfValue" >> $OUTFILE
-echo "RADIO_PORT=$radioPortValue" >> $OUTFILE
-echo "RADIO_HOST=$radioHostValue" >> $OUTFILE
+echo "BT_USBIP_SOCKET=$btUsbipSocketValue" >> $OUTFILE
+echo "BT_USBIP_SOCKET_HOST=$btUsbipSocketHostValue" >> $OUTFILE
+# Bind-mount the usbip socket's parent DIRECTORY (not the file), same rationale
+# as the Silabs socket above.
+if [ -n "$btUsbipSocketValue" ]; then
+    btUsbipSocketDirValue=$(dirname "$btUsbipSocketValue")
+    btUsbipSocketDirHostValue=$(dirname "$btUsbipSocketHostValue")
+    mkdir -p "$btUsbipSocketDirHostValue" 2>/dev/null || true
+    echo "BT_USBIP_SOCKET_DIR=$btUsbipSocketDirValue" >> $OUTFILE
+    echo "BT_USBIP_SOCKET_DIR_HOST=$btUsbipSocketDirHostValue" >> $OUTFILE
+fi
 ##############################################################################
 
 # Ensure the container network exists

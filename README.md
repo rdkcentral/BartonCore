@@ -73,6 +73,8 @@ Visual Studio Code is the preferred and supported development tool. This project
 
 See [the debugging doc](docs/DEBUGGING.md) for more information on debugging.
 
+Working on a remote dev server and want to commission Zigbee/Thread/Matter devices next to you? You can forward your local radios to the devcontainer — see [the remote radios guide](docs/REMOTE_RADIO_FOR_DEVELOPMENT.md). This is entirely optional; if you don't set it up, everything works exactly as before.
+
 See [the contributing doc](CONTRIBUTING.md) for information on contributing to this project.
 
 ## Known Issues

@@ -115,7 +115,7 @@ extern "C" {
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
 
 #define BLE_CONTROLLER_ADAPTER_ID_DEFAULT       0
-#define BLE_CONTROLLER_ADAPTER_ID_FILE          "/var/run/otbr-dbus/ble_adapter_id"
+#define BLE_CONTROLLER_ADAPTER_ID_FILE          "/var/run/remote-radios-dbus/ble_adapter_id"
 #define BLE_CONTROLLER_DEVICE_NAME              BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
 #define LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME      "localMatterNodeId"
@@ -389,7 +389,7 @@ uint32_t Matter::ResolveBleAdapterId()
         icWarn("Invalid %s value '%s', falling back to file detection", B_CORE_BARTON_MATTER_BLE_HCI_INDEX, propVal);
     }
 
-    // 2. Fall back to the file written by the otbr-radio entrypoint
+    // 2. Fall back to the file written by the remote-radios entrypoint
     FILE *f = fopen(BLE_CONTROLLER_ADAPTER_ID_FILE, "r");
 
     if (f != nullptr)
