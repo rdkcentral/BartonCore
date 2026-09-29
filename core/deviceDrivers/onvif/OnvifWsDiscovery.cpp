@@ -328,7 +328,9 @@ namespace barton
             static const size_t maxMatches = 256;
             const std::chrono::steady_clock::time_point deadline =
                 std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-            char buffer[8192];
+            // Sized for the maximum IPv4 UDP payload so a ProbeMatch with many scopes/XAddrs is not
+            // silently truncated (the recovery-mode XML parser would otherwise accept a partial URL).
+            char buffer[65536];
 
             while (results.size() < maxMatches)
             {
