@@ -28,7 +28,11 @@ WS-Discovery `Probe` on the local network. The call SHALL return immediately and
 a background thread. For each responding camera, the driver SHALL derive a stable device `uuid` from
 the WS-Discovery ProbeMatch endpoint reference (`urn:uuid:…`), obtain manufacturer, model, and
 firmware via an anonymous ONVIF `GetDeviceInformation`, and report the device with
-`deviceServiceDeviceFound`.
+`deviceServiceDeviceFound`. The anonymous `GetDeviceInformation` SOAP call SHALL use the same bounded
+libcurl timeout as the on-demand calls so an unreachable ProbeMatch cannot stall the discovery worker.
+Because a discovered ONVIF camera normally has no DDL descriptor entry,
+the driver SHALL report it with `neverReject = true` so the device service does not reject it for
+lack of a matching descriptor.
 
 #### Scenario: Discovery reports a responding ONVIF camera
 - **WHEN** a discovery request for `camera` is active and an ONVIF camera answers the WS-Discovery Probe
@@ -47,7 +51,7 @@ resources, and an endpoint with id `"onvif"` and profile `"onvif"` exposing:
 - `getMediaUrl` — executable
 - `mediaUrl` — string, event-emitting, non-cached (`RESOURCE_MODE_EMIT_EVENTS`, `CACHING_POLICY_NEVER`)
 - `getSnapshotUrl` — executable
-- `snapshotUrl` — string, event-emitting, non-cached
+- `snapshotUrl` — string, event-emitting, non-cached (`RESOURCE_MODE_EMIT_EVENTS`, `CACHING_POLICY_NEVER`)
 - `authRequired` — readable boolean (`RESOURCE_TYPE_BOOLEAN`, `RESOURCE_MODE_READABLE`)
 - `username` — writable, sensitive (`RESOURCE_TYPE_USER_ID`, `RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE`)
 - `password` — writable, sensitive (`RESOURCE_TYPE_PASSWORD`, `RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE`)
@@ -85,7 +89,8 @@ The `stream` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "entryP
 
 Executing `getMediaUrl` on `ep/onvif` SHALL perform an ONVIF `GetStreamUri` SOAP call authenticated
 with the stored credentials and SHALL emit the returned credential-free RTSP URL as a `mediaUrl`
-event.
+event. The SOAP call SHALL use a bounded libcurl timeout so an unresponsive or packet-dropping camera
+cannot block the executing thread indefinitely.
 
 #### Scenario: getMediaUrl emits the RTSP URL
 - **WHEN** `getMediaUrl` is executed with valid stored credentials
@@ -96,7 +101,9 @@ event.
 The `takePicture` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "entryPoint":
 "/<deviceId>/ep/onvif/r/getSnapshotUrl" }` and SHALL ignore the `sessionId` argument. Executing
 `getSnapshotUrl` on `ep/onvif` SHALL perform an ONVIF `GetSnapshotUri` SOAP call authenticated with
-the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` event.
+the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` event. As with
+`getMediaUrl`, the SOAP call SHALL use a bounded libcurl timeout so an unresponsive or packet-dropping
+camera cannot block the executing thread indefinitely.
 
 #### Scenario: takePicture returns the snapshot entry point
 - **WHEN** a client executes `takePicture` on an ONVIF camera
@@ -109,8 +116,13 @@ the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` e
 ### Requirement: authRequired signals credential need without exposing secrets
 
 The `authRequired` resource SHALL indicate whether the client must apply credentials to the returned
-media/snapshot URLs. The driver SHALL NOT place credentials in any resource value, event payload, or
-returned URL; secrets SHALL reside only in the `SENSITIVE` credential resources.
+media/snapshot URLs. In this driver version the driver SHALL set `authRequired` to a constant `"true"`
+at configuration time — a static hint reflecting that ONVIF media/snapshot fetches reuse the stored
+credentials — rather than deriving it from a live authentication probe. The driver SHALL NOT place
+credentials in any resource value, event payload, or returned URL other than the dedicated credential
+resources, which are flagged `RESOURCE_MODE_SENSITIVE` to request the platform's sensitive-value
+handling. `RESOURCE_MODE_SENSITIVE` is a marking the driver relies on; end-to-end redaction and
+at-rest protection are the platform's responsibility, not a guarantee the driver itself can make.
 
 #### Scenario: authRequired is readable and non-secret
 - **WHEN** a client reads `authRequired` on `ep/onvif`
