@@ -36,6 +36,7 @@
 import base64
 import http.server
 import logging
+import re
 import socket
 import threading
 import uuid as uuid_module
@@ -161,7 +162,7 @@ class OnvifCameraServer:
         self.service_url = f"http://127.0.0.1:{http_port}/onvif/device_service"
 
         # Live RTSP server publishing a dummy H.264 test pattern at a per-device mount point.
-        self._rtsp_server, rtsp_port = self._build_rtsp_server()
+        self._rtsp_server, rtsp_port, self._rtsp_source_id = self._build_rtsp_server()
         self.rtsp_uri = f"rtsp://127.0.0.1:{rtsp_port}/{self.device_uuid}"
         self.snapshot_uri = f"http://127.0.0.1:{http_port}/snapshot.jpg"
         self._http.rtsp_uri = self.rtsp_uri
@@ -190,17 +191,23 @@ class OnvifCameraServer:
         factory.set_shared(True)
         server.get_mount_points().add_factory(f"/{self.device_uuid}", factory)
         # attach registers the server's sources on the default main context; the loop dispatches
-        # them once started. get_bound_port is valid after attach.
-        server.attach(None)
-        return server, server.get_bound_port()
+        # them once started. get_bound_port is valid after attach. Keep the returned source id so
+        # stop() can remove it -- MainLoop.quit() stops dispatching but does not detach the source,
+        # which would otherwise keep the server (and its listening socket) alive across teardowns.
+        source_id = server.attach(None)
+        return server, server.get_bound_port(), source_id
 
-    def _probe_match(self) -> bytes:
+    def _probe_match(self, message_id: str = "") -> bytes:
+        # Echo the probe's MessageID as RelatesTo so a driver that correlates responses accepts this
+        # ProbeMatch. ONVIF uses the WS-Addressing 2005/08 namespace.
+        relates_to = ("<w:RelatesTo>" + message_id + "</w:RelatesTo>") if message_id else ""
         xml = (
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<e:Envelope xmlns:e="http://www.w3.org/2003/05/soap-envelope" '
-            'xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing" '
+            'xmlns:w="http://www.w3.org/2005/08/addressing" '
             'xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery" '
             'xmlns:dn="http://www.onvif.org/ver10/network/wsdl">'
+            "<e:Header>" + relates_to + "</e:Header>"
             "<e:Body><d:ProbeMatches><d:ProbeMatch>"
             "<w:EndpointReference><w:Address>urn:uuid:" + self.device_uuid + "</w:Address></w:EndpointReference>"
             "<d:Types>dn:NetworkVideoTransmitter</d:Types>"
@@ -208,6 +215,13 @@ class OnvifCameraServer:
             "</d:ProbeMatch></d:ProbeMatches></e:Body></e:Envelope>"
         )
         return xml.encode("utf-8")
+
+    @staticmethod
+    def _message_id_from_probe(data: bytes) -> str:
+        # Best-effort extraction of the WS-Addressing MessageID so the ProbeMatch can echo it as
+        # RelatesTo; the local name may carry any namespace prefix.
+        match = re.search(rb"<[^>]*:MessageID[^>]*>([^<]*)<", data)
+        return match.group(1).decode("utf-8", "replace").strip() if match else ""
 
     def _udp_loop(self):
         self._udp.settimeout(0.5)
@@ -220,7 +234,7 @@ class OnvifCameraServer:
                 break
 
             if b"Probe" in data:
-                self._udp.sendto(self._probe_match(), addr)
+                self._udp.sendto(self._probe_match(self._message_id_from_probe(data)), addr)
 
     def start(self):
         self._running = True
@@ -237,6 +251,11 @@ class OnvifCameraServer:
         self._http.shutdown()
         self._http.server_close()
         self._udp.close()
+        # Detach the RTSP server's GSource before releasing the loop; quit() alone leaves it attached
+        # to the default context, leaking the server and its listening socket across teardowns.
+        if self._rtsp_source_id is not None:
+            GLib.source_remove(self._rtsp_source_id)
+            self._rtsp_source_id = None
         self._loop.quit()
 
         for thread in (self._http_thread, self._udp_thread, self._loop_thread):
