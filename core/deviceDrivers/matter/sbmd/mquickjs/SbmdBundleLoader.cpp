@@ -102,17 +102,17 @@ namespace barton
         if (JS_IsException(result))
         {
             icError("Failed to execute SBMD %s bundle: %s", name, GetExceptionString(ctx).c_str());
-            MQuickJsRuntime::GetMetrics().RecordJsException("init", nullptr);
+            MQuickJsRuntime::Instance().GetMetrics().RecordJsException("init", nullptr);
             {
-                std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-                MQuickJsRuntime::LogMemoryUsage("sbmd-bundle-load-failed", IC_LOG_ERROR, true);
+                std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                MQuickJsRuntime::Instance().LogMemoryUsage("sbmd-bundle-load-failed", IC_LOG_ERROR, true);
             }
             return false;
         }
 
         // Check if bundle execution left an exception (indicates a problem we should fix)
         std::string exMsg;
-        if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
+        if (MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx, &exMsg))
         {
             icError("SBMD %s bundle execution left a pending exception: %s", name, exMsg.c_str());
             return false;
