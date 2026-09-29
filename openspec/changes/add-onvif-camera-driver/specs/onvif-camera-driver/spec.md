@@ -88,7 +88,9 @@ The `stream` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "entryP
 
 Executing `getMediaUrl` on `ep/onvif` SHALL perform an ONVIF `GetStreamUri` SOAP call authenticated
 with the stored credentials and SHALL emit the returned credential-free RTSP URL as a `mediaUrl`
-event. Before contacting the camera the driver SHALL verify that both the `username` and `password`
+event. Because configuration does not fetch profiles, the driver SHALL obtain a media-profile token
+via an on-demand `GetProfiles` call and use the first returned token for the `GetStreamUri` request.
+Before contacting the camera the driver SHALL verify that both the `username` and `password`
 credentials are present; if either is unset the execute SHALL fail with a credentials-required error
 and SHALL NOT start the SOAP worker or emit an event. The SOAP call SHALL use a bounded libcurl
 timeout so an unresponsive or packet-dropping camera cannot block the executing thread indefinitely.

@@ -247,13 +247,12 @@ namespace barton
                 guint8 nonceBytes[16];
 
                 // Use a CSPRNG so the nonce is unpredictable (WS-UsernameToken replay protection);
-                // glib's g_random_* is non-cryptographic. If the CSPRNG cannot be read, omit the token
-                // entirely (the request goes anonymous and the camera rejects it) rather than emit a
-                // predictable nonce that weakens replay protection exactly on the error path.
+                // glib's g_random_* is non-cryptographic. If the CSPRNG cannot be read, fail envelope
+                // construction (return empty) rather than downgrade an authenticated request to an
+                // anonymous one or emit a predictable nonce; Post treats an empty envelope as an error.
                 if (!FillSecureRandom(nonceBytes, sizeof(nonceBytes)))
                 {
-                    return std::string("<?xml version=\"1.0\" encoding=\"UTF-8\"?><s:Envelope xmlns:s=\"") + NS_SOAP +
-                           "\"><s:Body>" + bodyXml + "</s:Body></s:Envelope>";
+                    return std::string();
                 }
                 std::string nonceRaw(reinterpret_cast<const char *>(nonceBytes), sizeof(nonceBytes));
 
@@ -286,6 +285,18 @@ namespace barton
             // new response onto stale bytes; the curl write callback only appends.
             responseOut.clear();
 
+            // An empty envelope means BuildEnvelope could not generate a secure nonce for an
+            // authenticated request; fail rather than send an unauthenticated/malformed request.
+            if (envelope.empty())
+            {
+                if (error != nullptr)
+                {
+                    *error = "failed to generate authentication nonce";
+                }
+
+                return false;
+            }
+
             // libcurl requires a one-time, process-wide init before any easy handle is created; do it
             // exactly once in a thread-safe way since drivers may issue SOAP calls from worker threads.
             static std::once_flag curlInitFlag;
@@ -308,7 +319,10 @@ namespace barton
 
             // ONVIF service URLs are typically plain HTTP; default libcurl TLS verification applies to
             // any https:// endpoint (a self-signed camera cert would fail closed -- HTTPS is out of scope).
+            // Restrict to HTTP(S) so a forged discovery XAddr cannot make libcurl POST via another scheme.
             curl_easy_setopt(curl, CURLOPT_URL, serviceUrl.c_str());
+            curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long) (CURLPROTO_HTTP | CURLPROTO_HTTPS));
+            curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, (long) (CURLPROTO_HTTP | CURLPROTO_HTTPS));
             curl_easy_setopt(curl, CURLOPT_POST, 1L);
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, envelope.c_str());
             curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(envelope.size()));
