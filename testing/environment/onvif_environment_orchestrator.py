@@ -48,9 +48,9 @@ class OnvifEnvironmentOrchestrator(BaseEnvironmentOrchestrator):
 def onvif_environment(onvif_camera):
     """Barton client environment wired to discover the mock ONVIF camera by unicast."""
     env = OnvifEnvironmentOrchestrator(discovery_address=onvif_camera.discovery_address)
-    env.start_client()
-    env.wait_for_client_to_be_ready()
     try:
+        env.start_client()
+        env.wait_for_client_to_be_ready()
         yield env
     finally:
         env._cleanup()
