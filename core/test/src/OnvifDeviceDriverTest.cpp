@@ -24,8 +24,8 @@
 //
 // Unit tests for the ONVIF device driver's DeviceDriver wiring. The device-service C API the driver
 // depends on is replaced with Fake Function Framework (FFF) fakes so the driver links standalone.
-// The driver self-registers via an __attribute__((constructor)) when this translation unit loads,
-// so the fake registration call captures the DeviceDriver for the tests to exercise.
+// The test calls onvifDeviceDriverInitialize() explicitly; the fake registration call captures the
+// DeviceDriver for the tests to exercise.
 //
 
 #include <gtest/gtest.h>
@@ -55,6 +55,9 @@ extern "C" {
 
 DEFINE_FFF_GLOBALS;
 
+// Explicit registration entry point (replaces the former load-time constructor).
+extern "C" void onvifDeviceDriverInitialize(void);
+
 // Fakes for the device-service C API the driver references (so it links without the full service).
 FAKE_VALUE_FUNC(bool, deviceDriverManagerRegisterDriver, DeviceDriver *);
 FAKE_VALUE_FUNC(icDeviceEndpoint *, createEndpoint, icDevice *, const char *, const char *, bool);
@@ -83,7 +86,7 @@ FAKE_VALUE_FUNC(gchar *,
 namespace
 {
 
-    // The single DeviceDriver the constructor registered when this TU loaded.
+    // The single DeviceDriver onvifDeviceDriverInitialize() registered.
     DeviceDriver *RegisteredDriver()
     {
         return deviceDriverManagerRegisterDriver_fake.arg0_val;
@@ -112,6 +115,8 @@ namespace
 // executes, and the destroy path are all exercised in order within one deterministic test.
 TEST(OnvifDeviceDriver, RegistersWiresContractAndDestroysCleanly)
 {
+    onvifDeviceDriverInitialize();
+
     DeviceDriver *driver = RegisteredDriver();
     ASSERT_NE(driver, nullptr);
 
