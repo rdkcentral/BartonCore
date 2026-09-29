@@ -112,8 +112,9 @@ the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` e
 `getMediaUrl`, the driver SHALL require both credentials to be present before contacting the camera
 (failing with a credentials-required error and emitting no event otherwise), and the SOAP call SHALL
 use a bounded libcurl timeout so an unresponsive or packet-dropping camera cannot block the executing
-thread indefinitely.
-
+thread indefinitely. Because the returned URL is camera-controlled, the driver SHALL validate its
+scheme before emitting — `rtsp://` for `mediaUrl`, `http(s)://` for `snapshotUrl` — and SHALL reject a
+URL with any other scheme (e.g. `file://`) without emitting an event.
 #### Scenario: takePicture returns the snapshot entry point
 - **WHEN** a client executes `takePicture` on an ONVIF camera
 - **THEN** the result SHALL be `{ "protocol": "onvif", "entryPoint": "/<deviceId>/ep/onvif/r/getSnapshotUrl" }`
