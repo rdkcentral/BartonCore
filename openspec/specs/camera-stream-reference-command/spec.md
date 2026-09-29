@@ -135,10 +135,10 @@ receiving the `mediaUrl` event open a GStreamer `rtspsrc` source at that URL (ap
 when `authRequired` is true) feeding the shared fragmented-MP4 → serve/record sink. Taking a picture
 (requested via the `--snapshot <path>` flag) SHALL use `takePicture` → `getSnapshotUrl` →
 `snapshotUrl` analogously, downloading the JPEG over HTTP(S) and writing it to `<path>`. The
-media/snapshot URL is camera-controlled, so the driver constrains it to the expected scheme before
-emitting; the command applies credentials to the returned URL under the interim trust that it
-originates from the discovered camera. Pinning the URL authority to the discovered camera (with an
-explicit TLS policy) before attaching credentials is a planned hardening.
+media/snapshot URL is camera-controlled, so the driver constrains it to the expected scheme AND pins
+its host to the discovered camera before emitting, so credentials are only ever applied to a URL on
+the camera's own host. (An explicit TLS verification policy for the reference app's HTTP(S) fetch
+remains a planned hardening.)
 
 #### Scenario: ONVIF stream played through the same command
 - **WHEN** a user runs `cameraStream <onvifDeviceId>` and the driver reports protocol `onvif`
