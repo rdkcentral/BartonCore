@@ -31,6 +31,7 @@
 #include <libxml/tree.h>
 #include <sys/random.h>
 
+#include <cerrno>
 #include <cstring>
 #include <mutex>
 #include <utility>
@@ -57,13 +58,51 @@ namespace barton
             const char *const BASE64_ENCODING_TYPE =
                 "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary";
 
+            // Cap the accumulated response so a reachable or hostile camera cannot stream an
+            // unbounded (e.g. chunked) body and drive the process out of memory. ONVIF SOAP
+            // responses are small; 8 MiB is far above any legitimate reply.
+            constexpr size_t MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+
             size_t WriteCb(char *ptr, size_t size, size_t nmemb, void *userdata)
             {
                 std::string *body = static_cast<std::string *>(userdata);
                 size_t total = size * nmemb;
+
+                // Returning a short count aborts the transfer (CURLE_WRITE_ERROR) rather than
+                // appending past the limit.
+                if (body->size() > MAX_RESPONSE_BYTES - total)
+                {
+                    return 0;
+                }
                 body->append(ptr, total);
 
                 return total;
+            }
+
+            // Fill buf with cryptographically strong random bytes, retrying on EINTR and short reads
+            // so the caller never falls back to a non-cryptographic PRNG for the WS-UsernameToken nonce.
+            bool FillSecureRandom(guint8 *buf, size_t len)
+            {
+                size_t filled = 0;
+
+                while (filled < len)
+                {
+                    ssize_t got = getrandom(buf + filled, len - filled, 0);
+
+                    if (got < 0)
+                    {
+                        if (errno == EINTR)
+                        {
+                            continue;
+                        }
+
+                        return false;
+                    }
+
+                    filled += static_cast<size_t>(got);
+                }
+
+                return true;
             }
 
         } // namespace
@@ -208,13 +247,13 @@ namespace barton
                 guint8 nonceBytes[16];
 
                 // Use a CSPRNG so the nonce is unpredictable (WS-UsernameToken replay protection);
-                // glib's g_random_* is a non-cryptographic PRNG. Fall back only if getrandom fails.
-                if (getrandom(nonceBytes, sizeof(nonceBytes), 0) != static_cast<ssize_t>(sizeof(nonceBytes)))
+                // glib's g_random_* is non-cryptographic. If the CSPRNG cannot be read, omit the token
+                // entirely (the request goes anonymous and the camera rejects it) rather than emit a
+                // predictable nonce that weakens replay protection exactly on the error path.
+                if (!FillSecureRandom(nonceBytes, sizeof(nonceBytes)))
                 {
-                    for (size_t i = 0; i < sizeof(nonceBytes); i++)
-                    {
-                        nonceBytes[i] = static_cast<guint8>(g_random_int_range(0, 256));
-                    }
+                    return std::string("<?xml version=\"1.0\" encoding=\"UTF-8\"?><s:Envelope xmlns:s=\"") + NS_SOAP +
+                           "\"><s:Body>" + bodyXml + "</s:Body></s:Envelope>";
                 }
                 std::string nonceRaw(reinterpret_cast<const char *>(nonceBytes), sizeof(nonceBytes));
 
