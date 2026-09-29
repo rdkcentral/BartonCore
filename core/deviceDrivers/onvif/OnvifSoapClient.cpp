@@ -69,8 +69,9 @@ namespace barton
                 size_t total = size * nmemb;
 
                 // Returning a short count aborts the transfer (CURLE_WRITE_ERROR) rather than
-                // appending past the limit.
-                if (body->size() > MAX_RESPONSE_BYTES - total)
+                // appending past the limit. Guard the subtraction so a single oversized chunk cannot
+                // underflow the size_t and slip past the cap.
+                if (total > MAX_RESPONSE_BYTES || body->size() > MAX_RESPONSE_BYTES - total)
                 {
                     return 0;
                 }
