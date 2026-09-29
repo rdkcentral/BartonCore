@@ -207,15 +207,22 @@ namespace barton
             }
 
             std::string::size_type authStart = schemeEnd + 3;
-            std::string::size_type authEnd = uri.find('/', authStart);
-            std::string::size_type at = uri.find('@', authStart);
+            // The authority ends at the first '/', '?' or '#'.
+            std::string::size_type authEnd = uri.find_first_of("/?#", authStart);
+            std::string authority =
+                uri.substr(authStart, authEnd == std::string::npos ? std::string::npos : authEnd - authStart);
 
-            if (at == std::string::npos || (authEnd != std::string::npos && at > authEnd))
+            // Userinfo is everything up to the LAST '@' in the authority ('@' may appear in a password),
+            // so using the first '@' would leave part of the credential behind.
+            std::string::size_type at = authority.rfind('@');
+
+            if (at == std::string::npos)
             {
                 return uri;
             }
 
-            return uri.substr(0, authStart) + uri.substr(at + 1);
+            return uri.substr(0, authStart) + authority.substr(at + 1) +
+                   (authEnd == std::string::npos ? std::string() : uri.substr(authEnd));
         }
 
         std::string OnvifParseMediaUri(const std::string &xml)
