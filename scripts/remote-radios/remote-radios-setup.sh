@@ -66,6 +66,7 @@ SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 # usb-ip binds on this local TCP port on the workstation (usbipd default 3240)
 # and we reverse-tunnel it to a per-user UNIX socket on the dev server (no sshd
 # GatewayPorts change needed); socat in the container bridges it back to TCP.
+USBIPD_LOCAL_PORT=3240
 
 # Silabs local relay port for remote-serial.py (loopback only).
 SILABS_LOCAL_PORT=20000
