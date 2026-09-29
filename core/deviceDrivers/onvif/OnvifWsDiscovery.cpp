@@ -26,15 +26,17 @@
 #include "OnvifXml.h"
 
 #include <arpa/inet.h>
-#include <atomic>
 #include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <mutex>
 #include <netinet/in.h>
+#include <random>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -56,6 +58,41 @@ namespace barton
             const char *const NS_ONVIF_NET = "http://www.onvif.org/ver10/network/wsdl";
             const char *const WSD_TO = "urn:schemas-xmlsoap-org:ws:2005:04:discovery";
             const char *const WSD_PROBE_ACTION = "http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe";
+
+            // Generate an RFC 4122 version 4 (random) UUID URI. WS-Addressing requires MessageIDs to
+            // be unique; a random UUID stays distinct across processes, hosts, and restarts, so a probe
+            // response whose RelatesTo happens to match a process-local counter cannot be misattributed.
+            std::string GenerateMessageId()
+            {
+                static std::mutex rngMutex;
+                static std::random_device seedSource;
+                static std::mt19937_64 rng((static_cast<uint64_t>(seedSource()) << 32) ^
+                                           static_cast<uint64_t>(seedSource()));
+
+                uint64_t hi;
+                uint64_t lo;
+                {
+                    std::lock_guard<std::mutex> lock(rngMutex);
+                    hi = rng();
+                    lo = rng();
+                }
+
+                // Set the version (4) and variant (RFC 4122) bits.
+                hi = (hi & 0xFFFFFFFFFFFF0FFFULL) | 0x0000000000004000ULL;
+                lo = (lo & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;
+
+                char buffer[37];
+                std::snprintf(buffer,
+                              sizeof(buffer),
+                              "%08x-%04x-%04x-%04x-%012llx",
+                              static_cast<unsigned>(hi >> 32),
+                              static_cast<unsigned>((hi >> 16) & 0xFFFF),
+                              static_cast<unsigned>(hi & 0xFFFF),
+                              static_cast<unsigned>(lo >> 48),
+                              static_cast<unsigned long long>(lo & 0xFFFFFFFFFFFFULL));
+
+                return std::string("urn:uuid:") + buffer;
+            }
 
             // Split whitespace-separated tokens (used for the XAddrs list).
             std::vector<std::string> SplitWhitespace(const std::string &in)
@@ -298,13 +335,9 @@ namespace barton
                 return results;
             }
 
-            // A per-probe message id; format is not significant to the camera beyond uniqueness.
-            // WS-Addressing MessageIDs must be unique; a per-process atomic counter makes repeated
-            // probes (even with the same timeout) distinct so devices/proxies do not de-duplicate them.
-            static std::atomic<uint64_t> probeSequence {0};
-            uint64_t sequence = probeSequence.fetch_add(1, std::memory_order_relaxed);
-            std::string messageId = std::string("uuid:") + std::to_string(getpid()) + "-" + std::to_string(timeoutMs) +
-                                    "-" + std::to_string(sequence);
+            // A per-probe WS-Addressing MessageID. A standards-conforming random UUID keeps IDs unique
+            // across processes, hosts, and restarts so responses cannot be misattributed via RelatesTo.
+            std::string messageId = GenerateMessageId();
             std::string probe = OnvifBuildProbeMessage(messageId);
 
             ssize_t sent =
