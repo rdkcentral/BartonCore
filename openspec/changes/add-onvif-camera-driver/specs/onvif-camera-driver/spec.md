@@ -112,10 +112,13 @@ the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` e
 use a bounded libcurl timeout so an unresponsive or packet-dropping camera cannot block the executing
 thread indefinitely. Because the returned URL is camera-controlled, the driver SHALL validate its
 scheme before emitting — `rtsp://` for `mediaUrl`, `http(s)://` for `snapshotUrl` — and SHALL reject a
-URL with any other scheme (e.g. `file://`) without emitting an event. The driver SHALL also reject a
-URL whose host differs from the discovered camera's service host (host pinning; only the host is
-compared because the media/RTSP or snapshot port legitimately differs from the HTTP service port) so
-credentials cannot be redirected to another host.
+URL with any other scheme (e.g. `file://`) without emitting an event. The driver SHALL strip any
+embedded `user:pass@` userinfo before validating/emitting so the event stays credential-free. The
+driver SHALL also reject a URL whose host differs from the discovered camera's service host (host
+pinning; only the host is compared because the media/RTSP or snapshot port legitimately differs from
+the HTTP service port) so credentials cannot be redirected to another host. Host pinning uses the
+driver-owned discovered host within a session; after a restart the driver relies on the persisted
+service URL (device metadata), whose integrity is the platform's responsibility.
 
 #### Scenario: takePicture returns the snapshot entry point
 - **WHEN** a client executes `takePicture` on an ONVIF camera
