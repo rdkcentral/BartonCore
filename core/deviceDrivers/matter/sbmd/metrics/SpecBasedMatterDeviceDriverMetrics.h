@@ -44,6 +44,12 @@ namespace barton
         /** Record the in-flight gauge after a new deferred op is registered. */
         void RecordDeferredStart(int64_t inFlight);
 
+        /** Record a driver activation, updating the active-driver gauge to activeCount. */
+        void RecordDriverActivated(const char *driver, int64_t activeCount);
+
+        /** Record a driver deactivation, updating the active-driver gauge to activeCount. */
+        void RecordDriverDeactivated(const char *driver, int64_t activeCount);
+
         /** Record a deferred op overall-deadline timeout. */
         void RecordDeferredTimeout(const char *driver, const char *opType, const char *resourceId);
 
@@ -68,6 +74,9 @@ namespace barton
         ObservabilityGauge *deferredInFlightGauge = nullptr;
         ObservabilityHistogram *deferredDurationHisto = nullptr;
         ObservabilityHistogram *deferralDepthHisto = nullptr;
+        ObservabilityCounter *driverActivationCounter = nullptr;
+        ObservabilityCounter *driverDeactivationCounter = nullptr;
+        ObservabilityGauge *activeDriversGauge = nullptr;
     };
 
 } // namespace barton
@@ -80,6 +89,10 @@ namespace barton
     {
     public:
         void RecordDeferredStart(int64_t) {}
+
+        void RecordDriverActivated(const char *, int64_t) {}
+
+        void RecordDriverDeactivated(const char *, int64_t) {}
 
         void RecordDeferredTimeout(const char *, const char *, const char *) {}
 

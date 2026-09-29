@@ -432,9 +432,17 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
+        bool noDevicesRemain = false;
+
         {
             std::lock_guard<std::mutex> lock(devicesMutex);
             devices.erase(device->uuid);
+            noDevicesRemain = devices.empty();
+        }
+
+        if (noDevicesRemain)
+        {
+            OnLastDeviceRemoved();
         }
     });
 
@@ -1203,7 +1211,6 @@ static void synchronizeDevice(void *self, icDevice *device)
 {
     static_cast<MatterDeviceDriver *>(self)->SynchronizeDevice(device);
 }
-
 
 void MatterDeviceDriver::ProcessDeviceDescriptorMetadata(const icDevice *device, const icStringHashMap *metadata)
 {

@@ -198,6 +198,7 @@ namespace
 } // namespace
 
 SpecBasedMatterDeviceDriverMetrics SpecBasedMatterDeviceDriver::metrics;
+std::atomic<int64_t> SpecBasedMatterDeviceDriver::activeDriverCount {0};
 
 SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
@@ -252,6 +253,25 @@ std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 {
+    // Activate the driver on first bind. Both fresh commissioning and post-restart
+    // re-synchronization funnel through here, and the dispatch access below needs a live driver.
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+        if (!driver->IsActivated())
+        {
+            if (!driver->Activate(MQuickJsRuntime::Instance().GetSharedContext()))
+            {
+                icError("Failed to activate SBMD driver '%s' for device %s",
+                        driver->GetName().c_str(),
+                        device->GetDeviceId().c_str());
+                return false;
+            }
+
+            metrics.RecordDriverActivated(driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1);
+        }
+    }
+
     // The dispatch tables on the driver handle everything.
     device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
 
@@ -340,6 +360,19 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     }
 
     return MatterDeviceDriver::AddDevice(std::move(device));
+}
+
+void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()
+{
+    // The last bound device is gone; shed the driver's runtime state back to its claim stub.
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+    if (driver->IsActivated())
+    {
+        driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
+
+        metrics.RecordDriverDeactivated(driver->GetDriverStem().c_str(), activeDriverCount.fetch_sub(1) - 1);
+    }
 }
 
 SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionIntervalSecs()

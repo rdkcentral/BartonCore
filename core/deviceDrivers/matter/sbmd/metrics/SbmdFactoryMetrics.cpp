@@ -32,7 +32,7 @@ namespace barton
         driverLoadFailureCounter =
             observabilityCounterCreate("sbmd.driver.load.failure", "Number of SBMD driver loads that failed", "1");
         driverLoadDurationHisto = observabilityHistogramCreate(
-            "sbmd.driver.load.duration_ms", "Time to load and activate an SBMD driver", "ms");
+            "sbmd.driver.load.duration_ms", "Time to load and register an SBMD driver", "ms");
         driverLoadHeapDeltaHisto = observabilityHistogramCreate(
             "sbmd.driver.load.heap_bytes", "Change in mquickjs heap_used across a driver load", "By");
         registeredDriversGauge = observabilityGaugeCreate(

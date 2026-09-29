@@ -33,6 +33,7 @@
 #include "metrics/SpecBasedMatterDeviceDriverMetrics.h"
 #include "mquickjs/SbmdHandlerInvoker.h"
 #include "mquickjs/SbmdResultExecutor.h"
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <map>
@@ -103,6 +104,8 @@ namespace barton
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
+        void OnLastDeviceRemoved() override;
+
         void DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,
                                const std::string &deviceId,
                                const DeviceDescriptor *deviceDescriptor,
@@ -143,6 +146,9 @@ namespace barton
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
         static SpecBasedMatterDeviceDriverMetrics metrics;
+
+        // Process-wide count of currently-activated SBMD drivers, for observability.
+        static std::atomic<int64_t> activeDriverCount;
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);
