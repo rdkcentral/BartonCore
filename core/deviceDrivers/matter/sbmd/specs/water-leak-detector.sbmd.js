@@ -84,7 +84,8 @@ SbmdDriver({
                             var tlvBase64 = args.supplements.attributes.stateValue;
                             var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
 
-                            // StateValue=true means water detected (faulted)
+                            // StateValue=true means water detected (faulted). Treat an unknown
+                            // (uncached) state as not faulted to avoid raising a false leak alarm.
                             return Sbmd.result()
                                 .dataModel.updateResource(
                                     args.endpointId,

@@ -84,7 +84,8 @@ SbmdDriver({
                             var tlvBase64 = args.supplements.attributes.stateValue;
                             var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
 
-                            // StateValue=true means closed (not faulted); default to faulted when uncached
+                            // StateValue=true means closed (not faulted). Treat an unknown (uncached)
+                            // state as faulted so a possible open contact / intrusion is not missed.
                             return Sbmd.result()
                                 .dataModel.updateResource(
                                     args.endpointId,
