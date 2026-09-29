@@ -184,7 +184,7 @@ namespace
                 return;
             }
 
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             result.reset();
         }
 
@@ -763,8 +763,8 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     opCtx.resourceId = resource.id;
 
     {
-        auto lock = MQuickJsRuntime::AcquireMutex();
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
@@ -980,8 +980,8 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     opCtx.startTime = t0;
 
     {
-        auto lock = MQuickJsRuntime::AcquireMutex();
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
@@ -1271,7 +1271,7 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     // Move-assigning a SafeJSValue re-registers the held reference at the destination address and
     // clears the source, so the originating terminal ends up empty and destructs safely.
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         stored.onResponse = std::move(cmd.onResponse);
         stored.onError = std::move(cmd.onError);
         stored.context = std::move(cmd.context);
@@ -1335,8 +1335,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
         // Call onError handler
         if (ra.onError.HasValue())
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
                 ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context.Get());
@@ -1371,8 +1371,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
         // Call onResponse handler
         if (ra.onResponse.HasValue())
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
                 ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context.Get());
@@ -1435,8 +1435,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
         std::optional<ParsedResult> errorResult;
         ScopedResultRelease errorResultRelease {errorResult};
         {
-            auto lock = MQuickJsRuntime::AcquireMutex();
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             if (pending.onError.HasValue())
             {
@@ -1473,8 +1473,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
     {
-        auto lock = MQuickJsRuntime::AcquireMutex();
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         if (pending.onResponse.HasValue())
         {
@@ -1517,8 +1517,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
     std::optional<ParsedResult> errorResult;
     ScopedResultRelease errorResultRelease {errorResult};
     {
-        auto lock = MQuickJsRuntime::AcquireMutex();
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         if (pending.onError.HasValue())
         {
@@ -1740,7 +1740,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         // previous callbacks and clears the source; an empty source leaves the corresponding pending
         // callback empty, matching the prior "delete old, skip new" logic.
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             pending.onResponse = std::move(cmd.onResponse);
             pending.onError = std::move(cmd.onError);
         }
@@ -1813,7 +1813,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         // previous callbacks and clears the source; an empty source leaves the corresponding pending
         // callback empty, matching the prior "delete old, skip new" logic.
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             pending.onResponse = std::move(ra.onResponse);
             pending.onError = std::move(ra.onError);
         }
@@ -1839,8 +1839,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         if (err != CHIP_NO_ERROR)
         {
-            auto lock = MQuickJsRuntime::AcquireMutex();
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             if (pending.onError.HasValue())
             {
@@ -1861,8 +1861,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
             const std::string &tlvBase64 = *tlvBase64Opt;
 
-            auto lock = MQuickJsRuntime::AcquireMutex();
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             if (pending.onResponse.HasValue())
             {
@@ -1937,7 +1937,7 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
 
 void SpecBasedMatterDeviceDriver::ReleasePendingHandlers(PendingOperation &pending)
 {
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
     // Move-assigning an empty wrapper releases each held reference under the runtime mutex.
     pending.onResponse = SafeJSValue {};
@@ -2156,8 +2156,8 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
 
         {
             auto startTime = std::chrono::steady_clock::now();
-            auto lock = MQuickJsRuntime::AcquireMutex();
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            auto lock = MQuickJsRuntime::Instance().AcquireMutex();
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             // args keeps its value alive for its whole lifetime, so it survives the allocations in
             // AddSupplements and the handler call without a separate guard.

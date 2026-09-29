@@ -185,7 +185,7 @@ namespace barton
 
             if (JS_IsException(keysArr.Get()))
             {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx);
                 return {};
             }
 
