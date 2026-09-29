@@ -5,9 +5,9 @@ can use the Zigbee/Thread and Bluetooth radios physically attached to their
 **local workstation** — so end-devices next to the developer can be
 commissioned even though the devcontainer runs on a distant server.
 
-> **No radios? Nothing to do.** If you do not configure remote radios, your
-> devcontainer behaves exactly as before (simulated Thread/Zigbee, no BLE).
-> Remote-radio support is entirely opt-in.
+> **No radios? Nothing to do.** Forwarding radios is an optional, opt-in
+> feature. If you do not configure it, the devcontainer runs with simulated
+> Thread/Zigbee and no Bluetooth, and no extra setup is required of you.
 
 ---
 

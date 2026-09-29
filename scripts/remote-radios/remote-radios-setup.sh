@@ -48,8 +48,8 @@
 #
 # Re-running validates the saved radios and (re)establishes the tunnels.
 #
-# If you have no radios (or don't want to use them), you never need to run this
-# — your devcontainers behave exactly as before.
+# If you have no radios (or don't want to use them), you never need to run this;
+# the devcontainer runs with simulated Thread/Zigbee and no Bluetooth.
 #
 # See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for details.
 
