@@ -52,6 +52,10 @@ namespace barton
         // Parse a WS-Discovery ProbeMatches SOAP response into zero or more matches. Testable.
         std::vector<OnvifProbeMatch> OnvifParseProbeMatches(const std::string &xml);
 
+        // Extract the WS-Addressing RelatesTo correlation value from a response ("" if absent), trimmed.
+        // Used to discard ProbeMatches that answer a different probe on a shared LAN. Testable.
+        std::string OnvifParseRelatesTo(const std::string &xml);
+
         // Derive a stable Barton device uuid from a ProbeMatch endpoint reference. Strips a leading
         // "urn:uuid:" (case-insensitive) if present, then trims and lower-cases the result (the
         // fallback, when no prefix is present, is likewise trimmed and lower-cased).
@@ -71,7 +75,9 @@ namespace barton
             }
 
             // Send a Probe and gather ProbeMatch responses for up to timeoutMs. Returns the parsed matches;
-            // sets error (if provided) only on a hard socket failure (an empty result is not an error).
+            // sets error (if provided) on a hard socket failure or on an argument-validation failure
+            // (a negative timeout, an out-of-range destination port, or an unparseable destination
+            // address). An empty result with no such failure is not an error.
             std::vector<OnvifProbeMatch> Probe(int timeoutMs, std::string *error = nullptr);
 
         private:

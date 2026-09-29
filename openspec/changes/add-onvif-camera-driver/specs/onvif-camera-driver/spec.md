@@ -26,6 +26,9 @@ the WS-Discovery ProbeMatch endpoint reference (`urn:uuid:…`), obtain manufact
 firmware via an anonymous ONVIF `GetDeviceInformation`, and report the device with
 `deviceServiceDeviceFound`. The anonymous `GetDeviceInformation` SOAP call SHALL use the same bounded
 libcurl timeout as the on-demand calls so an unreachable ProbeMatch cannot stall the discovery worker.
+The `GetDeviceInformation` lookup SHALL be **best-effort**: if it fails or the camera requires
+credentials for it, the driver SHALL still report the ProbeMatch with fallback metadata rather than
+dropping the camera (credentials are only provisioned after the device exists).
 Because a discovered ONVIF camera normally has no DDL descriptor entry,
 the driver SHALL report it with `neverReject = true` so the device service does not reject it for
 lack of a matching descriptor.
@@ -85,8 +88,10 @@ The `stream` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "entryP
 
 Executing `getMediaUrl` on `ep/onvif` SHALL perform an ONVIF `GetStreamUri` SOAP call authenticated
 with the stored credentials and SHALL emit the returned credential-free RTSP URL as a `mediaUrl`
-event. The SOAP call SHALL use a bounded libcurl timeout so an unresponsive or packet-dropping camera
-cannot block the executing thread indefinitely.
+event. Before contacting the camera the driver SHALL verify that both the `username` and `password`
+credentials are present; if either is unset the execute SHALL fail with a credentials-required error
+and SHALL NOT start the SOAP worker or emit an event. The SOAP call SHALL use a bounded libcurl
+timeout so an unresponsive or packet-dropping camera cannot block the executing thread indefinitely.
 
 #### Scenario: getMediaUrl emits the RTSP URL
 - **WHEN** `getMediaUrl` is executed with valid stored credentials
@@ -98,8 +103,10 @@ The `takePicture` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "e
 "/<deviceId>/ep/onvif/r/getSnapshotUrl" }` and SHALL ignore the `sessionId` argument. Executing
 `getSnapshotUrl` on `ep/onvif` SHALL perform an ONVIF `GetSnapshotUri` SOAP call authenticated with
 the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` event. As with
-`getMediaUrl`, the SOAP call SHALL use a bounded libcurl timeout so an unresponsive or packet-dropping
-camera cannot block the executing thread indefinitely.
+`getMediaUrl`, the driver SHALL require both credentials to be present before contacting the camera
+(failing with a credentials-required error and emitting no event otherwise), and the SOAP call SHALL
+use a bounded libcurl timeout so an unresponsive or packet-dropping camera cannot block the executing
+thread indefinitely.
 
 #### Scenario: takePicture returns the snapshot entry point
 - **WHEN** a client executes `takePicture` on an ONVIF camera

@@ -137,13 +137,37 @@ namespace
         bool LookupDiscovered(const std::string &uuid, DiscoveredCamera &out);
         OnvifCredentials ReadCredentials(const std::string &uuid);
         std::string ReadServiceUrl(const std::string &uuid);
-        void FetchAndEmitUrl(const std::string &uuid, bool snapshot);
+        bool FetchAndEmitUrl(const std::string &uuid, bool snapshot);
 
         std::mutex stateMutex;
         std::unordered_map<std::string, DiscoveredCamera> discovered;
         std::atomic<bool> discoveryActive {false};
         std::thread discoveryThread;
     };
+
+    // A discovered uuid becomes part of a JSON springboard payload and a resource URI path. The
+    // endpoint reference is network-controlled and the parser accepts arbitrary values, so reject any
+    // identifier that could inject quotes, backslashes, path separators, or control characters.
+    bool IsSafeDeviceUuid(const std::string &uuid)
+    {
+        if (uuid.empty())
+        {
+            return false;
+        }
+
+        for (char c : uuid)
+        {
+            unsigned char uc = static_cast<unsigned char>(c);
+            bool safe = (uc >= '0' && uc <= '9') || (uc >= 'a' && uc <= 'z') || uc == '-' || uc == '.' || uc == '_';
+
+            if (!safe)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     // updateResource() is safe to call from a driver worker thread (the same pattern the Zigbee driver
     // uses from its receive threads). It emits the resource-updated event that carries the URL to clients.
@@ -172,6 +196,7 @@ static bool discoverDevices(void *ctx, const char *deviceClass);
 static void stopDiscoveringDevices(void *ctx, const char *deviceClass);
 static bool configureDevice(void *ctx, icDevice *device, DeviceDescriptor *descriptor);
 static bool registerResources(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues);
+static bool fetchInitialResourceValues(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues);
 static bool executeResource(void *ctx, icDeviceResource *resource, const char *arg, char **response);
 static bool writeResource(void *ctx, icDeviceResource *resource, const char *previousValue, const char *newValue);
 static void deviceRemoved(void *ctx, icDevice *device);
@@ -208,6 +233,7 @@ __attribute__((constructor)) static void onvifDriverRegister(void)
     driver->stopDiscoveringDevices = stopDiscoveringDevices;
     driver->configureDevice = configureDevice;
     driver->registerResources = registerResources;
+    driver->fetchInitialResourceValues = fetchInitialResourceValues;
     driver->executeResource = executeResource;
     driver->writeResource = writeResource;
     driver->deviceRemoved = deviceRemoved;
@@ -370,6 +396,14 @@ void OnvifDriver::DiscoveryWorker()
 
         if (uuid.empty() || match.xaddrs.empty())
         {
+            continue;
+        }
+
+        // Reject a network-controlled endpoint reference that would not yield a safe identifier before
+        // it is concatenated into the springboard JSON / resource URIs.
+        if (!IsSafeDeviceUuid(uuid))
+        {
+            icLogWarn(LOG_TAG, "skipping ONVIF camera with unsafe endpoint reference");
             continue;
         }
 
@@ -570,7 +604,7 @@ bool OnvifDriver::RegisterResources(icDevice *device)
     return true;
 }
 
-void OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
+bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
 {
     std::string serviceUrl = ReadServiceUrl(uuid);
     OnvifCredentials creds = ReadCredentials(uuid);
@@ -579,7 +613,20 @@ void OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
     {
         icLogError(LOG_TAG, "no ONVIF service URL for %s", uuid.c_str());
 
-        return;
+        return false;
+    }
+
+    // authRequired is advertised as true, so both credentials must be present before contacting the
+    // camera. Without them the execute must fail (no anonymous media/snapshot URL is emitted) rather
+    // than start a worker that would issue an unauthenticated request.
+    if (creds.username.empty() || creds.password.empty())
+    {
+        icLogError(LOG_TAG,
+                   "missing ONVIF credentials for %s; refusing %s",
+                   uuid.c_str(),
+                   snapshot ? "getSnapshotUrl" : "getMediaUrl");
+
+        return false;
     }
 
     // The SOAP round trip is blocking network I/O, so run it on a detached worker thread and emit the
@@ -615,6 +662,8 @@ void OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
         EmitResourceUpdate(
             uuid, ONVIF_ENDPOINT_ID, snapshot ? ONVIF_RESOURCE_SNAPSHOT_URL : ONVIF_RESOURCE_MEDIA_URL, url);
     }).detach();
+
+    return true;
 }
 
 bool OnvifDriver::ExecuteResource(icDeviceResource *resource, const char *arg, char **response)
@@ -673,16 +722,12 @@ bool OnvifDriver::ExecuteResource(icDeviceResource *resource, const char *arg, c
     {
         if (strcmp(id, ONVIF_FUNCTION_GET_MEDIA_URL) == 0)
         {
-            FetchAndEmitUrl(uuid, false);
-
-            return true;
+            return FetchAndEmitUrl(uuid, false);
         }
 
         if (strcmp(id, ONVIF_FUNCTION_GET_SNAPSHOT_URL) == 0)
         {
-            FetchAndEmitUrl(uuid, true);
-
-            return true;
+            return FetchAndEmitUrl(uuid, true);
         }
     }
 
@@ -729,6 +774,14 @@ static bool configureDevice(void *ctx, icDevice *device, DeviceDescriptor *)
 static bool registerResources(void *ctx, icDevice *device, icInitialResourceValues *)
 {
     return static_cast<OnvifDriver *>(ctx)->RegisterResources(device);
+}
+
+// No initial values to seed: ONVIF resources are created empty and populated on demand. The device
+// service invokes this unconditionally on reconfiguration, so a real (no-op) callback must exist to
+// avoid dereferencing a null function pointer.
+static bool fetchInitialResourceValues(void *, icDevice *, icInitialResourceValues *)
+{
+    return true;
 }
 
 static bool executeResource(void *ctx, icDeviceResource *resource, const char *arg, char **response)
