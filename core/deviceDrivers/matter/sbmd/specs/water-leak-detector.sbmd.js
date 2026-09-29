@@ -30,12 +30,13 @@
 
 SbmdDriver({
     schemaVersion: '5.0',
-    driverVersion: 1,
+    driverVersion: 2,
     name: 'Water Leak Detector',
 
     constants: {
         CL_BOOLEAN_STATE: 0x0045,
         ATTR_STATE_VALUE: 0x0000,
+        EVT_STATE_CHANGE: 0x0000,
         RES_FAULTED: 'faulted'
     },
 
@@ -59,6 +60,10 @@ SbmdDriver({
             clusterId: CL_BOOLEAN_STATE,
             attributeId: ATTR_STATE_VALUE,
             type: 'bool'
+        },
+        stateChange: {
+            clusterId: CL_BOOLEAN_STATE,
+            eventId: EVT_STATE_CHANGE
         }
     },
 
@@ -70,7 +75,26 @@ SbmdDriver({
                 faulted: {
                     type: 'com.icontrol.boolean',
                     modes: ['read'],
-                    prerequisites: [CL_BOOLEAN_STATE]
+                    prerequisites: [CL_BOOLEAN_STATE],
+                    seed: {
+                        supplements: {
+                            attributes: ['stateValue']
+                        },
+                        handler: function (args) {
+                            var tlvBase64 = args.supplements.attributes.stateValue;
+                            var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
+
+                            // StateValue=true means water detected (faulted). Treat an unknown
+                            // (uncached) state as not faulted to avoid raising a false leak alarm.
+                            return Sbmd.result()
+                                .dataModel.updateResource(
+                                    args.endpointId,
+                                    RES_FAULTED,
+                                    value === true ? 'true' : 'false'
+                                )
+                                .success();
+                        }
+                    }
                 }
             }
         }
@@ -86,12 +110,34 @@ SbmdDriver({
                     return Sbmd.result().error('TLV decode failed for StateValue');
                 }
 
-                // StateValue=true means water detected (faulted=true)
+                // StateValue=true means water detected (faulted)
                 return Sbmd.result()
                     .dataModel.updateResource(
                         args.endpointId,
                         RES_FAULTED,
                         value === true ? 'true' : 'false'
+                    )
+                    .success();
+            }
+        }
+    },
+
+    eventHandlers: {
+        handleStateChange: {
+            aliases: ['stateChange'],
+            handler: function (args) {
+                var fields = Sbmd.Tlv.decode(args.event.tlvBase64);
+
+                if (fields === null) {
+                    return Sbmd.result().error('TLV decode failed for StateChange');
+                }
+
+                // StateValue=true means water detected (faulted)
+                return Sbmd.result()
+                    .dataModel.updateResource(
+                        args.endpointId,
+                        RES_FAULTED,
+                        fields[0] === true ? 'true' : 'false'
                     )
                     .success();
             }

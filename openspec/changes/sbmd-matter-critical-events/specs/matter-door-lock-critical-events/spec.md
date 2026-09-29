@@ -1,0 +1,129 @@
+## ADDED Requirements
+
+### Requirement: Door lock SBMD driver handles DoorLockAlarm events
+The door lock SBMD driver SHALL subscribe to and handle `DoorLockAlarm` events (cluster 0x0101, event 0x0000). On receipt, the driver SHALL update the `jammed`, `tampered`, or `invalidCodeEntryLimit` resource according to the alarm code, or log and ignore alarm codes with no corresponding resource.
+
+Alarm code mapping:
+- 0x00 (LockJammed) → `jammed = "true"`
+- 0x01 (LockFactoryReset) → log only
+- 0x03 (LockRadioPowerCycled) → log only
+- 0x04 (WrongCodeEntryLimit) → `invalidCodeEntryLimit = "true"`
+- 0x05 (FrontEscutcheonRemoved) → `tampered = "true"`
+- 0x06 (DoorForcedOpen) → `tampered = "true"`
+- 0x07 (DoorAjar) → log only (door-position semantics require the DPS feature and are out of scope; see the DoorStateChange requirement)
+- 0x08 (ForcedUser) → log only
+
+#### Scenario: Lock bolt jammed alarm sets jammed resource
+- **WHEN** a `DoorLockAlarm` event is received with AlarmCode = 0x00 (LockJammed)
+- **THEN** the `jammed` resource SHALL be updated to `"true"`
+
+#### Scenario: Wrong code entry limit alarm sets invalidCodeEntryLimit resource
+- **WHEN** a `DoorLockAlarm` event is received with AlarmCode = 0x04 (WrongCodeEntryLimit)
+- **THEN** the `invalidCodeEntryLimit` resource SHALL be updated to `"true"`
+
+#### Scenario: Front escutcheon removed alarm sets tampered resource
+- **WHEN** a `DoorLockAlarm` event is received with AlarmCode = 0x05 (FrontEscutcheonRemoved)
+- **THEN** the `tampered` resource SHALL be updated to `"true"`
+
+#### Scenario: Door forced open alarm sets tampered resource
+- **WHEN** a `DoorLockAlarm` event is received with AlarmCode = 0x06 (DoorForcedOpen)
+- **THEN** the `tampered` resource SHALL be updated to `"true"`
+
+#### Scenario: Unresourced alarm codes are logged and ignored
+- **WHEN** a `DoorLockAlarm` event is received with AlarmCode = 0x01, 0x03, 0x07, or 0x08
+- **THEN** the event SHALL be logged and no resource update SHALL occur
+
+---
+
+### Requirement: Door lock SBMD driver handles LockOperation events
+The door lock SBMD driver SHALL subscribe to and handle `LockOperation` events (cluster 0x0101, event 0x0002). On receipt, the driver SHALL update `locked` based on the operation type and clear `tampered`, `invalidCodeEntryLimit`, and conditionally `jammed`.
+
+- LockOperationType 0x00 (Lock) → `locked = "true"`, clear `tampered`, `invalidCodeEntryLimit`, and if OperationSource == 0x01 (Manual) also clear `jammed`
+- LockOperationType 0x01 (Unlock) → `locked = "false"`, clear `tampered`, `invalidCodeEntryLimit`, and if OperationSource == 0x01 (Manual) also clear `jammed`
+- LockOperationType 0x04 (Unlatch) → `locked = "false"`, clear `tampered`, `invalidCodeEntryLimit`, and if OperationSource == 0x01 (Manual) also clear `jammed`
+- Other operation types → no-op
+
+The door lock driver SHALL retain the `attributeHandlers.handleLockState` live-update handler alongside the `LockOperation` event handler. Both update `locked`; because `LockOperation` is not CRITICAL for all operations (a Lock MAY be INFO) and `LockState` is the mandatory attribute, the attribute path is the reliable baseline. Duplicate resource-changed events are not produced because same-value resource updates are suppressed downstream. The `seed` handler establishes initial `locked` state at commission time.
+
+On a `LockOperation`, the driver SHALL attach `{ source, userId }` metadata to the `locked` resource update, mapping Matter `OperationSourceEnum` to the canonical `DOORLOCK_PROFILE_LOCKED_SOURCE_*` string and including `UserIndex` (TLV tag 2) when present.
+
+**Interface difference (invalidCodeEntryLimit clearing)**: the Zigbee driver auto-clears `invalidCodeEntryLimit` on a lockout-duration timer, whereas this driver clears it on the next `LockOperation`. This is an observable difference in the network-neutral interface, not just an internal detail: a client may see `invalidCodeEntryLimit` remain `"true"` longer (until an operation) or clear earlier (on an unrelated operation) than on Zigbee. The Matter equivalent attribute `UserCodeTemporaryDisableTime` (0x0031) exists, so timer-based clearing becomes directly implementable once an SBMD scheduler/`scheduleCallback` result-builder op lands. Deferred.
+
+#### Scenario: Lock operation updates locked resource
+- **WHEN** a `LockOperation` event is received with LockOperationType = 0x00 (Lock)
+- **THEN** the `locked` resource SHALL be updated to `"true"`
+
+#### Scenario: Unlock operation updates locked resource
+- **WHEN** a `LockOperation` event is received with LockOperationType = 0x01 (Unlock)
+- **THEN** the `locked` resource SHALL be updated to `"false"`
+
+#### Scenario: Lock operation clears tampered regardless of source
+- **WHEN** a `LockOperation` event is received with any LockOperationType in {0x00, 0x01, 0x04}
+- **THEN** the `tampered` resource SHALL be updated to `"false"`
+
+#### Scenario: Lock operation clears invalidCodeEntryLimit regardless of source
+- **WHEN** a `LockOperation` event is received with any LockOperationType in {0x00, 0x01, 0x04}
+- **THEN** the `invalidCodeEntryLimit` resource SHALL be updated to `"false"`
+
+#### Scenario: Manual lock operation clears jammed
+- **WHEN** a `LockOperation` event is received and OperationSource == 0x01 (Manual)
+- **THEN** the `jammed` resource SHALL be updated to `"false"`
+
+#### Scenario: Non-manual lock operation does not clear jammed
+- **WHEN** a `LockOperation` event is received and OperationSource != 0x01 (Manual)
+- **THEN** the `jammed` resource SHALL NOT be updated
+
+---
+
+### Requirement: Door lock SBMD driver exposes jammed, tampered, and invalidCodeEntryLimit resources
+The door lock SBMD driver (endpoint `1`, profile `doorLock`) SHALL declare the following read-only boolean resources with prerequisite cluster 0x0101:
+- `jammed` (resource name per `DOORLOCK_PROFILE_RESOURCE_JAMMED`)
+- `tampered` (resource name per `DOORLOCK_PROFILE_RESOURCE_TAMPERED`)
+- `invalidCodeEntryLimit` (resource name per `DOORLOCK_PROFILE_RESOURCE_INVALID_CODE_ENTRY_LIMIT`)
+
+Each resource SHALL have a `seed` handler that establishes an initial value of `"false"` at commission time, matching the Zigbee driver, so a freshly commissioned lock reports a definite "not faulted" state rather than a null/unknown value. Because `SeedInitialResourceValues` re-runs seed handlers on every synchronize/reconnect, each seed handler SHALL preserve an already-set value instead of forcing `"false"`, so a fault raised while the device was unreachable is not cleared when it reconnects.
+
+#### Scenario: New resources registered on commission
+- **WHEN** a Matter Door Lock device is commissioned
+- **THEN** `jammed`, `tampered`, and `invalidCodeEntryLimit` resources SHALL be registered on endpoint `1`
+
+#### Scenario: Resources seeded to false at commission
+- **WHEN** a Matter Door Lock device has been commissioned but no `DoorLockAlarm` or `LockOperation` event has been received
+- **THEN** `jammed`, `tampered`, and `invalidCodeEntryLimit` resources SHALL each have the cached value `"false"`
+
+#### Scenario: Existing fault preserved across synchronize
+- **WHEN** a fault resource (e.g. `jammed`) has value `"true"` and the device synchronizes/reconnects, re-running the seed handlers
+- **THEN** the fault resource SHALL retain its `"true"` value rather than being reset to `"false"`
+
+---
+
+### Requirement: Door lock endpoint profile version triggers reconfiguration for new resources
+The door lock SBMD driver SHALL bump the endpoint `1` `profileVersion` (from `3` to `4`) so that `deviceServiceDeviceNeedsReconfiguring` detects the change and reconfigures already-commissioned devices, registering the new `jammed`, `tampered`, and `invalidCodeEntryLimit` resources. The top-level `driverVersion` is bumped to `2` as a content marker but does not itself trigger reconfiguration (it is only recorded and logged).
+
+#### Scenario: Reconfiguration registers new resources on upgrade
+- **WHEN** a device commissioned with the prior door lock driver (endpoint profile version `3`) reconnects after the driver is upgraded to endpoint profile version `4`
+- **THEN** the driver SHALL reconfigure and register the `jammed`, `tampered`, and `invalidCodeEntryLimit` resources
+
+---
+
+### Requirement: DoorStateChange events are not handled (punted)
+The door lock SBMD driver SHALL NOT include a handler for `DoorStateChange` events (cluster 0x0101, event 0x0001) in this change. This event requires the Door Position Sensor feature (DPS, bit 2 of the DoorLock feature map), which is not present on any currently field-deployed device (confirmed: Aqara Smart Lock U400 does not have DPS). DoorStateChange handling is deferred to a future change.
+
+Consistent with this, the `DoorLockAlarm` `DoorAjar` code (0x07) — which is meaningful only on DPS-capable locks — is intentionally in the log-only set (it has no resource mapping) rather than being surfaced as a door-position resource. Door-position semantics as a whole are out of scope until the DPS follow-up.
+
+#### Scenario: DoorStateChange events have no handler
+- **WHEN** a Matter Door Lock device emits a `DoorStateChange` event
+- **THEN** the event SHALL be silently ignored (no matching handler in the dispatch table)
+
+---
+
+### Requirement: LockOperationError and LockUserChange events are not handled (out of scope)
+The door lock SBMD driver SHALL NOT include handlers for the `LockOperationError` (event 0x0003) or `LockUserChange` (event 0x0004) audit-trail events. These carry failed-attempt and user-database-change records that do not map to any Barton doorLock resource in this change and are out of scope per the ticket decision.
+
+#### Scenario: LockOperationError events have no handler
+- **WHEN** a Matter Door Lock device emits a `LockOperationError` event
+- **THEN** the event SHALL be silently ignored (no matching handler in the dispatch table)
+
+#### Scenario: LockUserChange events have no handler
+- **WHEN** a Matter Door Lock device emits a `LockUserChange` event
+- **THEN** the event SHALL be silently ignored (no matching handler in the dispatch table)
