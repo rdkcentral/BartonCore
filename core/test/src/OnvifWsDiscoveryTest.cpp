@@ -34,12 +34,27 @@ TEST(OnvifWsDiscovery, ProbeMessageContainsRequiredElements)
     EXPECT_NE(probe.find("<w:MessageID>uuid:abc-123</w:MessageID>"), std::string::npos);
     EXPECT_NE(probe.find("<d:Probe>"), std::string::npos);
     EXPECT_NE(probe.find("NetworkVideoTransmitter"), std::string::npos);
+    // ONVIF requires the WS-Addressing 2005/08 namespace (not the older 2004/08 one).
+    EXPECT_NE(probe.find("http://www.w3.org/2005/08/addressing"), std::string::npos);
+    EXPECT_EQ(probe.find("2004/08/addressing"), std::string::npos);
+}
+
+TEST(OnvifWsDiscovery, ParsesRelatesToWhenPresentAndAbsent)
+{
+    std::string withRelatesTo = "<e:Envelope xmlns:e=\"http://www.w3.org/2003/05/soap-envelope\" "
+                                "xmlns:w=\"http://www.w3.org/2005/08/addressing\"><e:Header>"
+                                "<w:RelatesTo>  uuid:probe-42  </w:RelatesTo></e:Header><e:Body/></e:Envelope>";
+    EXPECT_EQ(OnvifParseRelatesTo(withRelatesTo), "uuid:probe-42");
+
+    std::string noRelatesTo = "<e:Envelope xmlns:e=\"http://www.w3.org/2003/05/soap-envelope\">"
+                              "<e:Body/></e:Envelope>";
+    EXPECT_EQ(OnvifParseRelatesTo(noRelatesTo), "");
 }
 
 TEST(OnvifWsDiscovery, ParsesProbeMatch)
 {
     std::string xml = "<e:Envelope xmlns:e=\"http://www.w3.org/2003/05/soap-envelope\" "
-                      "xmlns:w=\"http://schemas.xmlsoap.org/ws/2004/08/addressing\" "
+                      "xmlns:w=\"http://www.w3.org/2005/08/addressing\" "
                       "xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\"><e:Body>"
                       "<d:ProbeMatches><d:ProbeMatch>"
                       "<w:EndpointReference><w:Address>urn:uuid:aabbccdd-1122-3344-5566-778899aabbcc</w:Address>"

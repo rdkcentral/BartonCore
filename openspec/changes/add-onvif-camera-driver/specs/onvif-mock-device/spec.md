@@ -14,9 +14,9 @@ do not depend on them.
 - **WHEN** a WS-Discovery `Probe` for the ONVIF camera type is received
 - **THEN** the mock SHALL send a `ProbeMatch` containing an `urn:uuid:…` endpoint reference and its ONVIF service address
 
-#### Scenario: Discovery and SOAP use only the Python standard library
-- **WHEN** the mock's WS-Discovery and SOAP responders are started in the test environment
-- **THEN** they SHALL run without installing any pip package beyond the Python standard library
+#### Scenario: Discovery and SOAP responders rely only on the Python standard library
+- **WHEN** the mock handles a WS-Discovery `Probe` or a SOAP request
+- **THEN** the request-handling logic SHALL use only the Python standard library (the module is loaded as a pytest fixture, and the optional live RTSP server additionally uses the GStreamer GI bindings, both of which are separate from the discovery/SOAP responders)
 
 ### Requirement: Mock serves canned ONVIF SOAP responses
 
