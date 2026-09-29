@@ -284,26 +284,31 @@ static void destroyDriver(void *ctx)
 // static archive and its registration actually runs for BartonCoreStatic consumers.
 extern "C" void onvifDeviceDriverInitialize(void)
 {
-    icLogDebug(LOG_TAG, "registering ONVIF camera device driver");
+    // Idempotent: deviceDriverManagerInitialize() may run more than once, and the manager retains every
+    // registered pointer, so register exactly one OnvifDriver for the process lifetime.
+    static std::once_flag registerFlag;
+    std::call_once(registerFlag, [] {
+        icLogDebug(LOG_TAG, "registering ONVIF camera device driver");
 
-    OnvifDriver *instance = new OnvifDriver();
-    DeviceDriver *driver = instance->GetDriver();
+        OnvifDriver *instance = new OnvifDriver();
+        DeviceDriver *driver = instance->GetDriver();
 
-    driver->startup = startup;
-    driver->shutdown = shutdown;
-    driver->destroy = destroyDriver;
-    driver->discoverDevices = discoverDevices;
-    driver->stopDiscoveringDevices = stopDiscoveringDevices;
-    driver->configureDevice = configureDevice;
-    driver->registerResources = registerResources;
-    driver->fetchInitialResourceValues = fetchInitialResourceValues;
-    driver->synchronizeDevice = synchronizeDevice;
-    driver->executeResource = executeResource;
-    driver->writeResource = writeResource;
-    driver->deviceRemoved = deviceRemoved;
-    driver->getDeviceClassVersion = getDeviceClassVersion;
+        driver->startup = startup;
+        driver->shutdown = shutdown;
+        driver->destroy = destroyDriver;
+        driver->discoverDevices = discoverDevices;
+        driver->stopDiscoveringDevices = stopDiscoveringDevices;
+        driver->configureDevice = configureDevice;
+        driver->registerResources = registerResources;
+        driver->fetchInitialResourceValues = fetchInitialResourceValues;
+        driver->synchronizeDevice = synchronizeDevice;
+        driver->executeResource = executeResource;
+        driver->writeResource = writeResource;
+        driver->deviceRemoved = deviceRemoved;
+        driver->getDeviceClassVersion = getDeviceClassVersion;
 
-    deviceDriverManagerRegisterDriver(driver);
+        deviceDriverManagerRegisterDriver(driver);
+    });
 }
 
 bool OnvifDriver::LookupDiscovered(const std::string &uuid, DiscoveredCamera &out)
@@ -765,8 +770,12 @@ bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
             return;
         }
 
-        EmitResourceUpdate(
-            uuid, ONVIF_ENDPOINT_ID, snapshot ? ONVIF_RESOURCE_SNAPSHOT_URL : ONVIF_RESOURCE_MEDIA_URL, url);
+        // Defensive: also strip any userinfo from the emitted value so the mediaUrl/snapshotUrl event
+        // stays credential-free even if a future parse path does not.
+        EmitResourceUpdate(uuid,
+                           ONVIF_ENDPOINT_ID,
+                           snapshot ? ONVIF_RESOURCE_SNAPSHOT_URL : ONVIF_RESOURCE_MEDIA_URL,
+                           StripUrlUserinfo(url));
     }).detach();
 
     return true;
