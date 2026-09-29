@@ -636,7 +636,9 @@ function allocateThenSolicitOffer(args, sessions, sessionId, streamInfoJson) {
     // honor SolicitOffer). handleAllocateForSolicit then sends SolicitOffer for the allocated
     // stream. Both legs use requestCommand so their promises stay alive across the deferred chain,
     // which also keeps the stream() execute parked until the chain settles — streamInfoJson rides
-    // along as the value stream() ultimately returns.
+    // along as the value stream() ultimately returns. The runtime sets the overall deadline from
+    // this first leg and does not reset it on re-arm, so this budget must cover the SolicitOffer
+    // hop below as well.
     var featureMap = args.clusterFeatureMaps[CL_CAMERA_AV_STREAM_MGMT] || 0;
     var allocPayload = buildVideoStreamAllocatePayload(featureMap);
 
@@ -647,7 +649,7 @@ function allocateThenSolicitOffer(args, sessions, sessionId, streamInfoJson) {
             onResponse: handleAllocateForSolicit,
             onError: handleSolicitAllocateError,
             context: {sessionId: sessionId, sessions: sessions, streamInfo: streamInfoJson},
-            timeoutMs: 5000
+            timeoutMs: 15000
         });
 }
 
@@ -700,7 +702,9 @@ function buildVideoStreamAllocatePayload(featureMap) {
 
 function allocateThenProvideOffer(args, sessions, sessionId, sdp) {
     // Step 1: Allocate a video stream on the camera.
-    // The camera requires an allocated stream before ProvideOffer will succeed.
+    // The camera requires an allocated stream before ProvideOffer will succeed. The runtime sets
+    // the overall deadline from this first leg and does not reset it on re-arm, so this budget
+    // must cover the ProvideOffer hop below as well.
     var featureMap = args.clusterFeatureMaps[CL_CAMERA_AV_STREAM_MGMT] || 0;
     var allocPayload = buildVideoStreamAllocatePayload(featureMap);
 
@@ -711,7 +715,7 @@ function allocateThenProvideOffer(args, sessions, sessionId, sdp) {
             onResponse: handleVideoStreamAllocateResponse,
             onError: handleVideoStreamAllocateError,
             context: {sdp: sdp, sessionId: sessionId, sessions: sessions},
-            timeoutMs: 5000
+            timeoutMs: 15000
         });
 }
 
