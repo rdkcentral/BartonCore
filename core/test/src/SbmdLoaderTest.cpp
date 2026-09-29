@@ -47,8 +47,8 @@ namespace
     protected:
         static void SetUpTestSuite()
         {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(512 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
@@ -56,23 +56,23 @@ namespace
 
         static void TearDownTestSuite()
         {
-            MQuickJsRuntime::Shutdown();
+            MQuickJsRuntime::Instance().Shutdown();
         }
 
         JSContext *Ctx()
         {
-            return MQuickJsRuntime::GetSharedContext();
+            return MQuickJsRuntime::Instance().GetSharedContext();
         }
 
         std::optional<std::vector<std::pair<std::string, std::string>>> ExtractConstants(const char *source)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             return SbmdLoader::ExtractConstants(Ctx(), source, strlen(source));
         }
 
         std::unique_ptr<SbmdRegistration> LoadDriver(const std::string &source)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             return SbmdLoader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
         }
     };
