@@ -29,8 +29,11 @@
 
 import json
 import logging
+import os
 import time
 import urllib.request
+
+import pytest
 
 from testing.utils.barton_utils import (
     resource_update_listener,
@@ -48,6 +51,31 @@ except (ImportError, ValueError):
     Gst = None
 
 logger = logging.getLogger(__name__)
+
+
+def _onvif_driver_built() -> bool:
+    """Whether the library under test was built with the ONVIF driver (BCORE_ONVIF).
+
+    ONVIF is an opt-in feature; when it is OFF the driver sources are not compiled, so discovery
+    would never find the mock and every test here would wait the full discovery timeout before
+    failing. Read the CMake cache so those tests skip cleanly instead. If the setting cannot be
+    determined, assume enabled so coverage is not silently dropped in the CI build that enables it.
+    """
+    cache = os.path.join(os.path.dirname(__file__), "..", "..", "build", "CMakeCache.txt")
+    try:
+        with open(cache, "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("BCORE_ONVIF:"):
+                    return line.strip().endswith("ON")
+    except OSError:
+        pass
+
+    return True
+
+
+pytestmark = pytest.mark.skipif(
+    not _onvif_driver_built(), reason="ONVIF driver not built (BCORE_ONVIF=OFF)"
+)
 
 
 def _probe_rtsp_buffers(url, seconds=8):
