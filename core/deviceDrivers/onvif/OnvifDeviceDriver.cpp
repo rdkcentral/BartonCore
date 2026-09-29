@@ -789,8 +789,11 @@ bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
         }
 
         // Pin the URL to the discovered camera's host so a compromised camera cannot redirect the
-        // client (and the credentials it applies) to an attacker-controlled authority.
-        if (UrlHost(url) != UrlHost(serviceUrl))
+        // client (and the credentials it applies) to an attacker-controlled authority. Reject an empty
+        // parsed host so a malformed URL (e.g. rtsp:///path) cannot pass by matching an empty host.
+        std::string urlHost = UrlHost(url);
+
+        if (urlHost.empty() || urlHost != UrlHost(serviceUrl))
         {
             icLogError(LOG_TAG,
                        "%s for %s returned a URL on a different host than the camera; not emitting",
