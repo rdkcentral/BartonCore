@@ -48,15 +48,15 @@ namespace
     protected:
         static void SetUpTestSuite()
         {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(256 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(256 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
         }
 
         static void TearDownTestSuite()
         {
-            MQuickJsRuntime::Shutdown();
+            MQuickJsRuntime::Instance().Shutdown();
         }
 
         /**
@@ -65,8 +65,8 @@ namespace
          */
         std::string EvalAsJson(const char *expr)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             std::string code = std::string("JSON.stringify(") + expr + ")";
 
@@ -75,7 +75,7 @@ namespace
             if (JS_IsException(result))
             {
                 std::string msg;
-                MQuickJsRuntime::CheckAndClearPendingException(ctx, &msg);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx, &msg);
                 return "EXCEPTION: " + msg;
             }
 
@@ -91,14 +91,14 @@ namespace
          */
         bool EvalThrows(const char *expr)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             JSValue result = JS_Eval(ctx, expr, strlen(expr), "<test>", JS_EVAL_RETVAL);
 
             if (JS_IsException(result))
             {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx);
                 return true;
             }
 

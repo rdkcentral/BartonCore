@@ -104,8 +104,8 @@ namespace
     protected:
         static void SetUpTestSuite()
         {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(512 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
@@ -113,12 +113,12 @@ namespace
 
         static void TearDownTestSuite()
         {
-            MQuickJsRuntime::Shutdown();
+            MQuickJsRuntime::Instance().Shutdown();
         }
 
         JSContext *Ctx()
         {
-            return MQuickJsRuntime::GetSharedContext();
+            return MQuickJsRuntime::Instance().GetSharedContext();
         }
 
         /**
@@ -126,7 +126,7 @@ namespace
          */
         std::unique_ptr<SbmdDriver> CreateDriver(const std::string &source = kDriverSource)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto reg = SbmdLoader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
 
             if (!reg)
@@ -154,7 +154,7 @@ namespace
 
             if (JS_IsException(args.Get()))
             {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx);
                 return std::nullopt;
             }
 
@@ -171,7 +171,7 @@ namespace
 
             if (JS_IsException(result))
             {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx);
                 return std::nullopt;
             }
 
@@ -213,7 +213,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -221,7 +221,7 @@ namespace
 
         // Clean up
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -232,7 +232,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -244,7 +244,7 @@ namespace
 
         // Clean up
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -255,7 +255,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -265,7 +265,7 @@ namespace
         ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto result = CallHandler(reg.endpoints[0].resources[0].write->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
@@ -277,7 +277,7 @@ namespace
 
         // Clean up
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -288,7 +288,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -296,7 +296,7 @@ namespace
         ASSERT_EQ(reg.attributeHandlers.size(), 1u);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto result = CallHandler(reg.attributeHandlers[0].Fn());
             ASSERT_TRUE(result.has_value());
 
@@ -308,7 +308,7 @@ namespace
 
         // Clean up
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -319,7 +319,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
             EXPECT_TRUE(driver->Activate(Ctx())); // Should be a no-op
         }
@@ -328,7 +328,7 @@ namespace
 
         // Clean up
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -343,7 +343,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
             driver->Deactivate(Ctx());
         }
@@ -357,7 +357,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
             driver->Deactivate(Ctx());
         }
@@ -381,7 +381,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
             driver->Deactivate(Ctx());
         }
@@ -397,7 +397,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
             driver->Deactivate(Ctx());
             driver->Deactivate(Ctx()); // Should be a no-op
@@ -416,7 +416,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
             driver->Deactivate(Ctx());
             EXPECT_TRUE(driver->Activate(Ctx()));
@@ -429,7 +429,7 @@ namespace
         ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto result = CallHandler(reg.endpoints[0].resources[0].write->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
@@ -437,7 +437,7 @@ namespace
 
         // Clean up
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -473,7 +473,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -482,7 +482,7 @@ namespace
         EXPECT_EQ(reg.commandHandlers[0].name, "handleEcho");
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto result = CallHandler(reg.commandHandlers[0].Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_EQ(result->ops.size(), 1u);
@@ -492,7 +492,7 @@ namespace
 
         // Clean up
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -519,7 +519,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
             driver->Deactivate(Ctx());
         }
@@ -550,14 +550,14 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
         EXPECT_TRUE(driver->IsActivated());
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
 
@@ -653,7 +653,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -661,7 +661,7 @@ namespace
         ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto result = CallHandler(reg.endpoints[0].resources[0].write->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
@@ -674,7 +674,7 @@ namespace
         }
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -719,7 +719,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -727,7 +727,7 @@ namespace
         ASSERT_TRUE(reg.endpoints[0].resources[0].read.has_value());
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto result = CallHandler(reg.endpoints[0].resources[0].read->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data));
@@ -745,7 +745,7 @@ namespace
         }
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
@@ -788,7 +788,7 @@ namespace
         ASSERT_NE(driver, nullptr);
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -796,7 +796,7 @@ namespace
         ASSERT_TRUE(reg.endpoints[0].resources[0].read.has_value());
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto result = CallHandler(reg.endpoints[0].resources[0].read->Fn());
             ASSERT_TRUE(result.has_value());
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data));
@@ -811,7 +811,7 @@ namespace
         }
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
     }
