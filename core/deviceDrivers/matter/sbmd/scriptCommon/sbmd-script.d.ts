@@ -270,10 +270,10 @@ interface SbmdEventTrigger {
      * struct payload decodes to an object keyed by each field's numeric TLV
      * context tag (access by tag number, e.g. `decoded[0]`).
      *
-     * Absent when the event has no payload (payload-less events), so guard for
-     * it before decoding.
+     * Always present: payload-less events are not dispatched, so a handler is
+     * never invoked without a payload.
      */
-    tlvBase64?: string;
+    tlvBase64: string;
 }
 
 /** Command trigger (present on unsolicited command handlers). */
