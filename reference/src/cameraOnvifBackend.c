@@ -120,11 +120,12 @@ static bool snapshotFetch(const gchar *url, const gchar *user, const gchar *pass
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, snapshotWriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, out);
     // Cameras (e.g. Reolink) commonly redirect the http snapshot endpoint to https on the same host,
-    // so redirects are followed but bounded and confined to HTTP(S). The snapshot URL is operator-
-    // provided in this developer reference app, so a redirect to an unrelated host is an accepted
-    // limitation here (a production integration should pin the redirect target to the camera host).
+    // so redirects are followed but bounded and confined to HTTP(S). CURLOPT_UNRESTRICTED_AUTH stays
+    // off so credentials are never forwarded to a different host/port on a redirect (they remain
+    // confined to the driver-pinned camera authority).
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+    curl_easy_setopt(curl, CURLOPT_UNRESTRICTED_AUTH, 0L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 
     // Restrict to HTTP(S), including across redirects, so a malicious snapshot URL cannot coerce
