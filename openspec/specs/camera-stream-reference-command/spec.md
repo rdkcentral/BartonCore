@@ -137,8 +137,11 @@ when `authRequired` is true) feeding the shared fragmented-MP4 → serve/record 
 `snapshotUrl` analogously, downloading the JPEG over HTTP(S) and writing it to `<path>`. The
 media/snapshot URL is camera-controlled, so the driver constrains it to the expected scheme AND pins
 its host to the discovered camera before emitting, so credentials are only ever applied to a URL on
-the camera's own host. (An explicit TLS verification policy for the reference app's HTTP(S) fetch
-remains a planned hardening.)
+the camera's own host; the reference app additionally keeps credentials confined to that host across
+HTTP redirects (`CURLOPT_UNRESTRICTED_AUTH` off). NOTE: the reference app is a developer tool that
+disables TLS peer/host verification to accept self-signed camera certificates, so it does NOT protect
+the HTTPS snapshot fetch against a man-in-the-middle; verified/pinned HTTPS is a known reference-app
+limitation.
 
 #### Scenario: ONVIF stream played through the same command
 - **WHEN** a user runs `cameraStream <onvifDeviceId>` and the driver reports protocol `onvif`

@@ -35,7 +35,9 @@ credentials for it, the driver SHALL still report the ProbeMatch with fallback m
 dropping the camera (credentials are only provisioned after the device exists).
 Because a discovered ONVIF camera normally has no DDL descriptor entry,
 the driver SHALL report it with `neverReject = true` so the device service does not reject it for
-lack of a matching descriptor.
+lack of a matching descriptor. The reported `DeviceFoundDetails.deviceDriver` SHALL point to this
+driver's `DeviceDriver` (the device service dereferences it to read `driverName` and to select
+`configureDevice`/`registerResources`).
 
 #### Scenario: Discovery reports a responding ONVIF camera
 - **WHEN** a discovery request for `camera` is active and an ONVIF camera answers the WS-Discovery Probe
@@ -115,8 +117,9 @@ use a bounded libcurl timeout so an unresponsive or packet-dropping camera canno
 thread indefinitely. Because the returned URL is camera-controlled, the driver SHALL validate its
 scheme before emitting — `rtsp://` for `mediaUrl`, `http(s)://` for `snapshotUrl` — and SHALL reject a
 URL with any other scheme (e.g. `file://`) without emitting an event. The driver SHALL also reject a
-URL whose host differs from the discovered camera's service host (authority pinning) so credentials
-cannot be redirected to another authority.
+URL whose host differs from the discovered camera's service host (host pinning; only the host is
+compared because the media/RTSP or snapshot port legitimately differs from the HTTP service port) so
+credentials cannot be redirected to another host.
 #### Scenario: takePicture returns the snapshot entry point
 - **WHEN** a client executes `takePicture` on an ONVIF camera
 - **THEN** the result SHALL be `{ "protocol": "onvif", "entryPoint": "/<deviceId>/ep/onvif/r/getSnapshotUrl" }`
