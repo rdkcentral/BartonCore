@@ -92,8 +92,9 @@ namespace barton
             return std::string("<?xml version=\"1.0\" encoding=\"UTF-8\"?>") + "<e:Envelope xmlns:e=\"" + NS_SOAP +
                    "\" xmlns:w=\"" + NS_WSA + "\" xmlns:d=\"" + NS_WSD + "\" xmlns:dn=\"" + NS_ONVIF_NET +
                    "\"><e:Header><w:MessageID>" + OnvifXmlEscape(messageId) +
-                   "</w:MessageID><w:To e:mustUnderstand=\"true\">" + WSD_TO +
-                   "</w:To><w:Action e:mustUnderstand=\"true\">" + WSD_PROBE_ACTION +
+                   "</w:MessageID><w:ReplyTo><w:Address>http://www.w3.org/2005/08/addressing/anonymous"
+                   "</w:Address></w:ReplyTo><w:To e:mustUnderstand=\"true\">" +
+                   WSD_TO + "</w:To><w:Action e:mustUnderstand=\"true\">" + WSD_PROBE_ACTION +
                    "</w:Action></e:Header><e:Body><d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe>"
                    "</e:Body></e:Envelope>";
         }
