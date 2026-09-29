@@ -156,6 +156,28 @@ static gboolean padIsH264Video(GstPad *pad)
     return isVideo;
 }
 
+// Link @p pad into a fakesink so its RTP source does not error out "not-linked" and tear down the
+// pipeline. Used for non-video streams and for extra video streams beyond the first.
+static void drainPadToFakesink(CameraRtspClient *self, GstPad *pad)
+{
+    GstElement *drain = gst_element_factory_make("fakesink", NULL);
+
+    if (drain != NULL)
+    {
+        g_object_set(drain, "sync", FALSE, "async", FALSE, NULL);
+        gst_bin_add(GST_BIN(self->pipeline), drain);
+        gst_element_sync_state_with_parent(drain);
+
+        GstPad *drainSink = gst_element_get_static_pad(drain, "sink");
+
+        if (drainSink != NULL)
+        {
+            gst_pad_link(pad, drainSink);
+            gst_object_unref(drainSink);
+        }
+    }
+}
+
 // rtspsrc adds a src pad per stream once the RTSP SETUP completes. Link the first H.264 video
 // stream into the fragmented-MP4 mux chain; drain any other stream (audio/metadata) into a
 // fakesink so its RTP source does not error out "not-linked" and tear down the pipeline.
@@ -173,27 +195,13 @@ static void onPadAdded(GstElement *src, GstPad *pad, gpointer userData)
 
     if (!isVideo)
     {
-        GstElement *drain = gst_element_factory_make("fakesink", NULL);
-
-        if (drain != NULL)
-        {
-            g_object_set(drain, "sync", FALSE, "async", FALSE, NULL);
-            gst_bin_add(GST_BIN(self->pipeline), drain);
-            gst_element_sync_state_with_parent(drain);
-
-            GstPad *drainSink = gst_element_get_static_pad(drain, "sink");
-
-            if (drainSink != NULL)
-            {
-                gst_pad_link(pad, drainSink);
-                gst_object_unref(drainSink);
-            }
-        }
+        drainPadToFakesink(self, pad);
 
         return;
     }
 
-    // Only the first video stream is muxed; ignore any subsequent video pad.
+    // Only the first video stream is muxed; drain any subsequent video pad to a fakesink (leaving it
+    // unlinked makes rtspsrc report a not-linked error that tears down the whole pipeline).
     g_mutex_lock(&self->lock);
     gboolean alreadyLinked = self->videoLinked;
     self->videoLinked = TRUE;
@@ -201,6 +209,8 @@ static void onPadAdded(GstElement *src, GstPad *pad, gpointer userData)
 
     if (alreadyLinked)
     {
+        drainPadToFakesink(self, pad);
+
         return;
     }
 
