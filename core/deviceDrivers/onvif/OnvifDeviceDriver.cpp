@@ -176,6 +176,26 @@ namespace
         return true;
     }
 
+    // Return the offset of the first character that terminates a URL authority (path, query, or
+    // fragment) at or after authStart, per RFC 3986. A query or fragment can precede any '/', so the
+    // authority must not be scanned for '/' alone or userinfo could survive credential redaction.
+    size_t UrlAuthorityEnd(const std::string &url, size_t authStart)
+    {
+        size_t end = std::string::npos;
+
+        for (char delim : {'/', '?', '#'})
+        {
+            size_t pos = url.find(delim, authStart);
+
+            if (pos != std::string::npos && (end == std::string::npos || pos < end))
+            {
+                end = pos;
+            }
+        }
+
+        return end;
+    }
+
     // Remove any "user:pass@" userinfo from an http(s) URL authority so a forged XAddr cannot smuggle
     // credentials into the cached service URL (or its logs).
     std::string StripUrlUserinfo(const std::string &url)
@@ -188,7 +208,7 @@ namespace
         }
 
         size_t authStart = schemeEnd + 3;
-        size_t authEnd = url.find('/', authStart);
+        size_t authEnd = UrlAuthorityEnd(url, authStart);
         std::string authority =
             url.substr(authStart, authEnd == std::string::npos ? std::string::npos : authEnd - authStart);
         size_t at = authority.rfind('@');
@@ -213,7 +233,7 @@ namespace
         }
 
         size_t authStart = schemeEnd + 3;
-        size_t authEnd = url.find('/', authStart);
+        size_t authEnd = UrlAuthorityEnd(url, authStart);
         std::string authority =
             url.substr(authStart, authEnd == std::string::npos ? std::string::npos : authEnd - authStart);
         size_t at = authority.rfind('@');
