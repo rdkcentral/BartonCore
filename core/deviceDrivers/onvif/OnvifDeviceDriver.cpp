@@ -421,6 +421,14 @@ void OnvifDriver::DiscoveryWorker()
         DiscoveredCamera cam;
         cam.serviceUrl = match.xaddrs.front();
 
+        // The XAddr comes from an unauthenticated ProbeMatch; accept only http(s) URLs before caching
+        // it as the libcurl POST target so a forged response cannot redirect SOAP calls elsewhere.
+        if (cam.serviceUrl.rfind("http://", 0) != 0 && cam.serviceUrl.rfind("https://", 0) != 0)
+        {
+            icLogWarn(LOG_TAG, "skipping ONVIF camera with non-HTTP service URL");
+            continue;
+        }
+
         // Anonymous device information (no credentials required for most cameras).
         OnvifSoapClient client(cam.serviceUrl);
         OnvifDeviceInfo info;
