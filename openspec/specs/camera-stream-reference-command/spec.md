@@ -169,14 +169,22 @@ raised to admit them.
 
 ### Requirement: cameraStream reports progress to user
 
-The command SHALL emit human-readable progress messages to stdout at each stage of the flow:
+The command SHALL emit human-readable progress messages to stdout at each stage of the flow. The
+common stages are:
 - Session created (sessionId)
 - Streaming initiated (protocol, entryPoint)
+- Media flowing / connected
+- Stream ended (reason)
+
+For the WebRTC protocol the command SHALL additionally report the signaling stages:
 - Local SDP sent (the offer, or the answer to the camera's offer)
 - Remote SDP received (the camera's answer or offer)
 - ICE candidates exchanged
-- Media flowing / connected
-- Stream ended (reason)
+
+For the ONVIF protocol the command SHALL instead report the URL/RTSP stages:
+- Credentials applied (when `authRequired` is true)
+- RTSP media URL requested (`getMediaUrl`) and received (the `mediaUrl` event)
+- RTSP source connected (media flowing)
 
 #### Scenario: Progress output during successful stream
 - **WHEN** `cameraStream` completes signaling and media begins flowing
