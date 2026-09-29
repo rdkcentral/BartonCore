@@ -119,7 +119,12 @@ static bool snapshotFetch(const gchar *url, const gchar *user, const gchar *pass
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, snapshotWriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, out);
+    // Cameras (e.g. Reolink) commonly redirect the http snapshot endpoint to https on the same host,
+    // so redirects are followed but bounded and confined to HTTP(S). The snapshot URL is operator-
+    // provided in this developer reference app, so a redirect to an unrelated host is an accepted
+    // limitation here (a production integration should pin the redirect target to the camera host).
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 
     // Restrict to HTTP(S), including across redirects, so a malicious snapshot URL cannot coerce
@@ -245,7 +250,18 @@ static bool onvifRun(CameraStreamBackend *base, CameraStreamContext *ctx)
     // Interim auth model: credentials are supplied via --user/--pass and written to the onvif
     // endpoint so the driver can authenticate its SOAP/RTSP calls. This primitive per-device
     // credential mechanism is expected to be reworked with future configuration support.
-    if ((self->user != NULL && self->user[0] != '\0') || (self->pass != NULL && self->pass[0] != '\0'))
+    bool haveUser = (self->user != NULL && self->user[0] != '\0');
+    bool havePass = (self->pass != NULL && self->pass[0] != '\0');
+
+    // The ONVIF credential is a pair; a half-supplied pair would authenticate incorrectly, so reject it.
+    if (haveUser != havePass)
+    {
+        emitError("[camera-stream] Incomplete credentials: supply both --user and --pass (or neither).\n");
+
+        return false;
+    }
+
+    if (haveUser && havePass)
     {
         emitOutput("[camera-stream] Applying credentials...\n");
 
@@ -259,10 +275,14 @@ static bool onvifRun(CameraStreamBackend *base, CameraStreamContext *ctx)
 
     g_autofree gchar *authRequired = cameraDeviceSessionOnvifReadAuthRequired(session);
 
-    if (g_strcmp0(authRequired, "true") == 0 && (self->user == NULL || self->user[0] == '\0'))
+    // When the camera requires auth, missing credentials cannot succeed: fail here with a clear error
+    // rather than proceeding into the SOAP/RTSP flow and reporting a generic 15s timeout.
+    if (g_strcmp0(authRequired, "true") == 0 && !(haveUser && havePass))
     {
-        emitOutput("[camera-stream] Note: camera reports authRequired=true but no --user/--pass was "
-                   "supplied; the stream may be rejected.\n");
+        emitError("[camera-stream] Camera requires credentials but none were supplied; "
+                  "provide both --user and --pass.\n");
+
+        return false;
     }
 
     // Optional still capture, independent of the video stream. A failed snapshot is non-fatal.

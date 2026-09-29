@@ -99,9 +99,12 @@ static gboolean parseOutputUri(const gchar *uri, gchar **filePathOut, gchar **se
     {
         *colon = '\0';
 
-        guint64 parsedPort = g_ascii_strtoull(colon + 1, NULL, 10);
+        gchar *endptr = NULL;
+        guint64 parsedPort = g_ascii_strtoull(colon + 1, &endptr, 10);
 
-        if (parsedPort == 0 || parsedPort > G_MAXUINT16)
+        // Require the entire token to be digits (endptr at the terminator) so "8088junk" is rejected
+        // rather than silently truncated to 8088.
+        if (endptr == colon + 1 || *endptr != '\0' || parsedPort == 0 || parsedPort > G_MAXUINT16)
         {
             return FALSE; // out-of-range or unparseable port
         }
@@ -116,6 +119,18 @@ static gboolean parseOutputUri(const gchar *uri, gchar **filePathOut, gchar **se
 // ============================================================================
 // Command implementation
 // ============================================================================
+
+// Clears the session callbacks when the enclosing scope exits. Used as a scope-bound cleanup so a
+// late resource-updated event cannot invoke a callback against user data that is about to be freed.
+static void clearSessionCallbacks(CameraDeviceSession **session)
+{
+    if (*session != NULL)
+    {
+        cameraDeviceSessionSetStatusCallback(*session, NULL, NULL);
+        cameraDeviceSessionSetWebrtcCallbacks(*session, NULL, NULL, NULL);
+        cameraDeviceSessionSetOnvifCallbacks(*session, NULL, NULL, NULL);
+    }
+}
 
 // Open the abstract camera session, start the stream, and drive the technology-specific backend.
 // Every handle is scope bound (g_autoptr) so early returns tear everything down in the right order:
@@ -137,11 +152,18 @@ static bool runCameraStream(BCoreClient *client,
         return false;
     }
 
-    // Create the context and register the session status callback before opening, so a webrtcError or
-    // session-ended event arriving during open/start is not dropped. Declaring ctx before the backend
-    // also makes g_autoptr tear down backend -> context -> session, matching the note above.
+    // Register the session status callback before opening so a webrtcError or session-ended event
+    // arriving during open/start is not dropped.
     g_autoptr(CameraStreamContext) ctx =
         cameraStreamContextCreate(session, filePath, serveHost, servePort, &sigintRequested);
+    g_autoptr(CameraStreamBackend) backend = NULL;
+
+    // Declared after the autoptrs so it runs first on every exit: the callbacks are cleared while the
+    // backend/context/session are all still alive, then g_autoptr tears down backend -> context ->
+    // session. Each early return therefore unwinds safely without a shared cleanup label.
+    __attribute__((cleanup(clearSessionCallbacks))) CameraDeviceSession *callbackGuard = session;
+    (void) callbackGuard;
+
     cameraDeviceSessionSetStatusCallback(session, cameraStreamContextOnSessionEnded, ctx);
 
     emitOutput("[camera-stream] Creating session...\n");
@@ -172,23 +194,14 @@ static bool runCameraStream(BCoreClient *client,
                entryPoint != NULL ? entryPoint : "unknown");
 
     // Select the backend for the reported technology; unknown protocols are rejected by the factory.
-    g_autoptr(CameraStreamBackend) backend = cameraStreamBackendCreate(protocol, options);
+    backend = cameraStreamBackendCreate(protocol, options);
 
     if (backend == NULL)
     {
         return false;
     }
 
-    bool result = cameraStreamBackendRun(backend, ctx);
-
-    // The session callbacks capture ctx / the backend (self), both scope-bound autoptrs freed when
-    // this function returns. Clear every session callback before the session (also scope bound) is
-    // torn down so a late resource-updated event cannot invoke one against a dangling pointer (UAF).
-    cameraDeviceSessionSetStatusCallback(session, NULL, NULL);
-    cameraDeviceSessionSetWebrtcCallbacks(session, NULL, NULL, NULL);
-    cameraDeviceSessionSetOnvifCallbacks(session, NULL, NULL, NULL);
-
-    return result;
+    return cameraStreamBackendRun(backend, ctx);
 }
 
 static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
