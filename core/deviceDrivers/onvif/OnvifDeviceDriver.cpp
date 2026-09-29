@@ -195,6 +195,39 @@ namespace
                (authEnd == std::string::npos ? std::string() : url.substr(authEnd));
     }
 
+    // Return the host of an http(s)/rtsp URL (without userinfo or port; brackets kept for IPv6).
+    std::string UrlHost(const std::string &url)
+    {
+        size_t schemeEnd = url.find("://");
+
+        if (schemeEnd == std::string::npos)
+        {
+            return "";
+        }
+
+        size_t authStart = schemeEnd + 3;
+        size_t authEnd = url.find('/', authStart);
+        std::string authority =
+            url.substr(authStart, authEnd == std::string::npos ? std::string::npos : authEnd - authStart);
+        size_t at = authority.rfind('@');
+
+        if (at != std::string::npos)
+        {
+            authority = authority.substr(at + 1);
+        }
+
+        if (!authority.empty() && authority.front() == '[')
+        {
+            size_t close = authority.find(']');
+
+            return close == std::string::npos ? authority : authority.substr(0, close + 1);
+        }
+
+        size_t colon = authority.rfind(':');
+
+        return colon == std::string::npos ? authority : authority.substr(0, colon);
+    }
+
     // updateResource() is safe to call from a driver worker thread (the same pattern the Zigbee driver
     // uses from its receive threads). It emits the resource-updated event that carries the URL to clients.
     void EmitResourceUpdate(const std::string &uuid,
@@ -246,7 +279,10 @@ static void destroyDriver(void *ctx)
     delete self;
 }
 
-__attribute__((constructor)) static void onvifDriverRegister(void)
+// Registration entry point. Called from deviceDriverManagerInitialize under BARTON_CONFIG_ONVIF (an
+// explicit reference, unlike a self-registering constructor) so the driver object is pulled from the
+// static archive and its registration actually runs for BartonCoreStatic consumers.
+extern "C" void onvifDeviceDriverInitialize(void)
 {
     icLogDebug(LOG_TAG, "registering ONVIF camera device driver");
 
@@ -292,10 +328,17 @@ std::string OnvifDriver::ReadServiceUrl(const std::string &uuid)
 
     if (meta != nullptr)
     {
-        std::string url(meta);
+        std::string url = StripUrlUserinfo(meta);
         free(meta);
 
-        return url;
+        // Device metadata is client-writable, so re-validate the scheme on every read (not just at
+        // discovery) before using it as an authenticated SOAP target.
+        if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0)
+        {
+            return url;
+        }
+
+        icLogWarn(LOG_TAG, "ignoring non-HTTP persisted ONVIF service URL for %s", uuid.c_str());
     }
 
     DiscoveredCamera cam;
@@ -704,6 +747,18 @@ bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
         {
             icLogError(LOG_TAG,
                        "%s for %s returned an unexpected URL scheme; not emitting",
+                       snapshot ? "getSnapshotUrl" : "getMediaUrl",
+                       uuid.c_str());
+
+            return;
+        }
+
+        // Pin the URL to the discovered camera's host so a compromised camera cannot redirect the
+        // client (and the credentials it applies) to an attacker-controlled authority.
+        if (UrlHost(url) != UrlHost(serviceUrl))
+        {
+            icLogError(LOG_TAG,
+                       "%s for %s returned a URL on a different host than the camera; not emitting",
                        snapshot ? "getSnapshotUrl" : "getMediaUrl",
                        uuid.c_str());
 

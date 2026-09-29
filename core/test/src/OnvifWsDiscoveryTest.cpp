@@ -37,6 +37,8 @@ TEST(OnvifWsDiscovery, ProbeMessageContainsRequiredElements)
     // ONVIF requires the WS-Addressing 2005/08 namespace (not the older 2004/08 one).
     EXPECT_NE(probe.find("http://www.w3.org/2005/08/addressing"), std::string::npos);
     EXPECT_EQ(probe.find("2004/08/addressing"), std::string::npos);
+    // An anonymous ReplyTo tells responders where to send the unicast ProbeMatch.
+    EXPECT_NE(probe.find("http://www.w3.org/2005/08/addressing/anonymous"), std::string::npos);
 }
 
 TEST(OnvifWsDiscovery, ParsesRelatesToWhenPresentAndAbsent)
