@@ -462,6 +462,7 @@ if (BCORE_ONVIF AND BUILD_TESTING)
                 ${ONVIF_DIR}/OnvifXml.cpp
         LIBS ${ONVIF_TEST_CURL_LINK_LIBRARIES} ${ONVIF_TEST_XML_LINK_LIBRARIES} gmock
              xhDeviceDescriptors BartonCommon::xhTypes BartonCommon::xhLog BartonCommon::xhUtil
+             BartonCommon::xhXmlHelper
         INCLUDES ${ONVIF_DIR} ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/api/c/public ${FFF_INCLUDE_DIR}
                  ${ONVIF_TEST_XML_INCLUDE_DIRS} ${ONVIF_TEST_CURL_INCLUDE_DIRS}
