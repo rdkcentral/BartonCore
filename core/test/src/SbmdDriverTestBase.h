@@ -100,14 +100,14 @@ namespace barton::test
          */
         static void InitRuntime()
         {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(512 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
-        static void ShutdownRuntime() { MQuickJsRuntime::Shutdown(); }
+        static void ShutdownRuntime() { MQuickJsRuntime::Instance().Shutdown(); }
 
         void SetUp() override
         {
@@ -116,7 +116,7 @@ namespace barton::test
             g_setPersistentDataCalls.clear();
         }
 
-        JSContext *Ctx() { return MQuickJsRuntime::GetSharedContext(); }
+        JSContext *Ctx() { return MQuickJsRuntime::Instance().GetSharedContext(); }
 
         HandlerContext MakeContext(const std::string &deviceUuid,
                                    const std::string &endpointId = "1",
@@ -176,7 +176,7 @@ namespace barton::test
         {
             std::string expr =
                 std::string("(function(){return Sbmd.Tlv.encodeStruct(") + values + "," + schema + ");})()";
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             JSValue val = JS_Eval(Ctx(), expr.c_str(), expr.size(), "<test>", JS_EVAL_RETVAL);
             EXPECT_FALSE(JS_IsException(val)) << "TLV encode failed for: " << expr;
             JSCStringBuf buf;
@@ -188,7 +188,7 @@ namespace barton::test
 
         /**
          * Decode a TLV base64 string and return the JS decoded object.
-         * Caller must hold MQuickJsRuntime::GetMutex().
+         * Caller must hold MQuickJsRuntime::Instance().GetMutex().
          */
         JSValue DecodeTlv(const std::string &tlvBase64)
         {
