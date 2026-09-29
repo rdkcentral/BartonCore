@@ -2843,18 +2843,20 @@ void updateResource(const char *deviceUuid,
                     cJSON *metadata)
 {
     // dont debug print on frequently updated resource ids to preserve log files
+    icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid, endpointId, resourceId, false);
+
     if (resourceId != NULL && strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
     {
+        // Redact the value of sensitive resources (e.g. credentials) so a secret is never logged.
+        bool sensitive = (resource != NULL && (resource->mode & RESOURCE_MODE_SENSITIVE) != 0);
         icLogDebug(LOG_TAG,
                    "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
                    __FUNCTION__,
                    deviceUuid,
                    stringCoalesce(endpointId),
                    resourceId,
-                   stringCoalesce(newValue));
+                   sensitive ? "<redacted>" : stringCoalesce(newValue));
     }
-
-    icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid, endpointId, resourceId, false);
 
     if (resource != NULL)
     {
