@@ -39,6 +39,10 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 - **WHEN** an inactive driver is activated and the re-read spec's claim-identity fields (name, device types, vendor/product IDs, device class) no longer match the claim stub, or the spec file cannot be read or parsed
 - **THEN** activation fails, the failure is logged, and the device bind is aborted rather than dispatching against a mismatched or partially built driver
 
+#### Scenario: Activation rejects a spec whose device-class or profile version changed
+- **WHEN** a device binds and the re-read spec's `barton.deviceClassVersion` or an endpoint `profileVersion` differs from the value the driver was registered with at load
+- **THEN** the bind is rejected and the driver is deactivated, because commissioning and reconfiguration publish/compare the versions cached at registration while the re-read handlers would run the changed spec
+
 #### Scenario: Deactivate then reactivate round trip
 - **WHEN** a driver is activated, then deactivated after its last device is removed, then a new matching device is later commissioned
 - **THEN** the driver is activated again from disk and dispatches to its handlers correctly

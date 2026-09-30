@@ -214,6 +214,9 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
 {
     icDebug("Created SBMD driver for: %s", driver->GetName().c_str());
 
+    // Capture the spec's raw device-class version so a later disk re-read can be checked for change.
+    constructedDeviceClassVersion = driver->GetRegistration().barton.deviceClassVersion;
+
     // Register endpoint profile versions so deviceServiceDeviceNeedsReconfiguring()
     // can detect profile version changes and trigger reconfiguration.
     DeviceDriver *dd = GetDriver();
@@ -307,6 +310,14 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             }
         }
     } activationGuard {driver, activatedHere};
+
+    // A re-read spec must not change the versions the base driver cached at construction; otherwise
+    // commissioning/reconfiguration would publish/compare stale versions while handlers run the new
+    // spec. Reject such a change (the guard rolls the activation back).
+    if (activatedHere && !ActivatedSpecMatchesCachedVersions())
+    {
+        return false;
+    }
 
     // The dispatch tables on the driver handle everything.
     device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
@@ -407,6 +418,41 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     {
         metrics.RecordDriverActivated(
             driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1, activationDurationMs);
+    }
+
+    return true;
+}
+
+bool SpecBasedMatterDeviceDriver::ActivatedSpecMatchesCachedVersions()
+{
+    const auto &reg = driver->GetRegistration();
+
+    if (reg.barton.deviceClassVersion != constructedDeviceClassVersion)
+    {
+        icError("SBMD driver '%s' device-class version changed on activation (loaded %u, spec %u); refusing bind",
+                driver->GetName().c_str(),
+                constructedDeviceClassVersion,
+                reg.barton.deviceClassVersion);
+        return false;
+    }
+
+    DeviceDriver *dd = GetDriver();
+
+    for (const auto &endpoint : reg.endpoints)
+    {
+        void *cached = dd->endpointProfileVersions != nullptr
+                           ? hashMapGet(dd->endpointProfileVersions,
+                                        const_cast<char *>(endpoint.profile.c_str()),
+                                        static_cast<uint16_t>(endpoint.profile.length() + 1))
+                           : nullptr;
+
+        if (cached == nullptr || *static_cast<uint8_t *>(cached) != static_cast<uint8_t>(endpoint.profileVersion))
+        {
+            icError("SBMD driver '%s' endpoint '%s' profile version changed on activation; refusing bind",
+                    driver->GetName().c_str(),
+                    endpoint.id.c_str());
+            return false;
+        }
     }
 
     return true;

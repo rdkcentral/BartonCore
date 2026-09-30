@@ -152,10 +152,23 @@ namespace barton
     private:
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
+        // Raw barton.deviceClassVersion captured from the spec at construction, used to detect a
+        // version change on a later disk re-read (GetDeviceClassVersion() adds a model-version
+        // offset, so it cannot be compared against the raw spec value directly).
+        uint32_t constructedDeviceClassVersion = 0;
+
         static SpecBasedMatterDeviceDriverMetrics metrics;
 
         // Process-wide count of currently-activated SBMD drivers, for observability.
         static std::atomic<int64_t> activeDriverCount;
+
+        /**
+         * After an on-demand activation, verify the re-read spec still carries the device-class
+         * version and endpoint profile versions the base driver cached at construction. A change
+         * would leave commissioning/reconfiguration publishing stale versions while handlers run
+         * the new spec, so activation is rejected on mismatch.
+         */
+        bool ActivatedSpecMatchesCachedVersions();
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);

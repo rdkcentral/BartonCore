@@ -70,6 +70,8 @@ Change `SbmdDriver::Activate()` to read the spec content from `filePath` (it cur
 
 After re-parsing, validate the re-read spec against the claim stub before going active: compare the claim-identity fields (name, `matter.deviceTypes`, `vendorId`, `productId`, device class). On any mismatch, fail activation, log, and abort the bind. This is scoped to the fields that drove the claim decision — not a deep structural diff — so cosmetic edits to handlers do not falsely reject, but a spec that no longer matches what claimed the device can never dispatch against it.
 
+Separately, `SpecBasedMatterDeviceDriver` caches the device-class version and endpoint profile versions at construction (published to the device-service layer for commissioning/reconfiguration). After a bind-time activation it verifies the re-read spec still carries those same versions and rejects the bind (rolling the activation back) on any change, so the device-service layer never publishes/compares a version that disagrees with the handlers now running.
+
 *Alternatives considered:* Trust the file without validation — rejected: a silently-diverged spec could bind handlers inconsistent with the claim. Compare a whole-file hash captured at load — rejected: rejects benign whitespace/comment edits and couples activation to byte-exactness rather than the claim contract.
 
 ### D5 — Thread safety

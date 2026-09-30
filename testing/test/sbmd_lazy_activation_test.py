@@ -34,13 +34,14 @@ through the activation observability metrics:
 """
 
 import json
+import threading
 import time
 
 import pytest
 from testing.mocks.devices.matter.matter_temperature_sensor import (
     MatterTemperatureSensor,
 )
-from testing.utils.barton_utils import commission_device
+from testing.utils.barton_utils import commission_device, resource_uri
 
 pytestmark = [
     pytest.mark.requires_matterjs,
@@ -232,3 +233,92 @@ def test_driver_stays_active_until_last_device_removed(
         )
     finally:
         second._cleanup()
+
+
+def test_deferred_op_settled_when_last_device_removed(
+    default_environment, matter_deferred_cmd_test_device
+):
+    """
+    Removing the last device while a deferred operation is pending must settle that
+    operation (its parking promise resolves so the blocked caller returns) and
+    deactivate the driver, and a late command response must be handled safely.
+    """
+    device = commission_device(
+        default_environment, matter_deferred_cmd_test_device, "deferredCmdTest"
+    )
+    client = default_environment.get_client()
+    uuid = device.props.uuid
+
+    assert (_gauge_sum(_metrics(client), "sbmd.driver.active.count") or 0) >= 1
+    deactivations_before = _gauge_sum(_metrics(client), "sbmd.driver.deactivation") or 0
+
+    # Withhold the device's Toggle response so the deferred op stays pending.
+    matter_deferred_cmd_test_device.sideband.send("armToggleHang")
+
+    # execute_resource blocks on the parked deferred op, so run it off-thread.
+    exec_result = {}
+
+    def run_toggle():
+        try:
+            client.execute_resource(
+                resource_uri(device, "toggle", endpoint_id=1), "", ""
+            )
+            exec_result["returned"] = True
+        except Exception as e:  # noqa: BLE001 - record whatever the blocked call raises
+            exec_result["error"] = e
+
+    worker = threading.Thread(target=run_toggle, daemon=True)
+    worker.start()
+
+    # Wait until the deferred op is actually in flight before removing the device.
+    deadline = time.time() + 10
+
+    while time.time() < deadline:
+        if (_gauge_sum(_metrics(client), "sbmd.deferred.in_flight") or 0) >= 1:
+            break
+
+        time.sleep(0.05)
+
+    assert (
+        _gauge_sum(_metrics(client), "sbmd.deferred.in_flight") or 0
+    ) >= 1, "deferred operation never parked"
+
+    # Remove the last device while the op is pending.
+    assert client.remove_device(uuid), "remove_device failed"
+
+    # The parked op must be settled — the blocked execute_resource must return, not hang.
+    worker.join(timeout=20)
+    assert (
+        not worker.is_alive()
+    ), "execute_resource did not return after device removal; deferred op left unresolved"
+
+    # The driver deactivates once its last device is gone.
+    active = None
+    deactivation = None
+    deadline = time.time() + 20
+
+    while time.time() < deadline:
+        metrics = _metrics(client)
+        active = _gauge_sum(metrics, "sbmd.driver.active.count")
+        deactivation = _gauge_sum(metrics, "sbmd.driver.deactivation")
+
+        if (deactivation or 0) > deactivations_before and (active or 0) == 0:
+            break
+
+        time.sleep(0.5)
+
+    assert (
+        deactivation or 0
+    ) > deactivations_before, (
+        "driver did not deactivate after its last device was removed"
+    )
+    assert (
+        active or 0
+    ) == 0, (
+        "sbmd.driver.active.count gauge should return to 0 after last device removed"
+    )
+
+    # Release the withheld response; the now-late callback must be handled safely (Barton alive).
+    matter_deferred_cmd_test_device.sideband.send("releaseToggle")
+    time.sleep(1)
+    assert json.loads(client.get_telemetry()) is not None
