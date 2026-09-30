@@ -190,9 +190,6 @@ namespace barton
         // Release the load-time handler roots before freeing the collections that hold them.
         ReleaseHandlers();
 
-        // Free the retained source; a shrunk driver re-reads its spec from disk on activation.
-        std::string().swap(source);
-
         ReleaseHeavyRegistration();
     }
 
@@ -230,10 +227,10 @@ namespace barton
 
     void SbmdDriver::ReleaseHeavyRegistration()
     {
-        // Free the heavy parsed collections (swap-with-empty releases capacity), leaving only the
-        // claim metadata (name, device class, matter/reporting meta, file path) resident. The source
-        // text is released separately by Shrink; on deactivation it is already absent in production
-        // because the driver was shrunk at load.
+        // Free the retained source and the heavy parsed collections (swap-with-empty releases
+        // capacity), leaving only the claim metadata (name, device class, matter/reporting meta,
+        // file path) resident. A subsequent activation re-reads the spec from disk.
+        std::string().swap(source);
         std::vector<SbmdEndpoint>().swap(registration->endpoints);
         std::unordered_map<std::string, SbmdAlias>().swap(registration->aliases);
         std::vector<SbmdDeviceHandler>().swap(registration->attributeHandlers);

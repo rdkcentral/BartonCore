@@ -255,11 +255,16 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
 {
     // Activate the driver on first bind. Both fresh commissioning and post-restart
     // re-synchronization funnel through here, and the dispatch access below needs a live driver.
+    bool activatedHere = false;
+    double activationDurationMs = 0.0;
+
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
         if (!driver->IsActivated())
         {
+            auto activateStart = std::chrono::steady_clock::now();
+
             if (!driver->Activate(MQuickJsRuntime::Instance().GetSharedContext()))
             {
                 icError("Failed to activate SBMD driver '%s' for device %s",
@@ -268,9 +273,34 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 return false;
             }
 
-            metrics.RecordDriverActivated(driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1);
+            activationDurationMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - activateStart).count();
+            activatedHere = true;
         }
     }
+
+    // If this bind activated the driver but does not complete, roll the activation back so the
+    // driver is not left active with zero bound devices (its removal hook would never run, and the
+    // active-driver gauge would stay inflated).
+    struct ActivationGuard
+    {
+        SbmdDriver *drv;
+        bool active;
+        bool committed = false;
+
+        ~ActivationGuard()
+        {
+            if (active && !committed)
+            {
+                std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+                if (drv->IsActivated())
+                {
+                    drv->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
+                }
+            }
+        }
+    } activationGuard {driver, activatedHere};
 
     // The dispatch tables on the driver handle everything.
     device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
@@ -359,7 +389,21 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         }
     }
 
-    return MatterDeviceDriver::AddDevice(std::move(device));
+    if (!MatterDeviceDriver::AddDevice(std::move(device)))
+    {
+        return false;
+    }
+
+    // The device is bound; commit the activation and record it now (not before the bind could fail).
+    activationGuard.committed = true;
+
+    if (activatedHere)
+    {
+        metrics.RecordDriverActivated(
+            driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1, activationDurationMs);
+    }
+
+    return true;
 }
 
 void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()

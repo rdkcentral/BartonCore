@@ -37,6 +37,9 @@ import json
 import time
 
 import pytest
+from testing.mocks.devices.matter.matter_temperature_sensor import (
+    MatterTemperatureSensor,
+)
 from testing.utils.barton_utils import commission_device
 
 pytestmark = [
@@ -55,6 +58,20 @@ def _gauge_sum(metrics, name):
 
 def _metrics(client):
     return json.loads(client.get_telemetry()).get("metrics", {})
+
+
+def _wait_for_device_count(client, device_class, count, timeout=20.0):
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        devices = client.get_devices_by_device_class(device_class)
+
+        if len(devices) >= count:
+            return devices
+
+        time.sleep(0.25)
+
+    return client.get_devices_by_device_class(device_class)
 
 
 def test_drivers_inactive_at_startup(default_environment):
@@ -139,3 +156,77 @@ def test_removal_deactivates_driver(
     assert (active or 0) == 0, (
         "sbmd.driver.active.count gauge should return to 0 after last device removed"
     )
+
+
+def test_driver_stays_active_until_last_device_removed(
+    default_environment, matter_temperature_sensor
+):
+    """
+    With two devices bound to the same driver, removing one leaves the driver
+    active (no deactivation, gauge unchanged); only removing the last device
+    deactivates it.
+    """
+    client = default_environment.get_client()
+
+    # First sensor via the fixture.
+    client.commission_device(
+        matter_temperature_sensor.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+
+    # Second sensor of the same class claims the same SBMD driver.
+    second = MatterTemperatureSensor()
+    second.start()
+
+    try:
+        client.commission_device(second.get_commissioning_code(), 100)
+        devices = _wait_for_device_count(client, "environmentalSensor", 2)
+        assert len(devices) == 2, (
+            f"expected 2 environmental sensors, got {len(devices)}"
+        )
+        uuids = [d.props.uuid for d in devices]
+
+        # One driver, two devices: exactly one active driver.
+        assert (_gauge_sum(_metrics(client), "sbmd.driver.active.count") or 0) == 1
+        deactivations_before = (
+            _gauge_sum(_metrics(client), "sbmd.driver.deactivation") or 0
+        )
+
+        # Remove the first device; the driver must stay active (second still bound).
+        assert client.remove_device(uuids[0]), "remove_device failed"
+
+        # Allow any (incorrect) deactivation time to occur, then confirm it did not.
+        time.sleep(4)
+        metrics = _metrics(client)
+        assert (_gauge_sum(metrics, "sbmd.driver.deactivation") or 0) == deactivations_before, (
+            "driver deactivated while a second device was still bound"
+        )
+        assert (_gauge_sum(metrics, "sbmd.driver.active.count") or 0) == 1, (
+            "active-driver gauge changed while a second device was still bound"
+        )
+
+        # Remove the last device; now the driver deactivates.
+        assert client.remove_device(uuids[1]), "remove_device failed"
+
+        active = None
+        deactivation = None
+        deadline = time.time() + 20
+
+        while time.time() < deadline:
+            metrics = _metrics(client)
+            active = _gauge_sum(metrics, "sbmd.driver.active.count")
+            deactivation = _gauge_sum(metrics, "sbmd.driver.deactivation")
+
+            if (deactivation or 0) > deactivations_before and (active or 0) == 0:
+                break
+
+            time.sleep(0.5)
+
+        assert (deactivation or 0) > deactivations_before, (
+            "driver did not deactivate after its last device was removed"
+        )
+        assert (active or 0) == 0, (
+            "sbmd.driver.active.count gauge should return to 0 after last device removed"
+        )
+    finally:
+        second._cleanup()

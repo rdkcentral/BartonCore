@@ -433,7 +433,9 @@ namespace
 
     TEST_F(SbmdDriverTest, ReactivateAfterDeactivate)
     {
-        auto driver = CreateDriver();
+        // Deactivation releases the source, so re-activation re-reads the spec from disk.
+        auto path = std::filesystem::temp_directory_path() / "sbmd_reactivate.sbmd.js";
+        auto driver = CreateDriverFromFile(kDriverSource, path.string());
         ASSERT_NE(driver, nullptr);
 
         {
@@ -461,6 +463,8 @@ namespace
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
+
+        std::filesystem::remove(path);
     }
 
     TEST_F(SbmdDriverTest, CommandHandlerCallableAfterActivation)
