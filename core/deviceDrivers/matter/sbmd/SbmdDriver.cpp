@@ -227,10 +227,21 @@ namespace barton
 
     void SbmdDriver::ReleaseHeavyRegistration()
     {
-        // Free the retained source and the heavy parsed collections (swap-with-empty releases
-        // capacity), leaving only the claim metadata (name, device class, matter/reporting meta,
-        // file path) resident. A subsequent activation re-reads the spec from disk.
+        // Reduce the registration to its claim stub — name, file path, device class, and the matter
+        // device-type/vendor/product IDs used for claiming — releasing the source, the heavy parsed
+        // collections, and every non-claim metadata field (swap-with-empty releases capacity). A
+        // subsequent activation re-reads the spec from disk and repopulates everything.
         std::string().swap(source);
+
+        registration->schemaVersion.clear();
+        registration->schemaVersion.shrink_to_fit();
+        registration->driverVersion = 0;
+        registration->barton.deviceClassVersion = 0;
+        registration->matter.revision.reset();
+        std::vector<uint32_t>().swap(registration->matter.featureClusters);
+        registration->matter.defaultTimeoutMs.reset();
+        registration->reporting = SbmdReporting {};
+
         std::vector<SbmdEndpoint>().swap(registration->endpoints);
         std::unordered_map<std::string, SbmdAlias>().swap(registration->aliases);
         std::vector<SbmdDeviceHandler>().swap(registration->attributeHandlers);

@@ -101,6 +101,13 @@ namespace barton
 
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
+        /**
+         * Publish the true count of currently-activated SBMD drivers to the active-driver gauge.
+         * Called by the factory after startup registration so the gauge reflects actual driver
+         * state (0 when all drivers are loaded inactive), not just runtime activation deltas.
+         */
+        static void SyncActiveDriverCount(int64_t activeCount);
+
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
@@ -258,6 +265,12 @@ namespace barton
          * Complete a pending operation — resolve the parking promise and clean up.
          */
         void CompletePendingOperation(uint64_t pendingId, bool success);
+
+        /**
+         * Complete every outstanding deferred operation as a failure, releasing their handler roots.
+         * Matter-thread-confined, like pendingOperations itself.
+         */
+        void CancelAllPendingOperations();
 
         /**
          * Release the held JS handler references for a pending operation.

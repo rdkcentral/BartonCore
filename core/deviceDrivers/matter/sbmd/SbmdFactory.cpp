@@ -86,6 +86,20 @@ bool SbmdFactory::RegisterDrivers()
         RegisterDriversFromDirectory(dirPath, allRegistered);
     }
 
+    // Publish the true active-driver count so observability reflects actual startup state. Drivers
+    // are loaded inactive, so this is normally 0; a non-zero value would indicate eager activation.
+    int64_t activeDrivers = 0;
+
+    for (const auto &sbmdDriver : drivers)
+    {
+        if (sbmdDriver->IsActivated())
+        {
+            activeDrivers++;
+        }
+    }
+
+    SpecBasedMatterDeviceDriver::SyncActiveDriverCount(activeDrivers);
+
     return allRegistered;
 }
 

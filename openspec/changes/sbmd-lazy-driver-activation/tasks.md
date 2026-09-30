@@ -1,6 +1,6 @@
 ## 1. SbmdDriver: split claim stub from active registration
 
-- [x] 1.1 Introduce an always-resident `SbmdClaimStub` (name, `matter.deviceTypes`, `vendorId`, `productId`, device class, `filePath`) populated at construction/load; keep it valid regardless of activation state.
+- [x] 1.1 Keep the claim metadata (name, `matter.deviceTypes`, `vendorId`, `productId`, device class, `filePath`) resident on `SbmdDriver`'s `SbmdRegistration` in every state; while inactive the registration is reduced to just those claim fields (no separate stub type — the claim accessors read the reduced registration directly).
 - [x] 1.2 Change `SbmdDriver::Activate()` to read the spec content from `filePath` on disk (instead of the retained in-memory `source`), parse, build the full `SbmdRegistration` and dispatch tables, and root handler JSValues; fail activation cleanly (log, return false) on file read/parse error.
 - [x] 1.3 Change `SbmdDriver::Deactivate()` to additionally release the `source` string and the heavy `SbmdRegistration` collections (endpoints, resources, aliases, handlers) back to the claim-stub state, in addition to releasing GC roots and clearing dispatch tables.
 - [x] 1.4 Stop retaining `source` after load; ensure the claim stub is the only resident state while inactive. Keep `Activate()`/`Deactivate()` idempotent.

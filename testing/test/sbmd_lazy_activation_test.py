@@ -76,17 +76,19 @@ def _wait_for_device_count(client, device_class, count, timeout=20.0):
 
 def test_drivers_inactive_at_startup(default_environment):
     """
-    With no devices commissioned, no driver is activated: the active-driver
-    gauge is either absent (never recorded) or reports zero.
+    With no devices commissioned, no driver is activated. The factory publishes
+    the true active-driver count at startup, so the gauge is present and reports
+    zero (a non-zero value would indicate eager startup activation).
     """
+
     client = default_environment.get_client()
     telemetry = json.loads(client.get_telemetry())
     metrics = telemetry.get("metrics", {})
 
     active = _gauge_sum(metrics, "sbmd.driver.active.count")
-    assert active in (None, 0), (
-        f"Expected no active SBMD drivers at startup, gauge reported {active}"
-    )
+    assert (
+        active == 0
+    ), f"Expected 0 active SBMD drivers at startup, gauge reported {active}"
 
 
 def test_commissioning_activates_driver(

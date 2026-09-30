@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: SBMD factory loads driver files
-The SBMD factory SHALL scan configured directories for `.sbmd.js` files (instead of `.sbmd` YAML files). For each file, the factory SHALL evaluate it in the mquickjs context, extract claim metadata to C++ structures, and register the driver with `MatterDriverFactory` in the **inactive** state. The factory SHALL NOT activate drivers at startup; after extracting a driver's claim metadata the factory SHALL release the spec source text and heavy parsed registration so that an unregistered-but-unused driver retains only its claim stub. The factory SHALL no longer use `SbmdParser` or yaml-cpp for driver loading.
+The SBMD factory SHALL scan configured directories for `.sbmd.js` files (instead of `.sbmd` YAML files). For each file, the factory SHALL evaluate it in the mquickjs context, extract claim metadata to C++ structures, and register the driver with `MatterDriverFactory` in the **inactive** state. The factory SHALL NOT activate drivers at startup; after extracting a driver's claim metadata the factory SHALL release the spec source text and heavy parsed registration so that a registered-but-unused driver retains only its claim stub. The factory SHALL no longer use `SbmdParser` or yaml-cpp for driver loading.
 
 #### Scenario: Factory loads .sbmd.js files
 - **WHEN** the SBMD factory scans the specs directory at startup

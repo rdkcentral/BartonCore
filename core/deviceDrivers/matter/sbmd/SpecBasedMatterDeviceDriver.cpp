@@ -200,6 +200,12 @@ namespace
 SpecBasedMatterDeviceDriverMetrics SpecBasedMatterDeviceDriver::metrics;
 std::atomic<int64_t> SpecBasedMatterDeviceDriver::activeDriverCount {0};
 
+void SpecBasedMatterDeviceDriver::SyncActiveDriverCount(int64_t activeCount)
+{
+    activeDriverCount.store(activeCount);
+    metrics.RecordActiveDriverCount(activeCount);
+}
+
 SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
                        driver->GetRegistration().barton.deviceClass.c_str(),
@@ -408,6 +414,12 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
 
 void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()
 {
+    // Settle any outstanding deferred operations before deactivating so their handler roots are
+    // released and no late response can dispatch against an inactive driver. This runs on the
+    // Matter thread (via DeviceRemoved) and must not hold the JS mutex — CompletePendingOperation
+    // takes it internally to release the handler references.
+    CancelAllPendingOperations();
+
     // The last bound device is gone; shed the driver's runtime state back to its claim stub.
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
@@ -2010,6 +2022,23 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
     ReleasePendingHandlers(pending);
 
     pendingOperations.erase(it);
+}
+
+void SpecBasedMatterDeviceDriver::CancelAllPendingOperations()
+{
+    // CompletePendingOperation erases entries as it runs, so snapshot the ids first.
+    std::vector<uint64_t> ids;
+    ids.reserve(pendingOperations.size());
+
+    for (const auto &entry : pendingOperations)
+    {
+        ids.push_back(entry.first);
+    }
+
+    for (uint64_t id : ids)
+    {
+        CompletePendingOperation(id, false);
+    }
 }
 
 void SpecBasedMatterDeviceDriver::ReleasePendingHandlers(PendingOperation &pending)

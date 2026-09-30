@@ -51,6 +51,10 @@ namespace barton
         /** Record a driver deactivation, updating the active-driver gauge to activeCount. */
         void RecordDriverDeactivated(const char *driver, int64_t activeCount);
 
+        /** Set the active-driver gauge to activeCount without recording an activation event.
+         *  Used to publish the true active-driver count (e.g. at factory startup). */
+        void RecordActiveDriverCount(int64_t activeCount);
+
         /** Record a deferred op overall-deadline timeout. */
         void RecordDeferredTimeout(const char *driver, const char *opType, const char *resourceId);
 
@@ -95,6 +99,8 @@ namespace barton
         void RecordDriverActivated(const char *, int64_t, double) {}
 
         void RecordDriverDeactivated(const char *, int64_t) {}
+
+        void RecordActiveDriverCount(int64_t) {}
 
         void RecordDeferredTimeout(const char *, const char *, const char *) {}
 

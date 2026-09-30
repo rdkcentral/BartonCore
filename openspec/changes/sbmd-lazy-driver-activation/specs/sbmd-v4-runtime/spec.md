@@ -5,7 +5,7 @@ The runtime SHALL support activating a driver (re-reading its `.sbmd.js` file fr
 
 A driver SHALL be loaded in the inactive state. While inactive, the driver SHALL retain only a claim stub (the claiming metadata above) and SHALL NOT retain the spec source text or the heavy parsed registration (endpoint, resource, alias, and handler collections). Deactivation SHALL release the spec source text and the heavy parsed registration in addition to releasing handler GC roots, returning the driver to the claim-stub state. Because the source text is not retained while inactive, activation SHALL obtain the spec content by reading the spec file from disk at `filePath`.
 
-A driver SHALL remain activated for as long as at least one device is bound to it, and SHALL be deactivated only when its last bound device is removed.
+A driver SHALL remain activated for as long as at least one device is bound to it, and SHALL be deactivated only when its last bound device is removed. Before deactivation, any outstanding deferred operations SHALL be settled (completed as failures) so their handler references are released and no late response can dispatch against an inactive driver.
 
 #### Scenario: Inactive driver used for claiming
 - **WHEN** a new device is commissioned and its device type matches an inactive driver's `matter.deviceTypes`
@@ -18,6 +18,10 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 #### Scenario: Driver stays active while any device remains
 - **WHEN** a device bound to a driver is removed but at least one other device remains bound to the same driver
 - **THEN** the driver remains activated
+
+#### Scenario: Outstanding deferred operations settled before deactivation
+- **WHEN** the last device bound to a driver is removed while the driver has outstanding deferred operations
+- **THEN** those deferred operations are completed as failures and their handler references released before the driver is deactivated
 
 #### Scenario: Metadata available while inactive
 - **WHEN** a driver is inactive

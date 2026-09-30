@@ -71,6 +71,11 @@ namespace barton
         observabilityGaugeRecord(activeDriversGauge, activeCount);
     }
 
+    void SpecBasedMatterDeviceDriverMetrics::RecordActiveDriverCount(int64_t activeCount)
+    {
+        observabilityGaugeRecord(activeDriversGauge, activeCount);
+    }
+
     void SpecBasedMatterDeviceDriverMetrics::RecordDeferredTimeout(const char *driver,
                                                                    const char *opType,
                                                                    const char *resourceId)
