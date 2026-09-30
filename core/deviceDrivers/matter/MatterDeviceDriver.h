@@ -310,6 +310,12 @@ namespace barton
         virtual std::vector<uint16_t> GetSupportedDeviceTypes() = 0;
 
         /**
+         * @brief Hook invoked after the driver's last bound device is removed.
+         *        Runs on the Matter thread with no locks held. Default is a no-op.
+         */
+        virtual void OnLastDeviceRemoved() {}
+
+        /**
          * @brief Get a server cluster on a given endpoint
          *
          * @param deviceUuid

@@ -41,11 +41,39 @@ namespace barton
                                          "ms");
         deferralDepthHisto = observabilityHistogramCreate(
             "sbmd.deferred.depth", "Deferral depth at which a deferred operation completed", "1");
+        driverActivationCounter =
+            observabilityCounterCreate("sbmd.driver.activation", "Number of SBMD driver activations", "1");
+        driverDeactivationCounter =
+            observabilityCounterCreate("sbmd.driver.deactivation", "Number of SBMD driver deactivations", "1");
+        activeDriversGauge =
+            observabilityGaugeCreate("sbmd.driver.active.count", "Number of SBMD drivers currently activated", "1");
+        driverActivationDurationHisto = observabilityHistogramCreate(
+            "sbmd.driver.activation.duration_ms", "Time to activate an SBMD driver on demand", "ms");
     }
 
     void SpecBasedMatterDeviceDriverMetrics::RecordDeferredStart(int64_t inFlight)
     {
         observabilityGaugeRecord(deferredInFlightGauge, inFlight);
+    }
+
+    void SpecBasedMatterDeviceDriverMetrics::RecordDriverActivated(const char *driver,
+                                                                   int64_t activeCount,
+                                                                   double durationMs)
+    {
+        observabilityCounterAddWithAttrs(driverActivationCounter, 1, "driver", driver, nullptr);
+        observabilityGaugeRecord(activeDriversGauge, activeCount);
+        observabilityHistogramRecordWithAttrs(driverActivationDurationHisto, durationMs, "driver", driver, nullptr);
+    }
+
+    void SpecBasedMatterDeviceDriverMetrics::RecordDriverDeactivated(const char *driver, int64_t activeCount)
+    {
+        observabilityCounterAddWithAttrs(driverDeactivationCounter, 1, "driver", driver, nullptr);
+        observabilityGaugeRecord(activeDriversGauge, activeCount);
+    }
+
+    void SpecBasedMatterDeviceDriverMetrics::RecordActiveDriverCount(int64_t activeCount)
+    {
+        observabilityGaugeRecord(activeDriversGauge, activeCount);
     }
 
     void SpecBasedMatterDeviceDriverMetrics::RecordDeferredTimeout(const char *driver,

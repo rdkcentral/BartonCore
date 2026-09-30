@@ -31,6 +31,8 @@
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <string>
 
@@ -128,6 +130,28 @@ namespace
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto reg = SbmdLoader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
+
+            if (!reg)
+            {
+                return nullptr;
+            }
+
+            return std::make_unique<SbmdDriver>(std::move(reg), source);
+        }
+
+        /**
+         * Write source to a file on disk and create a driver whose filePath is that file, so a
+         * shrunk driver can re-read its spec from disk on activation.
+         */
+        std::unique_ptr<SbmdDriver> CreateDriverFromFile(const std::string &source, const std::string &path)
+        {
+            {
+                std::ofstream out(path, std::ios::binary | std::ios::trunc);
+                out.write(source.data(), static_cast<std::streamsize>(source.size()));
+            }
+
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto reg = SbmdLoader::LoadDriver(Ctx(), path, source.c_str(), source.size());
 
             if (!reg)
             {
@@ -351,7 +375,7 @@ namespace
         EXPECT_FALSE(driver->IsActivated());
     }
 
-    TEST_F(SbmdDriverTest, HandlersUndefinedAfterDeactivation)
+    TEST_F(SbmdDriverTest, HandlersReleasedAfterDeactivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -364,15 +388,12 @@ namespace
 
         auto &reg = driver->GetRegistration();
 
-        // Resource handlers should be reset
-        ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
-        EXPECT_TRUE(JS_IsUndefined(reg.endpoints[0].resources[0].write->handler));
-        EXPECT_TRUE(JS_IsUndefined(reg.endpoints[0].resources[0].read->handler));
-        EXPECT_TRUE(JS_IsUndefined(reg.endpoints[0].resources[0].seed->handler));
-
-        // Device handlers should be reset
-        ASSERT_EQ(reg.attributeHandlers.size(), 1u);
-        EXPECT_TRUE(JS_IsUndefined(reg.attributeHandlers[0].handler));
+        // Deactivation sheds the heavy parsed registration back to the claim stub.
+        EXPECT_TRUE(reg.endpoints.empty());
+        EXPECT_TRUE(reg.aliases.empty());
+        EXPECT_TRUE(reg.attributeHandlers.empty());
+        EXPECT_TRUE(reg.eventHandlers.empty());
+        EXPECT_TRUE(reg.commandHandlers.empty());
     }
 
     TEST_F(SbmdDriverTest, MetadataPreservedAfterDeactivation)
@@ -412,7 +433,9 @@ namespace
 
     TEST_F(SbmdDriverTest, ReactivateAfterDeactivate)
     {
-        auto driver = CreateDriver();
+        // Deactivation releases the source, so re-activation re-reads the spec from disk.
+        auto path = std::filesystem::temp_directory_path() / "sbmd_reactivate.sbmd.js";
+        auto driver = CreateDriverFromFile(kDriverSource, path.string());
         ASSERT_NE(driver, nullptr);
 
         {
@@ -440,6 +463,8 @@ namespace
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
+
+        std::filesystem::remove(path);
     }
 
     TEST_F(SbmdDriverTest, CommandHandlerCallableAfterActivation)
@@ -497,7 +522,7 @@ namespace
         }
     }
 
-    TEST_F(SbmdDriverTest, CommandHandlersUndefinedAfterDeactivation)
+    TEST_F(SbmdDriverTest, CommandHandlersReleasedAfterDeactivation)
     {
         const char *source = R"(
             SbmdDriver({
@@ -525,8 +550,7 @@ namespace
         }
 
         auto &reg = driver->GetRegistration();
-        ASSERT_EQ(reg.commandHandlers.size(), 1u);
-        EXPECT_TRUE(JS_IsUndefined(reg.commandHandlers[0].handler));
+        EXPECT_TRUE(reg.commandHandlers.empty());
     }
 
     // ========================================================================
@@ -814,6 +838,116 @@ namespace
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
+    }
+
+    // ========================================================================
+    // Shrink to claim stub + activation from disk
+    // ========================================================================
+
+    TEST_F(SbmdDriverTest, ShrinkReleasesRegistrationKeepsMetadata)
+    {
+        auto driver = CreateDriver();
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->Shrink(Ctx());
+        }
+
+        EXPECT_FALSE(driver->IsActivated());
+
+        auto &reg = driver->GetRegistration();
+        // Claim metadata remains resident.
+        EXPECT_EQ(reg.name, "TestDriver");
+        EXPECT_EQ(reg.barton.deviceClass, "light");
+        ASSERT_EQ(reg.matter.deviceTypes.size(), 1u);
+        EXPECT_EQ(reg.matter.deviceTypes[0], 0x0100);
+        // Heavy collections are released.
+        EXPECT_TRUE(reg.endpoints.empty());
+        EXPECT_TRUE(reg.aliases.empty());
+        EXPECT_TRUE(reg.attributeHandlers.empty());
+    }
+
+    TEST_F(SbmdDriverTest, ActivateAfterShrinkReadsFromDisk)
+    {
+        auto path = std::filesystem::temp_directory_path() / "sbmd_disk_reread.sbmd.js";
+        auto driver = CreateDriverFromFile(kDriverSource, path.string());
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->Shrink(Ctx()); // frees the in-memory source; activation must re-read from disk
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        EXPECT_TRUE(driver->IsActivated());
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_FALSE(reg.endpoints.empty());
+        ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->Deactivate(Ctx());
+        }
+
+        std::filesystem::remove(path);
+    }
+
+    TEST_F(SbmdDriverTest, ActivateFailsWhenSourceUnavailable)
+    {
+        // A shrunk driver whose spec file does not exist on disk cannot activate.
+        auto driver = CreateDriver(); // filePath "<test>", no file on disk
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->Shrink(Ctx());
+            EXPECT_FALSE(driver->Activate(Ctx()));
+        }
+
+        EXPECT_FALSE(driver->IsActivated());
+    }
+
+    TEST_F(SbmdDriverTest, ActivateRejectsMismatchedSpec)
+    {
+        auto path = std::filesystem::temp_directory_path() / "sbmd_mismatch.sbmd.js";
+        auto driver = CreateDriverFromFile(kDriverSource, path.string());
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->Shrink(Ctx());
+        }
+
+        // Overwrite the spec on disk with a different claim identity (device type changed).
+        const std::string changed = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "TestDriver",
+                constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0 },
+                barton: { deviceClass: "light", deviceClassVersion: 1 },
+                matter: { deviceTypes: [0x0101] },
+                aliases: { onOff: { clusterId: CL_ON_OFF, attributeId: ATTR_ON_OFF, type: "bool" } },
+                endpoints: { "1": { profile: "light", profileVersion: 1, resources: {
+                    isOn: { type: "boolean", modes: ["read"], read: readIsOn } } } },
+            });
+            function readIsOn(args) { return Sbmd.result().success(); }
+        )";
+        {
+            std::ofstream out(path.string(), std::ios::binary | std::ios::trunc);
+            out.write(changed.data(), static_cast<std::streamsize>(changed.size()));
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            EXPECT_FALSE(driver->Activate(Ctx()));
+        }
+
+        EXPECT_FALSE(driver->IsActivated());
+
+        std::filesystem::remove(path);
     }
 
 } // namespace

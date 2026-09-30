@@ -32,6 +32,8 @@
 #include "mquickjs/MQuickJsRuntime.h"
 #include "mquickjs/SbmdLoader.h"
 
+#include <fstream>
+
 extern "C" {
 #include <icLog/logging.h>
 }
@@ -81,12 +83,45 @@ namespace barton
 
         icDebug("activating driver '%s'", registration->name.c_str());
 
+        // Obtain the spec content: re-use the retained source if present, otherwise read the spec
+        // file from disk. A shrunk (claim-stub) driver has released its source, so it re-reads.
+        std::string diskSource;
+        const char *specData = nullptr;
+        size_t specLen = 0;
+
+        if (!source.empty())
+        {
+            specData = source.c_str();
+            specLen = source.size();
+        }
+        else if (ReadSpecFromDisk(diskSource))
+        {
+            specData = diskSource.c_str();
+            specLen = diskSource.size();
+        }
+        else
+        {
+            icError("failed to read spec file '%s' during activation of driver '%s'",
+                    registration->filePath.c_str(),
+                    registration->name.c_str());
+            return false;
+        }
+
         // Re-evaluate the source to get fresh handler JSValues
-        auto freshReg = SbmdLoader::LoadDriver(ctx, registration->filePath, source.c_str(), source.size());
+        auto freshReg = SbmdLoader::LoadDriver(ctx, registration->filePath, specData, specLen);
 
         if (!freshReg)
         {
             icError("failed to re-evaluate driver '%s' during activation", registration->name.c_str());
+            return false;
+        }
+
+        // The spec on disk may have changed since load. Refuse to activate against metadata that no
+        // longer matches what the device claimed rather than dispatching to a mismatched driver.
+        if (!MatchesClaimStub(*freshReg))
+        {
+            icError("driver '%s' spec no longer matches its claim metadata; refusing to activate",
+                    registration->name.c_str());
             return false;
         }
 
@@ -127,7 +162,91 @@ namespace barton
         eventDispatch.Clear();
         commandDispatch.Clear();
 
+        ReleaseHeavyRegistration();
+
         registration->activated = false;
+    }
+
+    void SbmdDriver::Shrink(JSContext *ctx)
+    {
+        (void) ctx;
+
+        if (registration->activated)
+        {
+            icWarn("refusing to shrink active driver '%s'", registration->name.c_str());
+            return;
+        }
+
+        // Already a stub: source released and heavy collections empty.
+        if (source.empty() && registration->endpoints.empty() && registration->aliases.empty() &&
+            registration->attributeHandlers.empty() && registration->eventHandlers.empty() &&
+            registration->commandHandlers.empty())
+        {
+            return;
+        }
+
+        icDebug("shrinking driver '%s' to claim stub", registration->name.c_str());
+
+        // Release the load-time handler roots before freeing the collections that hold them.
+        ReleaseHandlers();
+
+        ReleaseHeavyRegistration();
+    }
+
+    bool SbmdDriver::ReadSpecFromDisk(std::string &out) const
+    {
+        std::ifstream file(registration->filePath, std::ios::binary | std::ios::ate);
+
+        if (!file.is_open())
+        {
+            return false;
+        }
+
+        auto fileSize = file.tellg();
+
+        if (fileSize < 0)
+        {
+            return false;
+        }
+
+        file.seekg(0, std::ios::beg);
+        out.assign(static_cast<size_t>(fileSize), '\0');
+        file.read(out.data(), static_cast<std::streamsize>(fileSize));
+
+        return static_cast<bool>(file);
+    }
+
+    bool SbmdDriver::MatchesClaimStub(const SbmdRegistration &fresh) const
+    {
+        const auto &stub = *registration;
+
+        return fresh.name == stub.name && fresh.barton.deviceClass == stub.barton.deviceClass &&
+               fresh.matter.deviceTypes == stub.matter.deviceTypes && fresh.matter.vendorId == stub.matter.vendorId &&
+               fresh.matter.productId == stub.matter.productId;
+    }
+
+    void SbmdDriver::ReleaseHeavyRegistration()
+    {
+        // Reduce the registration to its claim stub — name, file path, device class, and the matter
+        // device-type/vendor/product IDs used for claiming — releasing the source, the heavy parsed
+        // collections, and every non-claim metadata field (swap-with-empty releases capacity). A
+        // subsequent activation re-reads the spec from disk and repopulates everything.
+        std::string().swap(source);
+
+        registration->schemaVersion.clear();
+        registration->schemaVersion.shrink_to_fit();
+        registration->driverVersion = 0;
+        registration->barton.deviceClassVersion = 0;
+        registration->matter.revision.reset();
+        std::vector<uint32_t>().swap(registration->matter.featureClusters);
+        registration->matter.defaultTimeoutMs.reset();
+        registration->reporting = SbmdReporting {};
+
+        std::vector<SbmdEndpoint>().swap(registration->endpoints);
+        std::unordered_map<std::string, SbmdAlias>().swap(registration->aliases);
+        std::vector<SbmdDeviceHandler>().swap(registration->attributeHandlers);
+        std::vector<SbmdDeviceHandler>().swap(registration->eventHandlers);
+        std::vector<SbmdDeviceHandler>().swap(registration->commandHandlers);
     }
 
     bool SbmdDriver::IsActivated() const

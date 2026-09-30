@@ -86,6 +86,20 @@ bool SbmdFactory::RegisterDrivers()
         RegisterDriversFromDirectory(dirPath, allRegistered);
     }
 
+    // Publish the true active-driver count so observability reflects actual startup state. Drivers
+    // are loaded inactive, so this is normally 0; a non-zero value would indicate eager activation.
+    int64_t activeDrivers = 0;
+
+    for (const auto &sbmdDriver : drivers)
+    {
+        if (sbmdDriver->IsActivated())
+        {
+            activeDrivers++;
+        }
+    }
+
+    SpecBasedMatterDeviceDriver::SyncActiveDriverCount(activeDrivers);
+
     return allRegistered;
 }
 
@@ -228,28 +242,12 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                     continue;
                 }
 
-                // Create the driver and activate it
+                // Create the driver (loaded, inactive). It is activated on demand when a device
+                // first binds to it, not at startup.
                 auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
-                std::optional<JSMemoryUsage> usageAfter;
 
-                {
-                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-                    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
-
-                    if (!sbmdDriver->Activate(ctx))
-                    {
-                        icError("Failed to activate SBMD driver: %s", entry.path().c_str());
-                        metrics.RecordDriverLoadFailure(driverStem.c_str(), "activation_failed");
-                        allRegistered = false;
-                        continue;
-                    }
-
-                    usageAfter = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
-                }
-
-                auto loadEnd = std::chrono::steady_clock::now();
-
-                // Create the SpecBasedMatterDeviceDriver wrapper
+                // Create the SpecBasedMatterDeviceDriver wrapper while the full registration is
+                // still resident — its constructor reads endpoint profile versions.
                 auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(sbmdDriver.get());
 
                 if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
@@ -258,6 +256,20 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                     allRegistered = false;
                     continue;
                 }
+
+                // Shrink to the claim stub so an unclaimed driver holds only its metadata.
+                std::optional<JSMemoryUsage> usageAfter;
+
+                {
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+
+                    sbmdDriver->Shrink(ctx);
+
+                    usageAfter = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
+                }
+
+                auto loadEnd = std::chrono::steady_clock::now();
 
                 // Store the driver for lifetime management
                 drivers.push_back(std::move(sbmdDriver));
