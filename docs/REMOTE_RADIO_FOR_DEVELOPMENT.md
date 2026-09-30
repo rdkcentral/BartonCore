@@ -85,8 +85,12 @@ The script:
 2. **Saves your choice** to `~/.config/remote-radios/config` (keyed by the
    radio's stable USB serial / busid) so subsequent runs are non-interactive.
 3. **Installs a per-user systemd unit** (`remote-radios-usbip.service`) that
-   runs `usbipd` and binds the dongle. A one-time `sudo` installs a narrow
-   sudoers rule so later runs need no password.
+   runs `usbipd`, binds the dongle, and re-binds it if anything hands it back
+   to the kernel's own driver. A one-time `sudo` installs two root-owned
+   helpers under `/usr/local/lib/remote-radios/` and a narrow sudoers rule
+   granting the `remote-radios` group passwordless access to **those two
+   commands only**, so later runs need no password. See
+   [Privileges](#privileges) below.
 4. **Establishes the tunnels** and writes `~/.remote-radios/radios.env` on the
    dev server, which `docker/setupDockerEnv.sh` sources automatically.
 5. **Monitors and self-heals.** It restarts dropped tunnels and tears
@@ -108,6 +112,61 @@ pip install --user pyserial
 **Dev server:** Docker with your user in the `docker` group. No host `sudo` is
 required for usb-ip on the dev server — the dongle is attached **inside** the
 privileged container.
+
+The dev server must **not** run its own Bluetooth daemon. Linux does not place
+the Bluetooth stack in a network namespace, so when usb-ip attaches your dongle
+it becomes visible to the dev server's host `bluetoothd` as well as to the one
+inside the container. BlueZ cannot share an adapter between two daemons: the
+host daemon claims it first, and every BLE operation in the container then
+fails with `No default controller available` — while `hciconfig` still cheerfully
+reports the adapter `UP RUNNING`, which makes this failure easy to misread.
+
+If the dev server has no Bluetooth hardware of its own (the usual case for a
+build server), disable the daemon there once:
+
+```bash
+sudo systemctl mask --now bluetooth.service
+```
+
+Masking rather than disabling matters: `bluetooth.service` is a D-Bus-activated
+unit, so anything that touches `org.bluez` on the system bus can otherwise
+start it again. This does not affect the container, which runs its own
+`bluetoothd` on a private D-Bus.
+
+### Privileges
+
+`usbipd` and `usbip bind` require root on the workstation. Rather than asking
+for a password on every run, the setup script installs, on first use:
+
+| What | Where | Ownership |
+|---|---|---|
+| `usbipd-bind.sh` | `/usr/local/lib/remote-radios/` | `root:root`, mode `0755` |
+| `usbipd-release.sh` | `/usr/local/lib/remote-radios/` | `root:root`, mode `0755` |
+| sudoers rule | `/etc/sudoers.d/remote-radios` | `root:root`, mode `0440` |
+
+```text
+%remote-radios ALL=(root) NOPASSWD: /usr/local/lib/remote-radios/usbipd-bind.sh, \
+                                    /usr/local/lib/remote-radios/usbipd-release.sh
+```
+
+The grant is deliberately given to a group rather than a named user, so one
+install serves every developer on a shared workstation. The helpers live
+outside `$HOME` because a root-executed script in a directory the invoking user
+can write to is equivalent to handing that user passwordless root — they can
+simply rewrite the script. Being root-owned and not group-writable is what
+keeps the grant as narrow as it looks. The helpers also validate their busid
+argument, since a sudoers entry listing a command with no argument list permits
+any arguments.
+
+Group membership is only applied to new login sessions. On first install the
+script adds you to `remote-radios` and then stops, asking you to log out and
+back in (or run `newgrp remote-radios`) before re-running it.
+
+To grant another developer access on the same workstation:
+
+```bash
+sudo usermod -aG remote-radios <user>
+```
 
 ### Command-line options
 
@@ -211,8 +270,10 @@ nsenter --net=/run/host-netns bluetoothctl list
 
 - **Workstation:** press `Ctrl-C` in the `remote-radios-setup.sh` terminal (it
   removes the remote socket and env hint and stops the tunnels). The usb-ip
-  systemd service unbinds the dongle when stopped:
-  `systemctl --user stop remote-radios-usbip.service`.
+  systemd service returns the dongle to your workstation when stopped:
+  `systemctl --user stop remote-radios-usbip.service`. After that the dongle is
+  back on the normal kernel driver and your workstation's own Bluetooth can use
+  it again.
 - **Dev server:** stop the container with
   `docker compose -f docker/compose.yaml -f docker/compose.remote-radios.yaml down`.
 
@@ -231,3 +292,21 @@ Teardown also happens automatically when the VPN drops or you log out.
   kernel modules are available on the dev server.
 - **BLE picks the wrong adapter** — check `ble_adapter_id`; set
   `device.matter.bleAdapterId` explicitly if needed.
+- **`No default controller available`, or the validator reports "Controller
+  hciN not available to bluetoothd"** — another `bluetoothd` has claimed the
+  dongle. Almost always this is the dev server's own `bluetooth.service`; run
+  `sudo systemctl mask --now bluetooth.service` there and restart the
+  remote-radios container. Note that `hciconfig` will report the adapter
+  `UP RUNNING` throughout, because the kernel side is genuinely fine — only
+  bluetoothd ownership is missing.
+- **BLE scan finds zero devices** — treated as a failure, not a warning: an
+  adapter that is present but deaf is indistinguishable from a working one by
+  any other check. Confirm the dongle's antenna/placement and that no second
+  `bluetoothd` is competing for it.
+- **`sudo: a password is required` when the usb-ip service starts** — you are
+  not yet in the `remote-radios` group in this session. Log out and back in (or
+  `newgrp remote-radios`) and re-run the setup script.
+- **Stopping the service does not release the dongle** — verify the unit has an
+  `ExecStopPost=` line invoking `usbipd-release.sh`. A user systemd manager
+  cannot signal the root-owned bind helper directly, so the release helper is
+  what actually reclaims the device.

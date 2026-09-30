@@ -668,18 +668,25 @@ check_ble_scan() {
             bluetoothctl --agent=NoInputNoOutput 2>&1
     ) || true
 
-    if echo "$btctl_output" | grep -qi "NEW.*Device\|CHG.*RSSI"; then
+    # Order matters.  bluetoothctl echoes every command back on its prompt line,
+    # so the literal text "scan on" is ALWAYS present in the output — matching
+    # on it first would swallow every genuine error reported further down.
+    # Check for concrete failure signatures before deciding the scan ran.
+    if echo "$btctl_output" | grep -qi "not available\|not found\|No default controller"; then
+        fail "BLE LE scan" \
+            "Controller ${target_hci} (${bd_addr}) not available to bluetoothd — another bluetoothd (such as the dev server's own bluetooth.service) has most likely claimed the adapter"
+    elif echo "$btctl_output" | grep -qi "InProgress"; then
+        fail "BLE LE scan" "bluetoothd reports scan InProgress — a stale scan may be stuck"
+    elif echo "$btctl_output" | grep -qiE "NEW.*Device|CHG.*RSSI"; then
         local btctl_count
         btctl_count=$(echo "$btctl_output" | grep -ciE "NEW.*Device") || btctl_count=0
         pass "BLE LE scan" "Found ${btctl_count} device(s) via D-Bus on ${target_hci}"
-    elif echo "$btctl_output" | grep -qi "SetDiscoveryFilter\|Discovery started\|scan on"; then
-        warn "BLE LE scan" "Scan started on ${target_hci} but no devices found in 6s window"
-    elif echo "$btctl_output" | grep -qi "InProgress"; then
-        fail "BLE LE scan" "bluetoothd reports scan InProgress — a stale scan may be stuck"
-    elif echo "$btctl_output" | grep -qi "not available\|not found"; then
-        fail "BLE LE scan" "Controller ${target_hci} (${bd_addr}) not available to bluetoothd"
     else
-        fail "BLE LE scan" "Unexpected: $(echo "$btctl_output" | tail -3 | tr '\n' ' ')"
+        # Zero devices is a failure, not a warning: a radio that is present but
+        # deaf looks exactly like this, and that is the failure mode most worth
+        # catching.  Ambient BLE traffic is plentiful in any normal environment.
+        fail "BLE LE scan" \
+            "No BLE devices seen on ${target_hci} during the scan window — the adapter is not receiving advertisements"
     fi
 }
 

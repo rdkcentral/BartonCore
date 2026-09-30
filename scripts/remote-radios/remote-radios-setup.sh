@@ -63,6 +63,18 @@ CONFIG_FILE="${CONFIG_DIR}/config"
 STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/remote-radios-$(id -u)"
 SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 
+# Root-executed helpers live outside $HOME on purpose.  They are invoked via
+# sudo with NOPASSWD, so anywhere the invoking user can write would turn that
+# grant into an unrestricted root shell.  root-owned, non-writable, fixed path.
+HELPER_DIR="/usr/local/lib/remote-radios"
+BIND_HELPER="${HELPER_DIR}/usbipd-bind.sh"
+RELEASE_HELPER="${HELPER_DIR}/usbipd-release.sh"
+
+# The sudo grant is given to a dedicated group rather than an individual user,
+# so the same one-time install serves every developer on the machine.
+RR_GROUP="remote-radios"
+RR_SUDOERS="/etc/sudoers.d/remote-radios"
+
 # usb-ip binds on this local TCP port on the workstation (usbipd default 3240)
 # and we reverse-tunnel it to a per-user UNIX socket on the dev server (no sshd
 # GatewayPorts change needed); socat in the container bridges it back to TCP.
@@ -327,19 +339,41 @@ detect_radios() {
 install_usbipd_unit() {
     [ -n "${BT_BUSID:-}" ] || return 0
 
-    local helper="${CONFIG_DIR}/usbipd-bind.sh"
-    mkdir -p "$CONFIG_DIR" "$SYSTEMD_USER_DIR"
+    local staging="${CONFIG_DIR}/staging"
+    local helper="${staging}/usbipd-bind.sh"
+    local release="${staging}/usbipd-release.sh"
+    mkdir -p "$staging" "$SYSTEMD_USER_DIR"
 
-    # usbipd + bind need root; we run them via a tiny sudo helper invoked by a
-    # user systemd service.  Installing a NOPASSWD sudoers drop-in (one-time
-    # sudo) keeps subsequent runs password-free.
+    # usbipd + bind need root; we run them via two tiny sudo helpers invoked by
+    # a user systemd service.  The helpers are staged here and then installed
+    # root-owned under ${HELPER_DIR}; a NOPASSWD sudoers drop-in for that fixed
+    # path (one-time sudo) keeps subsequent runs password-free.
     cat > "$helper" <<'HELPER'
 #!/usr/bin/env bash
 # Started by the remote-radios user service. Runs usbipd and binds the dongle.
 # Root-only (invoked via sudo by the user service).
 set -u
-BUSID="$1"
+BUSID="${1:-}"
 log() { echo "[usbipd-bind] $*"; }
+
+# This runs as root with an argument supplied by an unprivileged caller, so the
+# busid is validated before it reaches usbip or any path construction.
+if ! [[ "$BUSID" =~ ^[0-9]+-[0-9]+(\.[0-9]+)*$ ]]; then
+    log "ERROR: refusing to act on malformed busid '${BUSID}'."
+    exit 1
+fi
+
+# Single-instance guard.  A user systemd manager cannot signal these root-owned
+# helpers, so `systemctl --user restart` leaves the previous one running; two
+# watchdogs would then fight over the same dongle.  The kernel drops this lock
+# automatically when the holder dies, so it never goes stale.
+mkdir -p /run/remote-radios
+exec 9>"/run/remote-radios/usbipd-bind-${BUSID}.lock"
+if ! flock -n 9; then
+    log "another instance is already managing ${BUSID}; exiting."
+    exit 0
+fi
+echo "$$" > "/run/remote-radios/usbipd-bind-${BUSID}.pid"
 
 # Load kernel modules for the usb-ip server side.  usbip-host provides the
 # bind driver; without it `usbip bind` fails with "unable to bind device".
@@ -355,37 +389,62 @@ if ! grep -qw usbip_host /proc/modules 2>/dev/null; then
     exit 1
 fi
 
-# Start usbipd if not already running.
-if ! pgrep -x usbipd >/dev/null 2>&1; then
-    usbipd -D
-    sleep 1
-fi
+ensure_usbipd() {
+    if ! pgrep -x usbipd >/dev/null 2>&1; then
+        usbipd -D
+        sleep 1
+    fi
+}
+
+device_present() { [ -e "/sys/bus/usb/devices/${BUSID}" ]; }
+
+# The device is exported only while it sits on the usbip-host driver.  Anything
+# that re-enumerates the dongle (replug, suspend/resume, a USB port reset)
+# hands it back to btusb, which silently ends the export even though this
+# service is still "running".
+#
+# Note this is a *device*-level check, not a per-interface one: `usbip bind`
+# detaches the interfaces and binds the whole device to usbip-host, so the
+# /sys/bus/usb/devices/<busid>:* interface entries disappear while exported.
+# Probing those would report a healthy export as unbound and rebind forever.
+is_bound() {
+    local drv
+    drv="$(basename "$(readlink -f "/sys/bus/usb/devices/${BUSID}/driver" 2>/dev/null)" 2>/dev/null)"
+    [ "$drv" = "usbip-host" ]
+}
 
 # Bind the dongle.  A Bluetooth dongle's interfaces are normally claimed by
 # btusb; `usbip bind` detaches them first.  Treat "already bound" as success,
 # but surface any other failure with diagnostics instead of hiding it.
-bind_out="$(usbip bind -b "$BUSID" 2>&1)"
-bind_rc=$?
-if [ $bind_rc -ne 0 ]; then
-    if echo "$bind_out" | grep -qi "already bound"; then
-        log "${BUSID} already bound."
-    else
-        log "ERROR: usbip bind -b ${BUSID} failed: ${bind_out}"
-        # One retry after forcing the interfaces off their kernel driver, which
-        # clears the common half-detached btusb state.
-        for intf in /sys/bus/usb/devices/${BUSID}:*; do
-            [ -e "$intf/driver" ] && echo "$(basename "$intf")" > "$intf/driver/unbind" 2>/dev/null || true
-        done
-        sleep 1
-        if usbip bind -b "$BUSID" 2>/dev/null; then
-            log "${BUSID} bound after interface reset."
+do_bind() {
+    local bind_out bind_rc intf
+    bind_out="$(usbip bind -b "$BUSID" 2>&1)"
+    bind_rc=$?
+    if [ $bind_rc -ne 0 ]; then
+        if echo "$bind_out" | grep -qi "already bound"; then
+            log "${BUSID} already bound."
         else
-            log "ERROR: still cannot bind ${BUSID}. Is the busid correct and the"
-            log "       device present? Try: usbip list -l"
-            exit 1
+            log "ERROR: usbip bind -b ${BUSID} failed: ${bind_out}"
+            # One retry after forcing the interfaces off their kernel driver,
+            # which clears the common half-detached btusb state.
+            for intf in /sys/bus/usb/devices/${BUSID}:*; do
+                [ -e "$intf/driver" ] && echo "$(basename "$intf")" > "$intf/driver/unbind" 2>/dev/null || true
+            done
+            sleep 1
+            if usbip bind -b "$BUSID" 2>/dev/null; then
+                log "${BUSID} bound after interface reset."
+            else
+                log "ERROR: still cannot bind ${BUSID}. Is the busid correct and the"
+                log "       device present? Try: usbip list -l"
+                return 1
+            fi
         fi
     fi
-fi
+    return 0
+}
+
+ensure_usbipd
+do_bind || exit 1
 
 # Verify the device is now exportable before declaring success.
 if ! usbip list -l 2>/dev/null | grep -q "busid ${BUSID} .*(.*)" ; then
@@ -394,29 +453,145 @@ fi
 log "usb-ip export ready for ${BUSID}."
 
 # Stay in foreground so systemd tracks the service; exit unbinds on stop.
-trap 'usbip unbind -b "$BUSID" 2>/dev/null || true' EXIT
-while pgrep -x usbipd >/dev/null 2>&1; do sleep 5; done
+#
+# Reassert the export on every pass rather than just watching usbipd: a lost
+# binding is invisible to a liveness check, so without this the service can
+# report healthy for days while exporting nothing and the dev-server container
+# retries an attach that can never succeed.
+trap 'rm -f "/run/remote-radios/usbipd-bind-${BUSID}.pid"; usbip unbind -b "$BUSID" 2>/dev/null || true' EXIT
+while true; do
+    sleep 5
+
+    ensure_usbipd
+
+    if ! device_present; then
+        continue
+    fi
+
+    if ! is_bound; then
+        log "WARNING: ${BUSID} lost its usb-ip binding (driver reverted); re-binding."
+        if do_bind; then
+            log "usb-ip export restored for ${BUSID}."
+        else
+            log "ERROR: re-bind of ${BUSID} failed; retrying."
+        fi
+    fi
+done
 HELPER
     chmod +x "$helper"
 
-    local sudoers
-    sudoers="/etc/sudoers.d/remote-radios-$(id -un)"
-    if ! sudo -n test -f "$sudoers" 2>/dev/null; then
-        info "Installing a one-time sudoers rule + systemd unit for usb-ip (needs sudo once)..."
-        # NOPASSWD only for the specific helper — nothing broader.
-        echo "$(id -un) ALL=(root) NOPASSWD: ${helper} *" | \
-            sudo tee "$sudoers" >/dev/null
-        sudo chmod 440 "$sudoers"
+    # Release helper: the counterpart that makes `systemctl --user stop` mean
+    # something.  The bind helper runs as root, so a user systemd manager cannot
+    # signal it — without this the watchdog survives "stop" and re-binds the
+    # dongle within seconds, and the developer can never reclaim it for local
+    # Bluetooth use.
+    cat > "$release" <<'RELEASE'
+#!/usr/bin/env bash
+# Stops the remote-radios usb-ip export and returns the dongle to the host.
+# Root-only (invoked via sudo by the user service's ExecStopPost).
+set -u
+BUSID="${1:-}"
+log() { echo "[usbipd-release] $*"; }
+
+if ! [[ "$BUSID" =~ ^[0-9]+-[0-9]+(\.[0-9]+)*$ ]]; then
+    log "ERROR: refusing to act on malformed busid '${BUSID}'."
+    exit 1
+fi
+
+pidfile="/run/remote-radios/usbipd-bind-${BUSID}.pid"
+if [ -r "$pidfile" ]; then
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    # Confirm the PID really is our helper before signalling it; PIDs are
+    # recycled, and this runs as root.
+    if [ -n "${pid:-}" ] && tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null \
+        | grep -q "usbipd-bind.sh ${BUSID}"; then
+        kill "$pid" 2>/dev/null || true
+        for _ in 1 2 3 4 5; do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+        done
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$pidfile"
+fi
+
+# The watchdog unbinds on exit, but do it here too: the helper may have been
+# killed outright, or never have been running at all.
+usbip unbind -b "$BUSID" 2>/dev/null || true
+log "released ${BUSID}."
+RELEASE
+    chmod +x "$release"
+
+    # Probe the capability we actually need, not the file.  The drop-in grants
+    # NOPASSWD for the helpers only, so a `sudo -n test -f` probe would itself
+    # need a password and always report "missing" — re-running the install (and
+    # hard-failing when there is no terminal to authenticate against).
+    local need_install=0
+    sudo -n -l "$BIND_HELPER" >/dev/null 2>&1 || need_install=1
+    sudo -n -l "$RELEASE_HELPER" >/dev/null 2>&1 || need_install=1
+    cmp -s "$helper" "$BIND_HELPER" || need_install=1
+    cmp -s "$release" "$RELEASE_HELPER" || need_install=1
+
+    if [ "$need_install" -eq 1 ]; then
+        info "Installing root helpers, the ${RR_GROUP} group and a sudoers rule (needs sudo once)..."
+        sudo install -d -m 0755 -o root -g root "$HELPER_DIR"
+        sudo install -m 0755 -o root -g root "$helper"  "$BIND_HELPER"
+        sudo install -m 0755 -o root -g root "$release" "$RELEASE_HELPER"
+
+        sudo groupadd -f "$RR_GROUP"
+        sudo usermod -aG "$RR_GROUP" "$(id -un)"
+
+        # NOPASSWD for these two root-owned helpers only — nothing broader.
+        # Listing a command without arguments lets sudo accept any arguments;
+        # each helper validates its own busid rather than trusting the caller.
+        local tmp_sudoers="${staging}/sudoers"
+        cat > "$tmp_sudoers" <<EOF
+# Installed by remote-radios-setup.sh.  Grants the ${RR_GROUP} group permission
+# to run the usb-ip export helpers as root without a password.  The helpers are
+# root-owned and not writable by the group, so this grant cannot be widened by
+# editing them.
+%${RR_GROUP} ALL=(root) NOPASSWD: ${BIND_HELPER}, ${RELEASE_HELPER}
+EOF
+        # Never install a sudoers file without checking it first: a syntax error
+        # in /etc/sudoers.d can lock everyone out of sudo on the machine.
+        if ! sudo visudo -c -q -f "$tmp_sudoers"; then
+            die "Generated sudoers rule failed validation; refusing to install it."
+        fi
+        sudo install -m 0440 -o root -g root "$tmp_sudoers" "$RR_SUDOERS"
+        rm -f "$tmp_sudoers"
+
+        # Retire the older per-user rule, which pointed at a helper inside the
+        # user's own home — writable by that user, and therefore equivalent to
+        # passwordless root.
+        local legacy="/etc/sudoers.d/remote-radios-$(id -un)"
+        if sudo test -f "$legacy" 2>/dev/null; then
+            sudo rm -f "$legacy"
+            info "Removed legacy sudoers rule ${legacy} (helper lived in \$HOME)."
+        fi
+        rm -f "${CONFIG_DIR}/usbipd-bind.sh"
+
+        # Group membership is established at login, so the running shell (and
+        # the systemd user manager) will not have it yet on first install.
+        if ! id -nG | tr ' ' '\n' | grep -qx "$RR_GROUP"; then
+            echo
+            ok "Installed. You have been added to the '${RR_GROUP}' group."
+            info "Group membership only takes effect on a new login session."
+            info "Log out and back in (or run: newgrp ${RR_GROUP}), then re-run this script."
+            exit 0
+        fi
     fi
 
-    cat > "${SYSTEMD_USER_DIR}/remote-radios-usbip.service" <<EOF
+    local unit="${SYSTEMD_USER_DIR}/remote-radios-usbip.service"
+    local unit_new="${staging}/remote-radios-usbip.service"
+    cat > "$unit_new" <<EOF
 [Unit]
 Description=remote-radios usb-ip export of Bluetooth dongle ${BT_BUSID}
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/sudo -n ${helper} ${BT_BUSID}
+ExecStart=/usr/bin/sudo -n ${BIND_HELPER} ${BT_BUSID}
+ExecStopPost=/usr/bin/sudo -n ${RELEASE_HELPER} ${BT_BUSID}
 Restart=on-failure
 RestartSec=3
 
@@ -424,8 +599,19 @@ RestartSec=3
 WantedBy=default.target
 EOF
 
+    # `enable --now` will not restart a unit that is already active, so an
+    # updated ExecStart (or a newly installed helper) would otherwise sit unused
+    # until the next logout.  Restart only when something actually changed.
+    local unit_changed=0
+    cmp -s "$unit_new" "$unit" || unit_changed=1
+    install -m 0644 "$unit_new" "$unit"
+    rm -f "$unit_new"
+
     systemctl --user daemon-reload
     systemctl --user enable --now remote-radios-usbip.service
+    if [ "$unit_changed" -eq 1 ] || [ "$need_install" -eq 1 ]; then
+        systemctl --user restart remote-radios-usbip.service
+    fi
     ok "usb-ip export service running for dongle ${BT_BUSID}."
 }
 
@@ -515,7 +701,7 @@ start_bt_tunnel() {
     # TCP -R bind, which the container's bridge gateway cannot reach).
     ssh -N \
         -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
-        -o ExitOnForwardFailure=yes \
+        -o ExitOnForwardFailure=no \
         -o StreamLocalBindUnlink=yes \
         -o ControlMaster=no -o ControlPath=none \
         -R "${BT_USBIP_SOCK_REMOTE}:127.0.0.1:${USBIPD_LOCAL_PORT}" \
@@ -523,6 +709,20 @@ start_bt_tunnel() {
         > "${STATE_DIR}/bt-tunnel.log" 2>&1 &
     BT_TUNNEL_PID=$!
     echo "$BT_TUNNEL_PID" > "${STATE_DIR}/bt-tunnel.pid"
+
+    # ExitOnForwardFailure is deliberately off: the user's ssh config may carry
+    # unrelated LocalForward/RemoteForward entries for this host, and a
+    # collision on any one of them would otherwise kill this tunnel.  Since ssh
+    # no longer fails fast for us, confirm the forward we actually care about.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if ssh -o BatchMode=yes -o ConnectTimeout=8 "$SSH_TARGET" \
+            "test -S ${BT_USBIP_SOCK_REMOTE}" 2>/dev/null; then
+            return 0
+        fi
+        kill -0 "$BT_TUNNEL_PID" 2>/dev/null || break
+        sleep 1
+    done
+    warn "usb-ip socket ${BT_USBIP_SOCK_REMOTE} did not appear; see ${STATE_DIR}/bt-tunnel.log"
 }
 
 write_remote_env_hint() {

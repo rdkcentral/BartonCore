@@ -439,6 +439,25 @@ start_bluetooth_chain() {
     echo "[remote-radios] Starting bluetoothd (host netns, private D-Bus)..."
     nsenter --net="${HOST_NETNS}" bluetoothd &
     sleep 3
+
+    # The adapter existing in sysfs is NOT proof that BLE works.  bluetoothd
+    # must also have claimed it; until then every BLE operation fails even
+    # though hciconfig reports the controller UP RUNNING.
+    local waited=0
+    while [ ${waited} -lt 10 ]; do
+        bt_controller_registered && break
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if ! bt_controller_registered; then
+        echo "[remote-radios] WARNING: bluetoothd started but does not expose ${radioHci} on D-Bus." >&2
+        echo "[remote-radios]          BLE will not work.  The usual cause is a second bluetoothd" >&2
+        echo "[remote-radios]          on the dev server claiming the adapter first: BlueZ cannot" >&2
+        echo "[remote-radios]          share an adapter between daemons.  On the dev server run:" >&2
+        echo "[remote-radios]              sudo systemctl mask --now bluetooth.service" >&2
+        return 1
+    fi
+
     echo "[remote-radios] Bluetooth chain ready (${radioHci})."
     return 0
 }
@@ -455,6 +474,22 @@ teardown_bluetooth_chain() {
     sleep 1
 }
 
+# bt_controller_registered — verify bluetoothd actually exposes the adapter.
+#
+# Every other Bluetooth check in this file is kernel-level, and the kernel is
+# perfectly happy to report an adapter as UP RUNNING while no bluetoothd owns
+# it.  In that state BLE is completely dead, so this check is what separates
+# "the dongle arrived" from "Bluetooth works".  Asking for the Adapter1
+# Address property fails unless bluetoothd has registered this exact adapter.
+bt_controller_registered() {
+    local idx="${BT_HCI_INDEX:-}"
+    [ -n "$idx" ] || return 1
+    DBUS_SYSTEM_BUS_ADDRESS="unix:path=${DBUS_SOCKET_PATH}" \
+        timeout 5 dbus-send --system --dest=org.bluez --print-reply \
+            "/org/bluez/hci${idx}" org.freedesktop.DBus.Properties.Get \
+            string:org.bluez.Adapter1 string:Address >/dev/null 2>&1
+}
+
 # bt_transport_healthy — verify the dongle's HCI transport is responsive.
 bt_transport_healthy() {
     local idx="${BT_HCI_INDEX:-}"
@@ -462,6 +497,10 @@ bt_transport_healthy() {
     # The dongle must still be present in sysfs (usb-ip session alive).
     nsenter --net="${HOST_NETNS}" test -e "/sys/class/bluetooth/hci${idx}" 2>/dev/null || return 1
     timeout 5 nsenter --net="${HOST_NETNS}" hciconfig "hci${idx}" version >/dev/null 2>&1 || return 1
+    # ...and bluetoothd must still own it.  A daemon crash, or another bluetoothd
+    # stealing the adapter, leaves the kernel checks above passing while BLE is
+    # unusable — the monitor must treat that as unhealthy and rebuild the chain.
+    bt_controller_registered || return 1
     return 0
 }
 
@@ -498,8 +537,13 @@ service_monitor() {
             restartSilabs="cpcd"
         fi
 
-        # Bluetooth: only if configured.
-        if [ -n "${BT_USBIP_SOCKET}" ] && [ -n "${BT_HCI_INDEX:-}" ] && [ ${SECONDS} -ge ${graceUntil} ]; then
+        # Bluetooth: only if configured.  Deliberately NOT gated on
+        # BT_HCI_INDEX — that is set only by a *successful* attach, so gating on
+        # it would permanently disable recovery whenever the initial attach
+        # failed (exactly the case the startup message promises to retry).
+        # bt_transport_healthy already reports unhealthy while the index is
+        # unset, so an unattached dongle simply looks broken and gets retried.
+        if [ -n "${BT_USBIP_SOCKET}" ] && [ -e "${HOST_NETNS}" ] && [ ${SECONDS} -ge ${graceUntil} ]; then
             btHealthCounter=$((btHealthCounter + 1))
             if [ ${btHealthCounter} -ge 3 ]; then
                 btHealthCounter=0
