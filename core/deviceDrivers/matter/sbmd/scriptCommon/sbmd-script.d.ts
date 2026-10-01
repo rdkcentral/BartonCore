@@ -244,8 +244,11 @@ interface SbmdHandlerArgsBase {
     /** Error details, present only on onError handlers. */
     error?: {
         message: string;
-        type: "timeout" | "transport" | "internal";
+        type: "timeout" | "transport" | "internal" | "commandFailed";
+        /** CHIP_ERROR value, if one was available. */
         matterCode: number | null;
+        /** Interaction Model status returned by the device, if one was returned. */
+        commandStatus: number | null;
     };
 }
 
@@ -450,4 +453,3 @@ declare function SbmdDriver(registration: SbmdRegistration): void;
 
 /** SBMD runtime namespace. */
 declare var Sbmd: SbmdNamespace;
-
