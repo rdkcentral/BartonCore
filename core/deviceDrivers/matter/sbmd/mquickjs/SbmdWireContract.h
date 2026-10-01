@@ -79,6 +79,7 @@
 #define SBMD_KEY_ON_RESPONSE             "onResponse"
 #define SBMD_KEY_ON_ERROR                "onError"
 #define SBMD_KEY_MATTER_CODE             "matterCode"
+#define SBMD_KEY_COMMAND_STATUS          "commandStatus"
 #define SBMD_KEY_RESPONSE_COMMAND_ID     "responseCommandId"
 #define SBMD_KEY_SUCCESS_VALUE           "successValue"
 #define SBMD_KEY_TIMED_INVOKE_TIMEOUT_MS "timedInvokeTimeoutMs"
