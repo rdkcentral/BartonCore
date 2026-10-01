@@ -62,6 +62,8 @@ SDK's BLE adapter.
 
 ## One-time setup (on your workstation)
 
+### Linux workstations
+
 Run the setup script on your **Ubuntu workstation** where the radios are
 plugged in. It detects your radios, saves the choice under
 `~/.config/remote-radios/`, installs a per-user systemd service for usb-ip
@@ -96,6 +98,40 @@ The script:
 5. **Monitors and self-heals.** It restarts dropped tunnels and tears
    everything down cleanly when the VPN drops or you log out — then
    re-establishes when connectivity returns. Safe to re-run any time.
+
+### Windows workstations
+
+`remote-radios-setup.sh` is a Bash script and needs systemd and the in-tree
+usb-ip tools, so it does not run on Windows. Use `remote-serial.py` directly
+instead — it is the same forwarder core the setup script drives, and it is
+cross-platform:
+
+```powershell
+# Install the prerequisites once.
+pip install pyserial
+winget install usbipd
+
+# Share the Bluetooth dongle (admin shell, once per dongle).
+usbipd list                  # note the BUSID
+usbipd bind --busid 2-4
+
+# Forward both radios.
+python remote-serial.py <user>@<devserver> --usbip
+```
+
+Differences from the Linux path:
+
+- **Binding is explicit.** On Linux the setup script installs a privileged
+  helper that binds the dongle and re-binds it if the kernel takes it back. On
+  Windows `usbipd bind` is a one-time administrator action that persists, so
+  `remote-serial.py` performs it when needed and no helper is installed.
+- **No service is installed.** Keep the terminal open while you work; the
+  script tears the tunnels down when you stop it.
+- **Serial ports are named `COMn`.** Auto-detection handles this; override with
+  `--port COM3` if several radios are attached.
+
+`--usbip` on its own auto-selects the dongle; pass `--usbip <BUSID>` to choose
+explicitly, or `--no-serial` to forward only Bluetooth.
 
 ### Prerequisites
 
@@ -292,7 +328,13 @@ Teardown also happens automatically when the VPN drops or you log out.
   kernel modules are available on the dev server.
 - **BLE picks the wrong adapter** — check `ble_adapter_id`; set
   `device.matter.bleAdapterId` explicitly if needed.
-- **`No default controller available`, or the validator reports "Controller
+- **The Silabs radio is connected but silent** — cpcd sends, nothing comes
+  back. This is usually the wrong RTS/CTS mode: some USB-serial adapters do not
+  drive the hardware flow-control lines, so requesting flow control leaves RTS
+  deasserted and the radio never transmits. `remote-serial.py` detects the
+  signature (bytes flowing one way only) and flips the mode once automatically,
+  logging `flipping RTS/CTS flow control`. To skip the six-second detection
+  window, pass `--rtscts` or `--no-rtscts` explicitly.- **`No default controller available`, or the validator reports "Controller
   hciN not available to bluetoothd"** — another `bluetoothd` has claimed the
   dongle. Almost always this is the dev server's own `bluetooth.service`; run
   `sudo systemctl mask --now bluetooth.service` there and restart the
