@@ -103,6 +103,9 @@ namespace
         std::string manufacturer;
         std::string model;
         std::string firmwareVersion;
+        // Derived during discovery: false when the camera answered an anonymous GetDeviceInformation,
+        // meaning it does not require credentials. Defaults to true (require credentials) until proven.
+        bool authRequired = true;
     };
 
     class OnvifDriver
@@ -533,7 +536,9 @@ void OnvifDriver::DiscoveryWorker()
             continue;
         }
 
-        // Anonymous device information (no credentials required for most cameras).
+        // Anonymous device information. Whether the camera answers an unauthenticated GetDeviceInformation
+        // also tells us if it requires credentials at all; a camera that responds anonymously does not, so
+        // the operator is not forced to invent throwaway credentials just to stream an open camera.
         OnvifSoapClient client(cam.serviceUrl);
         OnvifDeviceInfo info;
 
@@ -542,6 +547,7 @@ void OnvifDriver::DiscoveryWorker()
             cam.manufacturer = info.manufacturer;
             cam.model = info.model;
             cam.firmwareVersion = info.firmwareVersion;
+            cam.authRequired = false; // answered without credentials
         }
 
         {
@@ -706,10 +712,14 @@ bool OnvifDriver::RegisterResources(icDevice *device)
                                     RESOURCE_MODE_EMIT_EVENTS,
                                     CACHING_POLICY_NEVER) != nullptr) &&
             allOk;
-    // Non-secret signal telling the client that credentials must be applied to the media/snapshot URLs.
+    // Non-secret signal telling the client whether credentials must be applied to the media/snapshot
+    // URLs. Derived per camera from whether it answered an anonymous query during discovery; defaults
+    // to requiring credentials when the camera is not in the live discovery cache (e.g. after restart).
+    DiscoveredCamera regCam;
+    const char *authRequiredValue = (LookupDiscovered(device->uuid, regCam) && !regCam.authRequired) ? "false" : "true";
     allOk = (createEndpointResource(onvifEp,
                                     ONVIF_RESOURCE_AUTH_REQUIRED,
-                                    "true",
+                                    authRequiredValue,
                                     RESOURCE_TYPE_BOOLEAN,
                                     RESOURCE_MODE_READABLE,
                                     CACHING_POLICY_ALWAYS) != nullptr) &&
@@ -750,10 +760,14 @@ bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
         return false;
     }
 
-    // authRequired is advertised as true, so both credentials must be present before contacting the
-    // camera. Without them the execute must fail (no anonymous media/snapshot URL is emitted) rather
-    // than start a worker that would issue an unauthenticated request.
-    if (creds.username.empty() || creds.password.empty())
+    // A camera that requires authentication needs both credentials before we contact it; without them
+    // the execute fails rather than issuing a request the camera will reject. A camera that answered
+    // anonymously during discovery (authRequired false) is queried anonymously when no credentials are
+    // configured, so an open camera streams without the operator inventing throwaway credentials.
+    DiscoveredCamera cam;
+    bool authRequired = LookupDiscovered(uuid, cam) ? cam.authRequired : true;
+
+    if (authRequired && (creds.username.empty() || creds.password.empty()))
     {
         icLogError(LOG_TAG,
                    "missing ONVIF credentials for %s; refusing %s",
@@ -809,8 +823,10 @@ bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
         }
 
         // Pin the URL to the discovered camera's host so a compromised camera cannot redirect the
-        // client (and the credentials it applies) to an attacker-controlled authority. Reject an empty
-        // parsed host so a malformed URL (e.g. rtsp:///path) cannot pass by matching an empty host.
+        // client (and the credentials it applies) to a different host. This is host pinning only: the
+        // port is intentionally not compared (the media/RTSP port legitimately differs from the HTTP
+        // service port), so a same-host/different-port URL is accepted. Reject an empty parsed host so
+        // a malformed URL (e.g. rtsp:///path) cannot pass by matching an empty host.
         std::string urlHost = UrlHost(url);
 
         if (urlHost.empty() || urlHost != UrlHost(serviceUrl))
