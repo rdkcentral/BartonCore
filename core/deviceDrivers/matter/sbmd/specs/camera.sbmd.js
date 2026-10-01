@@ -133,6 +133,9 @@ SbmdDriver({
         CMD_PROVIDE_ICE: 0x05,
         CMD_END_SESSION: 0x06,
 
+        // Interaction Model status returned on error.commandStatus. 0x8b = NotFound.
+        COMMAND_STATUS_NOT_FOUND: 0x8b,
+
         // WebRTCEndReasonEnum used in the EndSession command's reason field. 2 = UserHangup.
         WEBRTC_END_REASON_USER_HANGUP: 2,
 
@@ -650,18 +653,23 @@ function handleDestroySessionEndComplete(args) {
     );
 }
 
-// Gives up on teardown and reports the failure, leaving the whole sequence retryable.
+// Treats a camera that has already dropped the session as teardown's first leg succeeding; any
+// other failure gives up and leaves the whole sequence retryable.
 function handleDestroySessionEndError(args) {
     var ctx = args.handlerContext;
     var error = args.error;
     var detail = error && error.message ? error.message : 'unknown';
 
+    // NotFound means the camera has no such WebRTC session, because a peer ended it without the
+    // camera sending us a requestor End command. The ReferenceCount is already back to zero, which
+    // is the state a successful EndSession leaves behind, so release the stream from there.
+    if (error && error.commandStatus === COMMAND_STATUS_NOT_FOUND) {
+        return handleDestroySessionEndComplete(args);
+    }
+
     // EndSession did not take effect, so the WebRTC session still holds a ReferenceCount on the
     // stream and VideoStreamDeallocate would be rejected with InvalidInState. Leaving the session
     // untouched lets a later destroySession retry the teardown from EndSession.
-    // TODO: that assumption breaks if the camera processed EndSession but the response was lost.
-    // Every retry then re-sends EndSession, the camera rejects it, and the stream is never
-    // released. Reconciling driver state against the device needs deferred-runtime work.
     return Sbmd.result()
         .log(
             'Camera session ' + (ctx ? ctx.sessionId : 'unknown') + ': EndSession failed: ' + detail
