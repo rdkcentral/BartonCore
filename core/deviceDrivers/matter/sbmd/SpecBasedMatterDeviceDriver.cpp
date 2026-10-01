@@ -1290,7 +1290,9 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
         [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
             HandleDeferredCommandResponse(pendingId, path, data);
         },
-        [this, pendingId](CHIP_ERROR error) { HandleDeferredCommandError(pendingId, error); });
+        [this, pendingId](CHIP_ERROR error, std::optional<int32_t> commandStatus) {
+            HandleDeferredCommandError(pendingId, error, commandStatus);
+        });
 
     if (!sent)
     {
@@ -1499,7 +1501,9 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     ContinueDeferredChain(pending, *result);
 }
 
-void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId, CHIP_ERROR error)
+void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
+                                                             CHIP_ERROR error,
+                                                             std::optional<int32_t> commandStatus)
 {
     auto it = pendingOperations.find(pendingId);
 
@@ -1527,7 +1531,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
                                                                           "commandFailed",
                                                                           error.AsString(),
                                                                           static_cast<int32_t>(error.AsInteger()),
-                                                                          pending.context.Get());
+                                                                          pending.context.Get(),
+                                                                          commandStatus);
             errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args, &pending.operationCtx);
         }
     }
@@ -1791,7 +1796,9 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
                 HandleDeferredCommandResponse(pendingId, path, data);
             },
-            [this, pendingId](CHIP_ERROR error) { HandleDeferredCommandError(pendingId, error); });
+            [this, pendingId](CHIP_ERROR error, std::optional<int32_t> commandStatus) {
+                HandleDeferredCommandError(pendingId, error, commandStatus);
+            });
 
         if (!sent)
         {

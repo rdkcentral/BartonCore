@@ -290,17 +290,17 @@ namespace barton
          * @param onError Called when the command fails (path error or transport error).
          * @return true if the command was successfully initiated.
          */
-        bool SendCommandWithCallbacks(chip::ClusterId clusterId,
-                                      chip::CommandId commandId,
-                                      std::optional<uint16_t> timedInvokeTimeoutMs,
-                                      chip::EndpointId endpointId,
-                                      const uint8_t *tlvBuffer,
-                                      size_t encodedLength,
-                                      chip::Messaging::ExchangeManager &exchangeMgr,
-                                      const chip::SessionHandle &sessionHandle,
-                                      std::function<void(const chip::app::ConcreteCommandPath &,
-                                                         chip::TLV::TLVReader *)> onResponse,
-                                      std::function<void(CHIP_ERROR)> onError);
+        bool SendCommandWithCallbacks(
+            chip::ClusterId clusterId,
+            chip::CommandId commandId,
+            std::optional<uint16_t> timedInvokeTimeoutMs,
+            chip::EndpointId endpointId,
+            const uint8_t *tlvBuffer,
+            size_t encodedLength,
+            chip::Messaging::ExchangeManager &exchangeMgr,
+            const chip::SessionHandle &sessionHandle,
+            std::function<void(const chip::app::ConcreteCommandPath &, chip::TLV::TLVReader *)> onResponse,
+            std::function<void(CHIP_ERROR, std::optional<int32_t>)> onError);
 
         /**
          * Write an attribute to the device using pre-encoded TLV data.
@@ -487,7 +487,7 @@ namespace barton
             // Deferred mode: when set, OnResponse/OnError call these instead of resolving the promise
             std::function<void(const chip::app::ConcreteCommandPath &,
                                chip::TLV::TLVReader *)> deferredOnResponse;
-            std::function<void(CHIP_ERROR)> deferredOnError;
+            std::function<void(CHIP_ERROR, std::optional<int32_t>)> deferredOnError;
 
             bool IsDeferred() const { return deferredOnResponse != nullptr; }
         };
