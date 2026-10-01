@@ -97,62 +97,123 @@ The SBMD driver SHALL register a command handler for the `End` command (ID 0x03)
 - **WHEN** the camera sends an `End` command with a reason code
 - **THEN** the SBMD handler SHALL call `updateResource('webrtc', 'webrtcError', <endedValue>, { "reason": "<reason>", "detail": "<text>" })` AND remove the associated session from transient data
 
-### Requirement: Asynchronous signaling failures emit webrtcError event
+### Requirement: Signaling failures are reported on the channel that carries success
 
-Each asynchronous WebRTC signaling failure that occurs after the originating execute has returned SHALL emit a `webrtcError` event so the client is notified rather than left to time out. This SHALL cover at least: a `VideoStreamAllocate` error, a `ProvideOffer` error (offerer flow), a `SolicitOffer` error (answerer flow), and a `requestCommand` overall-deadline timeout in the signaling flow.
+A signaling failure SHALL be reported on the same channel the corresponding success would have used, so that one failure never produces two notifications for the client to reconcile.
 
-#### Scenario: VideoStreamAllocate rejected by camera
-- **WHEN** the camera rejects the `VideoStreamAllocate` command during the signaling flow
+The `stream` execute stays parked for the whole camera-offerer chain and returns the stream result itself. `VideoStreamAllocate` and `SolicitOffer` failures in that chain SHALL therefore fail the pending `stream` execute and SHALL NOT emit a `webrtcError` event.
+
+The `localSdp` execute signals success asynchronously — the camera's answer arrives later as a `remoteSdp` event — so there is no meaningful result to fail. `VideoStreamAllocate` and `ProvideOffer` failures in the camera-answerer chain SHALL therefore emit a `webrtcError` event with a failure value and metadata describing the error, rather than leaving the client to time out. This SHALL include a `requestCommand` overall-deadline timeout in that chain, reported with a timeout reason.
+
+Because the runtime discards the message carried by an error terminal returned from a deferred handler, a handler that fails the pending execute SHALL also record the failure detail as a log operation.
+
+#### Scenario: VideoStreamAllocate rejected during the camera-offerer chain
+- **WHEN** the camera rejects `VideoStreamAllocate` while `stream` is parked on the `SolicitOffer` chain
+- **THEN** the SBMD handler SHALL fail the pending `stream` execute AND SHALL NOT emit a `webrtcError` event
+
+#### Scenario: SolicitOffer rejected by camera
+- **WHEN** the camera rejects the `SolicitOffer` command while `stream` is parked on that chain
+- **THEN** the SBMD handler SHALL fail the pending `stream` execute AND SHALL NOT emit a `webrtcError` event
+
+#### Scenario: VideoStreamAllocate rejected during the camera-answerer chain
+- **WHEN** the camera rejects `VideoStreamAllocate` after a client executed `localSdp` with its offer
 - **THEN** the SBMD handler SHALL emit a `webrtcError` event with a failure value and metadata describing the allocate error
 
 #### Scenario: ProvideOffer rejected by camera
-- **WHEN** the camera rejects the `ProvideOffer` command during the offerer (`ProvideOffer`) flow
+- **WHEN** the camera rejects the `ProvideOffer` command during the camera-answerer flow
 - **THEN** the SBMD handler SHALL emit a `webrtcError` event with a failure value and metadata describing the provide-offer error
 
-#### Scenario: SolicitOffer rejected by camera
-- **WHEN** the camera rejects the `SolicitOffer` command during the answerer (`SolicitOffer`) flow
-- **THEN** the SBMD handler SHALL emit a `webrtcError` event with a failure value and metadata describing the solicit-offer error
-
 #### Scenario: Signaling command times out
-- **WHEN** a `requestCommand` in the signaling flow exceeds its overall deadline
+- **WHEN** a `requestCommand` in the camera-answerer chain exceeds its overall deadline
 - **THEN** the SBMD handler SHALL emit a `webrtcError` event with a failure value and a timeout reason
 
-### Requirement: destroySession sends EndSession to camera
+### Requirement: Failed signaling rolls the session back and defers stream release
 
-When the camera session endpoint's `destroySession` is executed for a session that has progressed to WebRTC signaling, the handler SHALL send an `EndSession` command (ID 0x06) to the camera's `WebRTCTransportProvider` cluster (0x0553) before cleaning up local session state.
+When a `VideoStreamAllocate`, `ProvideOffer`, or `SolicitOffer` command fails, the SBMD driver SHALL restore the associated local camera session to `created` state and remove its stored WebRTC identifier. The driver SHALL record this rollback as result operations rather than as a chained device command, because the deferred runtime discards a terminal returned from an error handler once the chain's overall deadline has expired.
 
-#### Scenario: Client destroys active streaming session
-- **WHEN** a client executes `destroySession` for a session in `streaming` state
-- **THEN** the handler SHALL send `EndSession` to the camera AND remove the session from transient data
+The driver SHALL retain any `videoStreamID` supplied by a `VideoStreamAllocate` response and SHALL NOT issue `VideoStreamDeallocate` from the failing signaling chain. Releasing that stream on the camera is `destroySession`'s responsibility.
 
-#### Scenario: Client destroys session that never started streaming
-- **WHEN** a client executes `destroySession` for a session in `created` state (never executed `stream`)
+#### Scenario: Allocation fails before a video stream is assigned
+- **WHEN** `VideoStreamAllocate` fails
+- **THEN** the driver SHALL restore the local session to `created` state and clear any stored `webRTCSessionID`
+
+#### Scenario: Soliciting an offer fails after allocation
+- **WHEN** `SolicitOffer` fails after `VideoStreamAllocate` returned a video stream ID
+- **THEN** the driver SHALL restore the local session to `created` state, retain the `videoStreamID`, and return the `SolicitOffer` failure to the pending `stream` execute without issuing `VideoStreamDeallocate`
+
+#### Scenario: Providing an offer fails after allocation
+- **WHEN** `ProvideOffer` fails after `VideoStreamAllocate` returned a video stream ID
+- **THEN** the driver SHALL restore the local session to `created` state, retain the `videoStreamID`, and emit the `webrtcError` failure event without issuing `VideoStreamDeallocate`
+
+### Requirement: stream may be retried while a video stream is allocated
+
+`VideoStreamAllocate` is idempotent for a given set of stream parameters: the camera reuses a matching allocated stream and returns its existing identifier rather than creating a second one. When `stream` is executed for a session that already holds a `videoStreamID`, the handler SHALL proceed with the normal allocate-then-negotiate flow and SHALL NOT require the client to tear the session down first.
+
+#### Scenario: stream re-executed after a failed negotiation
+- **WHEN** `stream` is executed for a session that retains a `videoStreamID` from a failed negotiation
+- **THEN** the handler SHALL issue `VideoStreamAllocate` and continue the negotiation flow
+
+### Requirement: Teardown releases the camera's video stream allocation
+
+Every `destroySession` SHALL leave the camera holding no video stream allocation attributable to that session, and SHALL remove the session from transient data only once the camera has confirmed the release.
+
+A video stream allocated by `VideoStreamAllocate` is reference counted by the camera. `SolicitOffer` and `ProvideOffer` increment that count, `EndSession` decrements it, and the allocation itself is released only by `VideoStreamDeallocate`, which the camera rejects while the count is non-zero. Nothing releases the allocation implicitly, so an allocation that is never deallocated consumes one of the camera's encoders until it restarts.
+
+#### Scenario: Client destroys an active streaming session
+- **WHEN** a client executes `destroySession` for a session in `streaming` state holding a `videoStreamID`
+- **THEN** the handler SHALL send `EndSession` (ID 0x06) to the `WebRTCTransportProvider` cluster, AND after the camera confirms it SHALL issue `VideoStreamDeallocate` (ID 0x06) to the Camera AV Stream Management cluster, AND SHALL remove the session from transient data only once that deallocation is confirmed
+
+#### Scenario: Client destroys a session left by a failed negotiation
+- **WHEN** `destroySession` is executed for a `created` session holding a `videoStreamID`
+- **THEN** the handler SHALL issue `VideoStreamDeallocate` without sending `EndSession`, because no WebRTC session holds a reference, AND SHALL remove the session once the camera responds
+
+#### Scenario: Client destroys a session that never allocated a stream
+- **WHEN** a client executes `destroySession` for a session with no stored `videoStreamID` and no `webRTCSessionID`
 - **THEN** the handler SHALL only remove the session from transient data (no Matter command needed)
 
-### Requirement: WebRTC constants use correct Matter cluster and command IDs
+#### Scenario: EndSession fails during teardown
+- **WHEN** `EndSession` issued by `destroySession` fails
+- **THEN** the handler SHALL fail the execute AND SHALL NOT issue `VideoStreamDeallocate`, because the stream still carries the session's reference, AND SHALL leave the session unchanged so a subsequent `destroySession` can retry the whole teardown
 
-The SBMD driver SHALL define constants for all WebRTC cluster and command identifiers:
+#### Scenario: Stream release fails during teardown
+- **WHEN** `VideoStreamDeallocate` issued by `destroySession` fails
+- **THEN** the handler SHALL fail the execute AND leave the session and its `videoStreamID` in transient data so a subsequent `destroySession` can retry the release alone
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| CL_WEBRTC_TRANSPORT_PROVIDER | 0x0553 | Camera's provider cluster |
-| CL_WEBRTC_TRANSPORT_REQUESTOR | 0x0554 | Barton's requestor cluster |
-| CL_CAMERA_AV_STREAM_MGMT | 0x0551 | Camera A/V stream management (video stream allocation) |
-| CMD_VIDEO_STREAM_ALLOCATE | 0x03 | Allocate a video stream before offer/solicit |
-| CMD_SOLICIT_OFFER | 0x00 | Ask the camera to generate the offer (answerer flow) |
-| CMD_SOLICIT_OFFER_RESP | 0x01 | Camera's response to SolicitOffer |
-| CMD_PROVIDE_OFFER | 0x02 | Send SDP offer to camera (offerer flow) |
-| CMD_PROVIDE_ANSWER | 0x04 | Send SDP answer to camera (answerer flow) |
-| CMD_PROVIDE_ICE | 0x05 | Send ICE candidates to camera |
-| CMD_END_SESSION | 0x06 | End a WebRTC session |
-| CMD_OFFER | 0x00 | Incoming offer from camera |
-| CMD_ANSWER | 0x01 | Incoming answer from camera |
-| CMD_ICE_CANDIDATES | 0x02 | Incoming ICE from camera |
-| CMD_END | 0x03 | Incoming end from camera |
+### Requirement: A camera-ended session retains its stream allocation for teardown
 
-#### Scenario: Constants match Matter specification
+When an `End` command names a session holding a `videoStreamID`, the handler SHALL retain that session in transient data, restore it to `created` state, and clear its `webRTCSessionID`, so that a later `destroySession` releases the allocation. When the named session holds no `videoStreamID`, the handler SHALL remove it.
+
+Ending the session drops the camera's own reference count on the stream, but the stream remains allocated. A command handler cannot issue device commands, so the driver cannot release it at that point.
+
+#### Scenario: Camera ends a session holding a video stream
+- **WHEN** the camera sends `End` for a session with a stored `videoStreamID`
+- **THEN** the handler SHALL emit the `webrtcError` ended event AND retain the session in `created` state with its `videoStreamID` and without its `webRTCSessionID`
+
+#### Scenario: Camera ends a session with no allocation
+- **WHEN** the camera sends `End` for a session with no stored `videoStreamID`
+- **THEN** the handler SHALL emit the `webrtcError` ended event AND remove the session from transient data
+
+### Requirement: Clients release camera resources after a session ends
+
+On receiving a `webrtcError` event with the `ended` value, a client SHALL execute `destroySession` for the session named in the event metadata. Until it does, the camera keeps that session's video stream allocated.
+
+This places resource release on the client, which is a known weakness rather than a deliberate design. The driver learns that a session ended through a command handler, and a command handler cannot issue device commands, so it has no way to release the stream itself. If the client never calls `destroySession`, the allocation survives until the camera restarts; worse, once the session's transient data expires the stored `videoStreamID` is lost and the driver can no longer release it at all. This contract should be revisited if the driver gains a way to release device resources without client involvement.
+
+#### Scenario: Client tears down a camera-ended session
+- **WHEN** a client receives a `webrtcError` event with the `ended` value
+- **THEN** the client SHALL execute `destroySession` for the `sessionId` carried in the event metadata
+
+#### Scenario: Session ends without client teardown
+- **WHEN** a client does not execute `destroySession` after an `ended` event
+- **THEN** the camera SHALL retain the video stream allocation AND the driver SHALL NOT release it
+
+### Requirement: Matter identifiers come from the Matter specification
+
+The SBMD driver SHALL use the cluster, command, and response identifiers defined by the Matter WebRTC Transport and Camera AV Stream Management cluster specifications, at the SDK revision pinned in `matter-version`. This specification does not restate those values as a table; the driver source is the single place they are enumerated, and scenarios above cite an identifier only where it disambiguates the command being sent.
+
+#### Scenario: Constants match the Matter specification
 - **WHEN** the SBMD driver is loaded
-- **THEN** all cluster and command ID constants SHALL match the values defined in the Matter 1.5 WebRTC Transport cluster specification
+- **THEN** all cluster, command, and response ID constants SHALL match the values defined by the Matter WebRTC Transport and Camera AV Stream Management cluster specifications for the pinned SDK revision
 
 ### Requirement: WebRTC endpoint is separable by design
 
