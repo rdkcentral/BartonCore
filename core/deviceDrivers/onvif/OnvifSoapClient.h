@@ -115,7 +115,9 @@ namespace barton
                                 std::string *error = nullptr);
 
             // Build a SOAP envelope for a body, injecting a WS-Security UsernameToken when creds are set.
-            // Exposed for unit testing of the security header.
+            // Returns an empty string when a credentialed envelope cannot be built because the CSPRNG
+            // nonce is unreadable; callers must treat an empty result as a failure (Post does) rather
+            // than sending it. Exposed for unit testing of the security header.
             static std::string BuildEnvelope(const std::string &bodyXml, const OnvifCredentials &creds);
 
         private:
