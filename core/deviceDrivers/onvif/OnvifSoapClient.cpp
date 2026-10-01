@@ -337,10 +337,14 @@ namespace barton
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCb);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseOut);
-            // CURLOPT_TIMEOUT bounds the whole exchange; CONNECTTIMEOUT bounds the connect phase so an
-            // unreachable camera fails fast during discovery.
+            // CURLOPT_TIMEOUT bounds the whole exchange; CONNECTTIMEOUT bounds just the connect phase
+            // with a shorter budget so an unreachable camera on the LAN fails fast instead of burning
+            // the full transfer timeout before the next candidate is tried.
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeoutSeconds);
-            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, timeoutSeconds);
+            const long connectTimeoutSeconds = 5;
+            curl_easy_setopt(curl,
+                             CURLOPT_CONNECTTIMEOUT,
+                             timeoutSeconds < connectTimeoutSeconds ? timeoutSeconds : connectTimeoutSeconds);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
 
             CURLcode code = curl_easy_perform(curl);
