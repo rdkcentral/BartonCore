@@ -1189,6 +1189,86 @@ namespace
         EXPECT_EQ(finalState->value, "{}") << "The session is removed only once the stream is released";
     }
 
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionNotFoundReleasesRetainedStream)
+    {
+        // A peer can end the WebRTC session without the camera sending a requestor End command, so
+        // EndSession comes back NotFound. The stream is still allocated and must still be released.
+        std::string sessions =
+            R"({"1":{"state":"streaming","protocol":"webrtc","deviceId":"test-camera-uuid","webRTCSessionID":42,"videoStreamID":5}})";
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &end = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto notFound =
+            InvokeCallback(end.onError,
+                           "({error:{type:'commandFailed',message:'IM status',matterCode:1,commandStatus:139},"
+                           "handlerContext:{sessionId:'1',videoStreamID:5,sessions:{'1':{state:'streaming',"
+                           "protocol:'webrtc',deviceId:'test-camera-uuid',webRTCSessionID:42,videoStreamID:5}}}})");
+
+        auto &dealloc = ExpectRequestCommand(notFound, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+
+        const auto *demoted = FindTransientData(*notFound, "sessions");
+        ASSERT_NE(demoted, nullptr);
+        EXPECT_TRUE(demoted->value.find("\"state\":\"created\"") != std::string::npos) << "Got: " << demoted->value;
+        EXPECT_TRUE(demoted->value.find("webRTCSessionID") == std::string::npos) << "Got: " << demoted->value;
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        SafeJSValue decoded(Ctx(), DecodeTlv(dealloc.tlvBase64));
+        SafeJSValue videoStreamId(Ctx(), JS_GetPropertyUint32(Ctx(), decoded.Get(), 0));
+        int32_t value = 0;
+        JS_ToInt32(Ctx(), &value, videoStreamId.Get());
+        EXPECT_EQ(value, 5);
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionNotFoundWithoutStreamCompletes)
+    {
+        std::string sessions = SessionsJson("1", "streaming", 42);
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &end = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto notFound =
+            InvokeCallback(end.onError,
+                           "({error:{type:'commandFailed',message:'IM status',matterCode:1,commandStatus:139},"
+                           "handlerContext:{sessionId:'1',sessions:{'1':{state:'streaming',protocol:'webrtc',"
+                           "deviceId:'test-camera-uuid',webRTCSessionID:42}}}})");
+
+        ExpectSuccess(notFound);
+        const auto *finalState = FindTransientData(*notFound, "sessions");
+        ASSERT_NE(finalState, nullptr);
+        EXPECT_EQ(finalState->value, "{}") << "Got: " << finalState->value;
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionRecoversAfterEndSessionTimesOut)
+    {
+        // A timed-out EndSession the camera did process leaves Barton believing the session is
+        // still streaming. The retry is what reconciles that: the camera answers NotFound and
+        // teardown resumes, so the stream is not stranded.
+        std::string sessions =
+            R"({"1":{"state":"streaming","protocol":"webrtc","deviceId":"test-camera-uuid","webRTCSessionID":42,"videoStreamID":5}})";
+        auto first = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &end = ExpectRequestCommand(first, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto timedOut =
+            InvokeCallback(end.onError,
+                           "({error:{type:'timeout',message:'Overall operation deadline exceeded',matterCode:-1,"
+                           "commandStatus:null},handlerContext:{sessionId:'1',videoStreamID:5,"
+                           "sessions:{'1':{state:'streaming',protocol:'webrtc',deviceId:'test-camera-uuid',"
+                           "webRTCSessionID:42,videoStreamID:5}}}})");
+        ExpectErrorContains(timedOut, "EndSession failed");
+
+        const auto *persisted = FindTransientData(*timedOut, "sessions");
+        std::string afterTimeout = persisted != nullptr ? persisted->value : sessions;
+
+        auto retry = InvokeExecuteHandler("camera", "destroySession", "1", afterTimeout);
+        auto &retriedEnd = ExpectRequestCommand(retry, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto notFound =
+            InvokeCallback(retriedEnd.onError,
+                           "({error:{type:'commandFailed',message:'IM status',matterCode:1,commandStatus:139},"
+                           "handlerContext:{sessionId:'1',videoStreamID:5,sessions:{'1':{state:'streaming',"
+                           "protocol:'webrtc',deviceId:'test-camera-uuid',webRTCSessionID:42,videoStreamID:5}}}})");
+        ExpectRequestCommand(notFound, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+    }
+
     TEST_F(SbmdCameraWebrtcTest, DestroySessionEndSessionFailureRetriesWholeTeardown)
     {
         // EndSession never took effect, so the WebRTC session still holds the stream's
