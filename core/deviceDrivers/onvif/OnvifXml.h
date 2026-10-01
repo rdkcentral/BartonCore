@@ -54,7 +54,9 @@ namespace barton
         // Convenience: text of the first descendant with the given local name, relative to root.
         std::string OnvifXmlFindText(xmlNode *root, const char *localName);
 
-        // Escape XML metacharacters (&, <, >, ", ') so a value can be safely embedded in an element.
+        // Escape XML metacharacters (&, <, >, ") for embedding a value in XML element text. Backed by
+        // libxml2's xmlEncodeSpecialChars, which does not escape the apostrophe, so the result is safe
+        // for element text only -- not for a single-quoted attribute value.
         std::string OnvifXmlEscape(const std::string &in);
 
     } // namespace onvif
