@@ -34,7 +34,8 @@
  *   - executeLocalSdp (client-offers / ProvideOffer flow): TLV encoding (null webRTCSessionID, tags), error paths
  *   - executeLocalIceCandidates: valid JSON array → sendCommand, invalid JSON → error
  *   - handleIncomingOffer / handleIncomingAnswer / handleIncomingIceCandidates / handleIncomingEndSession
- *   - executeDestroySession with streaming session: sends EndSession command
+ *   - executeDestroySession: EndSession then VideoStreamDeallocate, plus the retry paths when
+ *     either leg fails
  */
 
 #include "SbmdDriverTestBase.h"
@@ -70,6 +71,7 @@ namespace
     constexpr uint32_t CMD_END_SESSION = 0x06;
     constexpr uint32_t CMD_VIDEO_STREAM_ALLOCATE = 0x03;
     constexpr uint32_t CMD_VIDEO_STREAM_ALLOCATE_RESP = 0x04;
+    constexpr uint32_t CMD_VIDEO_STREAM_DEALLOCATE = 0x06;
     constexpr uint32_t CMD_OFFER = 0x00;
     constexpr uint32_t CMD_ANSWER = 0x01;
     constexpr uint32_t CMD_ICE_CANDIDATES = 0x02;
@@ -743,7 +745,7 @@ namespace
         // EndSession (0x0553 cmd 0x06): WebRTCSessionID(0), Reason(1)
         std::string sessions = SessionsJson("1", "streaming", 42);
         auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
-        auto &cmd = ExpectSendCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+        auto &cmd = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         JSValue decoded = DecodeTlv(cmd.tlvBase64);
@@ -900,6 +902,28 @@ namespace
         EXPECT_TRUE(ur->metadata->find("reason") != std::string::npos);
     }
 
+    TEST_F(SbmdCameraWebrtcTest, HandleIncomingEndRetainsSessionHoldingVideoStream)
+    {
+        // The camera dropped its reference, but the stream stays allocated and a command handler
+        // cannot issue device commands. The session must survive so destroySession can release it.
+        std::string sessions =
+            R"({"1":{"state":"streaming","protocol":"webrtc","deviceId":"test-camera-uuid","webRTCSessionID":42,"videoStreamID":5}})";
+        auto tlv = EncodeTlv("{webRTCSessionID:{tag:0,type:'uint16'}, reason:{tag:1,type:'enum8'}}",
+                             "{webRTCSessionID: 42, reason: 2}");
+
+        auto result =
+            InvokeCommandHandler("handleIncomingEndSession", CL_WEBRTC_TRANSPORT_REQUESTOR, CMD_END, tlv, sessions);
+
+        ExpectSuccess(result);
+        ExpectUpdateResource(*result, "webrtcError", "ended");
+
+        auto *retained = FindTransientData(*result, "sessions");
+        ASSERT_NE(retained, nullptr);
+        EXPECT_TRUE(retained->value.find("\"videoStreamID\":5") != std::string::npos) << "Got: " << retained->value;
+        EXPECT_TRUE(retained->value.find("\"state\":\"created\"") != std::string::npos) << "Got: " << retained->value;
+        EXPECT_TRUE(retained->value.find("webRTCSessionID") == std::string::npos) << "Got: " << retained->value;
+    }
+
     TEST_F(SbmdCameraWebrtcTest, HandleIncomingEndWithUnknownWebRTCSessionIDExpectSuccess)
     {
         std::string sessions = SessionsJson("1", "streaming", 42);
@@ -983,16 +1007,25 @@ namespace
 
     TEST_F(SbmdCameraWebrtcTest, ExecuteStreamFailsWhenSolicitOfferFails)
     {
-        // The solicit chain runs inside stream(), so its failure must fail the execute rather than
-        // resolving to an empty success.
+        // The solicit chain runs inside stream(), so failures must roll the session back and fail
+        // the execute rather than resolving to an empty success. The rollback is recorded as ops
+        // (which survive an overall-deadline expiry) and never as a chained deallocate.
         std::string sessions = SessionsJson("1", "created");
         auto result = InvokeExecuteHandler("camera", "stream", "1", sessions, "", {}, CAMERA_OFFERER_ACCEPTED_CMDS);
         auto &alloc = ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
 
-        auto allocFailed = InvokeCallback(
-            alloc.onError,
-            "({error:{type:'commandError',message:'DYNAMIC_CONSTRAINT_ERROR'}, handlerContext:{sessionId:'1'}})");
+        auto allocFailed = InvokeCallback(alloc.onError,
+                                          "({error:{type:'commandError',message:'DYNAMIC_CONSTRAINT_ERROR'}, "
+                                          "handlerContext:{sessionId:'1',sessions:{'1':{state:'streaming',"
+                                          "protocol:'webrtc'}}}})");
         ExpectErrorContains(allocFailed, "VideoStreamAllocate failed");
+
+        auto *allocRollback = FindTransientData(*allocFailed, "sessions");
+        ASSERT_NE(allocRollback, nullptr) << "Allocation failure must persist rollback state";
+        EXPECT_TRUE(allocRollback->value.find("\"state\":\"created\"") != std::string::npos)
+            << "Got: " << allocRollback->value;
+        EXPECT_EQ(FindUpdateResource(*allocFailed, "webrtcError"), nullptr)
+            << "stream() is parked, so its failure is the execute result, not an event";
 
         auto allocRespTlv = EncodeTlv("{videoStreamID:{tag:0,type:'uint16'}}", "{videoStreamID: 5}");
         std::string allocRespArgs = "({response:{data:'" + allocRespTlv +
@@ -1001,10 +1034,39 @@ namespace
         auto solicit = InvokeCallback(alloc.onResponse, allocRespArgs);
         auto &so = ExpectRequestCommand(solicit, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_SOLICIT_OFFER);
 
-        auto solicitFailed = InvokeCallback(so.onError,
-                                            "({error:{type:'timeout',message:'Overall operation deadline exceeded'}, "
-                                            "handlerContext:{sessionId:'1'}})");
-        ExpectErrorContains(solicitFailed, "SolicitOffer failed");
+        auto solicitFailed =
+            InvokeCallback(so.onError,
+                           "({error:{type:'timeout',message:'Overall operation deadline exceeded'}, "
+                           "handlerContext:{sessionId:'1',sessions:{'1':{state:'streaming',protocol:'webrtc',"
+                           "webRTCSessionID:7,videoStreamID:5}}}})");
+
+        // The original failure reaches the parked execute directly: no deallocate round trip, which
+        // the runtime would discard on the deadline path anyway.
+        ExpectErrorContains(solicitFailed, "SolicitOffer failed: Overall operation deadline exceeded");
+        EXPECT_EQ(FindUpdateResource(*solicitFailed, "webrtcError"), nullptr)
+            << "stream() is parked, so its failure is the execute result, not an event";
+
+        auto *solicitRollback = FindTransientData(*solicitFailed, "sessions");
+        ASSERT_NE(solicitRollback, nullptr) << "SolicitOffer failure must persist rollback state";
+        EXPECT_TRUE(solicitRollback->value.find("\"state\":\"created\"") != std::string::npos)
+            << "Got: " << solicitRollback->value;
+        EXPECT_TRUE(solicitRollback->value.find("webRTCSessionID") == std::string::npos)
+            << "Got: " << solicitRollback->value;
+        EXPECT_TRUE(solicitRollback->value.find("\"videoStreamID\":5") != std::string::npos)
+            << "destroySession releases the retained stream, so the ID must survive rollback. Got: "
+            << solicitRollback->value;
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, ExecuteStreamRetriesAfterFailedNegotiation)
+    {
+        // A failed negotiation leaves the session holding a videoStreamID, and blocking the retry
+        // on that would make the session permanently unrecoverable. The camera may reuse the
+        // existing stream or allocate a new one; that choice belongs to its delegate.
+        std::string sessions =
+            R"({"1":{"state":"created","protocol":"webrtc","deviceId":"test-camera-uuid","videoStreamID":5}})";
+        auto result = InvokeExecuteHandler("camera", "stream", "1", sessions, "", {}, CAMERA_OFFERER_ACCEPTED_CMDS);
+
+        ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
     }
 
     TEST_F(SbmdCameraWebrtcTest, LocalSdpDoesNotSolicitWhenCameraIsOfferer)
@@ -1029,14 +1091,20 @@ namespace
             InvokeExecuteHandler("webrtc", "localSdp", "dummy-sdp", sessions, "", {}, CAMERA_ANSWERER_ACCEPTED_CMDS);
         auto &alloc = ExpectRequestCommand(offer, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_ALLOCATE);
 
-        auto result = InvokeCallback(
-            alloc.onError,
-            "({error:{type:'commandError',message:'DYNAMIC_CONSTRAINT_ERROR'}, handlerContext:{sessionId:'1'}})");
+        auto result = InvokeCallback(alloc.onError,
+                                     "({error:{type:'commandError',message:'DYNAMIC_CONSTRAINT_ERROR'}, "
+                                     "handlerContext:{sessionId:'1',sessions:{'1':{state:'streaming',"
+                                     "protocol:'webrtc',webRTCSessionID:7}}}})");
 
         ExpectSuccess(result);
         const auto *ur = ExpectUpdateResource(*result, "webrtcError", "failed");
         ASSERT_TRUE(ur->metadata.has_value());
         EXPECT_TRUE(ur->metadata->find("DYNAMIC_CONSTRAINT_ERROR") != std::string::npos);
+
+        auto *rollback = FindTransientData(*result, "sessions");
+        ASSERT_NE(rollback, nullptr) << "VideoStreamAllocate failure must persist rollback state";
+        EXPECT_TRUE(rollback->value.find("\"state\":\"created\"") != std::string::npos) << "Got: " << rollback->value;
+        EXPECT_TRUE(rollback->value.find("webRTCSessionID") == std::string::npos) << "Got: " << rollback->value;
     }
 
     TEST_F(SbmdCameraWebrtcTest, HandleProvideOfferErrorEmitsWebrtcErrorFailed)
@@ -1059,26 +1127,142 @@ namespace
 
         auto result = InvokeCallback(
             po.onError,
-            "({error:{type:'timeout',message:'Overall operation deadline exceeded'}, handlerContext:{sessionId:'1'}})");
+            "({error:{type:'timeout',message:'Overall operation deadline exceeded'}, "
+            "handlerContext:{sessionId:'1',sessions:{'1':{state:'streaming',protocol:'webrtc',videoStreamID:5}}}})");
 
+        // The webrtcError event is emitted immediately: it is an op, so it still reaches the client
+        // when the chain trips its overall deadline, unlike a chained deallocate terminal.
         ExpectSuccess(result);
         const auto *ur = ExpectUpdateResource(*result, "webrtcError", "failed");
         ASSERT_TRUE(ur->metadata.has_value());
         EXPECT_TRUE(ur->metadata->find("timeout") != std::string::npos);
+        EXPECT_TRUE(ur->metadata->find("\"sessionId\":\"1\"") != std::string::npos) << "Got: " << *ur->metadata;
+
+        auto *rollback = FindTransientData(*result, "sessions");
+        ASSERT_NE(rollback, nullptr) << "ProvideOffer failure must persist rollback state";
+        EXPECT_TRUE(rollback->value.find("\"state\":\"created\"") != std::string::npos) << "Got: " << rollback->value;
+        EXPECT_TRUE(rollback->value.find("\"videoStreamID\":5") != std::string::npos) << "Got: " << rollback->value;
     }
 
     // ========================================================================
     // 5.4 — executeDestroySession sends EndSession when streaming
     // ========================================================================
 
-    TEST_F(SbmdCameraWebrtcTest, DestroySessionStreamingSendsEndSession)
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionStreamingEndsSessionThenDeallocates)
     {
+        // The stream's ReferenceCount is only decremented by EndSession, and VideoStreamDeallocate is
+        // rejected with InvalidInState while that count is above zero. Teardown must therefore run
+        // (1) EndSession, then (2) VideoStreamDeallocate.
+        std::string sessions =
+            R"({"1":{"state":"streaming","protocol":"webrtc","deviceId":"test-camera-uuid","webRTCSessionID":42,"videoStreamID":5}})";
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &end = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto ended =
+            InvokeCallback(end.onResponse,
+                           "({handlerContext:{sessionId:'1',videoStreamID:5,sessions:{'1':{state:'streaming',"
+                           "protocol:'webrtc',deviceId:'test-camera-uuid',webRTCSessionID:42,videoStreamID:5}}}})");
+        auto &dealloc = ExpectRequestCommand(ended, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+
+        // The WebRTC reference is released, so a retry must not send EndSession a second time.
+        auto *afterEnd = FindTransientData(*ended, "sessions");
+        ASSERT_NE(afterEnd, nullptr);
+        EXPECT_TRUE(afterEnd->value.find("\"state\":\"created\"") != std::string::npos) << "Got: " << afterEnd->value;
+        EXPECT_TRUE(afterEnd->value.find("webRTCSessionID") == std::string::npos) << "Got: " << afterEnd->value;
+        EXPECT_TRUE(afterEnd->value.find("\"videoStreamID\":5") != std::string::npos) << "Got: " << afterEnd->value;
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            SafeJSValue decoded(Ctx(), DecodeTlv(dealloc.tlvBase64));
+            SafeJSValue videoStreamId(Ctx(), JS_GetPropertyUint32(Ctx(), decoded.Get(), 0));
+            int32_t value = 0;
+            JS_ToInt32(Ctx(), &value, videoStreamId.Get());
+            EXPECT_EQ(value, 5) << "The deallocate must target the stream the session allocated";
+        }
+
+        auto cleaned = InvokeCallback(dealloc.onResponse,
+                                      "({handlerContext:{sessionId:'1',videoStreamID:5,sessions:{'1':{state:'created',"
+                                      "protocol:'webrtc',deviceId:'test-camera-uuid',videoStreamID:5}}}})");
+        ExpectSuccess(cleaned);
+        auto *finalState = FindTransientData(*cleaned, "sessions");
+        ASSERT_NE(finalState, nullptr);
+        EXPECT_EQ(finalState->value, "{}") << "The session is removed only once the stream is released";
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionEndSessionFailureRetriesWholeTeardown)
+    {
+        // EndSession never took effect, so the WebRTC session still holds the stream's
+        // ReferenceCount and a deallocate would be rejected. The stored session must stay as it was
+        // so the retry restarts at EndSession rather than skipping to the deallocate.
+        std::string sessions =
+            R"({"1":{"state":"streaming","protocol":"webrtc","deviceId":"test-camera-uuid","webRTCSessionID":42,"videoStreamID":5}})";
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &end = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto failed =
+            InvokeCallback(end.onError,
+                           "({error:{type:'commandError',message:'INVALID_IN_STATE'},handlerContext:{sessionId:'1',"
+                           "videoStreamID:5,sessions:{'1':{state:'streaming',protocol:'webrtc',"
+                           "deviceId:'test-camera-uuid',webRTCSessionID:42,videoStreamID:5}}}})");
+        ExpectErrorContains(failed, "EndSession failed");
+
+        // Derive the surviving state rather than assuming nothing was written, so this still fails
+        // if the handler ever starts demoting the session on the error path.
+        const auto *persisted = FindTransientData(*failed, "sessions");
+        std::string afterFailure = persisted != nullptr ? persisted->value : sessions;
+        EXPECT_TRUE(afterFailure.find("\"webRTCSessionID\":42") != std::string::npos)
+            << "A failed EndSession must leave the WebRTC session intact. Got: " << afterFailure;
+
+        auto retry = InvokeExecuteHandler("camera", "destroySession", "1", afterFailure);
+        ExpectRequestCommand(retry, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionDeallocateFailureAfterEndSessionRetriesDeallocateOnly)
+    {
+        // The camera already dropped the WebRTC session, so the retry must not re-send EndSession
+        // for a session it no longer has. This is what the demotion in the EndSession response buys.
+        std::string sessions =
+            R"({"1":{"state":"streaming","protocol":"webrtc","deviceId":"test-camera-uuid","webRTCSessionID":42,"videoStreamID":5}})";
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &end = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+
+        auto ended =
+            InvokeCallback(end.onResponse,
+                           "({handlerContext:{sessionId:'1',videoStreamID:5,sessions:{'1':{state:'streaming',"
+                           "protocol:'webrtc',deviceId:'test-camera-uuid',webRTCSessionID:42,videoStreamID:5}}}})");
+        auto &dealloc = ExpectRequestCommand(ended, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+
+        // Whatever the EndSession response persisted is what a later destroySession will read.
+        const auto *afterEnd = FindTransientData(*ended, "sessions");
+        ASSERT_NE(afterEnd, nullptr) << "The EndSession response must persist the demoted session";
+
+        auto failed =
+            InvokeCallback(dealloc.onError,
+                           "({error:{type:'timeout',message:'deallocation timed out'},handlerContext:{sessionId:'1',"
+                           "videoStreamID:5,sessions:{'1':{state:'created',protocol:'webrtc',"
+                           "deviceId:'test-camera-uuid',videoStreamID:5}}}})");
+        ExpectErrorContains(failed, "VideoStreamDeallocate failed");
+
+        auto retry = InvokeExecuteHandler("camera", "destroySession", "1", afterEnd->value);
+        ExpectRequestCommand(retry, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionWithoutVideoStreamCompletesAtEndSession)
+    {
+        // A session can carry a webRTCSessionID without ever allocating a stream, since an incoming
+        // Offer records the ID. There is nothing to release, so teardown ends at EndSession.
         std::string sessions = SessionsJson("1", "streaming", 42);
         auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
-        ExpectSendCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
+        auto &end = ExpectRequestCommand(result, CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION);
 
-        ASSERT_GE(result->ops.size(), 1u);
-        EXPECT_TRUE(std::holds_alternative<ResultOp::SetTransientData>(result->ops[0].data));
+        auto ended = InvokeCallback(end.onResponse,
+                                    "({handlerContext:{sessionId:'1',sessions:{'1':{state:'streaming',"
+                                    "protocol:'webrtc',deviceId:'test-camera-uuid',webRTCSessionID:42}}}})");
+
+        ExpectSuccess(ended);
+        const auto *finalState = FindTransientData(*ended, "sessions");
+        ASSERT_NE(finalState, nullptr);
+        EXPECT_EQ(finalState->value, "{}") << "Got: " << finalState->value;
     }
 
     TEST_F(SbmdCameraWebrtcTest, DestroySessionCreatedStateDoesNotSendEndSession)
@@ -1095,6 +1279,69 @@ namespace
             EXPECT_FALSE(std::holds_alternative<ResultOp::UpdateResource>(op.data))
                 << "Non-streaming destroy should not update any resources";
         }
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionCreatedStateDeallocatesRetainedVideoStream)
+    {
+        std::string sessions =
+            R"({"1":{"state":"created","protocol":"webrtc","deviceId":"test-camera-uuid","videoStreamID":5}})";
+        auto result = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+
+        auto &deallocate = ExpectRequestCommand(result, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            SafeJSValue decoded(Ctx(), DecodeTlv(deallocate.tlvBase64));
+            SafeJSValue videoStreamId(Ctx(), JS_GetPropertyUint32(Ctx(), decoded.Get(), 0));
+            int32_t value = 0;
+            JS_ToInt32(Ctx(), &value, videoStreamId.Get());
+            EXPECT_EQ(value, 5);
+        }
+
+        auto cleaned =
+            InvokeCallback(deallocate.onResponse,
+                           "({handlerContext:{sessionId:'1',sessions:{'1':{state:'created',protocol:'webrtc',"
+                           "deviceId:'test-camera-uuid',videoStreamID:5}}}})");
+        ExpectSuccess(cleaned);
+        auto *cleanupSessions = FindTransientData(*cleaned, "sessions");
+        ASSERT_NE(cleanupSessions, nullptr);
+        EXPECT_EQ(cleanupSessions->value, "{}");
+    }
+
+    TEST_F(SbmdCameraWebrtcTest, DestroySessionRetriesDeallocateAfterFailure)
+    {
+        // A failed deallocation leaves the stored session untouched, so the next destroySession can
+        // reissue it. Driving that second execute is what proves the ID was retained: the error
+        // handler writes no storage, so asserting the absence of a write proves nothing on its own.
+        std::string sessions =
+            R"({"1":{"state":"created","protocol":"webrtc","deviceId":"test-camera-uuid","videoStreamID":5}})";
+        auto first = InvokeExecuteHandler("camera", "destroySession", "1", sessions);
+        auto &deallocate = ExpectRequestCommand(first, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+
+        auto failed =
+            InvokeCallback(deallocate.onError,
+                           "({error:{type:'timeout',message:'deallocation timed out'},handlerContext:{sessionId:'1',"
+                           "sessions:{'1':{state:'created',protocol:'webrtc',deviceId:'test-camera-uuid',"
+                           "videoStreamID:5}}}})");
+        ExpectErrorContains(failed, "VideoStreamDeallocate failed");
+
+        // Derive the state the failure actually left behind rather than assuming it wrote nothing,
+        // so this still fails if the handler ever starts persisting a session without the ID.
+        const auto *persisted = FindTransientData(*failed, "sessions");
+        std::string afterFailure = persisted != nullptr ? persisted->value : sessions;
+        EXPECT_TRUE(afterFailure.find("\"videoStreamID\":5") != std::string::npos)
+            << "A failed deallocation must retain the stream ID. Got: " << afterFailure;
+
+        // That retained state lets a later destroySession reissue VideoStreamDeallocate.
+        auto retry = InvokeExecuteHandler("camera", "destroySession", "1", afterFailure);
+        auto &retried = ExpectRequestCommand(retry, CL_CAMERA_AV_STREAM_MGMT, CMD_VIDEO_STREAM_DEALLOCATE);
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        SafeJSValue decoded(Ctx(), DecodeTlv(retried.tlvBase64));
+        SafeJSValue videoStreamId(Ctx(), JS_GetPropertyUint32(Ctx(), decoded.Get(), 0));
+        int32_t value = 0;
+        JS_ToInt32(Ctx(), &value, videoStreamId.Get());
+        EXPECT_EQ(value, 5) << "The retry must target the stream the failed attempt retained";
     }
 
 } // namespace

@@ -118,6 +118,7 @@ SbmdDriver({
         // CameraAVStreamManagement commands
         CMD_VIDEO_STREAM_ALLOCATE: 0x03,
         CMD_VIDEO_STREAM_ALLOCATE_RESP: 0x04,
+        CMD_VIDEO_STREAM_DEALLOCATE: 0x06,
 
         // CameraAVStreamManagement StreamUsageEnum value requested when allocating a stream and
         // soliciting/providing an offer. 3 = LiveView.
@@ -544,16 +545,17 @@ function executeDestroySession(args) {
         sessions[sessionId].state === 'streaming' &&
         sessions[sessionId].webRTCSessionID !== undefined;
     var webRTCSessionID = sessions[sessionId].webRTCSessionID;
+    var videoStreamID = sessions[sessionId].videoStreamID;
 
-    delete sessions[sessionId];
-
-    var result = Sbmd.result().storage.setTransientData(
-        TD_SESSIONS,
-        JSON.stringify(sessions),
-        ONE_HOUR_SECS
-    );
+    var result = Sbmd.result();
 
     if (wasStreaming) {
+        // Negotiation (SolicitOffer/ProvideOffer) incremented the video stream's ReferenceCount on
+        // the camera, and EndSession is what decrements it. VideoStreamDeallocate is rejected with
+        // InvalidInState while that count is above zero, so EndSession must complete before it.
+        // This execute is also the only path that releases the allocation: a client must call it
+        // even when the camera ended the session itself (surfaced as a webrtcError 'ended' event),
+        // so camera resources depend on client cooperation. That contract is worth revisiting.
         var endSchema = {
             webRTCSessionID: {tag: 0, type: 'uint16'},
             reason: {tag: 1, type: 'enum8'}
@@ -563,10 +565,141 @@ function executeDestroySession(args) {
             endSchema
         );
 
-        return result.device.sendCommand(CL_WEBRTC_TRANSPORT_PROVIDER, CMD_END_SESSION, endPayload);
+        return result.device.requestCommand(
+            CL_WEBRTC_TRANSPORT_PROVIDER,
+            CMD_END_SESSION,
+            endPayload,
+            {
+                // EndSession returns a bare status: no responseCommandId to pin. The runtime sets
+                // the deadline from this leg and never resets it, so this timeout budget covers the
+                // VideoStreamDeallocate hop that follows.
+                onResponse: handleDestroySessionEndComplete,
+                onError: handleDestroySessionEndError,
+                context: {
+                    sessionId: sessionId,
+                    sessions: sessions,
+                    videoStreamID: videoStreamID
+                },
+                timeoutMs: 15000
+            }
+        );
+    }
+
+    // No WebRTC session holds a ReferenceCount on the stream, so it can be released directly.
+    if (videoStreamID !== undefined && videoStreamID !== null) {
+        return result.device.requestCommand(
+            CL_CAMERA_AV_STREAM_MGMT,
+            CMD_VIDEO_STREAM_DEALLOCATE,
+            buildVideoStreamDeallocatePayload(videoStreamID),
+            {
+                // VideoStreamDeallocate returns a bare status: no responseCommandId to pin.
+                onResponse: handleDestroySessionDeallocateComplete,
+                onError: handleDestroySessionDeallocateError,
+                context: {sessionId: sessionId, sessions: sessions},
+                timeoutMs: 5000
+            }
+        );
+    }
+
+    // No WebRTC session or allocated video stream remains, so local state is the only cleanup.
+    delete sessions[sessionId];
+    result.storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS);
+
+    return result.success();
+}
+
+// Second leg of destroySession: the camera has torn down its WebRTC session, so release the video
+// stream it was referencing. Sessions that never allocated one are simply dropped here.
+function handleDestroySessionEndComplete(args) {
+    var ctx = args.handlerContext;
+    var sessions = ctx ? ctx.sessions : null;
+    var videoStreamID = ctx ? ctx.videoStreamID : null;
+    var result = Sbmd.result();
+
+    // No video stream is allocated, so only local state cleanup is needed.
+    if (videoStreamID === undefined || videoStreamID === null) {
+        if (sessions) {
+            delete sessions[ctx.sessionId];
+            result.storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS);
+        }
+
+        return result.success();
+    }
+
+    // The camera-side session is gone and ReferenceCount is back to zero, but the stream is still
+    // allocated. Persisting that now rather than deleting the session means a failed deallocate
+    // below leaves the next destroySession a videoStreamID to retry with, in a state that skips
+    // EndSession.
+    if (sessions && sessions[ctx.sessionId]) {
+        sessions[ctx.sessionId].state = 'created';
+        delete sessions[ctx.sessionId].webRTCSessionID;
+        result.storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS);
+    }
+
+    return result.device.requestCommand(
+        CL_CAMERA_AV_STREAM_MGMT,
+        CMD_VIDEO_STREAM_DEALLOCATE,
+        buildVideoStreamDeallocatePayload(videoStreamID),
+        {
+            // No context: the runtime pins the one supplied at the original park for the whole
+            // chain and discards any supplied on a re-arm.
+            onResponse: handleDestroySessionDeallocateComplete,
+            onError: handleDestroySessionDeallocateError,
+            timeoutMs: 5000
+        }
+    );
+}
+
+// Gives up on teardown and reports the failure, leaving the whole sequence retryable.
+function handleDestroySessionEndError(args) {
+    var ctx = args.handlerContext;
+    var error = args.error;
+    var detail = error && error.message ? error.message : 'unknown';
+
+    // EndSession did not take effect, so the WebRTC session still holds a ReferenceCount on the
+    // stream and VideoStreamDeallocate would be rejected with InvalidInState. Leaving the session
+    // untouched lets a later destroySession retry the teardown from EndSession.
+    // TODO: that assumption breaks if the camera processed EndSession but the response was lost.
+    // Every retry then re-sends EndSession, the camera rejects it, and the stream is never
+    // released. Reconciling driver state against the device needs deferred-runtime work.
+    return Sbmd.result()
+        .log(
+            'Camera session ' + (ctx ? ctx.sessionId : 'unknown') + ': EndSession failed: ' + detail
+        )
+        .error('EndSession failed: ' + detail);
+}
+
+// Final leg of destroySession, reached either through the EndSession chain or from the direct
+// deallocate that destroySession issues when no WebRTC session is active.
+function handleDestroySessionDeallocateComplete(args) {
+    var ctx = args.handlerContext;
+    var result = Sbmd.result();
+
+    // The camera released the stream, so the session no longer needs to be retained for cleanup.
+    if (ctx && ctx.sessions) {
+        delete ctx.sessions[ctx.sessionId];
+        result.storage.setTransientData(TD_SESSIONS, JSON.stringify(ctx.sessions), ONE_HOUR_SECS);
     }
 
     return result.success();
+}
+
+// Gives up with the stream still allocated on the camera, leaving the deallocate retryable.
+function handleDestroySessionDeallocateError(args) {
+    var ctx = args.handlerContext;
+    var error = args.error;
+    var sessionId = ctx ? ctx.sessionId : 'unknown';
+    var detail = error && error.message ? error.message : 'unknown';
+
+    // The session was never removed, so its videoStreamID survives for a later destroySession.
+    return Sbmd.result()
+        .log(
+            'Camera session ' +
+                sessionId +
+                ': destroy cleanup failed; retaining videoStreamID for retry: ' +
+                detail
+        )
+        .error('VideoStreamDeallocate failed: ' + detail);
 }
 
 // =============================================================================
@@ -700,6 +833,30 @@ function buildVideoStreamAllocatePayload(featureMap) {
     return Sbmd.Tlv.encodeStruct(allocData, allocSchema);
 }
 
+function buildVideoStreamDeallocatePayload(videoStreamID) {
+    return Sbmd.Tlv.encodeStruct(
+        {videoStreamID: videoStreamID},
+        {videoStreamID: {tag: 0, type: 'uint16'}}
+    );
+}
+
+function rollbackSessionAfterSignalingFailure(result, ctx, reason) {
+    // Recorded as ops, never as a chained device command: the deferred runtime still runs ops when
+    // the chain trips its overall deadline, but discards any terminal the error handler returns.
+    // The allocated videoStreamID is kept deliberately: nothing else records it, and destroySession
+    // needs it to release the stream on the camera.
+    var session = ctx && ctx.sessions ? ctx.sessions[ctx.sessionId] : null;
+
+    if (!session) {
+        return;
+    }
+
+    session.state = 'created';
+    delete session.webRTCSessionID;
+    result.log('Camera session ' + ctx.sessionId + ': ' + reason + '; reset state to `created`');
+    result.storage.setTransientData(TD_SESSIONS, JSON.stringify(ctx.sessions), ONE_HOUR_SECS);
+}
+
 function allocateThenProvideOffer(args, sessions, sessionId, sdp) {
     // Step 1: Allocate a video stream on the camera.
     // The camera requires an allocated stream before ProvideOffer will succeed. The runtime sets
@@ -727,6 +884,10 @@ function handleVideoStreamAllocateResponse(args) {
     var decoded = Sbmd.Tlv.decode(responseData);
     var videoStreamID = decoded[0];
 
+    if (ctx.sessions[ctx.sessionId]) {
+        ctx.sessions[ctx.sessionId].videoStreamID = videoStreamID;
+    }
+
     // Now send ProvideOffer with the allocated video stream ID
     var schema = {
         webRTCSessionID: {tag: 0, type: 'uint16'},
@@ -747,32 +908,33 @@ function handleVideoStreamAllocateResponse(args) {
         schema
     );
 
-    return Sbmd.result().device.requestCommand(
-        CL_WEBRTC_TRANSPORT_PROVIDER,
-        CMD_PROVIDE_OFFER,
-        tlvBase64,
-        {
+    return Sbmd.result()
+        .storage.setTransientData(TD_SESSIONS, JSON.stringify(ctx.sessions), ONE_HOUR_SECS)
+        .device.requestCommand(CL_WEBRTC_TRANSPORT_PROVIDER, CMD_PROVIDE_OFFER, tlvBase64, {
             responseCommandId: CMD_PROVIDE_OFFER_RESP,
             onResponse: handleProvideOfferResponse,
             onError: handleProvideOfferError,
             context: {sessionId: ctx.sessionId, sessions: ctx.sessions},
             timeoutMs: 10000
-        }
-    );
+        });
 }
 
 function handleVideoStreamAllocateError(args) {
-    // Async failure after the local SDP was posted: deliver it to the client via the
-    // webrtcError event (a bare .error() here has no client channel). Covers timeouts too,
-    // since a requestCommand deadline is reported through onError with type 'timeout'.
+    // localSdp signals success asynchronously (the camera's answer arrives as remoteSdp), so its
+    // failures go out on that same event channel. Covers timeouts too, since a requestCommand
+    // deadline is reported through onError with type 'timeout'.
+    var ctx = args.handlerContext;
     var metadata = {
-        sessionId: args.handlerContext ? args.handlerContext.sessionId : 'unknown',
+        sessionId: ctx ? ctx.sessionId : 'unknown',
         reason: args.error ? args.error.type : 'error',
         detail: 'VideoStreamAllocate failed: ' + (args.error ? args.error.message : 'unknown')
     };
+    var result = Sbmd.result();
 
-    return Sbmd.result()
-        .dataModel.updateResource(EP_WEBRTC, 'webrtcError', WEBRTC_ERROR_FAILED, metadata)
+    rollbackSessionAfterSignalingFailure(result, ctx, 'VideoStreamAllocate failed');
+
+    return result.dataModel
+        .updateResource(EP_WEBRTC, 'webrtcError', WEBRTC_ERROR_FAILED, metadata)
         .success();
 }
 
@@ -823,12 +985,18 @@ function handleAllocateForSolicit(args) {
 }
 
 function handleSolicitAllocateError(args) {
-    // The stream execute remains in progress, so propagate the allocation failure to it.
+    // The stream execute remains in progress, so propagate the allocation failure to it. The
+    // runtime drops the message carried by a deferred error terminal, so log the detail too.
+    var ctx = args.handlerContext;
     var err = args.error;
-
-    return Sbmd.result().error(
-        'VideoStreamAllocate failed: ' + (err && err.message ? err.message : 'unknown')
+    var detail = 'VideoStreamAllocate failed: ' + (err && err.message ? err.message : 'unknown');
+    var result = Sbmd.result().log(
+        'Camera session ' + (ctx ? ctx.sessionId : 'unknown') + ': ' + detail
     );
+
+    rollbackSessionAfterSignalingFailure(result, ctx, 'VideoStreamAllocate failed');
+
+    return result.error(detail);
 }
 
 function handleSolicitOfferResponse(args) {
@@ -854,12 +1022,18 @@ function handleSolicitOfferResponse(args) {
 }
 
 function handleSolicitOfferError(args) {
-    // The stream execute remains in progress, so propagate the solicitation failure to it.
+    // The stream execute remains in progress, so propagate the solicitation failure to it. The
+    // runtime drops the message carried by a deferred error terminal, so log the detail too.
+    var ctx = args.handlerContext;
     var err = args.error;
-
-    return Sbmd.result().error(
-        'SolicitOffer failed: ' + (err && err.message ? err.message : 'unknown')
+    var detail = 'SolicitOffer failed: ' + (err && err.message ? err.message : 'unknown');
+    var result = Sbmd.result().log(
+        'Camera session ' + (ctx ? ctx.sessionId : 'unknown') + ': ' + detail
     );
+
+    rollbackSessionAfterSignalingFailure(result, ctx, 'SolicitOffer failed');
+
+    return result.error(detail);
 }
 
 function handleProvideOfferResponse(args) {
@@ -879,16 +1053,20 @@ function handleProvideOfferResponse(args) {
 }
 
 function handleProvideOfferError(args) {
-    // Async failure after the local SDP was posted: deliver it to the client via the
-    // webrtcError event. Covers timeouts too (onError type 'timeout').
+    // localSdp signals success asynchronously (the camera's answer arrives as remoteSdp), so its
+    // failures go out on that same event channel.
+    var ctx = args.handlerContext;
     var metadata = {
-        sessionId: args.handlerContext ? args.handlerContext.sessionId : 'unknown',
+        sessionId: ctx ? ctx.sessionId : 'unknown',
         reason: args.error ? args.error.type : 'error',
         detail: 'ProvideOffer failed: ' + (args.error ? args.error.message : 'unknown')
     };
+    var result = Sbmd.result();
 
-    return Sbmd.result()
-        .dataModel.updateResource(EP_WEBRTC, 'webrtcError', WEBRTC_ERROR_FAILED, metadata)
+    rollbackSessionAfterSignalingFailure(result, ctx, 'ProvideOffer failed');
+
+    return result.dataModel
+        .updateResource(EP_WEBRTC, 'webrtcError', WEBRTC_ERROR_FAILED, metadata)
         .success();
 }
 
@@ -1117,8 +1295,19 @@ function handleIncomingEndSession(args) {
     // event with sessionId='unknown' rather than guessing from the current streaming state.
     var sessionId = findSessionIdByWebRTCSessionID(sessions, webRTCSessionID);
 
+    // Ending the session decremented the video stream's ReferenceCount to zero, but the stream is
+    // still allocated on the camera and only VideoStreamDeallocate releases it. A command handler
+    // cannot issue device commands, so keep the session and its videoStreamID for destroySession
+    // to release; drop the session outright when it holds no allocation.
     if (sessionId) {
-        delete sessions[sessionId];
+        var endedSession = sessions[sessionId];
+
+        if (endedSession.videoStreamID === undefined || endedSession.videoStreamID === null) {
+            delete sessions[sessionId];
+        } else {
+            endedSession.state = 'created';
+            delete endedSession.webRTCSessionID;
+        }
     }
 
     var metadata = {
