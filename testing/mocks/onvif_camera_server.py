@@ -90,6 +90,22 @@ class _OnvifSoapHandler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode("utf-8", "ignore")
 
+        # This mock models a camera that requires authentication. A request without a WS-Security
+        # UsernameToken is rejected with a SOAP Fault (HTTP 400), so the driver's anonymous probe-time
+        # GetDeviceInformation fails and the driver derives authRequired=true for this camera.
+        if "UsernameToken" not in body:
+            fault = _soap_envelope(
+                "<s:Fault><s:Code><s:Value>s:Sender</s:Value></s:Code>"
+                '<s:Reason><s:Text xml:lang="en">Authentication required</s:Text></s:Reason></s:Fault>'
+            )
+            data = fault.encode("utf-8")
+            self.send_response(400)
+            self.send_header("Content-Type", "application/soap+xml; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
         if "GetDeviceInformation" in body:
             payload = _soap_envelope(
                 '<tds:GetDeviceInformationResponse xmlns:tds="http://www.onvif.org/ver10/device/wsdl">'
