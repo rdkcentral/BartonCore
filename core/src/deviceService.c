@@ -2845,22 +2845,21 @@ void updateResource(const char *deviceUuid,
     // dont debug print on frequently updated resource ids to preserve log files
     icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid, endpointId, resourceId, false);
 
-    if (resourceId != NULL && strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
-    {
-        // Redact the value of sensitive resources (e.g. credentials) so a secret is never logged.
-        // Fail closed when the resource cannot be looked up (deletion/race) rather than logging it.
-        bool sensitive = (resource == NULL) || (resource->mode & RESOURCE_MODE_SENSITIVE) != 0;
-        icLogDebug(LOG_TAG,
-                   "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
-                   __FUNCTION__,
-                   deviceUuid,
-                   stringCoalesce(endpointId),
-                   resourceId,
-                   sensitive ? "<redacted>" : stringCoalesce(newValue));
-    }
-
     if (resource != NULL)
     {
+        if (resourceId != NULL && strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
+        {
+            // Redact the value of sensitive resources (e.g. credentials) so a secret is never logged.
+            bool sensitive = (resource->mode & RESOURCE_MODE_SENSITIVE) != 0;
+            icLogDebug(LOG_TAG,
+                       "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
+                       __FUNCTION__,
+                       deviceUuid,
+                       stringCoalesce(endpointId),
+                       resourceId,
+                       sensitive ? "<redacted>" : stringCoalesce(newValue));
+        }
+
         bool sendEvent = false;
 
         if (resource->cachingPolicy == CACHING_POLICY_NEVER && (resource->mode & RESOURCE_MODE_EMIT_EVENTS))
@@ -2934,6 +2933,15 @@ void updateResource(const char *deviceUuid,
         {
             sendResourceUpdatedEvent(resource, metadata);
         }
+    }
+    else
+    {
+        icLogError(LOG_TAG,
+                   "%s: resource not found for deviceUuid=%s, endpointId=%s, resourceId=%s",
+                   __FUNCTION__,
+                   stringCoalesce(deviceUuid),
+                   stringCoalesce(endpointId),
+                   stringCoalesce(resourceId));
     }
 
     resourceDestroy(resource);
