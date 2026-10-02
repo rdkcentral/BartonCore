@@ -66,6 +66,17 @@ shift "$(($OPTIND - 1))"
 # generate the `docker/.env` file and ensure the network/image is created
 $DIR/docker/setupDockerEnv.sh
 
+# The remote-radios container lives in its own Compose project, deliberately
+# separate from the barton one.  It is long-lived and shared by several
+# projects, whereas the overlay that defines it is only layered in for `-T`.
+# Were it part of the barton project, every plain `./dockerw` would report it as
+# an orphan and invite `--remove-orphans`, which would tear the radios out from
+# under BartonCore, ZigbeeCore and zilker at once.  The D-Bus volume and the
+# network it shares with barton are both declared with explicit names, so they
+# are unaffected by the project split.
+RADIOS_PROJECT="$(. "${DIR}/docker/.env" >/dev/null 2>&1; \
+    printf '%s-%s-radios' "${BUILDER_USER}" "${BARTON_WORKSPACE_ID}")"
+
 COMPOSE_FILES=(-f "${DIR}/docker/compose.yaml")
 if [ "$USE_REMOTE_RADIOS" = true ]; then
     COMPOSE_FILES+=(-f "${DIR}/docker/compose.remote-radios.yaml")
@@ -89,7 +100,7 @@ VOLUMES_ARGS="-v $HOME:$HOME
 # private bus instead of the host system bus.
 if [ "$USE_REMOTE_RADIOS" = true ]; then
     notice "Starting remote-radios container (cpcd + otbr-agent)..."
-    docker compose "${COMPOSE_FILES[@]}" up -d remote-radios
+    docker compose -p "$RADIOS_PROJECT" "${COMPOSE_FILES[@]}" up -d remote-radios
     notice "remote-radios container started in the background."
     EXTRA_ENV="${EXTRA_ENV} -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/remote-radios-dbus/system_bus_socket"
 fi

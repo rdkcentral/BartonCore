@@ -192,5 +192,9 @@ volumes:
     # Per-user/workspace named volume that shares /var/run/remote-radios-dbus
     # between the remote-radios container (where the private dbus-daemon writes
     # its socket) and the devcontainer/barton container (where Barton connects).
+    # Those two run in different Compose projects, so the volume is created by
+    # setupDockerEnv.sh and declared external here — otherwise Compose objects
+    # that it was created for the other project.
     dbus-socket:
         name: $BUILDER_USER-$BARTON_WORKSPACE_ID-remote-radios-dbus-socket
+        external: true

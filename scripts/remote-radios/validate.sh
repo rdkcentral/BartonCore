@@ -62,9 +62,12 @@ set -euo pipefail
 ###############################################################################
 # Auto-detect container and re-exec if needed
 #
-# This script must run inside the remote-radios container.  If we detect we're
-# in the Barton devcontainer (or elsewhere), find the remote-radios container
-# and re-exec there automatically.
+# This script must run inside the remote-radios container.  Run from the dev
+# server host it finds that container and re-execs there automatically.
+#
+# It cannot do so from the Barton devcontainer: that container has neither the
+# Docker CLI nor the Docker socket, so it has no way to reach the radio
+# container.  Run the validator from the host instead.
 ###############################################################################
 if [ ! -f /entrypoint.sh ] || ! grep -q "remote-radios" /entrypoint.sh 2>/dev/null; then
     # Not inside the remote-radios container.  Try to find it and re-exec.
@@ -104,10 +107,23 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "remote-radios" /entrypoint.sh 2>/dev/nu
             | python3 -c "import json,sys; print(json.load(sys.stdin)['Config']['Labels'].get('com.docker.compose.project',''))" 2>/dev/null) || true
 
         if [ -n "$COMPOSE_PROJECT" ]; then
-            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22label%22%3A%5B%22com.docker.compose.project%3D${COMPOSE_PROJECT}%22%5D%2C%22name%22%3A%5B%22remote-radios%22%5D%7D" 2>/dev/null \
-                | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
+            # The radios container runs in a sibling project, "<ours>-radios"
+            # (see dockerw); fall back to our own for pre-split installations.
+            for _proj in "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
+                _filter=$(python3 -c "
+import json, sys, urllib.parse
+print(urllib.parse.quote(json.dumps(
+    {'label': ['com.docker.compose.project=' + sys.argv[1]],
+     'name': ['remote-radios']})))
+" "$_proj")
+                OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=${_filter}" 2>/dev/null \
+                    | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
+                [ -n "$OTBR_CONTAINER" ] && break
+            done
         fi
 
+        # Fallback: name only.  On a shared dev server this can match another
+        # developer's container, so it is deliberately last.
         if [ -z "$OTBR_CONTAINER" ]; then
             OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22name%22%3A%5B%22remote-radios%22%5D%7D" 2>/dev/null \
                 | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
@@ -160,14 +176,22 @@ sys.stdout.buffer.flush()
             --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
 
         if [ -n "$COMPOSE_PROJECT" ]; then
-            OTBR_CONTAINER=$($DOCKER_CMD ps \
-                --filter "label=com.docker.compose.project=${COMPOSE_PROJECT}" \
-                --filter "name=remote-radios" \
-                --format '{{.Names}}' 2>/dev/null | head -1) || true
+            # The radios container runs in a sibling project, "<ours>-radios",
+            # so that a plain ./dockerw does not treat it as an orphan.  Look
+            # there first, then in our own project for installations predating
+            # that split.
+            for _proj in "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
+                OTBR_CONTAINER=$($DOCKER_CMD ps \
+                    --filter "label=com.docker.compose.project=${_proj}" \
+                    --filter "name=remote-radios" \
+                    --format '{{.Names}}' 2>/dev/null | head -1) || true
+                [ -n "$OTBR_CONTAINER" ] && break
+            done
         fi
 
         # Fallback: broad search if project detection failed (e.g. running
-        # from the host outside any container).
+        # from the host outside any container).  On a shared dev server this
+        # can match another developer's container, so it is deliberately last.
         if [ -z "$OTBR_CONTAINER" ]; then
             OTBR_CONTAINER=$($DOCKER_CMD ps \
                 --filter "name=remote-radios" \
@@ -182,8 +206,11 @@ sys.stdout.buffer.flush()
         exec $DOCKER_CMD exec -i "$OTBR_CONTAINER" bash -s -- "$@" < "$0"
     else
         echo "ERROR: Not inside the remote-radios container and could not find one running." >&2
-        echo "       Start the remote-radios container first, or run this script inside it:" >&2
+        echo "       Run this from the dev server host, where the container is" >&2
+        echo "       reachable, or inside the container itself:" >&2
         echo "       docker exec -i <remote-radios-container> bash < $0" >&2
+        echo "       (The Barton devcontainer has no Docker socket, so the" >&2
+        echo "       validator cannot find the radio container from there.)" >&2
         exit 2
     fi
 fi
@@ -660,12 +687,12 @@ check_ble_scan() {
         {
             echo "select ${bd_addr}"
             echo "scan on"
-            sleep 4
+            sleep 8
             echo "scan off"
             sleep 1
             echo "quit"
         } | DBUS_SYSTEM_BUS_ADDRESS="unix:path=${DBUS_SOCKET_PATH}" \
-            timeout 10 nsenter --net="${HOST_NETNS}" \
+            timeout 20 nsenter --net="${HOST_NETNS}" \
             bluetoothctl --agent=NoInputNoOutput 2>&1
     ) || true
 
@@ -678,16 +705,27 @@ check_ble_scan() {
             "Controller ${target_hci} (${bd_addr}) not available to bluetoothd — another bluetoothd (such as the dev server's own bluetooth.service) has most likely claimed the adapter"
     elif echo "$btctl_output" | grep -qi "InProgress"; then
         fail "BLE LE scan" "bluetoothd reports scan InProgress — a stale scan may be stuck"
-    elif echo "$btctl_output" | grep -qiE "NEW.*Device|CHG.*RSSI"; then
-        local btctl_count
-        btctl_count=$(echo "$btctl_output" | grep -ciE "NEW.*Device") || btctl_count=0
-        pass "BLE LE scan" "Found ${btctl_count} device(s) via D-Bus on ${target_hci}"
     else
-        # Zero devices is a failure, not a warning: a radio that is present but
-        # deaf looks exactly like this, and that is the failure mode most worth
-        # catching.  Ambient BLE traffic is plentiful in any normal environment.
-        fail "BLE LE scan" \
-            "No BLE devices seen on ${target_hci} during the scan window — the adapter is not receiving advertisements"
+        # Count distinct advertiser addresses rather than "NEW" lines.
+        # bluetoothd reports a device as NEW only the first time it sees it, so
+        # rescanning an already-known device yields CHG lines only.  Counting
+        # NEW alone therefore reported "Found 0 device(s)" — and passed.
+        local btctl_count
+        btctl_count=$(echo "$btctl_output" \
+            | grep -oiE "Device ([0-9A-F]{2}:){5}[0-9A-F]{2}" \
+            | grep -oiE "([0-9A-F]{2}:){5}[0-9A-F]{2}" \
+            | sort -u | wc -l) || btctl_count=0
+
+        if [ "${btctl_count:-0}" -gt 0 ]; then
+            pass "BLE LE scan" "Found ${btctl_count} device(s) via D-Bus on ${target_hci}"
+        else
+            # Zero devices is a failure, not a warning: a radio that is present
+            # but deaf looks exactly like this, and that is the failure mode
+            # most worth catching.  Ambient BLE traffic is plentiful in any
+            # normal environment.
+            fail "BLE LE scan" \
+                "No BLE devices seen on ${target_hci} during the scan window — the adapter is not receiving advertisements"
+        fi
     fi
 }
 

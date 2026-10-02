@@ -287,6 +287,18 @@ if ! docker network ls --format '{{.Name}}' | grep -Fxq "$NETWORK_NAME"; then
     docker network create --ipv6 --subnet $IPV6_SUBNET $NETWORK_NAME
 fi
 
+# Ensure the shared private D-Bus volume exists.  It is owned by neither
+# Compose project: the remote-radios container writes the socket there and the
+# barton container reads it, and those two run in separate projects so that a
+# plain `./dockerw` does not treat the long-lived radios container as an orphan.
+# Creating it here (like the network above) lets both declare it `external`,
+# which is what stops Compose warning that it belongs to the other project.
+DBUS_VOLUME_NAME="$USER-$BARTON_WORKSPACE_ID-remote-radios-dbus-socket"
+if ! docker volume ls --format '{{.Name}}' | grep -Fxq "$DBUS_VOLUME_NAME"; then
+    echo "Volume $DBUS_VOLUME_NAME does not exist. Creating it..."
+    docker volume create "$DBUS_VOLUME_NAME" >/dev/null
+fi
+
 # Build the image if it doesn't exist
 IMAGE="$IMAGE_REPO:$IMAGE_TAG"
 

@@ -403,13 +403,17 @@ exporting before `dockerw`.
 
 ## Verifying the full stack
 
-Run the validator from the Barton devcontainer or the `remote-radios`
-container; it re-execs into the radio container automatically:
+Run the validator from the dev server host, where it finds the `remote-radios`
+container and re-execs into it automatically:
 
 ```bash
 scripts/remote-radios/validate.sh          # human-readable
 scripts/remote-radios/validate.sh --json   # machine-readable
 ```
+
+It also runs directly inside the `remote-radios` container. It does **not** run
+from the Barton devcontainer: that container has neither the Docker CLI nor the
+Docker socket, so it cannot reach the radio container to re-exec into it.
 
 It checks the private D-Bus, the Silabs socket/socat/`/dev/ttyRadio`/cpcd
 chain, otbr-agent, and (when a dongle is configured) usb-ip reachability, the
