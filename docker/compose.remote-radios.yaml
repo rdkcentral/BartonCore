@@ -47,8 +47,9 @@
 #
 # ─── Usage ───────────────────────────────────────────────────────────────────
 #
-#   On the workstation, once:
-#       curl -fsSL <raw-url>/scripts/remote-radios/remote-radios-setup.sh | bash
+#   On the workstation, once (no checkout needed):
+#       curl -fsSL <raw>/scripts/remote-radios/remote-radios-setup.sh \
+#         | bash -s -- <user>@<devserver>
 #   Then, on the dev server:
 #       ./dockerw -T bash
 #
@@ -120,6 +121,11 @@ services:
             # this dir; socat in the entrypoint bridges it to a local TCP port
             # for `usbip attach` (avoids any sshd GatewayPorts change).
             - ${BT_USBIP_SOCKET_DIR_HOST:-/run/remote-radios/usbip}:${BT_USBIP_SOCKET_DIR:-/run/remote-radios/usbip}
+            # Bind-mount the claim directory (read-only — this container only
+            # observes claims, never writes them).  A consumer that cannot share
+            # a radio drops a file here; see the RADIO_CLAIM_DIR comment in
+            # remote-radios-entrypoint.sh.
+            - ${RADIO_CLAIM_DIR_HOST:-/run/remote-radios/claims}:${RADIO_CLAIM_DIR:-/run/remote-radios/claims}:ro
             # /dev is needed so a locally-attached Silabs radio (SILABS_DEVICE)
             # and the usb-ip virtual devices are visible.  privileged: true
             # grants the necessary device access.
@@ -150,6 +156,8 @@ services:
             - BT_USBIP_TCP_PORT=${BT_USBIP_TCP_PORT:-3240}
             - BT_USBIP_BUSID=${BT_USBIP_BUSID:-}
             - BACKBONE_IF=${BACKBONE_IF:-}
+            # Where to look for radio claim files (see the entrypoint).
+            - RADIO_CLAIM_DIR=${RADIO_CLAIM_DIR:-/run/remote-radios/claims}
             - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/remote-radios-dbus/system_bus_socket
             - CPC_INSTANCE=${CPC_INSTANCE:-cpcd_0}
         # Restart automatically if the stack crashes, but limit retries so a

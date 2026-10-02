@@ -252,6 +252,15 @@ echo "SILABS_SOCKET=$silabsSocketValue" >> $OUTFILE
 echo "SILABS_SOCKET_HOST=$silabsSocketHostValue" >> $OUTFILE
 echo "SILABS_SOCKET_DIR=$silabsSocketDirValue" >> $OUTFILE
 echo "SILABS_SOCKET_DIR_HOST=$silabsSocketDirHostValue" >> $OUTFILE
+# Claim directory — a sibling of radios/ in the same ~/.remote-radios tree.  A
+# consumer that cannot share the radio (an hh4 QEMU guest runs its own cpcd and
+# needs the raw CPC byte stream) drops a file here, and the remote-radios
+# container releases the Silabs radio until it is removed.
+radioClaimDirValue="$(dirname "$silabsSocketDirValue")/claims"
+radioClaimDirHostValue="$(dirname "$silabsSocketDirHostValue")/claims"
+mkdir -p "$radioClaimDirHostValue" 2>/dev/null || true
+echo "RADIO_CLAIM_DIR=$radioClaimDirValue" >> $OUTFILE
+echo "RADIO_CLAIM_DIR_HOST=$radioClaimDirHostValue" >> $OUTFILE
 echo "SILABS_DEVICE=$silabsDeviceValue" >> $OUTFILE
 echo "BACKBONE_IF=$backboneIfValue" >> $OUTFILE
 echo "BT_USBIP_SOCKET=$btUsbipSocketValue" >> $OUTFILE

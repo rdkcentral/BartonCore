@@ -35,15 +35,15 @@
 #   * Dedicated Bluetooth USB dongle — reached over usb-ip.  The workstation
 #     binds the dongle with usbipd/usbip and reverse-tunnels the usb-ip port
 #     to the dev server.  This container attaches it with `usbip attach`,
-#     producing a real HCI device in the host network namespace, which
-#     btattach/bluetoothd then manage.
+#     producing a real HCI device in the host network namespace, which the
+#     kernel btusb driver registers and bluetoothd then manages.
 #
 # Services started (in order):
 #   1. private D-Bus system bus
 #   2. avahi-daemon  (mDNS/DNS-SD — required by otbr-agent built with avahi)
 #   3. socat         (UNIX socket -> PTY) for the Silabs radio  [remote mode]
 #   4. cpcd          (CPC daemon — serial <-> CPC socket)
-#   5. usbip attach + btattach + bluetoothd for the Bluetooth dongle
+#   5. usbip attach + bluetoothd for the Bluetooth dongle
 #   6. otbr-agent    (Thread Border Router — CPC socket <-> D-Bus API)
 #
 # Environment variables:
@@ -85,6 +85,19 @@ SILABS_DEVICE="${SILABS_DEVICE:-}"
 BT_USBIP_SOCKET="${BT_USBIP_SOCKET:-}"
 BT_USBIP_TCP_PORT="${BT_USBIP_TCP_PORT:-3240}"
 BT_USBIP_BUSID="${BT_USBIP_BUSID:-}"
+
+# Claim files let another consumer borrow a radio that cannot be shared.  The
+# workstation relay serves exactly one client at a time, and a consumer running
+# its own cpcd (an hh4 QEMU guest, for example) needs the raw CPC byte stream
+# rather than a cpcd endpoint.  Both sides reconnect automatically, so without
+# an explicit claim they displace each other in a loop and corrupt CPC framing
+# for whichever one currently holds the link.  While the claim exists this
+# container releases the radio; when it disappears the radio is reclaimed.
+RADIO_CLAIM_DIR="${RADIO_CLAIM_DIR:-/run/remote-radios/claims}"
+SILABS_CLAIM="${SILABS_CLAIM:-${RADIO_CLAIM_DIR}/silabs.claim}"
+
+# Set while this container has released the Silabs radio to a claim holder.
+SILABS_YIELDED=""
 
 CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
 CPCD_CONF="${CPCD_CONF:-/usr/local/etc/cpcd.conf}"
@@ -144,6 +157,41 @@ is_process_alive() {
 }
 
 # ── Silabs serial (socat UNIX-socket -> PTY) ────────────────────────────────
+
+# silabs_claimed — true while another consumer has claimed the Silabs radio.
+silabs_claimed() {
+    [ -e "${SILABS_CLAIM}" ]
+}
+
+# yield_silabs — release the radio so the claim holder can open the relay.
+# Stops cpcd first, then socat, so cpcd never reads from a half-closed PTY.
+yield_silabs() {
+    echo "[remote-radios] Silabs radio claimed via ${SILABS_CLAIM} — releasing it."
+    SILABS_YIELDED=1
+    if [ -n "${CPCD_PID:-}" ]; then
+        kill ${CPCD_PID} 2>/dev/null || true
+        wait ${CPCD_PID} 2>/dev/null || true
+        CPCD_PID=""
+    fi
+    if [ -n "${SOCAT_PID:-}" ]; then
+        kill ${SOCAT_PID} 2>/dev/null || true
+        wait ${SOCAT_PID} 2>/dev/null || true
+        SOCAT_PID=""
+    fi
+    rm -f "${VIRTUAL_TTY}"
+    echo "[remote-radios] Silabs radio released; waiting for the claim to clear."
+}
+
+# resume_silabs — reconnect after the claim is released.  Non-zero on failure
+# so the monitor can back off and retry.
+resume_silabs() {
+    echo "[remote-radios] Silabs claim cleared — reconnecting."
+    start_silabs_socat || return 1
+    restart_cpcd || return 1
+    SILABS_YIELDED=""
+    echo "[remote-radios] Silabs radio reclaimed."
+    return 0
+}
 
 # start_silabs_socat — bridge the bind-mounted UNIX socket to a local PTY that
 # cpcd opens as /dev/ttyRadio.  Sets SOCAT_PID.  Returns non-zero on failure.
@@ -255,12 +303,13 @@ restart_cpcd() {
     start_cpcd nonfatal
 }
 
-# ── Bluetooth dongle (usb-ip -> btattach -> bluetoothd) ─────────────────────
+# ── Bluetooth dongle (usb-ip -> btusb -> bluetoothd) ─────────────────────
 #
 # The dedicated Bluetooth USB dongle is forwarded from the developer's
 # workstation via usb-ip.  Attaching it here creates a REAL HCI device in the
 # host network namespace (AF_BLUETOOTH sockets only work in the initial netns),
-# which btattach/bluetoothd then manage.  bluetoothd inherits this container's
+# which the kernel btusb driver registers and bluetoothd then manages.  It
+# inherits this container's
 # private DBUS_SYSTEM_BUS_ADDRESS so org.bluez lives on our private bus, never
 # the host's — and we never touch the workstation's own Bluetooth adapter.
 
@@ -375,8 +424,8 @@ bt_usbip_detach() {
 }
 
 # start_bluetooth_chain — attach the dongle, identify its HCI device, and start
-# bluetoothd.  Sets BTATTACH-independent state via BT_HCI_INDEX and starts
-# bluetoothd in the host netns.  Returns non-zero on failure.
+# bluetoothd.  Sets BT_HCI_INDEX and starts bluetoothd in the host netns.
+# Returns non-zero on failure.
 #
 # Unlike the old CPC path, the usb-ip dongle registers its own HCI device
 # directly (kernel btusb driver), so no bt_host_cpc_hci_bridge / btattach /
@@ -525,16 +574,36 @@ service_monitor() {
 
         local restartSilabs="" restartBt=""
 
-        # Silabs layer 0: socat (remote mode only).
-        if [ -n "${SILABS_SOCKET}" ] && [ -n "${SOCAT_PID:-}" ] && ! is_process_alive ${SOCAT_PID}; then
-            echo "[monitor] socat (PID ${SOCAT_PID}) died." >&2
-            restartSilabs="socat"
+        # Silabs claim arbitration.  Release the radio while another consumer
+        # holds it, and take it back as soon as the claim clears.  See the
+        # RADIO_CLAIM_DIR comment near the top of this file for why this is not
+        # left to a race.
+        if [ -n "${SILABS_SOCKET}" ]; then
+            if silabs_claimed; then
+                [ -z "${SILABS_YIELDED}" ] && yield_silabs
+            elif [ -n "${SILABS_YIELDED}" ]; then
+                if resume_silabs; then
+                    backoff=5
+                else
+                    backoff=$((backoff < 60 ? backoff * 2 : 60))
+                    echo "[monitor] Could not reclaim the Silabs radio; retrying in ${backoff}s..." >&2
+                fi
+            fi
         fi
 
-        # Silabs layer 1: cpcd.
-        if [ -z "${restartSilabs}" ] && ! is_process_alive ${CPCD_PID}; then
-            echo "[monitor] cpcd (PID ${CPCD_PID}) died." >&2
-            restartSilabs="cpcd"
+        # Silabs health checks are meaningless while the radio is released.
+        if [ -z "${SILABS_YIELDED}" ]; then
+            # Silabs layer 0: socat (remote mode only).
+            if [ -n "${SILABS_SOCKET}" ] && [ -n "${SOCAT_PID:-}" ] && ! is_process_alive ${SOCAT_PID}; then
+                echo "[monitor] socat (PID ${SOCAT_PID}) died." >&2
+                restartSilabs="socat"
+            fi
+
+            # Silabs layer 1: cpcd.
+            if [ -z "${restartSilabs}" ] && ! is_process_alive ${CPCD_PID}; then
+                echo "[monitor] cpcd (PID ${CPCD_PID}) died." >&2
+                restartSilabs="cpcd"
+            fi
         fi
 
         # Bluetooth: only if configured.  Deliberately NOT gated on
@@ -657,10 +726,17 @@ if [ -n "${SILABS_SOCKET}" ]; then
         silabsWaitCount=$((silabsWaitCount + 2))
     done
 
-    echo "[remote-radios] Silabs tunnel socket is present.  Starting socat bridge..."
-    start_silabs_socat
     RADIO_DEVICE="${VIRTUAL_TTY}"
-    echo "[remote-radios] Virtual serial device ready: ${RADIO_DEVICE} (via ${SILABS_SOCKET})"
+    if silabs_claimed; then
+        # Start released rather than stealing the link from the claim holder.
+        # The service monitor connects as soon as the claim clears.
+        SILABS_YIELDED=1
+        echo "[remote-radios] Silabs radio is claimed via ${SILABS_CLAIM} — starting without it."
+    else
+        echo "[remote-radios] Silabs tunnel socket is present.  Starting socat bridge..."
+        start_silabs_socat
+        echo "[remote-radios] Virtual serial device ready: ${RADIO_DEVICE} (via ${SILABS_SOCKET})"
+    fi
 
 elif [ -n "${SILABS_DEVICE}" ]; then
     #--------------------------------------------------------------------------
@@ -703,8 +779,12 @@ echo "[remote-radios] avahi-daemon started."
 ###############################################################################
 write_cpcd_conf
 
-echo "[remote-radios] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
-start_cpcd
+if [ -n "${SILABS_YIELDED}" ]; then
+    echo "[remote-radios] Deferring cpcd until the Silabs claim clears."
+else
+    echo "[remote-radios] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
+    start_cpcd
+fi
 
 ###############################################################################
 # 5. Bring up the Bluetooth dongle over usb-ip (optional)

@@ -43,7 +43,7 @@ Key properties:
 
 | Container | Runs | Provides |
 |---|---|---|
-| `remote-radios` | cpcd, otbr-agent, socat, usbip attach, btattach, bluetoothd | Thread + Zigbee (CPC) and BLE (real HCI dongle) over a shared private D-Bus |
+| `remote-radios` | cpcd, otbr-agent, socat, usbip attach, bluetoothd | Thread + Zigbee (CPC) and BLE (real HCI dongle) over a shared private D-Bus |
 | `barton` (devcontainer) | Barton application code, Matter SDK | Consumes Thread over D-Bus and BLE via BlueZ |
 
 A named Docker volume shares the private D-Bus socket directory
@@ -58,46 +58,132 @@ and writes it to `/var/run/remote-radios-dbus/ble_adapter_id`. Barton reads
 this (or the `device.matter.bleAdapterId` property) to configure the Matter
 SDK's BLE adapter.
 
+### Sharing the radios with other projects
+
+One forwarder, and one `remote-radios` container, serve every project you work
+on. The container is the hub: it owns the physical radios and publishes them, so
+other stacks do not each attach the hardware themselves.
+
+| Consumer | Gets Thread/Zigbee via | Gets Bluetooth via |
+|---|---|---|
+| `barton` devcontainer | otbr-agent over the shared private D-Bus | BlueZ over the shared private D-Bus |
+| ZigbeeCore (`./run.sh -r`) | the Silabs socket directly, under a claim | the shared private D-Bus |
+| zilker | BartonCore's device service | BartonCore's device service |
+| HH4 (QEMU guest) | the Silabs socket directly, under a claim | attaches the dongle itself over usb-ip |
+
+Everything that runs on the dev server shares its kernel, so it can consume the
+hub concurrently over sockets and D-Bus. A **VM guest cannot**: it has its own
+kernel and its own BlueZ, so it needs the devices themselves.
+
+Both radios are therefore exclusive, and consumers take turns rather than
+compete:
+
+- **Silabs radio** — the workstation relay serves one client at a time. A
+  consumer that wants it creates `~/.remote-radios/claims/silabs.claim`. The
+  container watches that file, stops cpcd and its socat bridge while it exists,
+  and reclaims the radio once it is removed. ZigbeeCore's `run.sh -r` and HH4's
+  `hh4-run.sh` both take this claim and release it on exit, including on
+  interrupt, so handover needs no manual steps.
+- **Bluetooth dongle** — a usb-ip device can be attached by one host only, and
+  the kernel grants exclusive access per `hciN` (a second stack binding it gets
+  `-EBUSY` or `-EUSERS`). When an HH4 guest attaches the dongle the container
+  loses it; the container's monitor re-attaches it when the guest shuts down.
+
+There is no supported way to share one Bluetooth controller between two stacks.
+If you need the container and a VM guest to have Bluetooth **at the same time**,
+use a second dongle — the forwarder exports both, and each consumer attaches its
+own.
+
+Claims are advisory and per-user. The claims directory lives inside your own
+`~/.remote-radios`, so it never affects another developer on the same server.
+
 ---
 
 ## One-time setup (on your workstation)
 
 ### Linux workstations
 
-Run the setup script on your **Ubuntu workstation** where the radios are
-plugged in. It detects your radios, saves the choice under
-`~/.config/remote-radios/`, installs a per-user systemd service for usb-ip
-(one-time `sudo`), and brings up both tunnels:
+Run the setup on your **Ubuntu workstation** where the radios are plugged in.
+You do not need a BartonCore checkout there — the workstation is not where you
+do development, so the setup installs what it needs into
+`~/.config/remote-radios/bin/` and runs from there:
 
 ```bash
-# From a BartonCore checkout:
-scripts/remote-radios/remote-radios-setup.sh <user>@<devserver>
-
-# Or curl it directly:
-curl -fsSL <raw-url>/scripts/remote-radios/remote-radios-setup.sh \
+curl -fsSL https://raw.githubusercontent.com/rdkcentral/BartonCore/main/scripts/remote-radios/remote-radios-setup.sh \
   | bash -s -- <user>@<devserver>
+```
+
+From a checkout it is the same command without the download:
+
+```bash
+scripts/remote-radios/remote-radios-setup.sh <user>@<devserver>
+```
+
+Either way it detects your radios, saves the choice under
+`~/.config/remote-radios/`, and installs a per-user systemd service that keeps
+both radios forwarded (one-time `sudo`).
+
+To install from a branch other than `main`, point it at that ref — the variable
+has to be set on `bash`, not on `curl`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rdkcentral/BartonCore/<ref>/scripts/remote-radios/remote-radios-setup.sh \
+  | REMOTE_RADIOS_REF=<ref> bash -s -- <user>@<devserver>
+```
+
+The script exits once the service is running — you do not leave it open in a
+terminal. Check on it with:
+
+```bash
+systemctl --user status remote-radios.service
+journalctl --user -u remote-radios.service -f
 ```
 
 The script:
 
-1. **Detects radios.** The Silabs serial radio is matched by USB VID:PID. A
+1. **Installs its runtime** to `~/.config/remote-radios/bin/`
+   (`remote-radios-setup.sh` and `remote-serial.py`), copying from a checkout
+   when run from one and downloading them otherwise. The service always runs
+   the installed copy, so the workstation never needs a checkout and nothing
+   breaks if one is moved or deleted later. These run as you, never as root —
+   unlike the sudo helpers below, which is why they can live under `$HOME`.
+2. **Detects radios.** The Silabs serial radio is matched by USB VID:PID. A
    dedicated Bluetooth dongle is auto-selected **unless** it is the adapter
    your workstation's own bluetoothd is using. If there are multiple candidates
    for either, you are prompted to choose.
-2. **Saves your choice** to `~/.config/remote-radios/config` (keyed by the
-   radio's stable USB serial / busid) so subsequent runs are non-interactive.
-3. **Installs a per-user systemd unit** (`remote-radios-usbip.service`) that
-   runs `usbipd`, binds the dongle, and re-binds it if anything hands it back
-   to the kernel's own driver. A one-time `sudo` installs two root-owned
-   helpers under `/usr/local/lib/remote-radios/` and a narrow sudoers rule
-   granting the `remote-radios` group passwordless access to **those two
-   commands only**, so later runs need no password. See
-   [Privileges](#privileges) below.
-4. **Establishes the tunnels** and writes `~/.remote-radios/radios.env` on the
-   dev server, which `docker/setupDockerEnv.sh` sources automatically.
-5. **Monitors and self-heals.** It restarts dropped tunnels and tears
-   everything down cleanly when the VPN drops or you log out — then
-   re-establishes when connectivity returns. Safe to re-run any time.
+3. **Saves your choice** to `~/.config/remote-radios/config` (keyed by the
+   radio's stable USB serial / busid, plus the dev server) so the service can
+   run without arguments and later runs are non-interactive.
+4. **Verifies it can reach the dev server** over SSH before installing anything
+   that claims to maintain a connection to it.
+5. **Installs the privileged helpers.** A one-time `sudo` installs two
+   root-owned helpers under `/usr/local/lib/remote-radios/` and a narrow
+   sudoers rule granting the `remote-radios` group passwordless access to
+   **those two commands only**. See [Privileges](#privileges) below. This step
+   is skipped entirely if you have no Bluetooth dongle.
+6. **Installs and starts `remote-radios.service`.** One user unit owns the
+   whole workstation side: it runs `usbipd` and keeps the dongle exported
+   (re-binding it if anything hands it back to the kernel's own driver), runs
+   both SSH tunnels, and writes `~/.remote-radios/radios.env` on the dev server
+   for `docker/setupDockerEnv.sh` to source.
+
+The service is wanted by `default.target`, so it **starts at login and stops at
+logout**. Nothing is left running on the workstation when you are not logged
+in, and there is no separate step after a reboot — log in and the radios are
+forwarded.
+
+While it runs it self-heals: it restarts dropped tunnels, tears everything down
+cleanly when the dev server becomes unreachable and re-establishes when it
+returns, and picks up radios that are **plugged in after login** rather than
+requiring them to be present at start.
+
+> The service runs the copy in `~/.config/remote-radios/bin/`, so moving or
+> deleting a checkout does not break it. Re-run the setup to pick up an updated
+> version.
+
+Re-run the script any time to change the dev server, re-detect radios after a
+hardware change, or pick up an updated checkout; it restarts the service only
+when something actually changed.
 
 ### Windows workstations
 
@@ -272,6 +358,8 @@ exporting before `dockerw`.
 | `SILABS_DEVICE` | Host path of a locally-attached Silabs USB radio (alternative to the tunnel) |
 | `BT_USBIP_SOCKET` | Container path of the bind-mounted usbipd socket for the dongle (empty ⇒ no BLE) |
 | `BT_USBIP_BUSID` | Remote busid to attach (default: auto-detect) |
+| `RADIO_CLAIM_DIR` | Container path of the claims directory (default `/run/remote-radios/claims`) |
+| `RADIO_CLAIM_DIR_HOST` | Host path of that directory (bind-mount source, read-only in the container) |
 | `BACKBONE_IF` | Thread backbone interface (default: host default route) |
 
 ---
@@ -304,25 +392,38 @@ nsenter --net=/run/host-netns bluetoothctl list
 
 ## Teardown
 
-- **Workstation:** press `Ctrl-C` in the `remote-radios-setup.sh` terminal (it
-  removes the remote socket and env hint and stops the tunnels). The usb-ip
-  systemd service returns the dongle to your workstation when stopped:
-  `systemctl --user stop remote-radios-usbip.service`. After that the dongle is
-  back on the normal kernel driver and your workstation's own Bluetooth can use
-  it again.
+- **Workstation:** `systemctl --user stop remote-radios.service`. That removes
+  the remote sockets and env hint, stops both tunnels, and returns the dongle
+  to the normal kernel driver so your workstation's own Bluetooth can use it
+  again. To stop it coming back at the next login, add
+  `systemctl --user disable remote-radios.service`.
 - **Dev server:** stop the container with
   `docker compose -f docker/compose.yaml -f docker/compose.remote-radios.yaml down`.
 
-Teardown also happens automatically when the VPN drops or you log out.
+Teardown also happens automatically when the dev server becomes unreachable,
+and the service stops at logout.
 
 ---
 
 ## Troubleshooting
 
-- **"Silabs tunnel socket did not appear"** — ensure `remote-radios-setup.sh`
-  (remote-serial.py) is running on your workstation and that your VPN/SSH is up.
+- **Nothing is forwarded after logging in** — check the service first:
+  `systemctl --user status remote-radios.service`, then
+  `journalctl --user -u remote-radios.service -b`. If the unit does not exist,
+  the setup script has not been run on this workstation.
+- **The service exits with "No radios configured"** — the saved config is
+  missing or empty. Re-run `remote-radios-setup.sh <user>@<devserver>`.
+- **The service logs `sudo: a password is required`** — your login session does
+  not have the `remote-radios` group yet. Log out and back in; the service
+  picks it up on the next login.
+- **A radio plugged in after login is not picked up** — it should be within
+  ~10 seconds; the service polls for it. Check the journal for
+  `Silabs radio appeared` or `Bluetooth dongle ... appeared`. If the radio is a
+  different unit than the one saved, re-run the setup script to re-detect.
+- **"Silabs tunnel socket did not appear"** — ensure `remote-radios.service` is
+  active on your workstation and that your VPN/SSH is up.
 - **"usb-ip service not reachable"** — the reverse tunnel or `usbipd` on the
-  workstation is down; re-run the setup script.
+  workstation is down; check the service journal, or re-run the setup script.
 - **"no new HCI device appeared after usb-ip attach"** — confirm the dongle is
   bound on the workstation (`usbip list -l`) and that the `vhci-hcd`/`usbip`
   kernel modules are available on the dev server.
@@ -334,7 +435,14 @@ Teardown also happens automatically when the VPN drops or you log out.
   deasserted and the radio never transmits. `remote-serial.py` detects the
   signature (bytes flowing one way only) and flips the mode once automatically,
   logging `flipping RTS/CTS flow control`. To skip the six-second detection
-  window, pass `--rtscts` or `--no-rtscts` explicitly.- **`No default controller available`, or the validator reports "Controller
+  window, pass `--rtscts` or `--no-rtscts` explicitly.
+- **cpcd keeps stopping, or the log says "Silabs radio claimed via ..."** — this
+  is the claim protocol working. Another project (an `hh4-run.sh` guest, or
+  ZigbeeCore's `./run.sh -r`) is using the radio, so the container released it
+  and is waiting. It reclaims the radio automatically once that run exits. If a
+  stale claim is left behind after a crash, delete
+  `~/.remote-radios/claims/silabs.claim`.
+- **`No default controller available`, or the validator reports "Controller
   hciN not available to bluetoothd"** — another `bluetoothd` has claimed the
   dongle. Almost always this is the dev server's own `bluetooth.service`; run
   `sudo systemctl mask --now bluetooth.service` there and restart the
@@ -345,6 +453,10 @@ Teardown also happens automatically when the VPN drops or you log out.
   adapter that is present but deaf is indistinguishable from a working one by
   any other check. Confirm the dongle's antenna/placement and that no second
   `bluetoothd` is competing for it.
+- **BLE stops working while an HH4 guest is running** — expected. A usb-ip
+  dongle can be attached by one host at a time, so the guest took it. The
+  container's monitor re-attaches it when the guest shuts down. For simultaneous
+  use, add a second dongle.
 - **`sudo: a password is required` when the usb-ip service starts** — you are
   not yet in the `remote-radios` group in this session. Log out and back in (or
   `newgrp remote-radios`) and re-run the setup script.

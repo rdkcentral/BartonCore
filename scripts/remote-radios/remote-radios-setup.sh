@@ -25,28 +25,45 @@
 # remote-radios-setup.sh — one-command setup for using your LOCAL Zigbee/Thread
 # and Bluetooth radios with a REMOTE dev server's devcontainers.
 #
-# Run this on your WORKSTATION (Ubuntu) where the USB radios are plugged in:
+# Run this on your WORKSTATION (Ubuntu) where the USB radios are plugged in.
+# No checkout is needed there:
 #
-#     curl -fsSL <raw-url>/scripts/remote-radios/remote-radios-setup.sh | bash -s -- <user>@<devserver>
+#     curl -fsSL <raw>/scripts/remote-radios/remote-radios-setup.sh \
+#       | bash -s -- <user>@<devserver>
 #
 # or, from a checkout:
 #
 #     scripts/remote-radios/remote-radios-setup.sh <user>@<devserver>
 #
+# Either way it installs the files it needs into ~/.config/remote-radios/bin/
+# and the service runs from there, then this exits.
+#
+# Overridable: REMOTE_RADIOS_REPO, REMOTE_RADIOS_REF (default main) or
+# REMOTE_RADIOS_RAW_BASE to install from somewhere other than rdkcentral/main.
+#
 # What it does:
+#   * Installs its runtime (this script + remote-serial.py) to
+#     ~/.config/remote-radios/bin/, from the checkout or by download.
 #   * First run: detects your Silabs Zigbee/Thread radio and a dedicated
 #     Bluetooth USB dongle (prompting only if the choice is ambiguous), and
-#     saves the selection to ~/.config/remote-radios/config.
-#   * Installs a per-user systemd service that runs usbipd and binds the
-#     Bluetooth dongle (one-time sudo to place the unit).
-#   * Brings up both radios to the dev server:
-#       - Silabs  : serial-over-SSH tunnel (remote-serial.py -> UNIX socket)
+#     saves the selection — and the dev server — to
+#     ~/.config/remote-radios/config.
+#   * One-time sudo to install two root-owned helpers and a narrow sudoers rule
+#     for the `remote-radios` group (only when a Bluetooth dongle is in play).
+#   * Installs and starts ONE per-user systemd service, remote-radios.service,
+#     which owns the whole workstation side:
+#       - runs usbipd and keeps the Bluetooth dongle bound for export
+#       - Silabs   : serial-over-SSH tunnel (remote-serial.py -> UNIX socket)
 #       - Bluetooth: usb-ip, reverse-tunnelled over SSH
-#   * Monitors health and tears everything down cleanly on logout or when the
-#     corporate VPN drops.  Safe to re-run any time; recovers from unclean
-#     prior sessions.
+#       - writes ~/.remote-radios/radios.env on the dev server
+#     It is wanted by default.target, so it starts at login and stops at
+#     logout, and re-executes this script with --service to do the work.
+#   * The service monitors health, tears everything down cleanly when the dev
+#     server becomes unreachable, re-establishes when it returns, and picks up
+#     radios plugged in after it started.
 #
-# Re-running validates the saved radios and (re)establishes the tunnels.
+# Re-running validates the saved radios and refreshes the service; it restarts
+# the service only when something actually changed.
 #
 # If you have no radios (or don't want to use them), you never need to run this;
 # the devcontainer runs with simulated Thread/Zigbee and no Bluetooth.
@@ -86,8 +103,38 @@ SILABS_LOCAL_PORT=20000
 # Known Silabs serial radio USB IDs (VID:PID).
 SILABS_IDS="10c4:ea60 1366:0105 1366:1024"
 
-# Directory to raw scripts (this script's own dir when run from a checkout).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+# Directory of this script when it was run from a checkout.  Deliberately empty
+# when piped in from curl: BASH_SOURCE is then "bash" (or unset), and taking its
+# dirname would silently resolve to the current directory.
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR=""
+fi
+SCRIPT_NAME="remote-radios-setup.sh"
+
+# A developer's workstation is not necessarily a machine they check the repo out
+# on — that is the whole point of the curl|bash entry point — so the setup
+# installs the two files the service needs into the user's own config dir and
+# the service runs from there.  Unlike the sudo helpers these are executed as
+# the user, never as root, so keeping them under $HOME is not a privilege risk.
+INSTALL_DIR="${CONFIG_DIR}/bin"
+INSTALLED_SETUP="${INSTALL_DIR}/${SCRIPT_NAME}"
+
+# Where to fetch those files when there is no checkout to copy them from.
+RAW_REPO="${REMOTE_RADIOS_REPO:-rdkcentral/BartonCore}"
+RAW_REF="${REMOTE_RADIOS_REF:-main}"
+RAW_BASE="${REMOTE_RADIOS_RAW_BASE:-https://raw.githubusercontent.com/${RAW_REPO}/${RAW_REF}/scripts/remote-radios}"
+
+# Single user service that owns everything on the workstation side: the usb-ip
+# export of the Bluetooth dongle and both SSH tunnels.  It is a user unit wanted
+# by default.target, so it starts at login and stops at logout.
+SERVICE_NAME="remote-radios.service"
+LEGACY_SERVICE_NAME="remote-radios-usbip.service"
+
+# Set when this process IS the service (see --service), rather than the
+# interactive installer that sets the service up.
+SERVICE_MODE=0
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -278,11 +325,11 @@ save_config() {
     cat > "$CONFIG_FILE" <<EOF
 # remote-radios developer config — generated by remote-radios-setup.sh
 # Edit or delete this file to re-run detection.
-SSH_TARGET="${SSH_TARGET}"
-SILABS_SERIAL="${SILABS_SERIAL}"     # persistent USB serial of the Silabs radio
-SILABS_DEV="${SILABS_DEV}"
-BT_BUSID="${BT_BUSID}"
-BT_VIDPID="${BT_VIDPID}"
+SSH_TARGET="${SSH_TARGET:-}"
+SILABS_SERIAL="${SILABS_SERIAL:-}"     # persistent USB serial of the Silabs radio
+SILABS_DEV="${SILABS_DEV:-}"
+BT_BUSID="${BT_BUSID:-}"
+BT_VIDPID="${BT_VIDPID:-}"
 EOF
     chmod 600 "$CONFIG_FILE"
     ok "Saved config to ${CONFIG_FILE}"
@@ -336,7 +383,7 @@ detect_radios() {
 # ---------------------------------------------------------------------------
 # Per-user systemd unit for usbipd + bind (one-time sudo to install)
 # ---------------------------------------------------------------------------
-install_usbipd_unit() {
+install_privileged_helpers() {
     [ -n "${BT_BUSID:-}" ] || return 0
 
     local staging="${CONFIG_DIR}/staging"
@@ -576,44 +623,118 @@ EOF
             echo
             ok "Installed. You have been added to the '${RR_GROUP}' group."
             info "Group membership only takes effect on a new login session."
-            info "Log out and back in (or run: newgrp ${RR_GROUP}), then re-run this script."
+            info "Log out and back in, then finish setup by running:"
+            printf '    %s%s %s%s\n' "$BOLD" "$INSTALLED_SETUP" "$SSH_TARGET" "$NC"
             exit 0
         fi
     fi
 
-    local unit="${SYSTEMD_USER_DIR}/remote-radios-usbip.service"
-    local unit_new="${staging}/remote-radios-usbip.service"
-    cat > "$unit_new" <<EOF
+    HELPERS_CHANGED="$need_install"
+}
+
+# ---------------------------------------------------------------------------
+# Runtime installation
+# ---------------------------------------------------------------------------
+# Put the files the service needs into ${INSTALL_DIR}: copied from the checkout
+# when this was run from one, downloaded from the published raw URLs when it was
+# piped in from curl.  The service always runs the installed copy, so the
+# workstation never needs a checkout and nothing breaks if one is moved later.
+install_runtime_files() {
+    local staging="${CONFIG_DIR}/staging"
+    mkdir -p "$INSTALL_DIR" "$staging"
+    RUNTIME_CHANGED=0
+
+    local f tmp
+    for f in "$SCRIPT_NAME" remote-serial.py; do
+        tmp="${staging}/${f}"
+        if [ -n "$SCRIPT_DIR" ] && [ "$SCRIPT_DIR" != "$INSTALL_DIR" ] \
+            && [ -f "${SCRIPT_DIR}/${f}" ]; then
+            cp -- "${SCRIPT_DIR}/${f}" "$tmp"
+        elif [ "$SCRIPT_DIR" = "$INSTALL_DIR" ] && [ -f "${INSTALL_DIR}/${f}" ]; then
+            # Re-run of the already-installed copy; nothing to refresh.
+            continue
+        else
+            command -v curl >/dev/null 2>&1 \
+                || die "curl is required to install ${f}; install curl or run from a checkout."
+            curl -fsSL "${RAW_BASE}/${f}" -o "$tmp" || die \
+                "Could not download ${f} from ${RAW_BASE}.
+       Check the ref exists, or set REMOTE_RADIOS_REF / REMOTE_RADIOS_RAW_BASE."
+        fi
+        if ! cmp -s "$tmp" "${INSTALL_DIR}/${f}"; then
+            install -m 0755 "$tmp" "${INSTALL_DIR}/${f}"
+            RUNTIME_CHANGED=1
+        fi
+        rm -f "$tmp"
+    done
+
+    [ -s "$INSTALLED_SETUP" ] || die "Runtime install failed: ${INSTALLED_SETUP} is missing."
+    ok "Workstation runtime installed in ${INSTALL_DIR}"
+}
+
+# ---------------------------------------------------------------------------
+# The single user service
+# ---------------------------------------------------------------------------
+# One unit owns the whole workstation side: the usb-ip export of the Bluetooth
+# dongle and both SSH tunnels.  It re-executes this script with --service, so
+# there is exactly one implementation of the supervision loop.
+#
+# ExecStopPost releases the dongle.  It has to be systemd's job rather than the
+# service's own cleanup because the bind helper runs as root via sudo, and a
+# user systemd manager cannot signal a root process — stopping the unit would
+# otherwise leave the dongle bound and unavailable for local Bluetooth.
+install_service_unit() {
+    mkdir -p "$SYSTEMD_USER_DIR" "${CONFIG_DIR}/staging"
+    local unit="${SYSTEMD_USER_DIR}/${SERVICE_NAME}"
+    local unit_new="${CONFIG_DIR}/staging/${SERVICE_NAME}"
+    local stop_post=""
+    [ -n "${BT_BUSID:-}" ] \
+        && stop_post="ExecStopPost=/usr/bin/sudo -n ${RELEASE_HELPER} ${BT_BUSID}"
+
+    {
+        cat <<EOF
 [Unit]
-Description=remote-radios usb-ip export of Bluetooth dongle ${BT_BUSID}
+Description=remote-radios: forward workstation radios to ${SSH_TARGET}
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/sudo -n ${BIND_HELPER} ${BT_BUSID}
-ExecStopPost=/usr/bin/sudo -n ${RELEASE_HELPER} ${BT_BUSID}
-Restart=on-failure
-RestartSec=3
+ExecStart=${INSTALLED_SETUP} --service ${SSH_TARGET}
+EOF
+        if [ -n "$stop_post" ]; then printf '%s\n' "$stop_post"; fi
+        cat <<EOF
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=default.target
 EOF
+    } > "$unit_new"
+
+    # Retire the unit that only exported the dongle; its work is now part of
+    # this one.  Stopping it also runs its own ExecStopPost, so the dongle is
+    # released cleanly before the new service claims it.
+    if [ -e "${SYSTEMD_USER_DIR}/${LEGACY_SERVICE_NAME}" ]; then
+        systemctl --user disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+        rm -f "${SYSTEMD_USER_DIR}/${LEGACY_SERVICE_NAME}"
+        info "Replaced ${LEGACY_SERVICE_NAME} with ${SERVICE_NAME}."
+    fi
 
     # `enable --now` will not restart a unit that is already active, so an
     # updated ExecStart (or a newly installed helper) would otherwise sit unused
-    # until the next logout.  Restart only when something actually changed.
+    # until the next login.  Restart only when something actually changed.
     local unit_changed=0
     cmp -s "$unit_new" "$unit" || unit_changed=1
     install -m 0644 "$unit_new" "$unit"
     rm -f "$unit_new"
 
     systemctl --user daemon-reload
-    systemctl --user enable --now remote-radios-usbip.service
-    if [ "$unit_changed" -eq 1 ] || [ "$need_install" -eq 1 ]; then
-        systemctl --user restart remote-radios-usbip.service
+    systemctl --user enable --now "$SERVICE_NAME"
+    if [ "$unit_changed" -eq 1 ] || [ "${HELPERS_CHANGED:-0}" -eq 1 ] \
+        || [ "${RUNTIME_CHANGED:-0}" -eq 1 ]; then
+        systemctl --user restart "$SERVICE_NAME"
     fi
-    ok "usb-ip export service running for dongle ${BT_BUSID}."
 }
+
 
 # ---------------------------------------------------------------------------
 # VPN detection (tear down if the corporate VPN drops)
@@ -664,12 +785,32 @@ locate_remote_serial_py() {
     if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/remote-serial.py" ]; then
         echo "$SCRIPT_DIR/remote-serial.py"; return 0
     fi
-    # Curl'd standalone: fetch remote-serial.py alongside from the same base URL.
-    if [ -n "${REMOTE_RADIOS_RAW_BASE:-}" ]; then
-        local dst="${CONFIG_DIR}/remote-serial.py"
-        curl -fsSL "${REMOTE_RADIOS_RAW_BASE}/remote-serial.py" -o "$dst" && { echo "$dst"; return 0; }
+    # The service runs from ${INSTALL_DIR}, where install_runtime_files put it.
+    if [ -f "${INSTALL_DIR}/remote-serial.py" ]; then
+        echo "${INSTALL_DIR}/remote-serial.py"; return 0
+    fi
+    mkdir -p "$INSTALL_DIR"
+    if curl -fsSL "${RAW_BASE}/remote-serial.py" -o "${INSTALL_DIR}/remote-serial.py" 2>/dev/null; then
+        chmod 0755 "${INSTALL_DIR}/remote-serial.py"
+        echo "${INSTALL_DIR}/remote-serial.py"; return 0
     fi
     echo ""
+}
+
+start_bind_helper() {
+    [ -n "${BT_BUSID:-}" ] || return 0
+    if [ ! -e "/sys/bus/usb/devices/${BT_BUSID}" ]; then
+        warn "Bluetooth dongle ${BT_BUSID} not present; will export it when it appears."
+        BIND_HELPER_PID=""
+        return 0
+    fi
+    info "Exporting Bluetooth dongle ${BT_BUSID} over usb-ip..."
+    # The helper takes an flock, so if a root-owned instance survived a previous
+    # stop (a user systemd manager cannot kill one) this second copy exits at
+    # once and the watchdog below simply sees it gone.  Harmless either way.
+    sudo -n "$BIND_HELPER" "$BT_BUSID" >> "${STATE_DIR}/usbip-bind.log" 2>&1 &
+    BIND_HELPER_PID=$!
+    echo "$BIND_HELPER_PID" > "${STATE_DIR}/usbip-bind.pid"
 }
 
 start_silabs_tunnel() {
@@ -729,7 +870,7 @@ write_remote_env_hint() {
     # Drop a small env file on the dev server so setupDockerEnv.sh / dockerw can
     # pick up the radio parameters automatically.
     ssh -o BatchMode=yes "$SSH_TARGET" \
-        "mkdir -p ~/.remote-radios/radios ~/.remote-radios/usbip && chmod 700 ~/.remote-radios && cat > ~/.remote-radios/radios.env <<EOF
+        "mkdir -p ~/.remote-radios/radios ~/.remote-radios/usbip ~/.remote-radios/claims && chmod 700 ~/.remote-radios && cat > ~/.remote-radios/radios.env <<EOF
 # generated by remote-radios-setup.sh on the developer workstation
 SILABS_SOCKET_HOST=${SILABS_SOCK_REMOTE}
 SILABS_SOCKET=/run/remote-radios/radios/silabs.sock
@@ -752,7 +893,7 @@ teardown() {
 }
 
 monitor_loop() {
-    info "Monitoring tunnels (Ctrl-C to stop). Tears down on VPN drop or logout."
+    info "Supervising radios and tunnels. Tears down on VPN drop or stop."
     trap 'teardown; exit 0' INT TERM
 
     while true; do
@@ -771,11 +912,47 @@ monitor_loop() {
             continue
         fi
 
+        # Hot-plug recovery.  The service starts at login, which is routinely
+        # before the radios are plugged in, so a missing device is a normal
+        # state to recover from rather than an error.
+        if [ -n "${SILABS_SERIAL:-}" ] && [ -z "${SILABS_DEV:-}" ]; then
+            SILABS_DEV="$(resolve_silabs_dev "$SILABS_SERIAL")"
+            if [ -n "$SILABS_DEV" ]; then
+                ok "Silabs radio appeared at ${SILABS_DEV}."
+                start_silabs_tunnel
+            fi
+        fi
+        if [ -n "${BT_BUSID:-}" ] && [ -z "${BIND_HELPER_PID:-}" ] \
+            && [ -e "/sys/bus/usb/devices/${BT_BUSID}" ]; then
+            ok "Bluetooth dongle ${BT_BUSID} appeared."
+            start_bind_helper
+        fi
+
+        # Keep the dongle exported.  The helper re-binds the device itself if
+        # the driver reverts; this covers the helper process going away.
+        if [ -n "${BIND_HELPER_PID:-}" ] && ! kill -0 "$BIND_HELPER_PID" 2>/dev/null; then
+            if [ -e "/sys/bus/usb/devices/${BT_BUSID}" ]; then
+                warn "usb-ip export helper died — restarting."
+                start_bind_helper
+            else
+                warn "Bluetooth dongle ${BT_BUSID} was unplugged."
+                BIND_HELPER_PID=""
+            fi
+        fi
+
         # Restart any tunnel process that died.
         if [ -n "${SILABS_DEV:-}" ] && [ -n "${SILABS_TUNNEL_PID:-}" ] \
             && ! kill -0 "$SILABS_TUNNEL_PID" 2>/dev/null; then
-            warn "Silabs tunnel died — restarting."
-            start_silabs_tunnel
+            # Distinguish an unplugged radio from a dropped tunnel: retrying a
+            # tunnel to a device node that no longer exists just spins.
+            if [ -e "$SILABS_DEV" ]; then
+                warn "Silabs tunnel died — restarting."
+                start_silabs_tunnel
+            else
+                warn "Silabs radio ${SILABS_DEV} was unplugged; waiting for it to return."
+                SILABS_DEV=""
+                SILABS_TUNNEL_PID=""
+            fi
         fi
         if [ -n "${BT_BUSID:-}" ] && [ -n "${BT_TUNNEL_PID:-}" ] \
             && ! kill -0 "$BT_TUNNEL_PID" 2>/dev/null; then
@@ -788,13 +965,70 @@ monitor_loop() {
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+usage() {
+    cat <<EOF
+Usage: ${SCRIPT_NAME} <user>@<devserver>
+
+Sets up this workstation to forward its Silabs radio and Bluetooth dongle to a
+shared dev server, and installs a user service that keeps them forwarded.  The
+service starts at login and stops at logout; re-run this script only to change
+the dev server or to pick up an updated checkout.
+
+Options:
+  --service <user>@<devserver>   Run as the service itself (used by the unit;
+                                 not normally invoked by hand).
+  -h, --help                     Show this help.
+EOF
+}
+
+# Resolve the radios named in the saved config, without prompting.
+resolve_saved_radios() {
+    if [ -n "${SILABS_SERIAL:-}" ]; then
+        SILABS_DEV="$(resolve_silabs_dev "$SILABS_SERIAL")"
+    fi
+}
+
+# The service: no prompting, no privileged installation — just bring the radios
+# up and supervise them.  A radio that is absent right now is not fatal; the
+# monitor loop picks it up when it is plugged in.
+run_as_service() {
+    load_config
+    [ -n "${SSH_TARGET:-}" ] || die "No dev server configured; run ${SCRIPT_NAME} <user>@<devserver> first."
+    resolve_saved_radios
+
+    [ -n "${SILABS_SERIAL:-}${BT_BUSID:-}" ] \
+        || die "No radios configured; run ${SCRIPT_NAME} <user>@<devserver> first."
+
+    [ -n "${SILABS_DEV:-}" ] && ok "Silabs radio: ${SILABS_DEV}"
+    start_bind_helper
+    resolve_remote_params
+    start_silabs_tunnel
+    start_bt_tunnel
+    write_remote_env_hint
+    ok "Remote radios are forwarded to ${SSH_TARGET}."
+    monitor_loop
+}
+
 main() {
     require_cmds
     mkdir -p "$STATE_DIR"; chmod 700 "$STATE_DIR"
 
+    case "${1:-}" in
+        -h|--help) usage; exit 0 ;;
+        --service) SERVICE_MODE=1; shift ;;
+    esac
+
+    if [ "$SERVICE_MODE" -eq 1 ]; then
+        # The unit passes the target explicitly; fall back to the saved one.
+        load_config
+        SSH_TARGET="${1:-${SSH_TARGET:-}}"
+        run_as_service
+        return
+    fi
+
     load_config
     SSH_TARGET="${1:-${SSH_TARGET:-}}"
-    [ -n "$SSH_TARGET" ] || die "Usage: remote-radios-setup.sh <user>@<devserver>"
+    [ -n "$SSH_TARGET" ] || { usage; exit 1; }
 
     # Detect radios on first run, or re-validate saved ones.
     if [ -z "${SILABS_SERIAL:-}${BT_BUSID:-}" ]; then
@@ -819,19 +1053,26 @@ main() {
         fi
     fi
 
-    install_usbipd_unit
+    # Persist the dev server so the service can run without arguments.
+    save_config
+
+    # Verify we can actually reach the dev server before installing anything
+    # that claims to keep a connection to it.
     resolve_remote_params
-    start_silabs_tunnel
-    start_bt_tunnel
-    write_remote_env_hint
+
+    install_runtime_files
+    install_privileged_helpers
+    install_service_unit
 
     echo
-    ok "Remote radios are set up."
+    ok "Remote radios are set up, and will be forwarded automatically at login."
+    info "Service:  systemctl --user status ${SERVICE_NAME}"
+    info "Logs:     journalctl --user -u ${SERVICE_NAME} -f"
+    echo
     info "On the dev server, run your devcontainer with the radio overlay:"
     printf '    %s./dockerw -T bash%s\n' "$BOLD" "$NC"
     echo
-
-    monitor_loop
 }
 
 main "$@"
+

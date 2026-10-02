@@ -39,7 +39,8 @@
 #   * Dedicated Bluetooth USB dongle — reached over usb-ip (BT_USBIP_SOCKET,
 #     a bind-mounted socket).  The container attaches it with `usbip attach`,
 #     producing a REAL HCI device in the host network namespace, which
-#     btattach/bluetoothd then manage.  This radio is optional — Thread /
+#     the kernel btusb driver registers and bluetoothd manages.  This radio is
+#     optional — Thread /
 #     Zigbee works without it.
 #
 # Run this inside the Barton or remote-radios container to diagnose the
@@ -273,12 +274,12 @@ is_process_alive() {
 check_container_env() {
     section "Container Environment"
 
-    # Privileged mode (needed for btattach, iptables, wpan0 creation)
+    # Privileged mode (needed for usb-ip attach, iptables, wpan0 creation)
     if ip link add dummy_priv_test type dummy 2>/dev/null; then
         ip link del dummy_priv_test 2>/dev/null
         pass "Privileged mode" "Container is privileged"
     else
-        fail "Privileged mode" "Container is NOT privileged (required for btattach/iptables)"
+        fail "Privileged mode" "Container is NOT privileged (required for usb-ip attach/iptables)"
     fi
 
     # Host network namespace mount
@@ -295,7 +296,7 @@ check_container_env() {
     fi
 
     # Required commands
-    for cmd in btattach bluetoothd hcitool hciconfig nsenter usbip python3 socat cpcd; do
+    for cmd in bluetoothd hcitool hciconfig nsenter usbip python3 socat cpcd; do
         if command -v "$cmd" >/dev/null 2>&1; then
             pass "Command: $cmd" "$(command -v "$cmd")"
         else
