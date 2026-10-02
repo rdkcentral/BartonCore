@@ -69,6 +69,20 @@ FAKE_VALUE_FUNC(icDeviceResource *,
                 const char *,
                 uint8_t,
                 ResourceCachingPolicy);
+FAKE_VALUE_FUNC(icDeviceResource *,
+                createEndpointResourceIfAvailable,
+                icDeviceEndpoint *,
+                const char *,
+                icInitialResourceValues *,
+                const char *,
+                uint8_t,
+                ResourceCachingPolicy);
+FAKE_VALUE_FUNC(bool,
+                initialResourceValuesPutEndpointValue,
+                icInitialResourceValues *,
+                const char *,
+                const char *,
+                const char *);
 FAKE_VALUE_FUNC(icDeviceMetadata *, createDeviceMetadata, icDevice *, const char *, const char *);
 FAKE_VALUE_FUNC(bool, deviceServiceDeviceFound, DeviceFoundDetails *, bool);
 FAKE_VALUE_FUNC(bool, deviceServiceIsDeviceKnown, const char *);
