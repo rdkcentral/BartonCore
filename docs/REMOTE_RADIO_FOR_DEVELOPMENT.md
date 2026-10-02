@@ -167,6 +167,12 @@ workstation set up by an older release is migrated rather than just overwritten
 — stopping and removing the superseded `remote-radios-usbip.service`, and
 deleting the old sudo helper that used to live under `$HOME`.
 
+The ref a workstation was installed from is remembered as `SETUP_REF` in
+`~/.config/remote-radios/config`, and re-runs track that same ref. A workstation
+installed from a branch or a commit therefore stays on it, instead of silently
+replacing itself with whatever is currently on `main`. Set `REMOTE_RADIOS_REF`
+explicitly to move it to a different ref.
+
 The `curl | bash` one-liner above also upgrades an existing install, so either
 entry point works.
 
