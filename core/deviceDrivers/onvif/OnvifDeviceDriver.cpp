@@ -128,7 +128,8 @@ namespace
         bool StartDiscovery(const char *deviceClass);
         void StopDiscovery();
         bool ConfigureDevice(icDevice *device);
-        bool RegisterResources(icDevice *device);
+        bool FetchInitialResourceValues(icDevice *device, icInitialResourceValues *initialResourceValues);
+        bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues);
         bool ExecuteResource(icDeviceResource *resource, const char *arg, char **response);
         void DeviceRemoved(icDevice *device);
         void Shutdown();
@@ -679,7 +680,38 @@ static icDeviceEndpoint *findEndpointById(icDevice *device, const char *endpoint
     return found;
 }
 
-bool OnvifDriver::RegisterResources(icDevice *device)
+bool OnvifDriver::FetchInitialResourceValues(icDevice *device, icInitialResourceValues *initialResourceValues)
+{
+    if (device == nullptr || device->uuid == nullptr)
+    {
+        return false;
+    }
+
+    // Seed the resources the driver (not the platform) supplies values for, so a reconfiguration -- which
+    // recreates the device's resources -- preserves them instead of resetting them. The credentials are
+    // client-written and would otherwise be lost; authRequired is discovery-derived and the discovery
+    // cache is empty during reconfiguration, so ReadAuthRequired prefers the persisted value. On first
+    // configuration ReadCredentials returns empty (seeded NULL) and ReadAuthRequired uses the freshly
+    // discovered value.
+    OnvifCredentials creds = ReadCredentials(device->uuid);
+
+    initialResourceValuesPutEndpointValue(initialResourceValues,
+                                          ONVIF_ENDPOINT_ID,
+                                          ONVIF_RESOURCE_USERNAME,
+                                          creds.username.empty() ? nullptr : creds.username.c_str());
+    initialResourceValuesPutEndpointValue(initialResourceValues,
+                                          ONVIF_ENDPOINT_ID,
+                                          ONVIF_RESOURCE_PASSWORD,
+                                          creds.password.empty() ? nullptr : creds.password.c_str());
+    initialResourceValuesPutEndpointValue(initialResourceValues,
+                                          ONVIF_ENDPOINT_ID,
+                                          ONVIF_RESOURCE_AUTH_REQUIRED,
+                                          ReadAuthRequired(device->uuid) ? "true" : "false");
+
+    return true;
+}
+
+bool OnvifDriver::RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues)
 {
     icDeviceEndpoint *cameraEp = findEndpointById(device, CAMERA_SESSION_ENDPOINT_ID);
     icDeviceEndpoint *onvifEp = findEndpointById(device, ONVIF_ENDPOINT_ID);
@@ -752,32 +784,30 @@ bool OnvifDriver::RegisterResources(icDevice *device)
                                     RESOURCE_MODE_EMIT_EVENTS,
                                     CACHING_POLICY_NEVER) != nullptr) &&
             allOk;
-    // Non-secret signal telling the client whether credentials must be applied to the media/snapshot
-    // URLs. Derived per camera from whether it answered an anonymous query during discovery; defaults
-    // to requiring credentials when the camera is not in the live discovery cache (e.g. after restart).
-    DiscoveredCamera regCam;
-    const char *authRequiredValue = (LookupDiscovered(device->uuid, regCam) && !regCam.authRequired) ? "false" : "true";
-    allOk = (createEndpointResource(onvifEp,
-                                    ONVIF_RESOURCE_AUTH_REQUIRED,
-                                    authRequiredValue,
-                                    RESOURCE_TYPE_BOOLEAN,
-                                    RESOURCE_MODE_READABLE,
-                                    CACHING_POLICY_ALWAYS) != nullptr) &&
+    // authRequired (non-secret) tells the client whether credentials must be applied to the media/
+    // snapshot URLs, and the write-only credentials are client-supplied. All three are seeded in
+    // fetchInitialResourceValues (from the derived value and any persisted values) and created here via
+    // createEndpointResourceIfAvailable so a reconfiguration preserves them instead of resetting them.
+    allOk = (createEndpointResourceIfAvailable(onvifEp,
+                                               ONVIF_RESOURCE_AUTH_REQUIRED,
+                                               initialResourceValues,
+                                               RESOURCE_TYPE_BOOLEAN,
+                                               RESOURCE_MODE_READABLE,
+                                               CACHING_POLICY_ALWAYS) != nullptr) &&
             allOk;
-    // Credentials: write-only sensitive resources (encrypted at rest, redacted in logs).
-    allOk = (createEndpointResource(onvifEp,
-                                    ONVIF_RESOURCE_USERNAME,
-                                    NULL,
-                                    RESOURCE_TYPE_USER_ID,
-                                    RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
-                                    CACHING_POLICY_ALWAYS) != nullptr) &&
+    allOk = (createEndpointResourceIfAvailable(onvifEp,
+                                               ONVIF_RESOURCE_USERNAME,
+                                               initialResourceValues,
+                                               RESOURCE_TYPE_USER_ID,
+                                               RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
+                                               CACHING_POLICY_ALWAYS) != nullptr) &&
             allOk;
-    allOk = (createEndpointResource(onvifEp,
-                                    ONVIF_RESOURCE_PASSWORD,
-                                    NULL,
-                                    RESOURCE_TYPE_PASSWORD,
-                                    RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
-                                    CACHING_POLICY_ALWAYS) != nullptr) &&
+    allOk = (createEndpointResourceIfAvailable(onvifEp,
+                                               ONVIF_RESOURCE_PASSWORD,
+                                               initialResourceValues,
+                                               RESOURCE_TYPE_PASSWORD,
+                                               RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_SENSITIVE,
+                                               CACHING_POLICY_ALWAYS) != nullptr) &&
             allOk;
 
     if (!allOk)
@@ -1005,17 +1035,16 @@ static bool configureDevice(void *ctx, icDevice *device, DeviceDescriptor *)
     return static_cast<OnvifDriver *>(ctx)->ConfigureDevice(device);
 }
 
-static bool registerResources(void *ctx, icDevice *device, icInitialResourceValues *)
+static bool registerResources(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues)
 {
-    return static_cast<OnvifDriver *>(ctx)->RegisterResources(device);
+    return static_cast<OnvifDriver *>(ctx)->RegisterResources(device, initialResourceValues);
 }
 
-// No initial values to seed: ONVIF resources are created empty and populated on demand. The device
-// service invokes this unconditionally on reconfiguration, so a real (no-op) callback must exist to
-// avoid dereferencing a null function pointer.
-static bool fetchInitialResourceValues(void *, icDevice *, icInitialResourceValues *)
+// Seed the driver-supplied resource values (credentials and the derived authRequired) so the device
+// service recreates them with their current values during a reconfiguration rather than resetting them.
+static bool fetchInitialResourceValues(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues)
 {
-    return true;
+    return static_cast<OnvifDriver *>(ctx)->FetchInitialResourceValues(device, initialResourceValues);
 }
 
 // No cached device state to refresh. The device service invokes this unconditionally when an ONVIF
