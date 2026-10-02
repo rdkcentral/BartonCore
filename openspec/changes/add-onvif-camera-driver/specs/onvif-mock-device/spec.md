@@ -37,6 +37,23 @@ stream and snapshot URIs SHALL NOT contain embedded credentials.
 - **WHEN** the mock receives a `GetSnapshotUri` request for its media profile
 - **THEN** it SHALL return an HTTP JPEG URI
 
+### Requirement: Mock can model an authenticated or an open camera
+
+The mock SHALL be configurable to either require WS-Security authentication or answer anonymously. When
+it requires authentication, a SOAP request without a WS-Security `UsernameToken` SHALL be rejected with
+a SOAP Fault (HTTP 400); when it is open, every request SHALL be answered normally. This lets the
+integration tests exercise both the driver's `authRequired = "true"` derivation (the camera rejected the
+anonymous probe-time `GetDeviceInformation`) and its `authRequired = "false"` derivation (the camera
+answered anonymously).
+
+#### Scenario: Authenticated mock rejects an unauthenticated request
+- **WHEN** the authenticated mock receives a SOAP request with no WS-Security `UsernameToken`
+- **THEN** it SHALL respond with a SOAP Fault so the driver's anonymous `GetDeviceInformation` fails
+
+#### Scenario: Open mock answers anonymously
+- **WHEN** the open mock receives a SOAP request with no credentials
+- **THEN** it SHALL return the normal canned response so the driver derives `authRequired = "false"`
+
 ### Requirement: Mock publishes a live RTSP stream and snapshot image
 
 The mock SHALL run a live RTSP server that publishes a dummy H.264 test pattern at the mount point
@@ -65,3 +82,7 @@ execute `takePicture` and follow the returned entry point to obtain a `snapshotU
 #### Scenario: End-to-end media flows on the reported URLs
 - **WHEN** the integration test opens the reported `mediaUrl` RTSP URI and fetches the reported `snapshotUrl`
 - **THEN** it SHALL receive live RTSP media buffers and JPEG snapshot bytes
+
+#### Scenario: End-to-end open camera streams without credentials
+- **WHEN** the integration test runs discovery for `camera` against the open mock and executes `stream` then its entry point without writing credentials
+- **THEN** the camera SHALL be discovered with `authRequired = "false"` AND a `mediaUrl` event SHALL carry the mock's `rtsp://` URI
