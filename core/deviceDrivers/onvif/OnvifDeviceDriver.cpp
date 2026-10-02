@@ -48,6 +48,7 @@
 #include "OnvifWsDiscovery.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -89,6 +90,10 @@ using namespace barton::onvif;
 #define ONVIF_DEVICE_CLASS_VERSION       1
 #define ONVIF_METADATA_SERVICE_URL       "onvifServiceUrl"
 #define ONVIF_DISCOVERY_TIMEOUT_MS       3000
+// Back off between retries when a discovery probe fails fast (bad socket/destination/args) so the
+// worker loop cannot hot-spin; a normal probe consumes ONVIF_DISCOVERY_TIMEOUT_MS and never backs off.
+#define ONVIF_DISCOVERY_RETRY_BACKOFF_MS 5000
+#define ONVIF_DISCOVERY_RETRY_SLICE_MS   250
 // Test seam: when set to "host:port", discovery probes that address by unicast instead of the
 // 239.255.255.250 multicast group (which does not reliably traverse container/CI networks).
 #define ONVIF_DISCOVERY_ADDRESS_PROPERTY "onvif.discovery.address"
@@ -138,7 +143,7 @@ namespace
 
     private:
         void DiscoveryWorker();
-        void RunDiscoveryProbe();
+        bool RunDiscoveryProbe();
         bool LookupDiscovered(const std::string &uuid, DiscoveredCamera &out);
         OnvifCredentials ReadCredentials(const std::string &uuid);
         std::string ReadServiceUrl(const std::string &uuid);
@@ -503,9 +508,11 @@ void OnvifDriver::DiscoveryWorker()
     // keeps the latch and runs again instead of releasing it and losing the start.
     while (true)
     {
+        bool probeOk = false;
+
         try
         {
-            RunDiscoveryProbe();
+            probeOk = RunDiscoveryProbe();
         }
         catch (const std::exception &e)
         {
@@ -520,18 +527,33 @@ void OnvifDriver::DiscoveryWorker()
         // StartDiscovery uses: a start that set discoverDesired just now either keeps this worker
         // looping (CAS would have failed) or wins the CAS after we release here -- never both, never
         // neither.
-        std::lock_guard<std::mutex> lock(discoveryThreadMutex);
-
-        if (!discoverDesired.load())
         {
-            discoveryRunning.store(false);
+            std::lock_guard<std::mutex> lock(discoveryThreadMutex);
 
-            return;
+            if (!discoverDesired.load())
+            {
+                discoveryRunning.store(false);
+
+                return;
+            }
+        }
+
+        // A probe that failed fast returns immediately; without a delay the loop would hot-spin (a
+        // pegged core, a log line per iteration, and repeated socket() calls under fd exhaustion) for
+        // the whole discovery window. Back off before retrying -- a normal probe consumes its full
+        // timeout and never reaches here -- sleeping in slices so a stop during the backoff is prompt.
+        if (!probeOk)
+        {
+            for (int waited = 0; waited < ONVIF_DISCOVERY_RETRY_BACKOFF_MS && discoverDesired.load();
+                 waited += ONVIF_DISCOVERY_RETRY_SLICE_MS)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(ONVIF_DISCOVERY_RETRY_SLICE_MS));
+            }
         }
     }
 }
 
-void OnvifDriver::RunDiscoveryProbe()
+bool OnvifDriver::RunDiscoveryProbe()
 {
     OnvifWsDiscovery discovery;
 
@@ -567,6 +589,10 @@ void OnvifDriver::RunDiscoveryProbe()
 
     std::string error;
     std::vector<OnvifProbeMatch> matches = discovery.Probe(ONVIF_DISCOVERY_TIMEOUT_MS, &error);
+
+    // A non-empty error means the probe failed fast (bad socket/destination/args) rather than ran its
+    // full budget; return it so the worker loop backs off instead of hot-spinning on a fast failure.
+    bool probeSucceeded = error.empty();
 
     if (!error.empty())
     {
@@ -667,6 +693,8 @@ void OnvifDriver::RunDiscoveryProbe()
             discovered.erase(uuid);
         }
     }
+
+    return probeSucceeded;
 }
 
 bool OnvifDriver::ConfigureDevice(icDevice *device)
