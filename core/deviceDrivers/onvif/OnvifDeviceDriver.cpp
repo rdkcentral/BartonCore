@@ -138,6 +138,7 @@ namespace
 
     private:
         void DiscoveryWorker();
+        void RunDiscoveryProbe();
         bool LookupDiscovered(const std::string &uuid, DiscoveredCamera &out);
         OnvifCredentials ReadCredentials(const std::string &uuid);
         std::string ReadServiceUrl(const std::string &uuid);
@@ -146,16 +147,20 @@ namespace
 
         std::mutex stateMutex;
         std::unordered_map<std::string, DiscoveredCamera> discovered;
-        // discoveryThreadMutex guards every joinable()/join()/assignment of discoveryThread so a
-        // concurrent start/stop cannot double-join it or move-assign over a joinable handle (UB).
+        // discoveryThreadMutex guards every joinable()/join()/assignment of discoveryThread and the
+        // worker's exit/relaunch decision, so a concurrent start/stop cannot double-join it, move-assign
+        // over a joinable handle (UB), or lose a start that raced the worker's exit.
         std::mutex discoveryThreadMutex;
         std::thread discoveryThread;
-        // Latch: a worker exists and has not exited. Set by StartDiscovery, cleared only by the worker
-        // on exit, so a concurrent start observes the live worker instead of launching a second one.
+        // Latch: a worker exists and has not exited. Set by StartDiscovery, released only by the worker
+        // under discoveryThreadMutex, so a concurrent start observes the live worker instead of
+        // launching a second one.
         std::atomic<bool> discoveryRunning {false};
-        // Cancellation signal: set only by StopDiscovery, cleared only when StartDiscovery launches a
-        // fresh worker, so a concurrent start cannot un-request an in-flight stop.
-        std::atomic<bool> stopRequested {false};
+        // The latest intent: true means discovery is wanted. StopDiscovery clears it; StartDiscovery
+        // sets it. The worker aborts a session's reporting when it is false and, on finishing a session,
+        // runs another session if it is still true -- so a start that arrives while a stop drains is
+        // honored rather than lost.
+        std::atomic<bool> discoverDesired {false};
     };
 
     // A discovered uuid becomes part of a JSON springboard payload and a resource URI path. The
@@ -455,23 +460,28 @@ bool OnvifDriver::StartDiscovery(const char *deviceClass)
 
     std::lock_guard<std::mutex> lock(discoveryThreadMutex);
 
+    // Record the intent to discover. If a worker already holds the latch (including one draining a
+    // pending stop), it observes this and runs another session before exiting, so a start that races a
+    // stop is not lost. The worker releases discoveryRunning under this same mutex, so the CAS below and
+    // that release cannot interleave into a lost start.
+    discoverDesired.store(true);
+
     bool expected = false;
 
     if (!discoveryRunning.compare_exchange_strong(expected, true))
     {
-        // A worker is already running; leave it (and any pending stop) untouched.
+        // A worker already holds the latch; it will (re)discover because discoverDesired is now true.
         return true;
     }
 
-    // The previous worker clears discoveryRunning before exiting, so this join reaps a finished thread
-    // rather than blocking, and reaping before reassigning avoids move-assigning over a joinable handle
-    // (which would call std::terminate).
+    // The previous worker released discoveryRunning under this mutex before exiting, so this join reaps
+    // a finished thread rather than blocking, and reaping before reassigning avoids move-assigning over
+    // a joinable handle (which would call std::terminate).
     if (discoveryThread.joinable())
     {
         discoveryThread.join();
     }
 
-    stopRequested.store(false);
     discoveryThread = std::thread(&OnvifDriver::DiscoveryWorker, this);
 
     return true;
@@ -479,22 +489,50 @@ bool OnvifDriver::StartDiscovery(const char *deviceClass)
 
 void OnvifDriver::StopDiscovery()
 {
-    // Contract: this returns immediately. Signal cancellation and let the worker observe it; the thread
-    // is reaped by the next StartDiscovery or by Shutdown rather than joined here, which would otherwise
-    // block for the full in-flight probe/SOAP timeout.
-    stopRequested.store(true);
+    // Contract: this returns immediately. Clear the desire to discover; the worker observes it, aborts
+    // any in-flight session's reporting, and exits (releasing the latch under discoveryThreadMutex). The
+    // thread is reaped by the next StartDiscovery or by Shutdown rather than joined here, which would
+    // otherwise block for the full in-flight probe/SOAP timeout.
+    discoverDesired.store(false);
 }
 
 void OnvifDriver::DiscoveryWorker()
 {
-    // Release the latch on every exit path (including a throw) so discovery cannot get stuck "running".
-    struct RunningGuard
+    // Run discovery sessions until discovery is no longer desired. Looping here (rather than exiting
+    // after a single session) lets a start that arrived while a stop was draining be honored: the worker
+    // keeps the latch and runs again instead of releasing it and losing the start.
+    while (true)
     {
-        std::atomic<bool> &flag;
+        try
+        {
+            RunDiscoveryProbe();
+        }
+        catch (const std::exception &e)
+        {
+            icLogError(LOG_TAG, "discovery worker error: %s", e.what());
+        }
+        catch (...)
+        {
+            icLogError(LOG_TAG, "discovery worker error");
+        }
 
-        ~RunningGuard() { flag.store(false); }
-    } runningGuard {discoveryRunning};
+        // Decide to run again or exit atomically with releasing the latch, under the same mutex
+        // StartDiscovery uses: a start that set discoverDesired just now either keeps this worker
+        // looping (CAS would have failed) or wins the CAS after we release here -- never both, never
+        // neither.
+        std::lock_guard<std::mutex> lock(discoveryThreadMutex);
 
+        if (!discoverDesired.load())
+        {
+            discoveryRunning.store(false);
+
+            return;
+        }
+    }
+}
+
+void OnvifDriver::RunDiscoveryProbe()
+{
     OnvifWsDiscovery discovery;
 
     // Test seam: allow a unicast discovery target via a property (see ONVIF_DISCOVERY_ADDRESS_PROPERTY).
@@ -537,7 +575,7 @@ void OnvifDriver::DiscoveryWorker()
 
     for (const OnvifProbeMatch &match : matches)
     {
-        if (stopRequested.load())
+        if (!discoverDesired.load())
         {
             break;
         }
@@ -1006,13 +1044,18 @@ void OnvifDriver::Shutdown()
     StopDiscovery();
 
     // StopDiscovery only signals; join here so the thread is reaped before the driver is destroyed (a
-    // joinable std::thread destructor calls std::terminate). This may block until the in-flight probe
-    // finishes, which is acceptable on shutdown.
-    std::lock_guard<std::mutex> lock(discoveryThreadMutex);
-
-    if (discoveryThread.joinable())
+    // joinable std::thread destructor calls std::terminate). Move the handle out under the mutex and
+    // join without holding it, since the worker needs the same mutex for its own exit decision. This may
+    // block until the in-flight probe finishes, which is acceptable on shutdown.
+    std::thread toJoin;
     {
-        discoveryThread.join();
+        std::lock_guard<std::mutex> lock(discoveryThreadMutex);
+        toJoin = std::move(discoveryThread);
+    }
+
+    if (toJoin.joinable())
+    {
+        toJoin.join();
     }
 }
 
