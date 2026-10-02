@@ -90,10 +90,11 @@ class _OnvifSoapHandler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode("utf-8", "ignore")
 
-        # This mock models a camera that requires authentication. A request without a WS-Security
-        # UsernameToken is rejected with a SOAP Fault (HTTP 400), so the driver's anonymous probe-time
-        # GetDeviceInformation fails and the driver derives authRequired=true for this camera.
-        if "UsernameToken" not in body:
+        # This mock can model either an authenticated camera (default) or an open one. When it requires
+        # authentication, a request without a WS-Security UsernameToken is rejected with a SOAP Fault
+        # (HTTP 400), so the driver's anonymous probe-time GetDeviceInformation fails and the driver
+        # derives authRequired=true. An open camera answers anonymously, so the driver derives false.
+        if getattr(self.server, "requires_auth", True) and "UsernameToken" not in body:
             fault = _soap_envelope(
                 "<s:Fault><s:Code><s:Value>s:Sender</s:Value></s:Code>"
                 '<s:Reason><s:Text xml:lang="en">Authentication required</s:Text></s:Reason></s:Fault>'
@@ -163,7 +164,7 @@ class OnvifCameraServer:
     """A mock ONVIF camera: a UDP WS-Discovery responder, an HTTP SOAP endpoint, a live RTSP stream,
     and an HTTP snapshot endpoint."""
 
-    def __init__(self):
+    def __init__(self, requires_auth=True):
         if not _GST_RTSP_AVAILABLE:
             raise RuntimeError(
                 "OnvifCameraServer requires the Gst/GstRtspServer GObject-introspection bindings, "
@@ -174,6 +175,8 @@ class OnvifCameraServer:
 
         # HTTP SOAP endpoint.
         self._http = http.server.HTTPServer(("127.0.0.1", 0), _OnvifSoapHandler)
+        # Whether the SOAP endpoint rejects unauthenticated requests (read by the request handler).
+        self._http.requires_auth = requires_auth
         http_port = self._http.server_address[1]
         self.service_url = f"http://127.0.0.1:{http_port}/onvif/device_service"
 
@@ -281,10 +284,23 @@ class OnvifCameraServer:
 
 @pytest.fixture
 def onvif_camera():
-    """Start a mock ONVIF camera for the duration of a test."""
+    """Start a mock ONVIF camera (requires authentication) for the duration of a test."""
     if not _GST_RTSP_AVAILABLE:
         pytest.skip("GStreamer RTSP GI bindings (Gst/GstRtspServer) are not available")
     server = OnvifCameraServer()
+    server.start()
+    try:
+        yield server
+    finally:
+        server.stop()
+
+
+@pytest.fixture
+def onvif_open_camera():
+    """Start a mock ONVIF camera that requires no authentication (answers every request anonymously)."""
+    if not _GST_RTSP_AVAILABLE:
+        pytest.skip("GStreamer RTSP GI bindings (Gst/GstRtspServer) are not available")
+    server = OnvifCameraServer(requires_auth=False)
     server.start()
     try:
         yield server
