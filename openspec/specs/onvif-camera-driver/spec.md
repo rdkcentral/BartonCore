@@ -32,7 +32,9 @@ firmware via an anonymous ONVIF `GetDeviceInformation`, and report the device wi
 libcurl timeout as the on-demand calls so an unreachable ProbeMatch cannot stall the discovery worker.
 The `GetDeviceInformation` lookup SHALL be **best-effort**: if it fails or the camera requires
 credentials for it, the driver SHALL still report the ProbeMatch with fallback metadata rather than
-dropping the camera (credentials are only provisioned after the device exists).
+dropping the camera (credentials are only provisioned after the device exists). Whether the anonymous
+`GetDeviceInformation` succeeded SHALL also be recorded per camera and used to derive the `authRequired`
+hint (see the `authRequired` requirement below).
 Because a discovered ONVIF camera normally has no DDL descriptor entry,
 the driver SHALL report it with `neverReject = true` so the device service does not reject it for
 lack of a matching descriptor. The reported `DeviceFoundDetails.deviceDriver` SHALL point to this
@@ -76,9 +78,13 @@ authenticated ONVIF SOAP call. Authentication SHALL occur on-demand when `getMed
 - **WHEN** an ONVIF camera is configured before any credentials are written
 - **THEN** configuration SHALL succeed AND the driver SHALL NOT issue an authenticated `GetProfiles`/`GetStreamUri`/`GetSnapshotUri` call
 
-#### Scenario: Missing credentials produce an error at stream time
-- **WHEN** `getMediaUrl` is executed while `username`/`password` are unset
+#### Scenario: Missing credentials produce an error at stream time for an auth-required camera
+- **WHEN** `getMediaUrl` is executed while `username`/`password` are unset AND `authRequired` is `"true"`
 - **THEN** the execute SHALL return an error indicating credentials are required AND SHALL NOT emit a `mediaUrl` event
+
+#### Scenario: An open camera streams without credentials
+- **WHEN** `getMediaUrl` is executed while `username`/`password` are unset AND `authRequired` is `"false"`
+- **THEN** the driver SHALL perform the ONVIF calls anonymously AND emit the `mediaUrl` event
 
 ### Requirement: stream springboards to the ONVIF media entry point
 
@@ -92,13 +98,15 @@ The `stream` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "entryP
 
 ### Requirement: getMediaUrl returns the RTSP media URL via GetStreamUri
 
-Executing `getMediaUrl` on `ep/onvif` SHALL perform an ONVIF `GetStreamUri` SOAP call authenticated
-with the stored credentials and SHALL emit the returned credential-free RTSP URL as a `mediaUrl`
-event. Because configuration does not fetch profiles, the driver SHALL obtain a media-profile token
-via an on-demand `GetProfiles` call and use the first returned token for the `GetStreamUri` request.
-Before contacting the camera the driver SHALL verify that both the `username` and `password`
-credentials are present; if either is unset the execute SHALL fail with a credentials-required error
-and SHALL NOT start the SOAP worker or emit an event. The SOAP call SHALL use a bounded libcurl
+Executing `getMediaUrl` on `ep/onvif` SHALL perform an ONVIF `GetStreamUri` SOAP call — authenticated
+with the stored credentials when they are set — and SHALL emit the returned credential-free RTSP URL as
+a `mediaUrl` event. Because configuration does not fetch profiles, the driver SHALL obtain a
+media-profile token via an on-demand `GetProfiles` call and use the first returned token for the
+`GetStreamUri` request. The credential requirement SHALL be gated on `authRequired`: when `authRequired`
+is `"true"` the driver SHALL verify that both the `username` and `password` credentials are present
+before contacting the camera and, if either is unset, SHALL fail with a credentials-required error and
+SHALL NOT start the SOAP worker or emit an event; when `authRequired` is `"false"` the driver SHALL
+perform the calls anonymously if no credentials are stored. The SOAP call SHALL use a bounded libcurl
 timeout so an unresponsive or packet-dropping camera cannot block the executing thread indefinitely.
 
 #### Scenario: getMediaUrl emits the RTSP URL
@@ -111,8 +119,9 @@ The `takePicture` execute on `ep/camera` SHALL return `{ "protocol": "onvif", "e
 "/<deviceId>/ep/onvif/r/getSnapshotUrl" }` and SHALL ignore the `sessionId` argument. Executing
 `getSnapshotUrl` on `ep/onvif` SHALL perform an ONVIF `GetSnapshotUri` SOAP call authenticated with
 the stored credentials and SHALL emit the returned JPEG URL as a `snapshotUrl` event. As with
-`getMediaUrl`, the driver SHALL require both credentials to be present before contacting the camera
-(failing with a credentials-required error and emitting no event otherwise), and the SOAP call SHALL
+`getMediaUrl`, the driver SHALL — when `authRequired` is `"true"` — require both credentials to be
+present before contacting the camera (failing with a credentials-required error and emitting no event
+otherwise); when `authRequired` is `"false"` it MAY contact the camera anonymously. The SOAP call SHALL
 use a bounded libcurl timeout so an unresponsive or packet-dropping camera cannot block the executing
 thread indefinitely. Because the returned URL is camera-controlled, the driver SHALL validate its
 scheme before emitting — `rtsp://` for `mediaUrl`, `http(s)://` for `snapshotUrl` — and SHALL reject a
@@ -134,9 +143,13 @@ service URL (device metadata), whose integrity is the platform's responsibility.
 ### Requirement: authRequired signals credential need without exposing secrets
 
 The `authRequired` resource SHALL indicate whether the client must apply credentials to the returned
-media/snapshot URLs. In this driver version the driver SHALL set `authRequired` to a constant `"true"`
-at configuration time — a static hint reflecting that ONVIF media/snapshot fetches reuse the stored
-credentials — rather than deriving it from a live authentication probe. The driver SHALL NOT place
+media/snapshot URLs. The driver SHALL derive `authRequired` per camera during discovery from whether
+the camera answered an anonymous `GetDeviceInformation`: `"false"` when the anonymous query succeeded
+(an open camera) and `"true"` otherwise (the camera rejected the anonymous query, or its authentication
+requirement could not be determined). This derived value is a static hint published at configuration
+time rather than a live per-request probe; because a successful anonymous `GetDeviceInformation` does
+not by itself prove the media service is anonymous, a client MAY still need to supply credentials if an
+anonymous media fetch is later rejected. The driver SHALL NOT place
 credentials in any resource value, event payload, or returned URL other than the dedicated credential
 resources, which are flagged `RESOURCE_MODE_SENSITIVE` to request the platform's sensitive-value
 handling. The credential resources are created **write-only** (`RESOURCE_MODE_WRITEABLE`, not
@@ -145,9 +158,9 @@ omitting `SENSITIVE` values from the resource-to-client conversion and the crede
 event-emitting, no credential value is exposed through a resource read or event. `RESOURCE_MODE_SENSITIVE`
 also drives at-rest and log handling, which is the platform's responsibility.
 
-#### Scenario: authRequired is readable and non-secret
+#### Scenario: authRequired reflects the camera's discovered authentication need
 - **WHEN** a client reads `authRequired` on `ep/onvif`
-- **THEN** it SHALL return `"true"` for a camera that requires authentication AND no credential value SHALL be readable from any resource or event
+- **THEN** it SHALL return `"true"` for a camera that rejected the anonymous discovery query and `"false"` for one that answered it anonymously AND no credential value SHALL be readable from any resource or event
 
 ### Requirement: ONVIF SOAP calls authenticate with WS-UsernameToken
 
