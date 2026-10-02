@@ -89,6 +89,8 @@ struct _CameraMediaServer
     // Invoked (on the server thread) when a viewer connects; used to request a keyframe.
     CameraMediaServerOnViewer onViewer;
     gpointer onViewerData;
+    guint viewerDispatching; // in-flight onViewer invocations (guarded by mutex)
+    GCond viewerCond;        // signalled when an onViewer invocation completes
 
     // Startup handshake between the caller and the server thread.
     GMutex startMutex;
@@ -110,6 +112,33 @@ static void servePlayerPage(GOutputStream *out)
     g_output_stream_write_all(out, resp, strlen(resp), NULL, NULL, NULL);
     g_output_stream_flush(out, NULL, NULL);
     g_free(resp);
+}
+
+// Invoke the new-viewer hook (outside the mutex) with in-flight tracking so cameraMediaServerSetOnViewer
+// can drain any running invocation before the caller frees the user data.
+static void dispatchViewer(CameraMediaServer *self)
+{
+    g_mutex_lock(&self->mutex);
+    CameraMediaServerOnViewer cb = self->onViewer;
+    gpointer data = self->onViewerData;
+
+    if (cb != NULL)
+    {
+        self->viewerDispatching++;
+    }
+    g_mutex_unlock(&self->mutex);
+
+    if (cb == NULL)
+    {
+        return;
+    }
+
+    cb(data);
+
+    g_mutex_lock(&self->mutex);
+    self->viewerDispatching--;
+    g_cond_broadcast(&self->viewerCond);
+    g_mutex_unlock(&self->mutex);
 }
 
 static gboolean onIncoming(GSocketService *service, GSocketConnection *conn, GObject *sourceObject, gpointer userData)
@@ -241,10 +270,7 @@ static gboolean onIncoming(GSocketService *service, GSocketConnection *conn, GOb
 
         // Ask for a fresh keyframe so this viewer can begin decoding without waiting for the
         // camera's periodic keyframe. Invoked outside the mutex; the handler must not re-enter.
-        if (self->onViewer != NULL)
-        {
-            self->onViewer(self->onViewerData);
-        }
+        dispatchViewer(self);
 
         // Claim the connection: our clients-list ref keeps it alive after this handler returns.
         return TRUE;
@@ -314,6 +340,7 @@ CameraMediaServer *cameraMediaServerCreate(const gchar *bindHost, guint16 port)
     self->url = g_strdup_printf("http://%s:%u", self->bindHost, port);
     self->initSegment = g_byte_array_new();
     g_mutex_init(&self->mutex);
+    g_cond_init(&self->viewerCond);
     g_mutex_init(&self->startMutex);
     g_cond_init(&self->startCond);
     self->context = g_main_context_new();
@@ -415,10 +442,7 @@ void cameraMediaServerPushBuffer(CameraMediaServer *self, const guint8 *data, gs
                 // Now that a deferred viewer is active, request a keyframe just like the ready
                 // path does so it can begin decoding without waiting for the camera's periodic
                 // keyframe. Invoked outside the mutex; the handler must not re-enter.
-                if (self->onViewer != NULL)
-                {
-                    self->onViewer(self->onViewerData);
-                }
+                dispatchViewer(self);
             }
         }
 
@@ -478,8 +502,17 @@ void cameraMediaServerSetOnViewer(CameraMediaServer *self, CameraMediaServerOnVi
         return;
     }
 
+    g_mutex_lock(&self->mutex);
     self->onViewer = onViewer;
     self->onViewerData = userData;
+
+    // When clearing the hook, wait for any in-flight invocation to finish so the caller can free the
+    // user data (e.g. the backend) as soon as this returns without a use-after-free.
+    while (onViewer == NULL && self->viewerDispatching > 0)
+    {
+        g_cond_wait(&self->viewerCond, &self->mutex);
+    }
+    g_mutex_unlock(&self->mutex);
 }
 
 void cameraMediaServerDestroy(CameraMediaServer *self)
@@ -545,6 +578,7 @@ void cameraMediaServerDestroy(CameraMediaServer *self)
     g_free(self->bindHost);
     g_free(self->url);
     g_mutex_clear(&self->mutex);
+    g_cond_clear(&self->viewerCond);
     g_mutex_clear(&self->startMutex);
     g_cond_clear(&self->startCond);
     g_free(self);
