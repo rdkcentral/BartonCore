@@ -140,12 +140,21 @@ namespace
         bool LookupDiscovered(const std::string &uuid, DiscoveredCamera &out);
         OnvifCredentials ReadCredentials(const std::string &uuid);
         std::string ReadServiceUrl(const std::string &uuid);
+        bool ReadAuthRequired(const std::string &uuid);
         bool FetchAndEmitUrl(const std::string &uuid, bool snapshot);
 
         std::mutex stateMutex;
         std::unordered_map<std::string, DiscoveredCamera> discovered;
-        std::atomic<bool> discoveryActive {false};
+        // discoveryThreadMutex guards every joinable()/join()/assignment of discoveryThread so a
+        // concurrent start/stop cannot double-join it or move-assign over a joinable handle (UB).
+        std::mutex discoveryThreadMutex;
         std::thread discoveryThread;
+        // Latch: a worker exists and has not exited. Set by StartDiscovery, cleared only by the worker
+        // on exit, so a concurrent start observes the live worker instead of launching a second one.
+        std::atomic<bool> discoveryRunning {false};
+        // Cancellation signal: set only by StopDiscovery, cleared only when StartDiscovery launches a
+        // fresh worker, so a concurrent start cannot un-request an in-flight stop.
+        std::atomic<bool> stopRequested {false};
     };
 
     // A discovered uuid becomes part of a JSON springboard payload and a resource URI path. The
@@ -416,6 +425,26 @@ OnvifCredentials OnvifDriver::ReadCredentials(const std::string &uuid)
     return creds;
 }
 
+bool OnvifDriver::ReadAuthRequired(const std::string &uuid)
+{
+    // Prefer the persisted authRequired resource (written at configuration from the discovery-derived
+    // value) so the decision survives a restart, when the in-memory discovery cache is empty. Default
+    // to requiring credentials if neither source resolves.
+    icDeviceResource *res = deviceServiceGetResourceById(uuid.c_str(), ONVIF_ENDPOINT_ID, ONVIF_RESOURCE_AUTH_REQUIRED);
+
+    if (res != nullptr)
+    {
+        bool required = (res->value == nullptr) || strcmp(res->value, "false") != 0;
+        resourceDestroy(res);
+
+        return required;
+    }
+
+    DiscoveredCamera cam;
+
+    return LookupDiscovered(uuid, cam) ? cam.authRequired : true;
+}
+
 bool OnvifDriver::StartDiscovery(const char *deviceClass)
 {
     if (deviceClass == nullptr || strcmp(deviceClass, CAMERA_DC) != 0)
@@ -423,18 +452,25 @@ bool OnvifDriver::StartDiscovery(const char *deviceClass)
         return false;
     }
 
+    std::lock_guard<std::mutex> lock(discoveryThreadMutex);
+
     bool expected = false;
 
-    if (!discoveryActive.compare_exchange_strong(expected, true))
+    if (!discoveryRunning.compare_exchange_strong(expected, true))
     {
-        // Already discovering.
+        // A worker is already running; leave it (and any pending stop) untouched.
         return true;
     }
 
+    // The previous worker clears discoveryRunning before exiting, so this join reaps a finished thread
+    // rather than blocking, and reaping before reassigning avoids move-assigning over a joinable handle
+    // (which would call std::terminate).
     if (discoveryThread.joinable())
     {
         discoveryThread.join();
     }
+
+    stopRequested.store(false);
     discoveryThread = std::thread(&OnvifDriver::DiscoveryWorker, this);
 
     return true;
@@ -442,16 +478,22 @@ bool OnvifDriver::StartDiscovery(const char *deviceClass)
 
 void OnvifDriver::StopDiscovery()
 {
-    discoveryActive.store(false);
-
-    if (discoveryThread.joinable())
-    {
-        discoveryThread.join();
-    }
+    // Contract: this returns immediately. Signal cancellation and let the worker observe it; the thread
+    // is reaped by the next StartDiscovery or by Shutdown rather than joined here, which would otherwise
+    // block for the full in-flight probe/SOAP timeout.
+    stopRequested.store(true);
 }
 
 void OnvifDriver::DiscoveryWorker()
 {
+    // Release the latch on every exit path (including a throw) so discovery cannot get stuck "running".
+    struct RunningGuard
+    {
+        std::atomic<bool> &flag;
+
+        ~RunningGuard() { flag.store(false); }
+    } runningGuard {discoveryRunning};
+
     OnvifWsDiscovery discovery;
 
     // Test seam: allow a unicast discovery target via a property (see ONVIF_DISCOVERY_ADDRESS_PROPERTY).
@@ -494,7 +536,7 @@ void OnvifDriver::DiscoveryWorker()
 
     for (const OnvifProbeMatch &match : matches)
     {
-        if (!discoveryActive.load())
+        if (stopRequested.load())
         {
             break;
         }
@@ -586,8 +628,6 @@ void OnvifDriver::DiscoveryWorker()
             discovered.erase(uuid);
         }
     }
-
-    discoveryActive.store(false);
 }
 
 bool OnvifDriver::ConfigureDevice(icDevice *device)
@@ -763,9 +803,9 @@ bool OnvifDriver::FetchAndEmitUrl(const std::string &uuid, bool snapshot)
     // A camera that requires authentication needs both credentials before we contact it; without them
     // the execute fails rather than issuing a request the camera will reject. A camera that answered
     // anonymously during discovery (authRequired false) is queried anonymously when no credentials are
-    // configured, so an open camera streams without the operator inventing throwaway credentials.
-    DiscoveredCamera cam;
-    bool authRequired = LookupDiscovered(uuid, cam) ? cam.authRequired : true;
+    // configured, so an open camera streams without the operator inventing throwaway credentials. Read
+    // the persisted authRequired resource (not the volatile discovery cache) so this holds after a restart.
+    bool authRequired = ReadAuthRequired(uuid);
 
     if (authRequired && (creds.username.empty() || creds.password.empty()))
     {
@@ -934,6 +974,16 @@ void OnvifDriver::DeviceRemoved(icDevice *device)
 void OnvifDriver::Shutdown()
 {
     StopDiscovery();
+
+    // StopDiscovery only signals; join here so the thread is reaped before the driver is destroyed (a
+    // joinable std::thread destructor calls std::terminate). This may block until the in-flight probe
+    // finishes, which is acceptable on shutdown.
+    std::lock_guard<std::mutex> lock(discoveryThreadMutex);
+
+    if (discoveryThread.joinable())
+    {
+        discoveryThread.join();
+    }
 }
 
 // ============================================================================================
