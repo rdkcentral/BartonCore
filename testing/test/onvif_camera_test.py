@@ -174,6 +174,27 @@ def test_onvif_auth_required_is_readable_and_non_secret(onvif_environment, onvif
     assert client.read_resource(resource_uri(camera, "authRequired", endpoint_id="onvif")) == "true"
 
 
+def test_onvif_open_camera_streams_without_credentials(onvif_open_environment, onvif_open_camera):
+    client = onvif_open_environment.get_client()
+    camera = _discover_camera(onvif_open_environment)
+    assert camera.props.uuid == onvif_open_camera.device_uuid
+
+    # An open camera answers discovery anonymously, so the driver derives authRequired="false".
+    assert client.read_resource(resource_uri(camera, "authRequired", endpoint_id="onvif")) == "false"
+
+    media_queue = resource_update_listener(client, "mediaUrl")
+
+    # No credentials are written; the driver must stream the open camera anonymously.
+    ok, info = client.execute_resource(resource_uri(camera, "stream", endpoint_id="camera"), "")
+    assert ok
+    ok, _ = client.execute_resource(json.loads(info)["entryPoint"], "")
+    assert ok, "getMediaUrl entry-point execute failed for an open camera without credentials"
+
+    media_url = media_queue.get(timeout=10)
+    assert media_url == onvif_open_camera.rtsp_uri
+    assert "@" not in media_url
+
+
 def test_onvif_stream_media_flows(onvif_environment, onvif_camera):
     client = onvif_environment.get_client()
     camera = _discover_camera(onvif_environment)

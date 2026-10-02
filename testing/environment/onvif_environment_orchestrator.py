@@ -54,3 +54,15 @@ def onvif_environment(onvif_camera):
         yield env
     finally:
         env._cleanup()
+
+
+@pytest.fixture
+def onvif_open_environment(onvif_open_camera):
+    """Barton client environment wired to discover the open (no-auth) mock ONVIF camera by unicast."""
+    env = OnvifEnvironmentOrchestrator(discovery_address=onvif_open_camera.discovery_address)
+    try:
+        env.start_client()
+        env.wait_for_client_to_be_ready()
+        yield env
+    finally:
+        env._cleanup()
