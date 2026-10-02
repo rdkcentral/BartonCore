@@ -139,6 +139,37 @@ systemctl --user status remote-radios.service
 journalctl --user -u remote-radios.service -f
 ```
 
+### Updating an existing workstation
+
+Re-run setup. It upgrades itself in place:
+
+```bash
+~/.config/remote-radios/bin/remote-radios-setup.sh
+```
+
+No arguments are needed — the dev server, the chosen radios and the dongle are
+read back from `~/.config/remote-radios/config`, so this is non-interactive.
+
+Each run refreshes `remote-radios-setup.sh` and `remote-serial.py` from the
+repository, and if the setup script itself changed it re-executes the new copy
+so the upgrade is carried out by the newer version rather than the one you
+started. The files are replaced by rename rather than overwritten in place,
+because a shell reads a script lazily as it runs and rewriting the file
+underneath a running one corrupts it.
+
+Only what actually changed is acted on: the service is restarted when the
+runtime, the root helpers or the unit changed, and left alone otherwise. If the
+workstation is offline, or the ref no longer exists, the run warns and keeps the
+installed copy instead of failing.
+
+The installed layout is versioned in `~/.config/remote-radios/version`, so a
+workstation set up by an older release is migrated rather than just overwritten
+— stopping and removing the superseded `remote-radios-usbip.service`, and
+deleting the old sudo helper that used to live under `$HOME`.
+
+The `curl | bash` one-liner above also upgrades an existing install, so either
+entry point works.
+
 The script:
 
 1. **Installs its runtime** to `~/.config/remote-radios/bin/`

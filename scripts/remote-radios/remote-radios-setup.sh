@@ -121,6 +121,17 @@ SCRIPT_NAME="remote-radios-setup.sh"
 INSTALL_DIR="${CONFIG_DIR}/bin"
 INSTALLED_SETUP="${INSTALL_DIR}/${SCRIPT_NAME}"
 
+# Version of the *installed layout*, bumped whenever a previously set-up
+# workstation needs something migrated rather than merely overwritten.  It is
+# recorded in VERSION_FILE once setup completes, so a later run can tell which
+# layout it is upgrading from.
+#   1  remote-radios-usbip.service only; sudo helper under $HOME; the SSH
+#      tunnels were supervised by a foreground run of this script.
+#   2  one remote-radios.service owning both radios; root helpers in
+#      /usr/local/lib/remote-radios; runtime installed in ${INSTALL_DIR}.
+SETUP_VERSION=2
+VERSION_FILE="${CONFIG_DIR}/version"
+
 # Where to fetch those files when there is no checkout to copy them from.
 RAW_REPO="${REMOTE_RADIOS_REPO:-rdkcentral/BartonCore}"
 RAW_REF="${REMOTE_RADIOS_REF:-main}"
@@ -644,25 +655,42 @@ install_runtime_files() {
     mkdir -p "$INSTALL_DIR" "$staging"
     RUNTIME_CHANGED=0
 
-    local f tmp
+    local f tmp src
     for f in "$SCRIPT_NAME" remote-serial.py; do
         tmp="${staging}/${f}"
+        src=""
         if [ -n "$SCRIPT_DIR" ] && [ "$SCRIPT_DIR" != "$INSTALL_DIR" ] \
             && [ -f "${SCRIPT_DIR}/${f}" ]; then
-            cp -- "${SCRIPT_DIR}/${f}" "$tmp"
-        elif [ "$SCRIPT_DIR" = "$INSTALL_DIR" ] && [ -f "${INSTALL_DIR}/${f}" ]; then
-            # Re-run of the already-installed copy; nothing to refresh.
-            continue
-        else
-            command -v curl >/dev/null 2>&1 \
-                || die "curl is required to install ${f}; install curl or run from a checkout."
-            curl -fsSL "${RAW_BASE}/${f}" -o "$tmp" || die \
-                "Could not download ${f} from ${RAW_BASE}.
+            cp -- "${SCRIPT_DIR}/${f}" "$tmp" && src="checkout"
+        elif command -v curl >/dev/null 2>&1 \
+            && curl -fsSL "${RAW_BASE}/${f}" -o "$tmp" 2>/dev/null; then
+            # This branch also covers re-running the already-installed copy.
+            # It deliberately does NOT skip: picking up a newer version from the
+            # repository is the only way an installed workstation can upgrade.
+            src="download"
+        fi
+
+        if [ -z "$src" ]; then
+            if [ -s "${INSTALL_DIR}/${f}" ]; then
+                # Offline, or the ref moved.  Keeping a working installation is
+                # better than failing a run that did not need a newer copy.
+                warn "Could not refresh ${f} from ${RAW_BASE}; keeping the installed copy."
+                rm -f "$tmp"
+                continue
+            fi
+            die "Could not obtain ${f} from ${RAW_BASE}.
        Check the ref exists, or set REMOTE_RADIOS_REF / REMOTE_RADIOS_RAW_BASE."
         fi
+
         if ! cmp -s "$tmp" "${INSTALL_DIR}/${f}"; then
-            install -m 0755 "$tmp" "${INSTALL_DIR}/${f}"
+            # Replace by rename, never in place.  This script may be the file
+            # being replaced, and bash reads a script lazily as it executes —
+            # overwriting the inode under a running shell corrupts the rest of
+            # the run, whereas a rename leaves it reading the old inode safely.
+            chmod 0755 "$tmp"
+            mv -f "$tmp" "${INSTALL_DIR}/${f}"
             RUNTIME_CHANGED=1
+            info "Updated ${f} (from ${src})."
         fi
         rm -f "$tmp"
     done
@@ -670,6 +698,73 @@ install_runtime_files() {
     [ -s "$INSTALLED_SETUP" ] || die "Runtime install failed: ${INSTALLED_SETUP} is missing."
     ok "Workstation runtime installed in ${INSTALL_DIR}"
 }
+
+# maybe_reexec_updated_setup — hand the rest of the run to the copy we just
+# installed, so that a newer version's logic and migrations are what actually
+# run.  Only needed when this process IS the installed copy and has just been
+# replaced; from a checkout or from curl the running copy is already the new
+# one, and re-executing would pointlessly repeat radio detection.
+maybe_reexec_updated_setup() {
+    [ "${RUNTIME_CHANGED:-0}" = "1" ] || return 0
+    [ -z "${REMOTE_RADIOS_REEXECED:-}" ] || return 0
+    [ -n "$SCRIPT_DIR" ] && [ "$SCRIPT_DIR" = "$INSTALL_DIR" ] || return 0
+
+    info "Setup script was updated; re-running the new version..."
+    export REMOTE_RADIOS_REEXECED=1
+    exec "$INSTALLED_SETUP" "$@"
+}
+
+# ---------------------------------------------------------------------------
+# Upgrading an existing workstation
+# ---------------------------------------------------------------------------
+installed_version() {
+    local v=""
+    [ -f "$VERSION_FILE" ] && v="$(cat "$VERSION_FILE" 2>/dev/null)"
+    case "$v" in
+        '' | *[!0-9]*)
+            # No record. Either a brand-new machine, or a workstation set up
+            # before versions were tracked — a saved config distinguishes them.
+            if [ -f "$CONFIG_FILE" ]; then echo 1; else echo 0; fi ;;
+        *) echo "$v" ;;
+    esac
+}
+
+record_version() {
+    mkdir -p "$CONFIG_DIR"
+    printf '%s\n' "$SETUP_VERSION" > "$VERSION_FILE"
+}
+
+# migrate_installed_state — retire artifacts left by older layouts.  Everything
+# it touches is also handled idempotently by the install functions; this exists
+# so an upgrade says what it is doing, and so removals that belong to no single
+# installer have a home.
+migrate_installed_state() {
+    local from
+    from="$(installed_version)"
+    [ "$from" -ge "$SETUP_VERSION" ] && return 0
+    [ "$from" -eq 0 ] && return 0
+
+    info "Upgrading workstation setup (installed layout v${from} -> v${SETUP_VERSION})."
+
+    if [ "$from" -lt 2 ]; then
+        # v1 supervised the tunnels in the foreground of this script, so a
+        # previous run may still be holding the radios and the old unit may
+        # still be exporting the dongle.  Stopping the unit here (rather than
+        # leaving it to install_service_unit) releases the dongle before the
+        # new unit tries to bind it.
+        if [ -e "${SYSTEMD_USER_DIR}/${LEGACY_SERVICE_NAME}" ]; then
+            info "Stopping ${LEGACY_SERVICE_NAME} before migrating."
+            systemctl --user disable --now "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+        fi
+        # The v1 helper lived in the user's own config dir, where the user could
+        # rewrite a file that sudo then ran as root.
+        if [ -e "${CONFIG_DIR}/usbipd-bind.sh" ]; then
+            rm -f "${CONFIG_DIR}/usbipd-bind.sh"
+            info "Removed the old in-\$HOME sudo helper."
+        fi
+    fi
+}
+
 
 # ---------------------------------------------------------------------------
 # The single user service
@@ -1030,6 +1125,15 @@ main() {
     SSH_TARGET="${1:-${SSH_TARGET:-}}"
     [ -n "$SSH_TARGET" ] || { usage; exit 1; }
 
+    # Retire anything left by an older layout before touching the new one.
+    migrate_installed_state
+
+    # Refresh the installed runtime up front. If this process is itself the
+    # installed copy and a newer version exists, the rest of the setup — and
+    # any migrations it carries — is performed by that newer version.
+    install_runtime_files
+    maybe_reexec_updated_setup "$@"
+
     # Detect radios on first run, or re-validate saved ones.
     if [ -z "${SILABS_SERIAL:-}${BT_BUSID:-}" ]; then
         detect_radios
@@ -1060,9 +1164,9 @@ main() {
     # that claims to keep a connection to it.
     resolve_remote_params
 
-    install_runtime_files
     install_privileged_helpers
     install_service_unit
+    record_version
 
     echo
     ok "Remote radios are set up, and will be forwarded automatically at login."
