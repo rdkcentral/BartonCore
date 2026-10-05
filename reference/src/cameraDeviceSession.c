@@ -34,8 +34,16 @@ struct _CameraDeviceSession
 
     CameraDeviceOnRemoteSdp onRemoteSdp;
     CameraDeviceOnRemoteIce onRemoteIce;
+    gpointer webrtcUserData;
+
     CameraDeviceOnSessionError onError;
-    gpointer userData;
+    gpointer statusUserData;
+
+    // ONVIF-path callbacks: the driver reports the RTSP media URL and snapshot URL as
+    // resource-updated events, delivered through these when set.
+    CameraDeviceOnMediaUrl onMediaUrl;
+    CameraDeviceOnSnapshotUrl onSnapshotUrl;
+    gpointer onvifUserData;
 
     gulong handlerId;
     gchar *sessionId;
@@ -89,19 +97,35 @@ static void onResourceUpdated(BCoreClient *source, BCoreResourceUpdatedEvent *ev
     g_autofree gchar *remoteSdpUri = g_strdup_printf("/%s/ep/webrtc/r/remoteSdp", self->deviceId);
     g_autofree gchar *remoteIceUri = g_strdup_printf("/%s/ep/webrtc/r/remoteIceCandidates", self->deviceId);
     g_autofree gchar *webrtcErrorUri = g_strdup_printf("/%s/ep/webrtc/r/webrtcError", self->deviceId);
+    g_autofree gchar *mediaUrlUri = g_strdup_printf("/%s/ep/onvif/r/mediaUrl", self->deviceId);
+    g_autofree gchar *snapshotUrlUri = g_strdup_printf("/%s/ep/onvif/r/snapshotUrl", self->deviceId);
 
     if (g_strcmp0(uri, remoteSdpUri) == 0 && value != NULL)
     {
         if (self->onRemoteSdp != NULL)
         {
-            self->onRemoteSdp(value, self->userData);
+            self->onRemoteSdp(value, self->webrtcUserData);
         }
     }
     else if (g_strcmp0(uri, remoteIceUri) == 0 && value != NULL)
     {
         if (self->onRemoteIce != NULL)
         {
-            self->onRemoteIce(value, self->userData);
+            self->onRemoteIce(value, self->webrtcUserData);
+        }
+    }
+    else if (g_strcmp0(uri, mediaUrlUri) == 0 && value != NULL)
+    {
+        if (self->onMediaUrl != NULL)
+        {
+            self->onMediaUrl(value, self->onvifUserData);
+        }
+    }
+    else if (g_strcmp0(uri, snapshotUrlUri) == 0 && value != NULL)
+    {
+        if (self->onSnapshotUrl != NULL)
+        {
+            self->onSnapshotUrl(value, self->onvifUserData);
         }
     }
     else if (g_strcmp0(uri, webrtcErrorUri) == 0)
@@ -123,7 +147,7 @@ static void onResourceUpdated(BCoreClient *source, BCoreResourceUpdatedEvent *ev
                 }
             }
 
-            self->onError(reason != NULL ? reason : (value != NULL ? value : "session ended"), self->userData);
+            self->onError(reason != NULL ? reason : (value != NULL ? value : "session ended"), self->statusUserData);
         }
     }
 }
@@ -132,12 +156,7 @@ static void onResourceUpdated(BCoreClient *source, BCoreResourceUpdatedEvent *ev
 // Public API
 // ============================================================================
 
-CameraDeviceSession *cameraDeviceSessionCreate(BCoreClient *client,
-                                               const gchar *deviceId,
-                                               CameraDeviceOnRemoteSdp onRemoteSdp,
-                                               CameraDeviceOnRemoteIce onRemoteIce,
-                                               CameraDeviceOnSessionError onError,
-                                               gpointer userData)
+CameraDeviceSession *cameraDeviceSessionCreate(BCoreClient *client, const gchar *deviceId)
 {
     if (client == NULL || deviceId == NULL)
     {
@@ -147,15 +166,33 @@ CameraDeviceSession *cameraDeviceSessionCreate(BCoreClient *client,
     CameraDeviceSession *self = g_new0(CameraDeviceSession, 1);
     self->client = client;
     self->deviceId = g_strdup(deviceId);
-    self->onRemoteSdp = onRemoteSdp;
-    self->onRemoteIce = onRemoteIce;
-    self->onError = onError;
-    self->userData = userData;
 
     self->handlerId =
         g_signal_connect(client, B_CORE_CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, G_CALLBACK(onResourceUpdated), self);
 
     return self;
+}
+
+void cameraDeviceSessionSetStatusCallback(CameraDeviceSession *session,
+                                          CameraDeviceOnSessionError onError,
+                                          gpointer userData)
+{
+    g_return_if_fail(session != NULL);
+
+    session->onError = onError;
+    session->statusUserData = userData;
+}
+
+void cameraDeviceSessionSetWebrtcCallbacks(CameraDeviceSession *session,
+                                           CameraDeviceOnRemoteSdp onRemoteSdp,
+                                           CameraDeviceOnRemoteIce onRemoteIce,
+                                           gpointer userData)
+{
+    g_return_if_fail(session != NULL);
+
+    session->onRemoteSdp = onRemoteSdp;
+    session->onRemoteIce = onRemoteIce;
+    session->webrtcUserData = userData;
 }
 
 bool cameraDeviceSessionOpen(CameraDeviceSession *session)
@@ -277,6 +314,122 @@ bool cameraDeviceSessionSendIceCandidates(CameraDeviceSession *session, const gc
     g_autofree gchar *uri = g_strdup_printf("/%s/ep/webrtc/r/localIceCandidates", session->deviceId);
 
     return b_core_client_execute_resource(session->client, uri, jsonCandidates, NULL);
+}
+
+void cameraDeviceSessionSetOnvifCallbacks(CameraDeviceSession *session,
+                                          CameraDeviceOnMediaUrl onMediaUrl,
+                                          CameraDeviceOnSnapshotUrl onSnapshotUrl,
+                                          gpointer userData)
+{
+    g_return_if_fail(session != NULL);
+
+    session->onMediaUrl = onMediaUrl;
+    session->onSnapshotUrl = onSnapshotUrl;
+    session->onvifUserData = userData;
+}
+
+bool cameraDeviceSessionOnvifSetCredentials(CameraDeviceSession *session, const gchar *user, const gchar *pass)
+{
+    g_return_val_if_fail(session != NULL, false);
+
+    bool ok = true;
+
+    if (user != NULL && user[0] != '\0')
+    {
+        g_autofree gchar *uri = g_strdup_printf("/%s/ep/onvif/r/username", session->deviceId);
+        ok = b_core_client_write_resource(session->client, uri, user) && ok;
+    }
+
+    if (pass != NULL && pass[0] != '\0')
+    {
+        g_autofree gchar *uri = g_strdup_printf("/%s/ep/onvif/r/password", session->deviceId);
+        ok = b_core_client_write_resource(session->client, uri, pass) && ok;
+    }
+
+    return ok;
+}
+
+gchar *cameraDeviceSessionOnvifReadAuthRequired(CameraDeviceSession *session)
+{
+    g_return_val_if_fail(session != NULL, NULL);
+
+    g_autofree gchar *uri = g_strdup_printf("/%s/ep/onvif/r/authRequired", session->deviceId);
+    g_autoptr(GError) err = NULL;
+    gchar *value = b_core_client_read_resource(session->client, uri, &err);
+
+    if (value == NULL)
+    {
+        emitError("[camera-stream] failed to read authRequired from %s: %s\n",
+                  uri,
+                  err != NULL ? err->message : "(unknown error)");
+    }
+
+    return value;
+}
+
+bool cameraDeviceSessionOnvifRequestMediaUrl(CameraDeviceSession *session)
+{
+    g_return_val_if_fail(session != NULL, false);
+
+    // The stream execute reported the getMediaUrl entry point; fall back to the conventional URI
+    // if the driver did not provide one.
+    g_autofree gchar *fallback = NULL;
+    const gchar *uri = session->entryPoint;
+
+    if (uri == NULL)
+    {
+        fallback = g_strdup_printf("/%s/ep/onvif/r/getMediaUrl", session->deviceId);
+        uri = fallback;
+    }
+
+    return b_core_client_execute_resource(session->client, uri, session->sessionId, NULL);
+}
+
+bool cameraDeviceSessionOnvifRequestSnapshotUrl(CameraDeviceSession *session)
+{
+    g_return_val_if_fail(session != NULL, false);
+
+    // takePicture is a springboard that returns { protocol, entryPoint:.../getSnapshotUrl }.
+    // Execute it, then execute the reported entry point so the driver fetches the snapshot URL
+    // on-demand and emits it as a snapshotUrl event.
+    g_autofree gchar *takePictureUri = g_strdup_printf("/%s/ep/camera/r/takePicture", session->deviceId);
+    g_autofree gchar *result = NULL;
+
+    if (!b_core_client_execute_resource(session->client, takePictureUri, session->sessionId, &result))
+    {
+        emitError("[camera-stream] failed to take picture (execute %s)\n", takePictureUri);
+
+        return false;
+    }
+
+    g_autofree gchar *entryPoint = NULL;
+
+    if (result != NULL)
+    {
+        scoped_cJSON *info = cJSON_Parse(result);
+
+        if (cJSON_IsObject(info))
+        {
+            cJSON *ep = cJSON_GetObjectItem(info, "entryPoint");
+
+            if (cJSON_IsString(ep))
+            {
+                entryPoint = g_strdup(ep->valuestring);
+            }
+        }
+    }
+
+    // Fall back to the conventional getSnapshotUrl URI if the springboard did not report one.
+    g_autofree gchar *fallback = NULL;
+    const gchar *uri = entryPoint;
+
+    if (uri == NULL)
+    {
+        fallback = g_strdup_printf("/%s/ep/onvif/r/getSnapshotUrl", session->deviceId);
+        uri = fallback;
+    }
+
+    return b_core_client_execute_resource(session->client, uri, session->sessionId, NULL);
 }
 
 void cameraDeviceSessionDestroy(CameraDeviceSession *session)
