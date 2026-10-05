@@ -34,7 +34,7 @@ resource API, branching on the active protocol returned by `stream`:
    2. Create a local GStreamer `webrtcbin` peer connection using host candidates only (no STUN/TURN), configured for the client's derived role
    3. Perform the SDP exchange for the client's derived role via the `localSdp` resource on `ep/webrtc`:
       - **Client is the offerer** (camera reported `answerer`): generate a local SDP offer from webrtcbin, execute `localSdp` with it, then wait for a `remoteSdp` event (the camera's answer) and set it as the remote description
-      - **Client is the answerer** (camera reported `offerer`): execute `localSdp` with empty input to open the flow, wait for a `remoteSdp` event (the camera's offer), set it as the remote description, generate a local SDP answer, and execute `localSdp` with the answer
+      - **Client is the answerer** (camera reported `offerer`): `stream` has already opened the flow, so wait for a `remoteSdp` event (the camera's offer), set it as the remote description, generate a local SDP answer, and execute `localSdp` with the answer
    4. Exchange ICE candidates (local → `localIceCandidates`, remote ← `remoteIceCandidates` events)
    5. Wait for the peer connection to reach the connected state, subject to a bounded connectivity timeout
 4. **If the protocol is `onvif`**, follow the ONVIF/RTSP path (see the ONVIF requirement): obtain the RTSP URL via `getMediaUrl`/`mediaUrl` and open a GStreamer `rtspsrc` source

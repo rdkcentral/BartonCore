@@ -42,12 +42,12 @@ protocol is stateless MAY return an identifier without persisting session state.
 
 ### Requirement: stream execute returns the active protocol and entry point
 
-The `stream` execute handler SHALL return, as its synchronous execute result, a JSON object
+The `stream` execute handler SHALL return, upon successful completion, a JSON object
 identifying the active protocol and the entry-point resource URI the client must use next:
 `{ "protocol": "<protocol>", "entryPoint": "/<deviceId>/ep/<protocol>/r/<resource>" }`. The handler
 SHALL NOT emit a separate event to convey the next action. A driver that tracks sessions SHALL mark
 the identified session as streaming; a driver whose protocol is stateless MAY ignore the `sessionId`
-argument.
+argument. A protocol may complete required signaling initialization before `stream` returns.
 
 #### Scenario: Stream returns protocol and entry point for a WebRTC camera
 - **WHEN** a client executes `stream` with a valid `sessionId` on a Matter WebRTC camera
