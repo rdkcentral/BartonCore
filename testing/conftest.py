@@ -65,6 +65,7 @@ pytest_plugins = [
     "testing.helpers.http_fixture_server",
     # Mocks
     "testing.mocks.device_descriptor_server",
+    "testing.mocks.onvif_camera_server",
     # Devices
     "testing.mocks.devices.matter.matter_light",
     "testing.mocks.devices.matter.matter_door_lock",
