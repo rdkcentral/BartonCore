@@ -69,7 +69,7 @@ def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     resource_updated_queue = resource_update_listener(client, "locked")
 
     # Unlock via Barton — execute the "unlock" function resource
-    client.execute_resource(resource_uri(lock, "unlock", endpoint_id=1), "", "")
+    client.execute_resource(resource_uri(lock, "unlock", endpoint_id=1), "")
     wait_for_resource_value(resource_updated_queue, "false")
 
     # Verify via side-band
@@ -77,7 +77,7 @@ def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     assert state["lockState"] == "unlocked"
 
     # Lock via Barton — execute the "lock" function resource
-    client.execute_resource(resource_uri(lock, "lock", endpoint_id=1), "", "")
+    client.execute_resource(resource_uri(lock, "lock", endpoint_id=1), "")
     wait_for_resource_value(resource_updated_queue, "true", timeout=10)
 
     # Verify via side-band
