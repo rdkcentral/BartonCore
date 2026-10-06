@@ -1,26 +1,4 @@
-# camera-stream-reference-command Specification
-
-## Purpose
-The reference app's `cameraStream` (`cs`) command drives a camera through Barton's resource API, branching on the streaming protocol the `stream` execute reports — performing the WebRTC signaling handshake and acting as the in-container WebRTC peer for WebRTC cameras, or opening an RTSP source for ONVIF cameras — then routes the received media to a destination selected by `--out` (record to a file or serve over HTTP to a browser). It uses only `BCoreClient` APIs and is gated behind a CMake option.
-
-## Requirements
-### Requirement: cameraStream command exists in reference app
-
-The reference app SHALL provide a command named `cameraStream` with short alias `cs` in a dedicated camera command category. The command SHALL accept a device ID as a required argument and optional flags: `--out <uri>` (media destination) and, for ONVIF cameras, `--user`/`--pass` (credentials) and `--snapshot <path>` (still capture; a plain filesystem path, with an optional `file://` prefix).
-
-#### Scenario: Command appears in help
-- **WHEN** a user types `help` in the reference app
-- **THEN** the camera category SHALL list `cameraStream` with usage: `<deviceId> [--out <uri>] [--user <name>] [--pass <secret>] [--snapshot <path>]`
-
-#### Scenario: Command with short alias
-- **WHEN** a user types `cs <deviceId>`
-- **THEN** the command SHALL execute identically to `cameraStream <deviceId>`
-
-#### Scenario: Output URI selects the media destination
-- **WHEN** the command is invoked with `--out file://<path>`
-- **THEN** the stream SHALL be recorded to that file path
-- **WHEN** the command is invoked with `--out <host>[:<port>]` (optionally prefixed with `http://`), or without `--out`
-- **THEN** the stream SHALL be served over HTTP for a browser to play, defaulting to a loopback host and port when `--out` is omitted
+## MODIFIED Requirements
 
 ### Requirement: cameraStream orchestrates full session lifecycle
 
@@ -64,14 +42,6 @@ resource API, branching on the active protocol returned by `stream`:
 #### Scenario: User stops the stream
 - **WHEN** a user presses Ctrl+C during an active stream
 - **THEN** the reference app SHALL execute `destroySession`, stop the GStreamer pipeline, and return to the command prompt
-
-### Requirement: cameraStream uses only BCoreClient API for signaling
-
-The `cameraStream` command SHALL interact with Barton exclusively through `BCoreClient` APIs (`b_core_client_execute_resource`, event subscriptions). It SHALL NOT use Matter SDK APIs, link against Matter libraries, or reference Matter-specific types.
-
-#### Scenario: No Matter SDK dependency
-- **WHEN** the reference app is compiled
-- **THEN** the camera stream module SHALL compile without any Matter SDK headers in its include path
 
 ### Requirement: cameraStream uses GStreamer for media (webrtcbin or rtspsrc)
 
@@ -126,6 +96,8 @@ obtain the active protocol and entry-point URI from the `stream` execute result.
 - **WHEN** the active protocol is `onvif` and the driver emits a `mediaUrl` event
 - **THEN** the reference app SHALL receive the RTSP URL from that event and use it as the `rtspsrc` location
 
+## ADDED Requirements
+
 ### Requirement: cameraStream supports ONVIF/RTSP cameras
 
 When the `stream` result reports protocol `onvif`, the `cameraStream` command SHALL drive the camera
@@ -166,8 +138,8 @@ extended accordingly: beyond `<deviceId> [--out <uri>]` it SHALL also accept the
 `--user`/`--pass` (and `--snapshot <path>`) flags, and its registered maximum-argument limit SHALL be
 raised to admit them. Passing `--pass` on the command line places the password in the process
 argument vector (and commonly in shell history); this exposure is an accepted limitation of the
-interim flag mechanism and SHALL be documented as such (a future credential model is expected to use
-an interactive/stdin path instead).
+interim flag-based mechanism and SHALL be documented as such (a future credential model is expected
+to use an interactive/stdin path instead).
 
 #### Scenario: Credentials supplied via flags
 - **WHEN** a user runs `cameraStream <onvifDeviceId> --user <u> --pass <p>`
@@ -176,58 +148,3 @@ an interactive/stdin path instead).
 #### Scenario: Missing credentials reported clearly
 - **WHEN** an ONVIF camera requires authentication and no credentials have been provided
 - **THEN** the command SHALL print a clear error indicating credentials are required and SHALL NOT hang
-
-### Requirement: cameraStream reports progress to user
-
-The command SHALL emit human-readable progress messages to stdout at each stage of the flow. The
-common stages are:
-- Session created (sessionId)
-- Streaming initiated (protocol, entryPoint)
-- Media flowing / connected
-- Stream ended (reason)
-
-For the WebRTC protocol the command SHALL additionally report the signaling stages:
-- Local SDP sent (the offer, or the answer to the camera's offer)
-- Remote SDP received (the camera's answer or offer)
-- ICE candidates exchanged
-
-For the ONVIF protocol the command SHALL instead report the URL/RTSP stages:
-- Credentials applied (when `authRequired` is true)
-- RTSP media URL requested (`getMediaUrl`) and received (the `mediaUrl` event)
-- RTSP source connected (media flowing)
-
-#### Scenario: Progress output during successful stream
-- **WHEN** `cameraStream` completes signaling and media begins flowing
-- **THEN** the user SHALL see step-by-step status messages indicating progress through the flow
-
-### Requirement: cameraStream handles errors gracefully
-
-The command SHALL handle failures at any stage (session creation failure, signaling timeout, asynchronous `webrtcError` failure, and connectivity/ICE failure) by printing an error message, cleaning up any partial state (destroying the session if created), and returning to the command prompt. In particular, because Matter signaling cannot observe media-plane connectivity, the command SHALL enforce a client-side connectivity timeout: if the WebRTC peer connection does not reach a connected state within a bounded window after signaling completes — or transitions to a failed state — the command SHALL tear down and report the failure rather than wait indefinitely.
-
-#### Scenario: Device does not support camera streaming
-- **WHEN** `cameraStream` is executed on a device without a `camera` endpoint
-- **THEN** the command SHALL print an error and exit without crashing
-
-#### Scenario: Signaling timeout
-- **WHEN** the camera does not respond to signaling within a reasonable timeout
-- **THEN** the command SHALL print a timeout error, destroy the session, and exit
-
-#### Scenario: Connectivity never established
-- **WHEN** signaling completes but the WebRTC peer connection does not reach a connected state within the connectivity timeout window
-- **THEN** the command SHALL print a connectivity-failure message, destroy the session, and exit rather than hang on a blank window
-
-#### Scenario: Peer connection fails
-- **WHEN** the WebRTC peer connection transitions to a failed state during or after ICE exchange
-- **THEN** the command SHALL print a failure message, destroy the session, and exit
-
-### Requirement: Camera command category is gated by CMake flag
-
-The camera stream command and its GStreamer dependencies SHALL be gated behind a `BCORE_REFERENCE_CAMERA_SUPPORT` CMake option (default OFF). When disabled, the reference app builds without GStreamer dependencies and without the camera category.
-
-#### Scenario: Build without camera stream support
-- **WHEN** `BCORE_REFERENCE_CAMERA_SUPPORT=OFF` (default)
-- **THEN** the reference app SHALL build successfully without GStreamer development libraries
-
-#### Scenario: Build with camera stream support
-- **WHEN** `BCORE_REFERENCE_CAMERA_SUPPORT=ON`
-- **THEN** the reference app SHALL link against gstreamer-1.0, gstreamer-webrtc-1.0, gstreamer-sdp-1.0, gstreamer-app-1.0, and gio-2.0, and include the camera category

@@ -1,9 +1,5 @@
-# camera-session-lifecycle Specification
+## MODIFIED Requirements
 
-## Purpose
-The protocol-agnostic abstract camera endpoint contract: the session lifecycle executes (`createSession`, `stream`, `takePicture`, `destroySession`) with no `sessionStatus` resource. The `stream` execute returns the active protocol and its entry-point URI; all in-session state, error, and teardown signaling lives on the protocol-specific endpoint (e.g. `ep/webrtc`), not the abstract one.
-
-## Requirements
 ### Requirement: Abstract camera endpoint provides protocol-agnostic session lifecycle
 
 A camera device driver SHALL declare an endpoint with id `"camera"` and profile `"camera"` exposing
@@ -74,11 +70,3 @@ driver whose protocol is stateless SHALL treat `destroySession` as a successful 
 #### Scenario: destroySession on a stateless driver
 - **WHEN** a client executes `destroySession` on a driver whose protocol holds no session state
 - **THEN** the handler SHALL return success without error
-
-### Requirement: Client discovers next steps without server-pushed status events
-
-A client SHALL be able to drive the full session flow using only execute results and protocol-endpoint event subscriptions, without reading or subscribing to any status resource on the abstract endpoint.
-
-#### Scenario: Reference client drives flow without sessionStatus
-- **WHEN** the reference app runs a camera stream
-- **THEN** it SHALL obtain the protocol and entry point from the `stream` execute result and subscribe to protocol-endpoint events, and SHALL NOT subscribe to any `sessionStatus` resource
