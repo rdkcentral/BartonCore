@@ -24,6 +24,8 @@
 import time
 from queue import Empty, Queue
 
+import json
+
 from gi.repository import BCore
 
 
@@ -123,3 +125,52 @@ def wait_for_resource_value(queue, expected_value, timeout=10):
 
         if value == expected_value:
             return value
+
+
+def resource_metadata_listener(client, resource_id):
+    """Connect a listener that captures (value, metadata) for a single resource.
+
+    Returns a Queue that receives a (value, metadata) tuple each time the given
+    resource is updated. metadata is the parsed event metadata JSON (a dict), or
+    None when the update carried no metadata.
+    """
+    queue = Queue()
+
+    def _on_resource_updated(_client, event):
+        resource = event.props.resource
+
+        if resource.props.id == resource_id:
+            metadata = None
+            metadata_str = event.props.metadata
+
+            if metadata_str:
+                metadata = json.loads(metadata_str)
+
+            queue.put((resource.props.value, metadata))
+
+    client.connect(BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, _on_resource_updated)
+
+    return queue
+
+
+def wait_for_resource_metadata(queue, expected_value, timeout=10):
+    """Drain (value, metadata) tuples until value matches; return that metadata."""
+    deadline = time.monotonic() + timeout
+
+    while True:
+        remaining = deadline - time.monotonic()
+
+        if remaining <= 0:
+            raise AssertionError(
+                f"Timed out waiting for resource value '{expected_value}'"
+            )
+
+        try:
+            value, metadata = queue.get(timeout=remaining)
+        except Empty:
+            raise AssertionError(
+                f"Timed out waiting for resource value '{expected_value}'"
+            )
+
+        if value == expected_value:
+            return metadata
