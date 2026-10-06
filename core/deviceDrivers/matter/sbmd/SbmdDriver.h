@@ -111,11 +111,9 @@ namespace barton
          *
          * Intended to be called once after load/registration so an unclaimed driver holds only
          * its stub. No-op if the driver is already a stub; refuses to run on an active driver.
-         * Caller must hold MQuickJsRuntime::GetMutex().
-         *
-         * @param ctx The mquickjs context
+         * Caller must hold MQuickJsRuntime::GetMutex() (ReleaseHandlers() releases GC roots).
          */
-        void Shrink(JSContext *ctx);
+        void Shrink();
 
         /**
          * Whether the driver is currently activated (handler references are held alive).

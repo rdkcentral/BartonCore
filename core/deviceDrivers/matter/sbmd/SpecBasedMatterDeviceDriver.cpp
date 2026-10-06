@@ -481,6 +481,13 @@ SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionInte
 {
     icDebug();
 
+    // reporting is only populated while the driver is activated; fall back to the base default
+    // rather than returning zeroed intervals if this is ever queried while inactive.
+    if (!driver->IsActivated())
+    {
+        return MatterDeviceDriver::GetDesiredSubscriptionIntervalSecs();
+    }
+
     const auto &r = driver->GetRegistration().reporting;
 
     return {r.minSecs, r.maxSecs};

@@ -31,9 +31,11 @@
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <random>
 #include <string>
 
 extern "C" {
@@ -121,6 +123,22 @@ namespace
         JSContext *Ctx()
         {
             return MQuickJsRuntime::Instance().GetSharedContext();
+        }
+
+        /**
+         * A unique spec-file path under the temp directory. Per-process salt plus a per-call
+         * counter keep concurrent test runs on the same host from colliding on fixed filenames.
+         */
+        std::filesystem::path UniqueSpecPath(const std::string &tag)
+        {
+            static const std::string salt = [] {
+                std::random_device rd;
+                return std::to_string(rd()) + "_" + std::to_string(rd());
+            }();
+            static std::atomic<unsigned> counter {0};
+
+            return std::filesystem::temp_directory_path() /
+                   ("sbmd_" + tag + "_" + salt + "_" + std::to_string(counter.fetch_add(1)) + ".sbmd.js");
         }
 
         /**
@@ -434,7 +452,7 @@ namespace
     TEST_F(SbmdDriverTest, ReactivateAfterDeactivate)
     {
         // Deactivation releases the source, so re-activation re-reads the spec from disk.
-        auto path = std::filesystem::temp_directory_path() / "sbmd_reactivate.sbmd.js";
+        auto path = UniqueSpecPath("reactivate");
         auto driver = CreateDriverFromFile(kDriverSource, path.string());
         ASSERT_NE(driver, nullptr);
 
@@ -851,7 +869,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink(Ctx());
+            driver->Shrink();
         }
 
         EXPECT_FALSE(driver->IsActivated());
@@ -870,13 +888,13 @@ namespace
 
     TEST_F(SbmdDriverTest, ActivateAfterShrinkReadsFromDisk)
     {
-        auto path = std::filesystem::temp_directory_path() / "sbmd_disk_reread.sbmd.js";
+        auto path = UniqueSpecPath("disk_reread");
         auto driver = CreateDriverFromFile(kDriverSource, path.string());
         ASSERT_NE(driver, nullptr);
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink(Ctx()); // frees the in-memory source; activation must re-read from disk
+            driver->Shrink(); // frees the in-memory source; activation must re-read from disk
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -902,7 +920,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink(Ctx());
+            driver->Shrink();
             EXPECT_FALSE(driver->Activate(Ctx()));
         }
 
@@ -911,13 +929,13 @@ namespace
 
     TEST_F(SbmdDriverTest, ActivateRejectsMismatchedSpec)
     {
-        auto path = std::filesystem::temp_directory_path() / "sbmd_mismatch.sbmd.js";
+        auto path = UniqueSpecPath("mismatch");
         auto driver = CreateDriverFromFile(kDriverSource, path.string());
         ASSERT_NE(driver, nullptr);
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink(Ctx());
+            driver->Shrink();
         }
 
         // Overwrite the spec on disk with a different claim identity (device type changed).

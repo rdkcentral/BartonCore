@@ -264,7 +264,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
                     auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
-                    sbmdDriver->Shrink(ctx);
+                    sbmdDriver->Shrink();
 
                     usageAfter = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
                 }

@@ -167,10 +167,8 @@ namespace barton
         registration->activated = false;
     }
 
-    void SbmdDriver::Shrink(JSContext *ctx)
+    void SbmdDriver::Shrink()
     {
-        (void) ctx;
-
         if (registration->activated)
         {
             icWarn("refusing to shrink active driver '%s'", registration->name.c_str());

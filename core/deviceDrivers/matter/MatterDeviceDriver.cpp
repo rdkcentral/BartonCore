@@ -432,15 +432,15 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
-        bool noDevicesRemain = false;
+        bool removedLastDevice = false;
 
         {
             std::lock_guard<std::mutex> lock(devicesMutex);
-            devices.erase(device->uuid);
-            noDevicesRemain = devices.empty();
+            // Only treat this as the last-device removal when an entry was actually erased.
+            removedLastDevice = devices.erase(device->uuid) > 0 && devices.empty();
         }
 
-        if (noDevicesRemain)
+        if (removedLastDevice)
         {
             OnLastDeviceRemoved();
         }
