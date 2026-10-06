@@ -315,22 +315,16 @@ static void onRemoteIce(const gchar *jsonCandidates, gpointer userData)
 // Signaling
 // ============================================================================
 
-// Answerer (SolicitOffer flow): request the camera's offer, set it as the remote description
-// (which makes the client create our answer), and send the answer back.
+// Answerer (SolicitOffer flow): the stream execute already asked the camera to generate the offer,
+// so wait for it, set it as the remote description (which makes the client create our answer), and
+// send the answer back.
 static bool runAnswererSignaling(CameraWebrtcBackend *self,
                                  CameraStreamContext *ctx,
                                  CameraDeviceSession *session,
                                  CameraWebrtcClient *webrtc)
 {
-    emitOutput("[camera-stream] Requesting camera SDP offer...\n");
-
-    if (!cameraDeviceSessionSendOffer(session, ""))
-    {
-        emitError("[camera-stream] Failed to request camera SDP offer\n");
-
-        return false;
-    }
-
+    // The offer may already have arrived while the stream execute was in flight; onRemoteSdp
+    // buffers it, so this wait can return immediately.
     emitOutput("[camera-stream] Waiting for camera SDP offer...\n");
 
     if (!cameraStreamContextWaitFlag(ctx, &self->remoteSdpReady, 30))
