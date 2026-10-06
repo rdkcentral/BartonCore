@@ -78,20 +78,31 @@ SbmdDriver({
                     prerequisites: [CL_BOOLEAN_STATE],
                     seed: {
                         supplements: {
-                            attributes: ['stateValue']
+                            attributes: ['stateValue'],
+                            resources: ['1/faulted']
                         },
                         handler: function (args) {
                             var tlvBase64 = args.supplements.attributes.stateValue;
                             var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
+                            var faulted;
 
-                            // StateValue=true means water detected (faulted). Treat an unknown
-                            // (uncached) state as not faulted to avoid raising a false leak alarm.
+                            if (value === true) {
+                                faulted = 'true'; // water detected = faulted
+                            } else if (value === false) {
+                                faulted = 'false'; // no water = not faulted
+                            } else {
+                                // StateValue unavailable: preserve an existing value so a reconnect
+                                // with a cold cache cannot clear a real leak; default to not-faulted
+                                // only at commission (no value yet) to avoid a false leak alarm.
+                                var existing = args.supplements.resources['1/faulted'];
+                                faulted =
+                                    existing !== null && existing !== undefined
+                                        ? existing
+                                        : 'false';
+                            }
+
                             return Sbmd.result()
-                                .dataModel.updateResource(
-                                    args.endpointId,
-                                    RES_FAULTED,
-                                    value === true ? 'true' : 'false'
-                                )
+                                .dataModel.updateResource(args.endpointId, RES_FAULTED, faulted)
                                 .success();
                         }
                     }
