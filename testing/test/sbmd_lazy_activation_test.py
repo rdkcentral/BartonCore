@@ -33,15 +33,25 @@ through the activation observability metrics:
   - sbmd.driver.activation   : counter incremented on each driver activation
 """
 
+import contextlib
 import json
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from testing.mocks.devices.matter.matter_temperature_sensor import (
     MatterTemperatureSensor,
 )
 from testing.utils.barton_utils import commission_device, resource_uri
+
+_DEFERRED_SPEC = (
+    Path(__file__).resolve().parent.parent.parent
+    / "testing"
+    / "resources"
+    / "sbmd-specs"
+    / "deferred-command-test.sbmd.js"
+)
 
 pytestmark = [
     pytest.mark.requires_matterjs,
@@ -260,10 +270,11 @@ def test_deferred_op_settled_when_last_device_removed(
 
     def run_toggle():
         try:
-            client.execute_resource(
-                resource_uri(device, "toggle", endpoint_id=1), "", ""
+            # execute_resource returns (ok, response); a cancelled deferred op must settle as a failure.
+            ok, _ = client.execute_resource(
+                resource_uri(device, "toggle", endpoint_id=1), ""
             )
-            exec_result["returned"] = True
+            exec_result["ok"] = ok
         except Exception as e:  # noqa: BLE001 - record whatever the blocked call raises
             exec_result["error"] = e
 
@@ -291,6 +302,12 @@ def test_deferred_op_settled_when_last_device_removed(
     assert (
         not worker.is_alive()
     ), "execute_resource did not return after device removal; deferred op left unresolved"
+    assert (
+        exec_result.get("error") is None
+    ), f"execute_resource raised unexpectedly: {exec_result.get('error')}"
+    assert (
+        exec_result.get("ok") is False
+    ), "a cancelled deferred op must settle as a failure (ok=False), not success"
 
     # The driver deactivates once its last device is gone.
     active = None
@@ -322,3 +339,77 @@ def test_deferred_op_settled_when_last_device_removed(
     matter_deferred_cmd_test_device.sideband.send("releaseToggle")
     time.sleep(1)
     assert json.loads(client.get_telemetry()) is not None
+
+
+@contextlib.contextmanager
+def _patched_spec(old, new):
+    """Replace the first occurrence of old with new in the deferred test spec on disk,
+    restoring the original content afterward even on failure."""
+    original = _DEFERRED_SPEC.read_text()
+    assert old in original, f"expected {old!r} in {_DEFERRED_SPEC}"
+
+    try:
+        _DEFERRED_SPEC.write_text(original.replace(old, new, 1))
+        yield
+    finally:
+        _DEFERRED_SPEC.write_text(original)
+
+
+def _assert_bind_rejected_on_version_change(default_environment, device, old, new):
+    """With Barton already running (drivers constructed from the original spec), change a
+    version in the spec on disk and verify commissioning is rejected: the on-demand activation
+    re-reads the changed spec, the version no longer matches the cached value, and the bind
+    fails so the device is never added and the activation is rolled back."""
+    client = default_environment.get_client()
+    # Ensure Barton is up and drivers were constructed from the original spec before patching.
+    client.get_telemetry()
+
+    appeared = False
+
+    with _patched_spec(old, new):
+        try:
+            client.commission_device(device.get_commissioning_code(), 100)
+        except (
+            Exception
+        ):  # noqa: BLE001 - commissioning is expected to fail; the add is what we assert
+            pass
+
+        # The bind must be rejected: the device must never be added under deferredCmdTest.
+        deadline = time.time() + 15
+
+        while time.time() < deadline:
+            if client.get_devices_by_device_class("deferredCmdTest"):
+                appeared = True
+                break
+
+            time.sleep(0.5)
+
+    assert (
+        not appeared
+    ), "device must not be commissioned when the re-read spec version no longer matches"
+    # A rejected bind rolls the activation back, so no driver is left active.
+    assert (
+        _gauge_sum(_metrics(client), "sbmd.driver.active.count") or 0
+    ) == 0, "a rejected bind must roll the activation back (no active driver)"
+
+
+def test_bind_rejected_when_device_class_version_changes(
+    default_environment, matter_deferred_cmd_test_device
+):
+    _assert_bind_rejected_on_version_change(
+        default_environment,
+        matter_deferred_cmd_test_device,
+        "deviceClassVersion: 1",
+        "deviceClassVersion: 2",
+    )
+
+
+def test_bind_rejected_when_profile_version_changes(
+    default_environment, matter_deferred_cmd_test_device
+):
+    _assert_bind_rejected_on_version_change(
+        default_environment,
+        matter_deferred_cmd_test_device,
+        "profileVersion: 1",
+        "profileVersion: 2",
+    )
