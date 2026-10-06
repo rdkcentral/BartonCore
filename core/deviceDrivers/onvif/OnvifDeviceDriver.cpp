@@ -44,6 +44,7 @@
 // ============================================================================================
 //
 
+#include "deviceDrivers/OnvifDeviceDriver.h"
 #include "OnvifSoapClient.h"
 #include "OnvifWsDiscovery.h"
 
@@ -100,73 +101,6 @@ using namespace barton::onvif;
 
 namespace
 {
-
-    // Per-camera information captured during WS-Discovery and consulted at configuration time.
-    struct DiscoveredCamera
-    {
-        std::string serviceUrl;
-        std::string manufacturer;
-        std::string model;
-        std::string firmwareVersion;
-        // Derived during discovery: false when the camera answered an anonymous GetDeviceInformation,
-        // meaning it does not require credentials. Defaults to true (require credentials) until proven.
-        bool authRequired = true;
-    };
-
-    class OnvifDriver
-    {
-    public:
-        DeviceDriver *GetDriver() { return &driver; }
-
-        OnvifDriver()
-        {
-            driver.driverName = strdup(DEVICE_DRIVER_NAME);
-            driver.supportedDeviceClasses = linkedListCreate();
-            linkedListAppend(driver.supportedDeviceClasses, strdup(CAMERA_DC));
-            driver.callbackContext = this;
-            // The driver vouches for cameras it discovers via ONVIF WS-Discovery, so they are accepted
-            // without a device descriptor (this also lets discovery start before a descriptor list loads).
-            driver.neverReject = true;
-            driver.customCommFail = true; // no comm-fail monitoring in this version (Non-goal)
-        }
-
-        bool StartDiscovery(const char *deviceClass);
-        void StopDiscovery();
-        bool ConfigureDevice(icDevice *device);
-        bool FetchInitialResourceValues(icDevice *device, icInitialResourceValues *initialResourceValues);
-        bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues);
-        bool ExecuteResource(icDeviceResource *resource, const char *arg, char **response);
-        void DeviceRemoved(icDevice *device);
-        void Shutdown();
-
-        DeviceDriver driver {};
-
-    private:
-        void DiscoveryWorker();
-        bool RunDiscoveryProbe();
-        bool LookupDiscovered(const std::string &uuid, DiscoveredCamera &out);
-        OnvifCredentials ReadCredentials(const std::string &uuid);
-        std::string ReadServiceUrl(const std::string &uuid);
-        bool ReadAuthRequired(const std::string &uuid);
-        bool FetchAndEmitUrl(const std::string &uuid, bool snapshot);
-
-        std::mutex stateMutex;
-        std::unordered_map<std::string, DiscoveredCamera> discovered;
-        // discoveryThreadMutex guards every joinable()/join()/assignment of discoveryThread and the
-        // worker's exit/relaunch decision, so a concurrent start/stop cannot double-join it, move-assign
-        // over a joinable handle (UB), or lose a start that raced the worker's exit.
-        std::mutex discoveryThreadMutex;
-        std::thread discoveryThread;
-        // Latch: a worker exists and has not exited. Set by StartDiscovery, released only by the worker
-        // under discoveryThreadMutex, so a concurrent start observes the live worker instead of
-        // launching a second one.
-        std::atomic<bool> discoveryRunning {false};
-        // The latest intent: true means discovery is wanted. StopDiscovery clears it; StartDiscovery
-        // sets it. The worker aborts a session's reporting when it is false and, on finishing a session,
-        // runs another session if it is still true -- so a start that arrives while a stop drains is
-        // honored rather than lost.
-        std::atomic<bool> discoverDesired {false};
-    };
 
     // A discovered uuid becomes part of a JSON springboard payload and a resource URI path. The
     // endpoint reference is network-controlled and the parser accepts arbitrary values, so reject any
@@ -297,6 +231,81 @@ namespace
 } // namespace
 
 // ============================================================================================
+// Base construction and the vendor-specialization claim registry.
+// ============================================================================================
+
+OnvifDriver::OnvifDriver()
+{
+    driver.driverName = strdup(DEVICE_DRIVER_NAME);
+    driver.supportedDeviceClasses = linkedListCreate();
+    linkedListAppend(driver.supportedDeviceClasses, strdup(CAMERA_DC));
+    driver.callbackContext = this;
+    // The driver vouches for cameras it discovers via ONVIF WS-Discovery, so they are accepted
+    // without a device descriptor (this also lets discovery start before a descriptor list loads).
+    driver.neverReject = true;
+    driver.customCommFail = true; // no comm-fail monitoring in this version (Non-goal)
+}
+
+namespace
+{
+    // Guards the specialization registry. A function-local static avoids static-init-order issues
+    // between translation units (a specialization registers from its own TU's init).
+    std::mutex &SpecializationMutex()
+    {
+        static std::mutex m;
+
+        return m;
+    }
+
+    std::vector<OnvifDriver *> &Specializations()
+    {
+        static std::vector<OnvifDriver *> list;
+
+        return list;
+    }
+} // namespace
+
+void OnvifDriver::RegisterSpecialization(OnvifDriver *self)
+{
+    if (self == nullptr)
+    {
+        return;
+    }
+
+    self->isSpecialization = true;
+
+    std::lock_guard<std::mutex> lock(SpecializationMutex());
+    Specializations().push_back(self);
+}
+
+bool OnvifDriver::AnySpecializationClaims(const std::string &manufacturer, const std::string &model)
+{
+    std::lock_guard<std::mutex> lock(SpecializationMutex());
+
+    for (OnvifDriver *spec : Specializations())
+    {
+        if (spec->ClaimsCamera(manufacturer, model))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool OnvifDriver::ShouldReportCamera(const std::string &manufacturer, const std::string &model) const
+{
+    // A specialization reports only cameras it claims; the generic driver reports only cameras no
+    // registered specialization claims. This makes ownership deterministic instead of a discovery race.
+    if (isSpecialization)
+    {
+        return ClaimsCamera(manufacturer, model);
+    }
+
+    return !AnySpecializationClaims(manufacturer, model);
+}
+
+// ============================================================================================
 // Registration and lifecycle. The driver self-registers when this translation unit is loaded. The
 // DeviceDriver C-callback thunks it wires up are forward-declared here and defined near the bottom.
 // ============================================================================================
@@ -329,6 +338,31 @@ static void destroyDriver(void *ctx)
     delete self;
 }
 
+// Wire the DeviceDriver C callbacks to the dispatch thunks. Shared by the ONVIF registration and by
+// vendor specializations so they reuse the same (virtual-dispatching) thunks.
+namespace barton
+{
+    namespace onvif
+    {
+        void OnvifWireDriverCallbacks(DeviceDriver *driver)
+        {
+            driver->startup = startup;
+            driver->shutdown = shutdown;
+            driver->destroy = destroyDriver;
+            driver->discoverDevices = discoverDevices;
+            driver->stopDiscoveringDevices = stopDiscoveringDevices;
+            driver->configureDevice = configureDevice;
+            driver->registerResources = registerResources;
+            driver->fetchInitialResourceValues = fetchInitialResourceValues;
+            driver->synchronizeDevice = synchronizeDevice;
+            driver->executeResource = executeResource;
+            driver->writeResource = writeResource;
+            driver->deviceRemoved = deviceRemoved;
+            driver->getDeviceClassVersion = getDeviceClassVersion;
+        }
+    } // namespace onvif
+} // namespace barton
+
 // Registration entry point. Called from deviceDriverManagerInitialize under BARTON_CONFIG_ONVIF (an
 // explicit reference, unlike a self-registering constructor) so the driver object is pulled from the
 // static archive and its registration actually runs for BartonCoreStatic consumers.
@@ -343,19 +377,7 @@ extern "C" void onvifDeviceDriverInitialize(void)
         OnvifDriver *instance = new OnvifDriver();
         DeviceDriver *driver = instance->GetDriver();
 
-        driver->startup = startup;
-        driver->shutdown = shutdown;
-        driver->destroy = destroyDriver;
-        driver->discoverDevices = discoverDevices;
-        driver->stopDiscoveringDevices = stopDiscoveringDevices;
-        driver->configureDevice = configureDevice;
-        driver->registerResources = registerResources;
-        driver->fetchInitialResourceValues = fetchInitialResourceValues;
-        driver->synchronizeDevice = synchronizeDevice;
-        driver->executeResource = executeResource;
-        driver->writeResource = writeResource;
-        driver->deviceRemoved = deviceRemoved;
-        driver->getDeviceClassVersion = getDeviceClassVersion;
+        OnvifWireDriverCallbacks(driver);
 
         deviceDriverManagerRegisterDriver(driver);
     });
@@ -660,6 +682,19 @@ bool OnvifDriver::RunDiscoveryProbe()
         {
             std::lock_guard<std::mutex> lock(stateMutex);
             discovered[uuid] = cam;
+        }
+
+        // Ownership gate: a specialization reports only cameras it claims; the generic driver yields a
+        // camera that a registered specialization claims. Decided from the (best-effort) manufacturer/
+        // model obtained above. See the interim claim model in OnvifDeviceDriver.h.
+        if (!ShouldReportCamera(cam.manufacturer, cam.model))
+        {
+            icLogDebug(LOG_TAG, "yielding ONVIF camera %s to a vendor specialization", uuid.c_str());
+
+            std::lock_guard<std::mutex> lock(stateMutex);
+            discovered.erase(uuid);
+
+            continue;
         }
 
         DeviceFoundDetails details {};
@@ -1157,7 +1192,10 @@ static void shutdown(void *ctx)
     static_cast<OnvifDriver *>(ctx)->Shutdown();
 }
 
-static void startup(void *) {}
+static void startup(void *ctx)
+{
+    static_cast<OnvifDriver *>(ctx)->Startup();
+}
 
 static bool getDeviceClassVersion(void *, const char *, uint8_t *version)
 {
