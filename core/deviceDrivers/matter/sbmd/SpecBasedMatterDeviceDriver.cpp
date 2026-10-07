@@ -41,6 +41,7 @@
 #include <lib/core/TLVReader.h>
 #include <lib/core/TLVWriter.h>
 #include <memory>
+#include <set>
 #include <vector>
 
 extern "C" {
@@ -262,6 +263,19 @@ std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 {
+    // Mark a bind as in flight for this driver's whole AddDevice call. Activation happens below,
+    // before the device is inserted into the base device map, so a concurrent last-device removal
+    // could otherwise observe an empty map and deactivate the driver mid-bind. OnLastDeviceRemoved
+    // checks this counter and defers deactivation while any bind is in progress.
+    struct InFlightBind
+    {
+        std::atomic<int> &counter;
+
+        InFlightBind(std::atomic<int> &c) : counter(c) { counter.fetch_add(1); }
+
+        ~InFlightBind() { counter.fetch_sub(1); }
+    } inFlightBind {activationsInProgress};
+
     // Activate the driver on first bind. Both fresh commissioning and post-restart
     // re-synchronization funnel through here, and the dispatch access below needs a live driver.
     bool activatedHere = false;
@@ -438,8 +452,12 @@ bool SpecBasedMatterDeviceDriver::ActivatedSpecMatchesCachedVersions()
 
     DeviceDriver *dd = GetDriver();
 
+    std::set<std::string> freshProfiles;
+
     for (const auto &endpoint : reg.endpoints)
     {
+        freshProfiles.insert(endpoint.profile);
+
         // Profile versions are tracked as uint8 across the device model; a wider spec value would be
         // narrowed and could alias onto the cached version, so reject it instead of comparing narrowed.
         if (endpoint.profileVersion > UINT8_MAX)
@@ -466,6 +484,23 @@ bool SpecBasedMatterDeviceDriver::ActivatedSpecMatchesCachedVersions()
         }
     }
 
+    // The loop above only checks profiles the re-read spec still declares. A profile deleted from the
+    // spec would otherwise pass while endpointProfileVersions keeps advertising its startup version to
+    // the device-service layer. Every cached profile matched a fresh entry above, so equal distinct
+    // counts prove the cached and fresh profile sets are identical; a mismatch means a profile was
+    // added or removed, so reject the bind.
+    uint16_t cachedProfileCount =
+        dd->endpointProfileVersions != nullptr ? hashMapCount(dd->endpointProfileVersions) : 0;
+
+    if (freshProfiles.size() != cachedProfileCount)
+    {
+        icError("SBMD driver '%s' endpoint profile set changed on activation (loaded %u, spec %zu); refusing bind",
+                driver->GetName().c_str(),
+                cachedProfileCount,
+                freshProfiles.size());
+        return false;
+    }
+
     return true;
 }
 
@@ -480,7 +515,12 @@ void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()
     // The last bound device is gone; shed the driver's runtime state back to its claim stub.
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
-    if (driver->IsActivated())
+    // A commission for a new device can race this removal: AddDevice activates the driver on the
+    // commissioning thread before inserting into the device map, so the empty-map observation that
+    // triggered this hook may already be stale. Only deactivate when the driver is still activated,
+    // no bind is in flight, and the device map is still empty when rechecked under its own lock —
+    // otherwise a concurrent bind would be left pointing at a driver whose state we just shed.
+    if (driver->IsActivated() && activationsInProgress.load() == 0 && HasNoDevices())
     {
         driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
 

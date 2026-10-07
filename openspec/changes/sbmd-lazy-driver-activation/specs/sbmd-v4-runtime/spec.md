@@ -40,8 +40,12 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 - **THEN** activation fails, the failure is logged, and the device bind is aborted rather than dispatching against a mismatched or partially built driver
 
 #### Scenario: Activation rejects a spec whose device-class or profile version changed
-- **WHEN** a device binds and the re-read spec's `barton.deviceClassVersion` or an endpoint `profileVersion` differs from the value the driver was registered with at load
+- **WHEN** a device binds and the re-read spec's `barton.deviceClassVersion`, an endpoint `profileVersion`, or the set of endpoint profiles differs from what the driver was registered with at load (a profile added, removed, a version changed, or a `profileVersion` outside the `uint8` range)
 - **THEN** the bind is rejected and the driver is deactivated, because commissioning and reconfiguration publish/compare the versions cached at registration while the re-read handlers would run the changed spec
+
+#### Scenario: Last-device deactivation deferred while a bind is in flight
+- **WHEN** a driver's last device is removed at the same time a new matching device is being commissioned, so the removal's empty-map observation races the in-progress bind that has already activated the driver but not yet inserted its device
+- **THEN** deactivation is skipped while any bind is in flight or the device map is non-empty when rechecked, so the concurrent bind is never left pointing at a driver whose runtime state was shed
 
 #### Scenario: Deactivate then reactivate round trip
 - **WHEN** a driver is activated, then deactivated after its last device is removed, then a new matching device is later commissioned

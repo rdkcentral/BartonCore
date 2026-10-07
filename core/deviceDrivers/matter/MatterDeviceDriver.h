@@ -534,6 +534,18 @@ namespace barton
             return nullptr;
         }
 
+        /**
+         * @brief Return true when no devices are currently bound to this driver.
+         *
+         * Rechecks the live device map under devicesMutex so callers can confirm an earlier
+         * empty-map observation has not since gone stale (e.g. a concurrent bind).
+         */
+        bool HasNoDevices()
+        {
+            std::lock_guard<std::mutex> lock(devicesMutex);
+            return devices.empty();
+        }
+
     private:
         // These are for unit test fixtures.
         friend class MockMatterDeviceDriver;
