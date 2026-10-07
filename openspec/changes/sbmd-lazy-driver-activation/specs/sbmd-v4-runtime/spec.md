@@ -47,6 +47,14 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 - **WHEN** a driver's last device is removed at the same time a new matching device is being commissioned, so the removal's empty-map observation races the in-progress bind that has already activated the driver but not yet inserted its device
 - **THEN** deactivation is skipped while any bind is in flight or the device map is non-empty when rechecked, so the concurrent bind is never left pointing at a driver whose runtime state was shed
 
+#### Scenario: Activation and version validation are one serialized transition
+- **WHEN** a bind activates the driver and validates the re-read spec's cached versions, while another bind concurrently observes the driver as already activated
+- **THEN** validation is performed under the same lock hold as activation and the activation is rolled back before being recorded if it fails, so a concurrent binder only ever adopts a validated registration
+
+#### Scenario: A failed or rolled-back bind never sheds a concurrent bind's state
+- **WHEN** one bind activates the driver and then fails (e.g. a prerequisite is unmet) while another concurrent bind has already adopted that activation and bound its device
+- **THEN** the failing bind's rollback deactivates only when the driver is idle (no bind in flight and no device bound), so it cannot shed the live state the other bind depends on; and if the last device was removed while a bind was racing, the teardown is retried when that bind finishes idle rather than leaving the driver active forever
+
 #### Scenario: Deactivate then reactivate round trip
 - **WHEN** a driver is activated, then deactivated after its last device is removed, then a new matching device is later commissioned
 - **THEN** the driver is activated again from disk and dispatches to its handlers correctly

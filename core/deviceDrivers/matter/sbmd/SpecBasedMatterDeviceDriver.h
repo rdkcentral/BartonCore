@@ -157,6 +157,14 @@ namespace barton
         // offset, so it cannot be compared against the raw spec value directly).
         uint32_t constructedDeviceClassVersion = 0;
 
+        // Claim-identity metadata captured at construction from the then-full registration. Activation
+        // rejects any re-read spec whose claim identity changed, so these never go stale; reading them
+        // keeps the claim-time accessors off the registration object that Activate()/Deactivate() swap,
+        // which claim-time callers read without the JS mutex.
+        const std::vector<uint16_t> supportedDeviceTypes;
+        const std::optional<uint16_t> claimVendorId;
+        const std::optional<uint16_t> claimProductId;
+
         static SpecBasedMatterDeviceDriverMetrics metrics;
 
         // Process-wide count of currently-activated SBMD drivers, for observability.
@@ -174,6 +182,17 @@ namespace barton
          * the new spec, so activation is rejected on mismatch.
          */
         bool ActivatedSpecMatchesCachedVersions();
+
+        /**
+         * Deactivate the driver and shed its runtime state iff it is idle: still activated, no bind
+         * in flight, and no device still bound (rechecked under devicesMutex). This is the single
+         * serialized teardown point shared by the last-device-removed hook and a failed or
+         * last-exiting bind, so a stale empty-map observation, a rolled-back bind, or a device
+         * removed mid-bind can neither strand the driver active nor shed state a concurrent bind
+         * still relies on. The caller must hold the JS mutex.
+         */
+        void DeactivateIfIdle();
+
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);

@@ -436,3 +436,31 @@ def test_bind_rejected_when_profile_version_changes(
         "profileVersion: 1",
         "profileVersion: 2",
     )
+
+
+def test_bind_rejected_when_profile_version_out_of_range(
+    default_environment, matter_deferred_cmd_test_device
+):
+    # The base driver caches profile versions as 8-bit values. 257 narrows to 1 (== the cached
+    # value), so a narrowing comparison would wrongly accept it; the out-of-range guard must reject.
+    _assert_bind_rejected_on_version_change(
+        default_environment,
+        matter_deferred_cmd_test_device,
+        "profileVersion: 1",
+        "profileVersion: 257",
+    )
+
+
+def test_bind_rejected_when_profile_set_changes(
+    default_environment, matter_deferred_cmd_test_device
+):
+    # Renaming the endpoint profile removes the cached 'deferredCmdTest' profile from the re-read
+    # spec (and adds an unknown one), so the profile set no longer matches what was registered at
+    # load. The claim identity (device class, device types) is unchanged, so this exercises the
+    # profile-set rejection rather than the claim-stub check.
+    _assert_bind_rejected_on_version_change(
+        default_environment,
+        matter_deferred_cmd_test_device,
+        "profile: 'deferredCmdTest'",
+        "profile: 'deferredCmdTestRenamed'",
+    )

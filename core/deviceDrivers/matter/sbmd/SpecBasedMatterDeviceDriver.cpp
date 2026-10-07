@@ -211,7 +211,8 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
                        driver->GetRegistration().barton.deviceClass.c_str(),
                        driver->GetRegistration().barton.deviceClassVersion),
-    driver(driver)
+    driver(driver), supportedDeviceTypes(driver->GetRegistration().matter.deviceTypes),
+    claimVendorId(driver->GetRegistration().matter.vendorId), claimProductId(driver->GetRegistration().matter.productId)
 {
     icDebug("Created SBMD driver for: %s", driver->GetName().c_str());
 
@@ -241,46 +242,54 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
 
 uint16_t SpecBasedMatterDeviceDriver::GetSupportedVendorId() const
 {
-    return driver->GetRegistration().matter.vendorId.value_or(0);
+    return claimVendorId.value_or(0);
 }
 
 uint16_t SpecBasedMatterDeviceDriver::GetSupportedProductId() const
 {
-    return driver->GetRegistration().matter.productId.value_or(0);
+    return claimProductId.value_or(0);
 }
 
 bool SpecBasedMatterDeviceDriver::IsVendorSpecificDriver() const
 {
-    const auto &m = driver->GetRegistration().matter;
-
-    return m.vendorId.has_value() && m.productId.has_value();
+    return claimVendorId.has_value() && claimProductId.has_value();
 }
 
 std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 {
-    return driver->GetRegistration().matter.deviceTypes;
+    return supportedDeviceTypes;
 }
 
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 {
-    // Mark a bind as in flight for this driver's whole AddDevice call. Activation happens below,
-    // before the device is inserted into the base device map, so a concurrent last-device removal
-    // could otherwise observe an empty map and deactivate the driver mid-bind. OnLastDeviceRemoved
-    // checks this counter and defers deactivation while any bind is in progress.
+    // Mark a bind in flight for this driver's whole AddDevice call and, on exit, release it and tear
+    // the driver down if that leaves it idle. Activation happens below before the device is inserted
+    // into the base device map, so without this a concurrent last-device removal could observe an
+    // empty map and deactivate mid-bind; and a bind that activated but then fails (or whose device is
+    // removed before this returns) must still shed the driver it is the last to hold. DeactivateIfIdle
+    // only acts when no bind is in flight and no device remains, so a driver adopted by another
+    // concurrent bind is never torn down underneath it.
     struct InFlightBind
     {
-        std::atomic<int> &counter;
+        SpecBasedMatterDeviceDriver *self;
 
-        InFlightBind(std::atomic<int> &c) : counter(c) { counter.fetch_add(1); }
+        InFlightBind(SpecBasedMatterDeviceDriver *s) : self(s) { self->activationsInProgress.fetch_add(1); }
 
-        ~InFlightBind() { counter.fetch_sub(1); }
-    } inFlightBind {activationsInProgress};
+        ~InFlightBind()
+        {
+            self->activationsInProgress.fetch_sub(1);
 
-    // Activate the driver on first bind. Both fresh commissioning and post-restart
-    // re-synchronization funnel through here, and the dispatch access below needs a live driver.
-    bool activatedHere = false;
-    double activationDurationMs = 0.0;
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
+            self->DeactivateIfIdle();
+        }
+    } inFlightBind {this};
+
+    // Activate the driver on first bind and validate the re-read spec under the same JS-mutex hold,
+    // so activation and its cached-version check are one serialized transition: any concurrent bind
+    // that later observes IsActivated() == true sees an already-validated registration rather than one
+    // this thread might still reject. Both fresh commissioning and post-restart re-synchronization
+    // funnel through here, and the dispatch access below needs a live driver.
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
@@ -296,41 +305,23 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 return false;
             }
 
-            activationDurationMs =
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - activateStart).count();
-            activatedHere = true;
-        }
-    }
-
-    // If this bind activated the driver but does not complete, roll the activation back so the
-    // driver is not left active with zero bound devices (its removal hook would never run, and the
-    // active-driver gauge would stay inflated).
-    struct ActivationGuard
-    {
-        SbmdDriver *drv;
-        bool active;
-        bool committed = false;
-
-        ~ActivationGuard()
-        {
-            if (active && !committed)
+            // A re-read spec must not change the versions the base driver cached at construction;
+            // otherwise commissioning/reconfiguration would publish/compare stale versions while
+            // handlers run the new spec. Roll the just-done activation back under this same lock
+            // before recording it, so no concurrent binder ever adopts an unvalidated registration.
+            if (!ActivatedSpecMatchesCachedVersions())
             {
-                std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
 
-                if (drv->IsActivated())
-                {
-                    drv->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
-                }
+                return false;
             }
-        }
-    } activationGuard {driver, activatedHere};
 
-    // A re-read spec must not change the versions the base driver cached at construction; otherwise
-    // commissioning/reconfiguration would publish/compare stale versions while handlers run the new
-    // spec. Reject such a change (the guard rolls the activation back).
-    if (activatedHere && !ActivatedSpecMatchesCachedVersions())
-    {
-        return false;
+            double activationDurationMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - activateStart).count();
+
+            metrics.RecordDriverActivated(
+                driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1, activationDurationMs);
+        }
     }
 
     // The dispatch tables on the driver handle everything.
@@ -425,15 +416,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         return false;
     }
 
-    // The device is bound; commit the activation and record it now (not before the bind could fail).
-    activationGuard.committed = true;
-
-    if (activatedHere)
-    {
-        metrics.RecordDriverActivated(
-            driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1, activationDurationMs);
-    }
-
+    // The device is bound. The InFlightBind guard releases the in-flight count on return; the driver
+    // stays active because a device now remains.
     return true;
 }
 
@@ -504,6 +488,20 @@ bool SpecBasedMatterDeviceDriver::ActivatedSpecMatchesCachedVersions()
     return true;
 }
 
+void SpecBasedMatterDeviceDriver::DeactivateIfIdle()
+{
+    // Caller holds the JS mutex. Deactivate only when the driver is still activated, no bind is in
+    // flight, and no device remains bound (rechecked under devicesMutex) — so a stale empty-map
+    // observation, a rolled-back bind, or a device removed mid-bind can neither strand the driver
+    // active nor shed state a concurrent bind still relies on.
+    if (driver->IsActivated() && activationsInProgress.load() == 0 && HasNoDevices())
+    {
+        driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
+
+        metrics.RecordDriverDeactivated(driver->GetDriverStem().c_str(), activeDriverCount.fetch_sub(1) - 1);
+    }
+}
+
 void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()
 {
     // Settle any outstanding deferred operations before deactivating so their handler roots are
@@ -512,20 +510,12 @@ void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()
     // takes it internally to release the handler references.
     CancelAllPendingOperations();
 
-    // The last bound device is gone; shed the driver's runtime state back to its claim stub.
+    // The last bound device is gone; shed the driver's runtime state back to its claim stub if it is
+    // idle. DeactivateIfIdle defers when a bind is racing this removal (that bind's InFlightBind guard
+    // will tear the driver down if it ends up the last to hold it).
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
-    // A commission for a new device can race this removal: AddDevice activates the driver on the
-    // commissioning thread before inserting into the device map, so the empty-map observation that
-    // triggered this hook may already be stale. Only deactivate when the driver is still activated,
-    // no bind is in flight, and the device map is still empty when rechecked under its own lock —
-    // otherwise a concurrent bind would be left pointing at a driver whose state we just shed.
-    if (driver->IsActivated() && activationsInProgress.load() == 0 && HasNoDevices())
-    {
-        driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
-
-        metrics.RecordDriverDeactivated(driver->GetDriverStem().c_str(), activeDriverCount.fetch_sub(1) - 1);
-    }
+    DeactivateIfIdle();
 }
 
 SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionIntervalSecs()
