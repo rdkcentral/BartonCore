@@ -33,7 +33,7 @@
 ## 5. Observability
 
 - [x] 5.1 Add metrics under `BARTON_CONFIG_SBMD_METRICS`: attributed activate/deactivate event counters (driver-stem attribute) and a current active-driver count as a set-on-change `ObservabilityGauge` (mirroring `registeredDriversGauge`); split the `sbmd.driver.load.duration_ms` metric into load-only plus per-activation duration.
-- [x] 5.2 Update `SbmdObservabilityTest.cpp` and/or add assertions for the new metrics. (unit) — activation metrics are recorded in the device-lifecycle path, so they are asserted at integration level in `sbmd_lazy_activation_test.py` (activation counter + active-count gauge).
+- [x] 5.2 Update `SbmdObservabilityTest.cpp` and/or add assertions for the new metrics. (unit) — activation metrics are recorded in the device-lifecycle path, so they are asserted at integration level in `sbmd_lazy_activation_test.py` (activation counter, active-count gauge, and the `sbmd.driver.activation.duration_ms` histogram: >= 1 observation with a positive sum after commissioning).
 - [x] 5.3 Update `testing/test/sbmd_load_metrics_test.py` for the load-vs-activation metric split; add an integration assertion that idle drivers report inactive and activate on commissioning. (integration, Docker) — added `testing/test/sbmd_lazy_activation_test.py`.
 
 ## 6. Verification

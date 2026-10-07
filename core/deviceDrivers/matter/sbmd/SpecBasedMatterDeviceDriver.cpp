@@ -440,6 +440,17 @@ bool SpecBasedMatterDeviceDriver::ActivatedSpecMatchesCachedVersions()
 
     for (const auto &endpoint : reg.endpoints)
     {
+        // Profile versions are tracked as uint8 across the device model; a wider spec value would be
+        // narrowed and could alias onto the cached version, so reject it instead of comparing narrowed.
+        if (endpoint.profileVersion > UINT8_MAX)
+        {
+            icError("SBMD driver '%s' endpoint '%s' profile version %" PRIu32 " is out of range; refusing bind",
+                    driver->GetName().c_str(),
+                    endpoint.id.c_str(),
+                    endpoint.profileVersion);
+            return false;
+        }
+
         void *cached = dd->endpointProfileVersions != nullptr
                            ? hashMapGet(dd->endpointProfileVersions,
                                         const_cast<char *>(endpoint.profile.c_str()),

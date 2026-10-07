@@ -129,6 +129,19 @@ def test_commissioning_activates_driver(
         "sbmd.driver.active.count gauge should be >= 1 after commissioning"
     )
 
+    # Each activation records one observation on the activation-duration histogram.
+    duration = metrics.get("sbmd.driver.activation.duration_ms")
+    assert (
+        duration is not None
+    ), "sbmd.driver.activation.duration_ms not found in telemetry after commissioning"
+    duration_dps = duration.get("dataPoints", [])
+    assert (
+        sum(dp["count"] for dp in duration_dps) >= 1
+    ), "sbmd.driver.activation.duration_ms should have >= 1 observation after commissioning"
+    assert (
+        sum(dp["sum"] for dp in duration_dps) > 0
+    ), "sbmd.driver.activation.duration_ms sum should be positive (activation takes non-zero time)"
+
 
 def test_removal_deactivates_driver(
     default_environment, matter_temperature_sensor
@@ -341,6 +354,12 @@ def test_deferred_op_settled_when_last_device_removed(
     assert json.loads(client.get_telemetry()) is not None
 
 
+# Upper bound on how long a commissioning attempt may take to resolve. A successful bind fires
+# device-added in a few seconds; this generous margin keeps the spec patched until a rejected
+# attempt has definitively given up, so the bind is never evaluated against the restored spec.
+_COMMISSION_RESOLVE_TIMEOUT = 30
+
+
 @contextlib.contextmanager
 def _patched_spec(old, new):
     """Replace the first occurrence of old with new in the deferred test spec on disk,
@@ -374,15 +393,19 @@ def _assert_bind_rejected_on_version_change(default_environment, device, old, ne
         ):  # noqa: BLE001 - commissioning is expected to fail; the add is what we assert
             pass
 
-        # The bind must be rejected: the device must never be added under deferredCmdTest.
-        deadline = time.time() + 15
-
-        while time.time() < deadline:
-            if client.get_devices_by_device_class("deferredCmdTest"):
-                appeared = True
-                break
-
-            time.sleep(0.5)
+        # Commissioning runs on a detached background thread, so the bind can be attempted
+        # well after commission_device() returns. Keep the mismatched spec on disk until the
+        # attempt has definitively resolved so the bind is always evaluated against it: a
+        # successful bind would fire device-added (returns immediately), while a rejected bind
+        # never does and the wait times out. Restoring only happens on leaving this block.
+        try:
+            default_environment.wait_for_device_added(
+                timeout=_COMMISSION_RESOLVE_TIMEOUT
+            )
+            appeared = True
+        except AssertionError:
+            # No device-added within the window; confirm none of the class slipped in regardless.
+            appeared = bool(client.get_devices_by_device_class("deferredCmdTest"))
 
     assert (
         not appeared
