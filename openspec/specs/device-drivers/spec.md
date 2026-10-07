@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Device Drivers
+
+## Purpose
+
+Specifies the `DeviceDriver` interface and the contract native and SBMD drivers implement: identification, startup/shutdown lifecycle, discovery, configuration, resource operations, communication-failure handling, synchronization, migration, and the native Zigbee and Philips Hue driver catalog.
+
+## Requirements
 
 ### Requirement: DeviceDriver interface
 The system SHALL define a `DeviceDriver` C struct with function pointers for all driver lifecycle and operational callbacks. Drivers SHALL be registered via `deviceDriverManagerRegisterDriver()`.
@@ -131,21 +137,21 @@ The system SHALL include a `philipsHue` IP-based device driver when `BCORE_PHILI
 - **THEN** the Philips Hue driver SHALL be compiled and available for registration
 
 ### Requirement: Config restore callbacks
-Drivers MAY implement `restoreConfig()`, `preRestoreConfig()`, and `postRestoreConfig()` callbacks for backup/restore scenarios.
+The device driver contract SHALL allow drivers to optionally implement `restoreConfig()`, `preRestoreConfig()`, and `postRestoreConfig()` callbacks for backup/restore scenarios.
 
 #### Scenario: Restore driver config
 - **WHEN** `b_core_client_config_restore()` is called
 - **THEN** the driver manager SHALL invoke `preRestoreConfig()` on all drivers, then `restoreConfig()` with the backup directory, then `postRestoreConfig()`
 
 ### Requirement: System event callbacks
-Drivers MAY implement `systemPowerEvent()` and `propertyChanged()` callbacks to react to system-wide events.
+The device driver contract SHALL allow drivers to optionally implement `systemPowerEvent()` and `propertyChanged()` callbacks to react to system-wide events.
 
 #### Scenario: Property change notification to driver
 - **WHEN** a system property changes
 - **THEN** all drivers with `propertyChanged` callbacks SHALL be notified with the property key and new value
 
 ### Requirement: Additional driver callbacks
-Drivers MAY implement these additional callbacks:
+The device driver contract SHALL allow drivers to optionally implement these additional callbacks:
 - `processDeviceDescriptor(ctx, device, dd)` — examine device against its descriptor for firmware upgrades or changes
 - `endpointDisabled(ctx, endpoint)` — notification when an endpoint is disabled
 - `fetchRuntimeStats(ctx, output)` — collect device-specific runtime statistics
@@ -154,3 +160,7 @@ Drivers MAY implement these additional callbacks:
 - `serviceStatusChanged(ctx, status)` — notification when the device service status changes
 - `commFailTimeoutSecsChanged(driver, device, commFailTimeoutSecs)` — notification when the comm-fail timeout has changed
 - `metadataUpdated(driver, device, key, value)` — notification when a metadata key is persisted for a device managed by this driver; called synchronously from `setMetadata()` after each persisted change
+
+#### Scenario: Metadata update notification
+- **WHEN** `setMetadata()` persists a metadata key for a device managed by a driver
+- **THEN** the driver's `metadataUpdated` callback SHALL be invoked synchronously with the metadata key and value

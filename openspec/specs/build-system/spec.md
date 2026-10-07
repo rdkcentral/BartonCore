@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Build System
+
+## Purpose
+
+Specifies BartonCore's CMake-based build system: project configuration, build targets, the modular feature-flag catalog, string and integer configuration options, dependency version constraints, sanitizer and coverage support, CTest and GObject Introspection integration, Docker builds, and Git-derived versioning.
+
+## Requirements
 
 ### Requirement: CMake project configuration
 The build system SHALL use CMake (minimum 3.16.5) with the project name `barton-core`. It SHALL use C99 and C++17 standards, both set as required. Position-independent code SHALL be enabled globally.

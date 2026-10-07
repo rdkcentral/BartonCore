@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Temperature and Humidity SBMD Drivers
+
+## Purpose
+
+Specifies the SBMD specs and tests for temperature and humidity sensors: the IKEA TIMMERFLOTTE spec and its resources, generic temperature and humidity sensor specs, virtual test devices, and integration tests.
+
+## Requirements
 
 ### Requirement: IKEA TIMMERFLOTTE SBMD spec
 The system SHALL include an SBMD spec file `ikea-timmerflotte.sbmd` that defines a TIMMERFLOTTE-specific driver claiming by vendor ID and product ID. The spec SHALL also list device types `0x0302` (Temperature Sensor) and `0x0307` (Humidity Sensor) for endpoint mapping purposes.

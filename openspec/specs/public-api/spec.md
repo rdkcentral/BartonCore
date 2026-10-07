@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Public API
+
+## Purpose
+
+Specifies the GObject-based public C API: `BCoreClient` lifecycle and operations, device/endpoint/resource CRUD and access, Matter commissioning, provider interfaces, the `BCoreEvent` hierarchy, GObject Introspection compatibility, and well-known property constants.
+
+## Requirements
 
 ### Requirement: BCoreClient lifecycle management
 The system SHALL provide a `BCoreClient` GObject type that manages the complete device service lifecycle. A client SHALL be created with `b_core_client_new()` accepting a `BCoreInitializeParamsContainer`, started with `b_core_client_start()`, and stopped with `b_core_client_stop()`.
@@ -221,10 +227,18 @@ The system SHALL provide additional client functions:
 - `b_core_process_device_descriptors()` — process device descriptor list
 - `b_core_client_set_account_id()` — set the account ID
 
+#### Scenario: Query current service status
+- **WHEN** a client calls `b_core_client_get_status()`
+- **THEN** the current service status SHALL be returned as a `BCoreStatus`
+
 ### Requirement: Additional event types
 The system SHALL provide intermediate event base types:
 - `BCoreDiscoverySessionInfoEvent` with `session-discovery-type` property
 - `BCoreDeviceConfigurationEvent` with `uuid` and `device-class` properties
+
+#### Scenario: Discovery session event carries discovery type
+- **WHEN** a `BCoreDiscoverySessionInfoEvent` is emitted
+- **THEN** it SHALL expose the `session-discovery-type` property
 
 ### Requirement: Well-known property constants
 The system SHALL define string constants for all Matter and device properties: vendor name/ID, product name/ID, hardware version, serial number, manufacturing date, setup discriminator, setup passcode, SPAKE2+ parameters, 802.15.4 EUI64, Matter part number, Matter product URL, Matter product label, Matter hardware version string, and default Thread network name. These SHALL be defined as C macros with the `B_CORE_BARTON_` prefix.

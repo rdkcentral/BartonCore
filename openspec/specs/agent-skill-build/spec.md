@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Agent Skill: Build
+
+## Purpose
+
+Defines the structure and required content of the `build` agent skill (`.github/skills/build/SKILL.md`), which teaches an AI agent how to build BartonCore: the `build.sh` hierarchy, CMake configuration flags, the development build profile, and an error-recovery pattern.
+
+## Requirements
 
 ### Requirement: Build skill SKILL.md conforms to Agent Skills spec
 The `build` skill SHALL be located at `.github/skills/build/SKILL.md`. The frontmatter SHALL include `name: build`, a `description` field explaining the skill covers building BartonCore, and `compatibility` noting it requires the BartonCore Docker development container. The `name` field SHALL match the parent directory name.
