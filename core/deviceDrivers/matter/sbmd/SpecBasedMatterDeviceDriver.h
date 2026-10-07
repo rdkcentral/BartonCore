@@ -193,6 +193,13 @@ namespace barton
          */
         void DeactivateIfIdle();
 
+        /**
+         * Test seam invoked by AddDevice once a bind has activated the driver but before its device
+         * is inserted into the base device map. No-op in production; overridden by unit tests to
+         * deterministically overlap a bind with a last-device removal. Must not hold the JS mutex.
+         */
+        virtual void OnBindActivatedTestHook() {}
+
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);

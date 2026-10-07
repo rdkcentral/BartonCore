@@ -324,6 +324,10 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         }
     }
 
+    // Test seam: lets a unit test deterministically overlap this bind — now past activation but
+    // before the device is inserted — with a concurrent last-device removal. No-op in production.
+    OnBindActivatedTestHook();
+
     // The dispatch tables on the driver handle everything.
     device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
 
