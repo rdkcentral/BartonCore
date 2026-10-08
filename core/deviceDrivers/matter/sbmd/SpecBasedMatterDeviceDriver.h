@@ -33,6 +33,7 @@
 #include "metrics/SpecBasedMatterDeviceDriverMetrics.h"
 #include "mquickjs/SbmdHandlerInvoker.h"
 #include "mquickjs/SbmdResultExecutor.h"
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <map>
@@ -100,8 +101,17 @@ namespace barton
 
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
+        /**
+         * Publish the true count of currently-activated SBMD drivers to the active-driver gauge.
+         * Called by the factory after startup registration so the gauge reflects actual driver
+         * state (0 when all drivers are loaded inactive), not just runtime activation deltas.
+         */
+        static void SyncActiveDriverCount(int64_t activeCount);
+
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
+
+        void OnLastDeviceRemoved() override;
 
         void DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,
                                const std::string &deviceId,
@@ -142,7 +152,54 @@ namespace barton
     private:
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
+        // Raw barton.deviceClassVersion captured from the spec at construction, used to detect a
+        // version change on a later disk re-read (GetDeviceClassVersion() adds a model-version
+        // offset, so it cannot be compared against the raw spec value directly).
+        uint32_t constructedDeviceClassVersion = 0;
+
+        // Claim-identity metadata captured at construction from the then-full registration. Activation
+        // rejects any re-read spec whose claim identity changed, so these never go stale; reading them
+        // keeps the claim-time accessors off the registration object that Activate()/Deactivate() swap,
+        // which claim-time callers read without the JS mutex.
+        const std::vector<uint16_t> supportedDeviceTypes;
+        const std::optional<uint16_t> claimVendorId;
+        const std::optional<uint16_t> claimProductId;
+
         static SpecBasedMatterDeviceDriverMetrics metrics;
+
+        // Process-wide count of currently-activated SBMD drivers, for observability.
+        static std::atomic<int64_t> activeDriverCount;
+
+        // Number of binds currently executing in AddDevice. A bind activates the driver before it
+        // inserts into the device map, so OnLastDeviceRemoved must not deactivate while this is
+        // non-zero or it could shed state out from under an in-flight bind.
+        std::atomic<int> bindsInProgress {0};
+
+        /**
+         * After an on-demand activation, verify the re-read spec still carries the device-class
+         * version and endpoint profile versions the base driver cached at construction. A change
+         * would leave commissioning/reconfiguration publishing stale versions while handlers run
+         * the new spec, so activation is rejected on mismatch.
+         */
+        bool ActivatedSpecMatchesCachedVersions();
+
+        /**
+         * Deactivate the driver and shed its runtime state iff it is idle: still activated, no bind
+         * in flight, and no device still bound (rechecked under devicesMutex). This is the single
+         * serialized teardown point shared by the last-device-removed hook and a failed or
+         * last-exiting bind, so a stale empty-map observation, a rolled-back bind, or a device
+         * removed mid-bind can neither strand the driver active nor shed state a concurrent bind
+         * still relies on. The caller must hold the JS mutex.
+         */
+        void DeactivateIfIdle();
+
+        /**
+         * Test seam invoked by AddDevice once a bind has activated the driver but before its device
+         * is inserted into the base device map. No-op in production; overridden by unit tests to
+         * deterministically overlap a bind with a last-device removal. Must not hold the JS mutex.
+         */
+        virtual void OnBindActivatedTestHook() {}
+
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);
@@ -252,6 +309,12 @@ namespace barton
          * Complete a pending operation — resolve the parking promise and clean up.
          */
         void CompletePendingOperation(uint64_t pendingId, bool success);
+
+        /**
+         * Complete every outstanding deferred operation as a failure, releasing their handler roots.
+         * Matter-thread-confined, like pendingOperations itself.
+         */
+        void CancelAllPendingOperations();
 
         /**
          * Release the held JS handler references for a pending operation.

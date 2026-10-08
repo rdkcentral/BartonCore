@@ -310,6 +310,17 @@ namespace barton
         virtual std::vector<uint16_t> GetSupportedDeviceTypes() = 0;
 
         /**
+         * @brief Hook invoked after the driver's last bound device is removed.
+         *        Runs on the Matter thread with no locks held. Default is a no-op.
+         *
+         * @warning This is invoked from within DeviceRemoved's RunOnMatterSync block — i.e. already
+         *          on the Matter event loop. Implementations MUST NOT re-enter the loop (no nested
+         *          RunOnMatterSync/ConnectAndExecute, or anything that blocks on the Matter thread)
+         *          or they will self-deadlock.
+         */
+        virtual void OnLastDeviceRemoved() {}
+
+        /**
          * @brief Get a server cluster on a given endpoint
          *
          * @param deviceUuid
@@ -521,6 +532,18 @@ namespace barton
                 return it->second;
             }
             return nullptr;
+        }
+
+        /**
+         * @brief Return true when no devices are currently bound to this driver.
+         *
+         * Rechecks the live device map under devicesMutex so callers can confirm an earlier
+         * empty-map observation has not since gone stale (e.g. a concurrent bind).
+         */
+        bool HasNoDevices()
+        {
+            std::lock_guard<std::mutex> lock(devicesMutex);
+            return devices.empty();
         }
 
     private:
