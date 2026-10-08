@@ -386,12 +386,11 @@ def _assert_bind_rejected_on_version_change(default_environment, device, old, ne
     appeared = False
 
     with _patched_spec(old, new):
-        try:
-            client.commission_device(device.get_commissioning_code(), 100)
-        except (
-            Exception
-        ):  # noqa: BLE001 - commissioning is expected to fail; the add is what we assert
-            pass
+        # commission_device reports only whether the detached commissioning attempt started;
+        # the bind (and its rejection) happens later on that thread. Assert the request started
+        # so a failure to even begin can't masquerade as a rejection via the no-event timeout.
+        started = client.commission_device(device.get_commissioning_code(), 100)
+        assert started, "commissioning request should start successfully"
 
         # Commissioning runs on a detached background thread, so the bind can be attempted
         # well after commission_device() returns. Keep the mismatched spec on disk until the

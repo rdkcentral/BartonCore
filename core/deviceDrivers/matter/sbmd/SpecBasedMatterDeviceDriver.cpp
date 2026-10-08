@@ -273,11 +273,11 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     {
         SpecBasedMatterDeviceDriver *self;
 
-        InFlightBind(SpecBasedMatterDeviceDriver *s) : self(s) { self->activationsInProgress.fetch_add(1); }
+        InFlightBind(SpecBasedMatterDeviceDriver *s) : self(s) { self->bindsInProgress.fetch_add(1); }
 
         ~InFlightBind()
         {
-            self->activationsInProgress.fetch_sub(1);
+            self->bindsInProgress.fetch_sub(1);
 
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
@@ -498,7 +498,7 @@ void SpecBasedMatterDeviceDriver::DeactivateIfIdle()
     // flight, and no device remains bound (rechecked under devicesMutex) — so a stale empty-map
     // observation, a rolled-back bind, or a device removed mid-bind can neither strand the driver
     // active nor shed state a concurrent bind still relies on.
-    if (driver->IsActivated() && activationsInProgress.load() == 0 && HasNoDevices())
+    if (driver->IsActivated() && bindsInProgress.load() == 0 && HasNoDevices())
     {
         driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
 

@@ -173,7 +173,7 @@ namespace barton
         // Number of binds currently executing in AddDevice. A bind activates the driver before it
         // inserts into the device map, so OnLastDeviceRemoved must not deactivate while this is
         // non-zero or it could shed state out from under an in-flight bind.
-        std::atomic<int> activationsInProgress {0};
+        std::atomic<int> bindsInProgress {0};
 
         /**
          * After an on-demand activation, verify the re-read spec still carries the device-class
