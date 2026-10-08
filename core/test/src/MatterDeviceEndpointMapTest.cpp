@@ -672,8 +672,14 @@ namespace
 
             std::thread binder([&driver, &device, &bindResult] { bindResult = driver.AddDevice(std::move(device)); });
 
-            ASSERT_EQ(reached.wait_for(std::chrono::seconds(10)), std::future_status::ready)
-                << "bind never reached the post-activation seam";
+            if (reached.wait_for(std::chrono::seconds(10)) != std::future_status::ready)
+            {
+                // Unblock a hook that may arrive late and reap the worker before failing, so
+                // std::thread's destructor does not std::terminate on a still-joinable thread.
+                driver.proceed.set_value();
+                binder.join();
+                FAIL() << "bind never reached the post-activation seam";
+            }
 
             // The bind has activated the driver but not yet inserted its device.
             EXPECT_TRUE(sbmd->IsActivated());
