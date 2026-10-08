@@ -40,24 +40,26 @@ class MatterTemperatureSensor(MatterDevice):
         self,
         vendor_id: int = 0,
         product_id: int = 0,
+        endpoint_number: int | None = None,
     ):
         super().__init__(
             device_class="environmentalSensor",
             matterjs_entry_point="TemperatureSensorDevice.js",
             vendor_id=vendor_id,
             product_id=product_id,
+            endpoint_number=endpoint_number,
         )
 
 
 @pytest.fixture
-def matter_temperature_sensor():
+def matter_temperature_sensor(request):
     """
     Fixture to create and manage a MatterTemperatureSensor instance.
 
     Yields:
         MatterTemperatureSensor: Started and ready for commissioning.
     """
-    sensor = MatterTemperatureSensor()
+    sensor = MatterTemperatureSensor(endpoint_number=getattr(request, "param", None))
     sensor.start()
 
     try:

@@ -33,6 +33,7 @@ from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
     resource_update_listener,
+    resource_uri,
     wait_for_resource_value,
 )
 
@@ -87,3 +88,24 @@ def test_temperature_sensor_update(
         "setTemperature", {"value": 3000}
     )
     wait_for_resource_value(temp_queue, "3000")
+
+
+@pytest.mark.parametrize("matter_temperature_sensor", [2], indirect=True)
+def test_temperature_sensor_on_matter_endpoint_2(
+    default_environment, matter_temperature_sensor
+):
+    """Matter endpoint 2 must update the registered Barton endpoint 1."""
+    device = commission_device(
+        default_environment,
+        matter_temperature_sensor,
+        "environmentalSensor",
+    )
+    client = default_environment.get_client()
+    uri = resource_uri(device, "temperature", endpoint_id="1")
+    assert client.get_resource_by_uri(uri) is not None
+
+    temp_queue = resource_update_listener(client, "temperature")
+    matter_temperature_sensor.sideband.send("setTemperature", {"value": 3000})
+
+    wait_for_resource_value(temp_queue, "3000")
+    assert client.read_resource(uri) == "3000"

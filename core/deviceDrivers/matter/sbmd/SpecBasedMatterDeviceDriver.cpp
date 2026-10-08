@@ -195,6 +195,16 @@ namespace
         std::optional<ParsedResult> &result;
     };
 
+    // Inbound callbacks carry Matter endpoint IDs, but handlers use args.endpointId for Barton resources.
+    // A single declared endpoint has an unambiguous Barton ID; otherwise preserve the existing behavior
+    // until multi-endpoint drivers have an inbound endpoint map.
+    std::string GetHandlerEndpointId(const SbmdRegistration &registration, chip::EndpointId matterEndpointId)
+    {
+        const auto &endpoints = registration.endpoints;
+
+        return endpoints.size() == 1 ? endpoints.front().id : std::to_string(matterEndpointId);
+    }
+
 } // namespace
 
 SpecBasedMatterDeviceDriverMetrics SpecBasedMatterDeviceDriver::metrics;
@@ -2252,7 +2262,7 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
     // Build handler context
     HandlerContext hctx;
     hctx.deviceUuid = deviceId;
-    hctx.endpointId = std::to_string(endpointId);
+    hctx.endpointId = GetHandlerEndpointId(driver->GetRegistration(), endpointId);
 
     auto matterDevice = GetDevice(deviceId);
 
@@ -2313,7 +2323,7 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
     // Build handler context
     HandlerContext hctx;
     hctx.deviceUuid = deviceId;
-    hctx.endpointId = std::to_string(endpointId);
+    hctx.endpointId = GetHandlerEndpointId(driver->GetRegistration(), endpointId);
 
     auto matterDevice = GetDevice(deviceId);
 
@@ -2350,7 +2360,7 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
     // Build handler context
     HandlerContext hctx;
     hctx.deviceUuid = deviceId;
-    hctx.endpointId = std::to_string(endpointId);
+    hctx.endpointId = GetHandlerEndpointId(driver->GetRegistration(), endpointId);
 
     auto matterDevice = GetDevice(deviceId);
 

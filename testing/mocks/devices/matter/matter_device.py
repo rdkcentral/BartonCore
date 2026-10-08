@@ -59,6 +59,7 @@ class MatterDevice(BaseDevice):
         _discriminator (int): The discriminator for the device.
         _vendor_id (int): The vendor ID for the device (default is 0).
         _product_id (int): The product ID for the device (default is 0).
+        _endpoint_number (int | None): Optional Matter endpoint number for single-endpoint devices.
         _commissioning_code (str): The commissioning code for the device.
         _process (subprocess.Popen): The process running the device application.
     """
@@ -68,6 +69,7 @@ class MatterDevice(BaseDevice):
     _discriminator: int
     _vendor_id: int
     _product_id: int
+    _endpoint_number: int | None
     _commissioning_code: str
     _process: subprocess.Popen
     _sideband: SidebandClient | None
@@ -78,11 +80,13 @@ class MatterDevice(BaseDevice):
         matterjs_entry_point: str,
         vendor_id: int = 0,
         product_id: int = 0,
+        endpoint_number: int | None = None,
     ):
         self._matterjs_entry_point = matterjs_entry_point
         self._device_class = device_class
         self._vendor_id = vendor_id
         self._product_id = product_id
+        self._endpoint_number = endpoint_number
         self._passcode = self._set_passcode()
         self._discriminator = self._set_discriminator()
         self._commissioning_code = self._set_commissioning_code()
@@ -174,6 +178,9 @@ class MatterDevice(BaseDevice):
 
         if self._product_id:
             cmd.extend(["--product-id", str(self._product_id)])
+
+        if self._endpoint_number is not None:
+            cmd.extend(["--endpoint-number", str(self._endpoint_number)])
 
         # Keep LD_PRELOAD for Python (ASAN-instrumented Barton libs), but do
         # not inject it into Node.js virtual devices to avoid cross-runtime

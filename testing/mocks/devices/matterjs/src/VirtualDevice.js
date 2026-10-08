@@ -61,11 +61,13 @@ export class VirtualDevice {
         productId = 0x8000,
         passcode = 20202021,
         discriminator = 3840,
-        port = 0
+        port = 0,
+        endpointNumber
     } = {}) {
         this.deviceName = deviceName;
         this.vendorId = vendorId;
         this.productId = productId;
+        this.endpointNumber = endpointNumber;
         this.passcode = passcode;
         this.discriminator = discriminator;
         this.port = port;
@@ -146,6 +148,12 @@ export class VirtualDevice {
 
         // Create and add device endpoint(s)
         this.endpoints = this.createEndpoints();
+        if (this.endpointNumber !== undefined) {
+            if (this.endpoints.length !== 1) {
+                throw new Error('--endpoint-number requires exactly one device endpoint');
+            }
+            this.endpoints[0].number = this.endpointNumber;
+        }
         for (const ep of this.endpoints) {
             await this.serverNode.add(ep);
         }

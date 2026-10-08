@@ -30,6 +30,7 @@
  *   --port <int>           Matter port (default handled by device)
  *   --vendor-id <int>      Vendor ID (default handled by device)
  *   --product-id <int>     Product ID (default handled by device)
+ *   --endpoint-number <int> Matter endpoint number (default assigned by node)
  */
 export function parseArgs(argv) {
     const args = {};
@@ -38,7 +39,8 @@ export function parseArgs(argv) {
         '--discriminator',
         '--port',
         '--vendor-id',
-        '--product-id'
+        '--product-id',
+        '--endpoint-number'
     ]);
 
     for (let i = 2; i < argv.length; i += 2) {
@@ -75,6 +77,9 @@ export function parseArgs(argv) {
                 break;
             case '--product-id':
                 args.productId = parsedValue;
+                break;
+            case '--endpoint-number':
+                args.endpointNumber = parsedValue;
                 break;
         }
     }
