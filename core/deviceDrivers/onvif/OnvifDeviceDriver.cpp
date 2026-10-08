@@ -98,6 +98,25 @@ using namespace barton::onvif;
 // Test seam: when set to "host:port", discovery probes that address by unicast instead of the
 // 239.255.255.250 multicast group (which does not reliably traverse container/CI networks).
 #define ONVIF_DISCOVERY_ADDRESS_PROPERTY "onvif.discovery.address"
+// PRIMITIVE / INTERIM discovery-time ONVIF credentials -- NOT A FINAL DESIGN. See the "AUTH MODEL"
+// header above: this extends that stopgap to the discovery/identification phase and is expected to be
+// reworked when Barton gains a device-configuration/onboarding mechanism.
+//
+// Why this exists: some cameras (observed: Reolink E1 Pro) require WS-Security on GetDeviceInformation,
+// so an anonymous identification returns 401 and the camera cannot be identified (manufacturer/model
+// empty) -- which breaks vendor claim/ownership. When set, these credentials are used to retry
+// identification so such cameras are correctly identified at discovery.
+//
+// KNOWN LIMITATION (intentional, interim): this introduces a SECOND credential surface that duplicates
+// the per-device ep/onvif username/password resources used for runtime (polling, media/snapshot URL
+// retrieval). Discovery runs before the device -- and therefore its ep/onvif resources -- exists, so
+// there is no per-device resource to read yet; hence a global property seam. These are single, static,
+// global credentials (one pair for all cameras), write-once via properties, with no per-device scoping,
+// rotation, expiry, or secure provisioning. A finished design should provision a single credential
+// source consumed by both discovery and runtime (e.g. persist the discovery credentials onto the device
+// at add time, or source both from the onboarding subsystem) and remove this global seam.
+#define ONVIF_DISCOVERY_USERNAME_PROPERTY "onvif.discovery.username"
+#define ONVIF_DISCOVERY_PASSWORD_PROPERTY "onvif.discovery.password"
 
 namespace
 {
@@ -105,6 +124,29 @@ namespace
     // A discovered uuid becomes part of a JSON springboard payload and a resource URI path. The
     // endpoint reference is network-controlled and the parser accepts arbitrary values, so reject any
     // identifier that could inject quotes, backslashes, path separators, or control characters.
+    // Read a CPE/property-provider string property, returning "" when unset. Used for the interim
+    // discovery-time ONVIF credential seam (see ONVIF_DISCOVERY_USERNAME/PASSWORD_PROPERTY).
+    std::string ReadDiscoveryProperty(const char *propertyName)
+    {
+        std::string value;
+        BCorePropertyProvider *provider = deviceServiceConfigurationGetPropertyProvider();
+
+        if (provider != nullptr)
+        {
+            gchar *raw = b_core_property_provider_get_property_as_string(provider, propertyName, nullptr);
+
+            if (raw != nullptr)
+            {
+                value = raw;
+                g_free(raw);
+            }
+
+            g_object_unref(provider);
+        }
+
+        return value;
+    }
+
     bool IsSafeDeviceUuid(const std::string &uuid)
     {
         if (uuid.empty())
@@ -677,6 +719,28 @@ bool OnvifDriver::RunDiscoveryProbe()
             cam.model = info.model;
             cam.firmwareVersion = info.firmwareVersion;
             cam.authRequired = false; // answered without credentials
+        }
+        else
+        {
+            // The camera rejected an anonymous GetDeviceInformation (e.g. Reolink E1 Pro requires
+            // WS-Security). Retry identification with the interim discovery credentials so the camera is
+            // still identified (manufacturer/model) and can be claimed by its vendor specialization.
+            std::string discoveryUser = ReadDiscoveryProperty(ONVIF_DISCOVERY_USERNAME_PROPERTY);
+            std::string discoveryPass = ReadDiscoveryProperty(ONVIF_DISCOVERY_PASSWORD_PROPERTY);
+
+            if (!discoveryUser.empty() && !discoveryPass.empty())
+            {
+                OnvifCredentials discoveryCreds {discoveryUser, discoveryPass};
+                OnvifDeviceInfo authedInfo;
+
+                if (client.GetDeviceInformation(discoveryCreds, authedInfo, nullptr))
+                {
+                    cam.manufacturer = authedInfo.manufacturer;
+                    cam.model = authedInfo.model;
+                    cam.firmwareVersion = authedInfo.firmwareVersion;
+                    cam.authRequired = true; // required credentials to identify
+                }
+            }
         }
 
         {

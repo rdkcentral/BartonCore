@@ -47,7 +47,7 @@ namespace barton
         };
 
         // Build a WS-Discovery Probe SOAP message with the given (already-formatted) message id. Testable.
-        std::string OnvifBuildProbeMessage(const std::string &messageId);
+        std::string OnvifBuildProbeMessage(const std::string &messageId, const char *wsaNamespace = nullptr);
 
         // Parse a WS-Discovery ProbeMatches SOAP response into zero or more matches. Testable.
         std::vector<OnvifProbeMatch> OnvifParseProbeMatches(const std::string &xml);

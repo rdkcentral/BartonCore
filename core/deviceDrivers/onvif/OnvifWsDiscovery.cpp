@@ -54,6 +54,11 @@ namespace barton
             // namespace; cameras that validate the qualified Action/To/MessageID headers reject the
             // older 2004/08 addressing namespace.
             const char *const NS_WSA = "http://www.w3.org/2005/08/addressing";
+            // Legacy WS-Addressing namespace. Some ONVIF cameras (observed: Reolink E1 Pro) implement
+            // only the 2004/08 addressing namespace and return a soap:MustUnderstand Fault for a probe
+            // that qualifies w:To with the 2005/08 namespace, so they are never discovered. We therefore
+            // probe with both namespaces (see Probe()) to interoperate with compliant and legacy cameras.
+            const char *const NS_WSA_LEGACY = "http://schemas.xmlsoap.org/ws/2004/08/addressing";
             const char *const NS_WSD = "http://schemas.xmlsoap.org/ws/2005/04/discovery";
             const char *const NS_ONVIF_NET = "http://www.onvif.org/ver10/network/wsdl";
             const char *const WSD_TO = "urn:schemas-xmlsoap-org:ws:2005:04:discovery";
@@ -124,10 +129,13 @@ namespace barton
 
         } // namespace
 
-        std::string OnvifBuildProbeMessage(const std::string &messageId)
+        std::string OnvifBuildProbeMessage(const std::string &messageId, const char *wsaNamespace)
         {
+            // A null namespace selects the standard WS-Addressing 2005/08 namespace (back-compat default).
+            const char *wsa = (wsaNamespace != nullptr) ? wsaNamespace : NS_WSA;
+
             return std::string("<?xml version=\"1.0\" encoding=\"UTF-8\"?>") + "<e:Envelope xmlns:e=\"" + NS_SOAP +
-                   "\" xmlns:w=\"" + NS_WSA + "\" xmlns:d=\"" + NS_WSD + "\" xmlns:dn=\"" + NS_ONVIF_NET +
+                   "\" xmlns:w=\"" + wsa + "\" xmlns:d=\"" + NS_WSD + "\" xmlns:dn=\"" + NS_ONVIF_NET +
                    "\"><e:Header><w:MessageID>" + OnvifXmlEscape(messageId) +
                    "</w:MessageID><w:ReplyTo><w:Address>http://www.w3.org/2005/08/addressing/anonymous"
                    "</w:Address></w:ReplyTo><w:To e:mustUnderstand=\"true\">" +
@@ -338,12 +346,27 @@ namespace barton
             // A per-probe WS-Addressing MessageID. A standards-conforming random UUID keeps IDs unique
             // across processes, hosts, and restarts so responses cannot be misattributed via RelatesTo.
             std::string messageId = GenerateMessageId();
-            std::string probe = OnvifBuildProbeMessage(messageId);
 
-            ssize_t sent =
-                sendto(sock, probe.data(), probe.size(), 0, reinterpret_cast<struct sockaddr *>(&dest), sizeof(dest));
+            // Probe with both the standard (2005/08) and legacy (2004/08) WS-Addressing namespaces so
+            // both spec-compliant cameras and cameras that only understand the legacy namespace (e.g.
+            // Reolink E1 Pro, which otherwise returns a soap:MustUnderstand Fault) answer. The same
+            // MessageID is reused across both so the RelatesTo correlation filter below still matches.
+            const char *const wsaNamespaces[] = {NS_WSA, NS_WSA_LEGACY};
+            bool anySent = false;
 
-            if (sent < 0)
+            for (const char *wsaNamespace : wsaNamespaces)
+            {
+                std::string probe = OnvifBuildProbeMessage(messageId, wsaNamespace);
+                ssize_t sent = sendto(
+                    sock, probe.data(), probe.size(), 0, reinterpret_cast<struct sockaddr *>(&dest), sizeof(dest));
+
+                if (sent >= 0)
+                {
+                    anySent = true;
+                }
+            }
+
+            if (!anySent)
             {
                 if (error != nullptr)
                 {
