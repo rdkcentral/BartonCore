@@ -225,15 +225,40 @@ static void test_deviceCommunicationWatchdogTerm(void **state)
     assert_false(deviceCommunicationWatchdogIsDeviceMonitored("device3"));
 }
 
+static void test_deviceCommunicationWatchdogMonitorDeviceTwice(void **state)
+{
+    (void) state;
+
+    const char *uuid = "device5";
+
+    // Re-monitoring an already monitored device (e.g., device recovery) must replace the entry without
+    // leaving a dangling pointer in the table (XHCPE-2730)
+    deviceCommunicationWatchdogMonitorDevice(uuid, 30, false);
+    deviceCommunicationWatchdogMonitorDevice(uuid, 60, true);
+    assert_true(deviceCommunicationWatchdogIsDeviceMonitored(uuid));
+
+    // The latest registration wins: device is in comm fail, so remaining time is -1
+    assert_int_equal(deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(uuid, 60), -1);
+
+    deviceCommunicationWatchdogPetDevice(uuid);
+    assert_string_equal(restoredUuid, uuid);
+
+    // Teardown destroys the table, which double-freed the entry before the fix
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_deviceCommunicationWatchdogInit, test_testSetup, test_testTeardown),
-        cmocka_unit_test_setup_teardown(test_deviceCommunicationWatchdogMonitorDevice, test_testSetup, test_testTeardown),
-        cmocka_unit_test_setup_teardown(test_deviceCommunicationWatchdogForceDeviceInCommFail, test_testSetup, test_testTeardown),
-        cmocka_unit_test_setup_teardown(test_deviceCommunicationWatchdogSetTimeRemaining, test_testSetup, test_testTeardown),
-        cmocka_unit_test_setup_teardown(test_deviceCommunicationWatchdogTerm, test_testSetup, test_testTeardown)
-    };
+        cmocka_unit_test_setup_teardown(
+            test_deviceCommunicationWatchdogMonitorDevice, test_testSetup, test_testTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_deviceCommunicationWatchdogForceDeviceInCommFail, test_testSetup, test_testTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_deviceCommunicationWatchdogSetTimeRemaining, test_testSetup, test_testTeardown),
+        cmocka_unit_test_setup_teardown(test_deviceCommunicationWatchdogTerm, test_testSetup, test_testTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_deviceCommunicationWatchdogMonitorDeviceTwice, test_testSetup, test_testTeardown)};
 
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
