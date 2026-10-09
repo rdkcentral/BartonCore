@@ -71,6 +71,10 @@ namespace barton
         // Extract the media URI ("Uri") from a GetStreamUri or GetSnapshotUri response ("" if absent).
         std::string OnvifParseMediaUri(const std::string &xml);
 
+        // Extract the first interface HwAddress (MAC) from a GetNetworkInterfaces response.
+        // Returns "" when none is present.
+        std::string OnvifParseHwAddress(const std::string &xml);
+
         class OnvifSoapClient
         {
         public:
@@ -113,6 +117,11 @@ namespace barton
                                 const std::string &profileToken,
                                 std::string &jpegUriOut,
                                 std::string *error = nullptr);
+
+            // Returns the camera's hardware (MAC) address from the first network interface. Requires
+            // credentials on cameras that secure GetNetworkInterfaces (e.g. Reolink). The MAC is a
+            // stable, non-rotating hardware identifier suitable for use as the device id.
+            bool GetHwAddress(const OnvifCredentials &creds, std::string &macOut, std::string *error = nullptr);
 
             // Build a SOAP envelope for a body, injecting a WS-Security UsernameToken when creds are set.
             // Returns an empty string when a credentialed envelope cannot be built because the CSPRNG

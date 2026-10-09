@@ -380,6 +380,52 @@ namespace barton
             return true;
         }
 
+        std::string OnvifParseHwAddress(const std::string &xml)
+        {
+            xmlDoc *doc = xmlReadMemory(xml.data(),
+                                        static_cast<int>(xml.size()),
+                                        nullptr,
+                                        nullptr,
+                                        XML_PARSE_NOERROR | XML_PARSE_NOWARNING | XML_PARSE_RECOVER | XML_PARSE_NONET);
+
+            if (doc == nullptr)
+            {
+                return "";
+            }
+
+            // GetNetworkInterfacesResponse/NetworkInterfaces/Info/HwAddress. OnvifXmlFindText returns the
+            // first HwAddress in document order (the first interface), which is the device's MAC.
+            std::string hwAddress = OnvifXmlFindText(xmlDocGetRootElement(doc), "HwAddress");
+            xmlFreeDoc(doc);
+
+            return hwAddress;
+        }
+
+        bool OnvifSoapClient::GetHwAddress(const OnvifCredentials &creds, std::string &macOut, std::string *error)
+        {
+            std::string body = std::string("<tds:GetNetworkInterfaces xmlns:tds=\"") + NS_TDS + "\"/>";
+            std::string response;
+
+            if (!Post(BuildEnvelope(body, creds), response, error))
+            {
+                return false;
+            }
+
+            macOut = OnvifParseHwAddress(response);
+
+            if (macOut.empty())
+            {
+                if (error != nullptr)
+                {
+                    *error = "GetNetworkInterfaces returned no HwAddress";
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+
         bool
         OnvifSoapClient::GetDeviceInformation(const OnvifCredentials &creds, OnvifDeviceInfo &out, std::string *error)
         {

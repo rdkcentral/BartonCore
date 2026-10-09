@@ -50,6 +50,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -90,6 +91,9 @@ using namespace barton::onvif;
 #define DEVICE_DRIVER_NAME               "onvifCameraDeviceDriver"
 #define ONVIF_DEVICE_CLASS_VERSION       1
 #define ONVIF_METADATA_SERVICE_URL       "onvifServiceUrl"
+// The camera's full WS-Discovery EndpointReference (urn:uuid:...). The device id is the MAC, so the
+// original ONVIF identity is preserved as metadata for traceability/correlation.
+#define ONVIF_METADATA_ENDPOINT_REFERENCE "onvifEndpointReference"
 #define ONVIF_DISCOVERY_TIMEOUT_MS       3000
 // Back off between retries when a discovery probe fails fast (bad socket/destination/args) so the
 // worker loop cannot hot-spin; a normal probe consumes ONVIF_DISCOVERY_TIMEOUT_MS and never backs off.
@@ -124,6 +128,25 @@ namespace
     // A discovered uuid becomes part of a JSON springboard payload and a resource URI path. The
     // endpoint reference is network-controlled and the parser accepts arbitrary values, so reject any
     // identifier that could inject quotes, backslashes, path separators, or control characters.
+    // Normalize a MAC address to lowercase hex with no separators (e.g. "58:41:46:55:8A:07" ->
+    // "584146558a07") for use as a device id. Returns "" if the input has no hex digits.
+    std::string NormalizeMac(const std::string &mac)
+    {
+        std::string out;
+
+        for (char ch : mac)
+        {
+            unsigned char uc = static_cast<unsigned char>(ch);
+
+            if (std::isxdigit(uc))
+            {
+                out += static_cast<char>(std::tolower(uc));
+            }
+        }
+
+        return out;
+    }
+
     // Read a CPE/property-provider string property, returning "" when unset. Used for the interim
     // discovery-time ONVIF credential seam (see ONVIF_DISCOVERY_USERNAME/PASSWORD_PROPERTY).
     std::string ReadDiscoveryProperty(const char *propertyName)
@@ -685,19 +708,9 @@ bool OnvifDriver::RunDiscoveryProbe()
             continue;
         }
 
-        // Discovery must be idempotent: WS-Discovery ProbeMatches are received on every discovery
-        // run (and cameras may answer a single probe more than once). If the device is already in
-        // the database, re-reporting it via deviceServiceDeviceFound would fail to re-create the
-        // existing device entry ("Failed to create device entry" / "device discovery failed").
-        // Skip devices we already know about so repeat discoveries are harmless no-ops.
-        if (deviceServiceIsDeviceKnown(uuid.c_str()))
-        {
-            icLogDebug(LOG_TAG, "ONVIF camera %s already known; skipping re-report", uuid.c_str());
-            continue;
-        }
-
         DiscoveredCamera cam;
         cam.serviceUrl = StripUrlUserinfo(match.xaddrs.front());
+        cam.endpointReference = match.endpointReference;
 
         // The XAddr comes from an unauthenticated ProbeMatch; accept only http(s) URLs before caching
         // it as the libcurl POST target so a forged response cannot redirect SOAP calls elsewhere.
@@ -743,9 +756,51 @@ bool OnvifDriver::RunDiscoveryProbe()
             }
         }
 
+        // Prefer the camera's MAC (a stable, non-rotating hardware id) as the device id, read from the
+        // vendor-neutral ONVIF GetNetworkInterfaces (authenticated when the camera requires credentials,
+        // like Reolink). Fall back to the WS-Discovery endpoint-reference uuid if the MAC is unavailable.
+        std::string deviceId = uuid;
+        {
+            OnvifCredentials macCreds;
+
+            if (cam.authRequired)
+            {
+                macCreds.username = ReadDiscoveryProperty(ONVIF_DISCOVERY_USERNAME_PROPERTY);
+                macCreds.password = ReadDiscoveryProperty(ONVIF_DISCOVERY_PASSWORD_PROPERTY);
+            }
+
+            std::string mac;
+
+            if (client.GetHwAddress(macCreds, mac, nullptr))
+            {
+                std::string normalized = NormalizeMac(mac);
+
+                if (!normalized.empty() && IsSafeDeviceUuid(normalized))
+                {
+                    deviceId = normalized;
+                }
+            }
+            else
+            {
+                icLogWarn(LOG_TAG,
+                          "could not read MAC for ONVIF camera %s; using endpoint-reference id",
+                          uuid.c_str());
+            }
+        }
+
+        // The discovery cache and device-known/idempotency checks key on the final device id (the MAC).
+        // WS-Discovery ProbeMatches arrive on every run (and a camera may answer a probe more than
+        // once); skip devices already in the database so repeat discoveries are harmless no-ops.
+        if (deviceServiceIsDeviceKnown(deviceId.c_str()))
+        {
+            icLogDebug(LOG_TAG, "ONVIF camera %s already known; skipping re-report", deviceId.c_str());
+
+            continue;
+        }
+
         {
             std::lock_guard<std::mutex> lock(stateMutex);
-            discovered[uuid] = cam;
+            discovered[deviceId] = cam;
         }
 
         // Ownership gate: a specialization reports only cameras it claims; the generic driver yields a
@@ -753,10 +808,10 @@ bool OnvifDriver::RunDiscoveryProbe()
         // model obtained above. See the interim claim model in OnvifDeviceDriver.h.
         if (!ShouldReportCamera(cam.manufacturer, cam.model))
         {
-            icLogDebug(LOG_TAG, "yielding ONVIF camera %s to a vendor specialization", uuid.c_str());
+            icLogDebug(LOG_TAG, "yielding ONVIF camera %s to a vendor specialization", deviceId.c_str());
 
             std::lock_guard<std::mutex> lock(stateMutex);
-            discovered.erase(uuid);
+            discovered.erase(deviceId);
 
             continue;
         }
@@ -765,7 +820,14 @@ bool OnvifDriver::RunDiscoveryProbe()
         details.deviceDriver = &driver;
         details.deviceClass = CAMERA_DC;
         details.deviceClassVersion = ONVIF_DEVICE_CLASS_VERSION;
-        details.deviceUuid = uuid.c_str();
+        details.deviceUuid = deviceId.c_str();
+
+        // Preserve the camera's original ONVIF identity (its WS-Discovery endpoint reference) as device
+        // metadata; the device id itself is now the MAC.
+        details.metadata = stringHashMapCreate();
+        stringHashMapPut(details.metadata,
+                         strdup(ONVIF_METADATA_ENDPOINT_REFERENCE),
+                         strdup(cam.endpointReference.c_str()));
         details.manufacturer = cam.manufacturer.empty() ? "ONVIF" : cam.manufacturer.c_str();
         details.model = cam.model.empty() ? "Camera" : cam.model.c_str();
         details.hardwareVersion = "1";
@@ -776,20 +838,25 @@ bool OnvifDriver::RunDiscoveryProbe()
             details.endpointProfileMap, strdup(CAMERA_SESSION_ENDPOINT_ID), strdup(CAMERA_SESSION_PROFILE));
         stringHashMapPut(details.endpointProfileMap, strdup(ONVIF_ENDPOINT_ID), strdup(ONVIF_PROFILE));
 
-        icLogInfo(LOG_TAG, "ONVIF camera found: uuid=%s service=%s", uuid.c_str(), cam.serviceUrl.c_str());
+        icLogInfo(LOG_TAG,
+                  "ONVIF camera found: id=%s (eref=%s) service=%s",
+                  deviceId.c_str(),
+                  cam.endpointReference.c_str(),
+                  cam.serviceUrl.c_str());
 
         bool accepted = deviceServiceDeviceFound(&details, driver.neverReject);
 
         stringHashMapDestroy(details.endpointProfileMap, NULL);
+        stringHashMapDestroy(details.metadata, NULL);
 
         if (!accepted)
         {
             // The device service rejected the camera; drop the entry we speculatively cached so a
             // later probe starts clean instead of reusing stale discovery state.
-            icLogWarn(LOG_TAG, "deviceServiceDeviceFound rejected uuid=%s; dropping cached discovery", uuid.c_str());
+            icLogWarn(LOG_TAG, "deviceServiceDeviceFound rejected id=%s; dropping cached discovery", deviceId.c_str());
 
             std::lock_guard<std::mutex> lock(stateMutex);
-            discovered.erase(uuid);
+            discovered.erase(deviceId);
         }
     }
 
@@ -809,6 +876,11 @@ bool OnvifDriver::ConfigureDevice(icDevice *device)
     {
         // Fresh discovery: persist the service URL so on-demand SOAP calls survive restarts.
         createDeviceMetadata(device, ONVIF_METADATA_SERVICE_URL, cam.serviceUrl.c_str());
+
+        if (!cam.endpointReference.empty())
+        {
+            createDeviceMetadata(device, ONVIF_METADATA_ENDPOINT_REFERENCE, cam.endpointReference.c_str());
+        }
     }
     else
     {

@@ -71,6 +71,10 @@ namespace barton
             std::string manufacturer;
             std::string model;
             std::string firmwareVersion;
+            // The camera's full WS-Discovery EndpointReference (urn:uuid:...). The device id is the
+            // camera's MAC, so the original ONVIF endpoint reference is preserved here and persisted as
+            // device metadata for traceability/correlation.
+            std::string endpointReference;
             // Derived during discovery: false when the camera answered an anonymous GetDeviceInformation,
             // meaning it does not require credentials. Defaults to true (require credentials) until proven.
             bool authRequired = true;
