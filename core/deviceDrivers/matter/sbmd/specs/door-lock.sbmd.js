@@ -25,15 +25,17 @@
 // Door Lock SBMD Driver
 //
 // Maps Matter Door Lock device type to Barton doorLock device class.
-// Uses LockState attribute for real-time lock state updates.
+// The locked resource is seeded from the cached LockState attribute at
+// commission time; live updates arrive via two paths: the LockState
+// attribute handler (the mandatory-attribute baseline) and the LockOperation
+// event handler (which also attaches source/userId metadata). DoorLockAlarm
+// events drive the jammed, tampered, and invalidCodeEntryLimit resources.
 // Lock/Unlock commands sent via execute handlers with optional PIN code.
-// The locked resource is seeded at commission time and kept current by
-// the LockState attribute subscription.
 //
 
 SbmdDriver({
     schemaVersion: '5.0',
-    driverVersion: 1,
+    driverVersion: 2,
     name: 'Door Lock',
 
     constants: {
@@ -42,14 +44,53 @@ SbmdDriver({
         // Attributes
         ATTR_LOCK_STATE: 0x0000,
 
+        // Events
+        EVT_DOOR_LOCK_ALARM: 0x0000,
+        EVT_LOCK_OPERATION: 0x0002,
+
         // Commands
         CMD_LOCK_DOOR: 0x0000,
         CMD_UNLOCK_DOOR: 0x0001,
 
+        // DoorLockAlarm alarm codes
+        ALARM_LOCK_JAMMED: 0x00,
+        ALARM_WRONG_CODE_ENTRY_LIMIT: 0x04,
+        // Matter/CHIP spell this enum member "kFrontEsceutcheonRemoved" (typo); noting to avoid confusion
+        ALARM_FRONT_ESCUTCHEON_REMOVED: 0x05,
+        ALARM_DOOR_FORCED_OPEN: 0x06,
+
+        // LockOperation operation types
+        OP_TYPE_LOCK: 0x00,
+        OP_TYPE_UNLOCK: 0x01,
+        OP_TYPE_UNLATCH: 0x04,
+
+        // LockOperation operation source (Matter OperationSourceEnum)
+        OP_SOURCE_MANUAL: 0x01,
+        OP_SOURCE_PROPRIETARY_REMOTE: 0x02,
+        OP_SOURCE_KEYPAD: 0x03,
+        OP_SOURCE_AUTO: 0x04,
+        OP_SOURCE_SCHEDULE: 0x06,
+        OP_SOURCE_REMOTE: 0x07,
+        OP_SOURCE_RFID: 0x08,
+
+        // locked update metadata keys and canonical source values (commonDeviceDefs.h)
+        META_SOURCE: 'source',
+        META_USER_ID: 'userId',
+        SRC_MANUAL: 'manual',
+        SRC_KEYPAD: 'keypad',
+        SRC_RF: 'rf',
+        SRC_RFID: 'rfid',
+        SRC_AUTO: 'auto',
+        SRC_SCHEDULE: 'schedule',
+        SRC_UNKNOWN: 'unknown',
+
         // Resource IDs
         RES_LOCKED: 'locked',
         RES_LOCK: 'lock',
-        RES_UNLOCK: 'unlock'
+        RES_UNLOCK: 'unlock',
+        RES_JAMMED: 'jammed',
+        RES_TAMPERED: 'tampered',
+        RES_INVALID_CODE_ENTRY_LIMIT: 'invalidCodeEntryLimit'
     },
 
     barton: {
@@ -73,13 +114,21 @@ SbmdDriver({
             clusterId: CL_DOOR_LOCK,
             attributeId: ATTR_LOCK_STATE,
             type: 'enum8'
+        },
+        doorLockAlarm: {
+            clusterId: CL_DOOR_LOCK,
+            eventId: EVT_DOOR_LOCK_ALARM
+        },
+        lockOperation: {
+            clusterId: CL_DOOR_LOCK,
+            eventId: EVT_LOCK_OPERATION
         }
     },
 
     endpoints: {
         '1': {
             profile: 'doorLock',
-            profileVersion: 3,
+            profileVersion: 4,
             resources: {
                 locked: {
                     type: 'boolean',
@@ -99,9 +148,41 @@ SbmdDriver({
                 unlock: {
                     type: 'function',
                     execute: executeUnlock
+                },
+                jammed: {
+                    type: 'boolean',
+                    modes: ['read'],
+                    prerequisites: [CL_DOOR_LOCK],
+                    seed: {
+                        supplements: {resources: ['1/jammed']},
+                        handler: seedFalse
+                    }
+                },
+                tampered: {
+                    type: 'boolean',
+                    modes: ['read'],
+                    prerequisites: [CL_DOOR_LOCK],
+                    seed: {
+                        supplements: {resources: ['1/tampered']},
+                        handler: seedFalse
+                    }
+                },
+                invalidCodeEntryLimit: {
+                    type: 'boolean',
+                    modes: ['read'],
+                    prerequisites: [CL_DOOR_LOCK],
+                    seed: {
+                        supplements: {resources: ['1/invalidCodeEntryLimit']},
+                        handler: seedFalse
+                    }
                 }
             }
         }
+    },
+
+    eventHandlers: {
+        handleDoorLockAlarm: {aliases: ['doorLockAlarm'], handler: handleDoorLockAlarm},
+        handleLockOperation: {aliases: ['lockOperation'], handler: handleLockOperation}
     },
 
     attributeHandlers: {
@@ -123,6 +204,47 @@ function seedLocked(args) {
 
     // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
     // If the attribute is not yet cached, defaults to false (unlocked).
+    var isLocked = value === 1;
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
+        .success();
+}
+
+/**
+ * Seeds a fault resource to "false" at commission so a freshly commissioned
+ * lock reports a definite "not faulted" state (matching the Zigbee driver)
+ * rather than a null/unknown value. This seed also runs on every synchronize,
+ * so it preserves an existing value (a live fault set by an event) and only
+ * defaults to "false" when the resource has no cached value yet (commission).
+ * These resources have no backing Matter attribute, so there is nothing to
+ * re-read on reconnect.
+ */
+function seedFalse(args) {
+    var resourceId = args.resource.resourceId;
+    var key = args.endpointId + '/' + resourceId;
+    var existing =
+        args.supplements && args.supplements.resources ? args.supplements.resources[key] : null;
+    var value = existing !== null && existing !== undefined ? existing : 'false';
+
+    return Sbmd.result().dataModel.updateResource(args.endpointId, resourceId, value).success();
+}
+
+/**
+ * Maps Matter LockState (enum, cluster 0x0101) attribute reports to the Barton
+ * locked resource. Retained alongside the LockOperation event handler because
+ * LockState is a mandatory attribute while LockOperation is an optional event;
+ * same-value updates are suppressed downstream so the two paths do not produce
+ * duplicate resource-changed events.
+ */
+function handleLockState(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed for LockState');
+    }
+
+    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
     var isLocked = value === 1;
 
     return Sbmd.result()
@@ -189,20 +311,110 @@ function executeUnlock(args) {
 }
 
 /**
- * Maps Matter LockState (enum, cluster 0x0101) reports to the Barton locked
- * resource; locked only when LockState is Locked (1).
+ * Maps Matter DoorLockAlarm events (cluster 0x0101, event 0x0000) to the
+ * jammed, tampered, and invalidCodeEntryLimit resources. Alarm codes with no
+ * corresponding resource are logged and ignored.
  */
-function handleLockState(args) {
-    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+function handleDoorLockAlarm(args) {
+    var fields = Sbmd.Tlv.decode(args.event.tlvBase64);
 
-    if (value === null) {
-        return Sbmd.result().error('TLV decode failed for LockState');
+    if (fields === null) {
+        return Sbmd.result().error('TLV decode failed for DoorLockAlarm');
     }
 
-    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-    var isLocked = value === 1;
+    var alarmCode = fields[0];
+    var result = Sbmd.result();
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
+    if (alarmCode === ALARM_LOCK_JAMMED) {
+        return result.dataModel.updateResource(args.endpointId, RES_JAMMED, 'true').success();
+    }
+
+    if (alarmCode === ALARM_WRONG_CODE_ENTRY_LIMIT) {
+        return result.dataModel
+            .updateResource(args.endpointId, RES_INVALID_CODE_ENTRY_LIMIT, 'true')
+            .success();
+    }
+
+    if (alarmCode === ALARM_FRONT_ESCUTCHEON_REMOVED || alarmCode === ALARM_DOOR_FORCED_OPEN) {
+        return result.dataModel.updateResource(args.endpointId, RES_TAMPERED, 'true').success();
+    }
+
+    return result
+        .log(
+            'DoorLockAlarm: unresourced alarm code 0x' +
+                (typeof alarmCode === 'number' ? alarmCode.toString(16) : String(alarmCode))
+        )
         .success();
+}
+
+/**
+ * Maps a Matter OperationSourceEnum value to the canonical Barton
+ * DOORLOCK_PROFILE_LOCKED_SOURCE_* string used on the locked resource metadata.
+ */
+function mapLockSource(source) {
+    switch (source) {
+        case OP_SOURCE_MANUAL:
+            return SRC_MANUAL;
+        case OP_SOURCE_KEYPAD:
+            return SRC_KEYPAD;
+        case OP_SOURCE_PROPRIETARY_REMOTE:
+        case OP_SOURCE_REMOTE:
+            return SRC_RF;
+        case OP_SOURCE_RFID:
+            return SRC_RFID;
+        case OP_SOURCE_AUTO:
+            return SRC_AUTO;
+        case OP_SOURCE_SCHEDULE:
+            return SRC_SCHEDULE;
+        default:
+            return SRC_UNKNOWN;
+    }
+}
+
+/**
+ * Maps Matter LockOperation events (cluster 0x0101, event 0x0002) to the locked
+ * resource and clears the tampered and invalidCodeEntryLimit fault resources.
+ * A manually-sourced operation additionally clears jammed.
+ */
+function handleLockOperation(args) {
+    var fields = Sbmd.Tlv.decode(args.event.tlvBase64);
+
+    if (fields === null) {
+        return Sbmd.result().error('TLV decode failed for LockOperation');
+    }
+
+    var opType = fields[0];
+    var source = fields[1];
+    var userId = fields[2];
+
+    var isLock = opType === OP_TYPE_LOCK;
+    var isUnlock = opType === OP_TYPE_UNLOCK || opType === OP_TYPE_UNLATCH;
+
+    if (!isLock && !isUnlock) {
+        return Sbmd.result().success();
+    }
+
+    // Attach source/userId metadata to the locked update, mirroring the Zigbee driver.
+    var lockedMeta = {};
+    lockedMeta[META_SOURCE] = mapLockSource(source);
+
+    if (typeof userId === 'number') {
+        lockedMeta[META_USER_ID] = userId;
+    }
+
+    var result = Sbmd.result()
+        .dataModel.updateResource(
+            args.endpointId,
+            RES_LOCKED,
+            isLock ? 'true' : 'false',
+            lockedMeta
+        )
+        .dataModel.updateResource(args.endpointId, RES_TAMPERED, 'false')
+        .dataModel.updateResource(args.endpointId, RES_INVALID_CODE_ENTRY_LIMIT, 'false');
+
+    if (source === OP_SOURCE_MANUAL) {
+        result = result.dataModel.updateResource(args.endpointId, RES_JAMMED, 'false');
+    }
+
+    return result.success();
 }
