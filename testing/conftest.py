@@ -61,10 +61,12 @@ pytest_plugins = [
     # Environments
     "testing.environment.default_environment_orchestrator",
     "testing.environment.descriptor_environment_orchestrator",
+    "testing.environment.onvif_environment_orchestrator",
     # Helpers
     "testing.helpers.http_fixture_server",
     # Mocks
     "testing.mocks.device_descriptor_server",
+    "testing.mocks.onvif_camera_server",
     # Devices
     "testing.mocks.devices.matter.matter_light",
     "testing.mocks.devices.matter.matter_door_lock",
@@ -74,6 +76,9 @@ pytest_plugins = [
     "testing.mocks.devices.matter.matter_ikea_timmerflotte",
     "testing.mocks.devices.matter.matter_temperature_sensor",
     "testing.mocks.devices.matter.matter_humidity_sensor",
+    "testing.mocks.devices.matter.matter_contact_sensor",
+    "testing.mocks.devices.matter.matter_contact_sensor_no_event",
+    "testing.mocks.devices.matter.matter_water_leak_detector",
     # ZHAL
     ## events (load first so pytest can assert-rewrite these modules before
     ## they are imported transitively by other plugins)

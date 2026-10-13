@@ -689,6 +689,110 @@ namespace
     }
 
     // ================================================================
+    // Fault seed preserve-on-unknown (contact sensor / water leak).
+    // The faulted seed re-runs on every synchronize. If the StateValue
+    // attribute supplement is unavailable then (cold cache on reconnect),
+    // an already-set faulted value must be preserved rather than clobbered
+    // by the commission fail-safe default. Mirrors the seed handlers in
+    // contact-sensor.sbmd.js / water-leak-detector.sbmd.js.
+    // ================================================================
+
+    namespace
+    {
+        constexpr const char *kFaultSeedHandler =
+            "(function(args) {"
+            "  var tlv = args.supplements.attributes.stateValue;"
+            "  var value = tlv !== null ? Sbmd.Tlv.decode(tlv) : null;"
+            "  var faulted;"
+            "  if (value === true) { faulted = 'false'; }"
+            "  else if (value === false) { faulted = 'true'; }"
+            "  else {"
+            "    var existing = args.supplements.resources['1/faulted'];"
+            "    faulted = (existing !== null && existing !== undefined) ? existing : 'true';"
+            "  }"
+            "  return Sbmd.result()"
+            "    .dataModel.updateResource('1', 'faulted', faulted)"
+            "    .success();"
+            "})";
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, FaultSeedPreservesExistingWhenStateValueUnavailable)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+        SafeJSValue handler(Ctx(), EvalFunc(kFaultSeedHandler));
+        ASSERT_FALSE(JS_IsException(handler.Get()));
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "faulted", std::nullopt);
+
+        SbmdSupplements sup;
+        sup.attributes = {"stateValue"};
+        sup.resources = {"1/faulted"};
+
+        // StateValue cache miss, but the resource already holds "false" (healthy sensor).
+        FetchAndAddSupplements(
+            Ctx(),
+            args,
+            sup,
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &path) -> std::optional<std::string> {
+                if (path == "1/faulted")
+                {
+                    return "false";
+                }
+
+                return std::nullopt;
+            },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; });
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler.Get(), args);
+        ASSERT_TRUE(result.has_value());
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+
+        ASSERT_EQ(g_updateResourceCalls.size(), 1u);
+        EXPECT_EQ(g_updateResourceCalls[0].resourceId, "faulted");
+        EXPECT_EQ(g_updateResourceCalls[0].value, "false"); // preserved, not clobbered to "true"
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, FaultSeedFailsSafeWhenStateValueAndResourceUnavailable)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+        SafeJSValue handler(Ctx(), EvalFunc(kFaultSeedHandler));
+        ASSERT_FALSE(JS_IsException(handler.Get()));
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "faulted", std::nullopt);
+
+        SbmdSupplements sup;
+        sup.attributes = {"stateValue"};
+        sup.resources = {"1/faulted"};
+
+        // Commission: no cached StateValue and no existing resource value -> fail safe.
+        FetchAndAddSupplements(
+            Ctx(),
+            args,
+            sup,
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; });
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler.Get(), args);
+        ASSERT_TRUE(result.has_value());
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+
+        ASSERT_EQ(g_updateResourceCalls.size(), 1u);
+        EXPECT_EQ(g_updateResourceCalls[0].value, "true"); // commission fail-safe to faulted
+    }
+
+    // ================================================================
     // Declared-supplement contract: every DECLARED supplement key is
     // always a defined JS property (its value, or null) at invocation --
     // never undefined -- even when the prefetch was skipped or a fetch

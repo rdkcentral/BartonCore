@@ -58,6 +58,13 @@ if (BCORE_PHILIPS_HUE)
     set(XTRA_LIBS ${XTRA_LIBS} xhPhilipsHue)
 endif()
 
+# onvif ip cameras (if option set)
+if (BCORE_ONVIF)
+    # add source files (C++ driver + standalone SOAP/WS-Discovery units)
+    file(GLOB_RECURSE onvifSrc "deviceDrivers/onvif/*.cpp")
+    set(SOURCES ${SOURCES} ${onvifSrc})
+endif()
+
 # zigbee (if option set)
 if (BCORE_ZIGBEE)
 

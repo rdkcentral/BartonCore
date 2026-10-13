@@ -465,14 +465,14 @@ gboolean b_core_client_remove_endpoint_by_id(BCoreClient *self, const gchar *dev
  * b_core_client_execute_resource
  * @self: the BCoreClient instance.
  * @uri: the URI of the resource to execute.
- * @payload: JSON payload to send to the resource to execute. (optional)
- * @response: the response from the executed resource.(optional)
+ * @payload: (nullable): JSON payload to send to the resource to execute.
+ * @response: (out) (optional) (nullable) (transfer full): the response from the executed resource.
  *
  * @brief Execute a resource based on the URI with the optional payload.
  *
  * Returns: gboolean - TRUE if the resource was executed successfully.
  */
-gboolean b_core_client_execute_resource(BCoreClient *self, const gchar *uri, const gchar *payload, char **response);
+gboolean b_core_client_execute_resource(BCoreClient *self, const gchar *uri, const gchar *payload, gchar **response);
 
 /**
  * b_core_client_write_resource

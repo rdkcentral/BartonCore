@@ -67,3 +67,15 @@ leak:chip::DeviceLayer::ThreadStackManagerImpl
 # @see Matter Linux platform's BluezObjectManager.[h|cpp]
 # @see Matter Linux platform's PlatformManagerImpl::GLibMatterContextInvokeSync
 leak:chip::DeviceLayer::Internal::BluezObjectManager
+
+# When a subscription's liveness timer expires, the CHIP SDK opens a fresh CASE
+# session via OperationalSessionSetup::Connect and holds the allocation until the
+# connection callbacks fire. If the process shuts down while that reconnect is
+# still in flight (which the fast comm-fail/liveness-override reconnect tests
+# deliberately provoke), the pending OperationalSessionSetup is torn down by
+# process exit before its callbacks run, so its heap allocation is reported as a
+# leak. This is internal Matter session-setup lifetime we do not control.
+#
+# @see Matter's OperationalSessionSetup::Connect / NotifyConnectionCallbacks
+#      (matter/src/app/OperationalSessionSetup.cpp)
+leak:chip::OperationalSessionSetup

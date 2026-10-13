@@ -31,6 +31,7 @@
 #include "barton-core-metadata.h"
 #include "barton-core-resource.h"
 #include "barton-core-status.h"
+#include "deviceService/resourceModes.h"
 #include "events/barton-core-status-event.h"
 #include "glibconfig.h"
 #include "icTypes/icLinkedList.h"
@@ -83,6 +84,9 @@ BCoreResource *convertIcDeviceResourceToGObject(const icDeviceResource *resource
 
         guint mode = resource->mode;
         guint64 dateOfLastSyncMillis = resource->dateOfLastSyncMillis;
+        // Never expose a sensitive resource's value (e.g. credentials) to clients through the API or
+        // events; RESOURCE_MODE_SENSITIVE resources are write-only from a client's perspective.
+        const gchar *value = (mode & RESOURCE_MODE_SENSITIVE) ? NULL : resource->value;
         g_object_set(retVal,
                      B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_ID],
                      resource->id,
@@ -93,7 +97,7 @@ BCoreResource *convertIcDeviceResourceToGObject(const icDeviceResource *resource
                      B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_DEVICE_UUID],
                      resource->deviceUuid,
                      B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
-                     resource->value,
+                     value,
                      B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_TYPE],
                      resource->type,
                      B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_MODE],

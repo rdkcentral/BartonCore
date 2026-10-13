@@ -63,6 +63,12 @@ static pthread_once_t registerExitOnce = PTHREAD_ONCE_INIT;
 bool deviceDriverManagerInitialize()
 {
     icLogDebug(LOG_TAG, "deviceDriverManagerInitialize");
+#ifdef BARTON_CONFIG_ONVIF
+    // The ONVIF driver has no subsystem to initialize it; reference its registration explicitly so it
+    // is pulled from the static archive (BartonCoreStatic) rather than relying on a load-time constructor.
+    extern void onvifDeviceDriverInitialize(void);
+    onvifDeviceDriverInitialize();
+#endif
     return true;
 }
 
