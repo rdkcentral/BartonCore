@@ -66,7 +66,7 @@ On a `LockOperation`, the driver SHALL attach `{ source, userId }` metadata to t
 - **THEN** the `invalidCodeEntryLimit` resource SHALL be updated to `"false"`
 
 #### Scenario: Manual lock operation clears jammed
-- **WHEN** a `LockOperation` event is received and OperationSource == 0x01 (Manual)
+- **WHEN** a `LockOperation` event is received with LockOperationType in {0x00, 0x01, 0x04} and OperationSource == 0x01 (Manual)
 - **THEN** the `jammed` resource SHALL be updated to `"false"`
 
 #### Scenario: Non-manual lock operation does not clear jammed
