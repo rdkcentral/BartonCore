@@ -136,7 +136,8 @@ SbmdDriver({
                     prerequisites: [CL_DOOR_LOCK],
                     seed: {
                         supplements: {
-                            attributes: ['lockState']
+                            attributes: ['lockState'],
+                            resources: ['1/locked']
                         },
                         handler: seedLocked
                     }
@@ -202,13 +203,23 @@ function seedLocked(args) {
     var tlvBase64 = args.supplements.attributes.lockState;
     var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
 
-    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-    // If the attribute is not yet cached, defaults to false (unlocked).
-    var isLocked = value === 1;
+    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched. This seed
+    // re-runs on every synchronize/reconnect, when lockState MAY be uncached. On
+    // an unavailable lockState, preserve the existing locked value so a physically
+    // locked door is not reported as unlocked; default to 'false' only at
+    // commission when no value exists yet.
+    var locked;
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
-        .success();
+    if (value === 1) {
+        locked = 'true';
+    } else if (value !== null && value !== undefined) {
+        locked = 'false';
+    } else {
+        var existing = args.supplements.resources['1/locked'];
+        locked = existing !== null && existing !== undefined ? existing : 'false';
+    }
+
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_LOCKED, locked).success();
 }
 
 /**

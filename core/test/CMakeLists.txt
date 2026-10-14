@@ -286,6 +286,8 @@ if (BCORE_MATTER)
 
     if (TARGET testSbmdDriver)
         target_link_libraries(testSbmdDriver bCoreConfig)
+        target_compile_definitions(testSbmdDriver PRIVATE
+            -DSBMD_SPECS_DIR="${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
     endif()
 
     bcore_add_cpp_test(
