@@ -26,12 +26,15 @@
  */
 
 #include "deviceDrivers/matter/sbmd/SbmdDriver.h"
+#include "deviceDrivers/matter/sbmd/SbmdRegistration.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
 #include <gtest/gtest.h>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 extern "C" {
@@ -814,6 +817,182 @@ namespace
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
+    }
+
+    // ========================================================================
+    // Production seed-handler cold-cache coverage.
+    //
+    // These load the ACTUAL shipped driver files and invoke their real seed
+    // handlers (not a copied representative string) with an unavailable
+    // attribute supplement, so a regression in the production handler is
+    // caught. They guard the preserve-on-unavailable behavior: on a cold
+    // attribute cache during a synchronize re-seed, an existing resource value
+    // must be retained rather than overwritten by the commission default.
+    // ========================================================================
+
+    namespace
+    {
+        std::string ReadSpecFile(const char *filename)
+        {
+            std::ifstream f(std::string(SBMD_SPECS_DIR) + filename, std::ios::binary);
+            std::stringstream ss;
+            ss << f.rdbuf();
+            return ss.str();
+        }
+
+        JSValue FindSeedFn(const SbmdRegistration &reg, const char *endpointId, const char *resourceId)
+        {
+            for (const auto &ep : reg.endpoints)
+            {
+                if (ep.id != endpointId)
+                {
+                    continue;
+                }
+
+                for (const auto &res : ep.resources)
+                {
+                    if (res.id == resourceId && res.seed.has_value())
+                    {
+                        return res.seed->Fn();
+                    }
+                }
+            }
+
+            return JS_UNDEFINED;
+        }
+    }
+
+    // Load a production driver, activate it, invoke the named resource's seed
+    // with the given args object expression, and return the value of the first
+    // updateResource op (or "" on failure).
+    static std::string SeedUpdateValue(const char *specFile,
+                                       const char *endpointId,
+                                       const char *resourceId,
+                                       const std::string &argsExpr)
+    {
+        std::string source = ReadSpecFile(specFile);
+        std::string value;
+
+        // Declared outside the lock scope so the driver destructs AFTER the mutex
+        // is released (its teardown re-acquires the same non-recursive mutex).
+        std::unique_ptr<SbmdDriver> driver;
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+
+            auto reg = SbmdLoader::LoadDriver(ctx, "<test>", source.c_str(), source.size());
+
+            if (reg)
+            {
+                driver = std::make_unique<SbmdDriver>(std::move(reg), source);
+
+                if (driver->Activate(ctx))
+                {
+                    JSValue fn = FindSeedFn(driver->GetRegistration(), endpointId, resourceId);
+
+                    if (!JS_IsUndefined(fn))
+                    {
+                        SafeJSValue handler(ctx, fn);
+                        SafeJSValue args(
+                            ctx, JS_Eval(ctx, argsExpr.c_str(), argsExpr.size(), "<test>", JS_EVAL_RETVAL));
+
+                        if (!JS_IsException(args.Get()) && !JS_StackCheck(ctx, 3))
+                        {
+                            JS_PushArg(ctx, args.Get());
+                            JS_PushArg(ctx, handler.Get());
+                            JS_PushArg(ctx, JS_NULL);
+                            JSValue result = JS_Call(ctx, 1);
+
+                            if (!JS_IsException(result))
+                            {
+                                auto parsed = SbmdResultExecutor::Parse(ctx, result);
+
+                                if (parsed.has_value())
+                                {
+                                    for (const auto &op : parsed->ops)
+                                    {
+                                        if (std::holds_alternative<ResultOp::UpdateResource>(op.data))
+                                        {
+                                            value = std::get<ResultOp::UpdateResource>(op.data).value;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx);
+                    }
+
+                    driver->Deactivate(ctx);
+                }
+            }
+        }
+
+        return value;
+    }
+
+    TEST_F(SbmdDriverTest, DoorLockLockedSeedPreservesLockedOnColdCache)
+    {
+        // lockState unavailable on a re-seed, locked already "true": must NOT
+        // report a physically locked door as unlocked.
+        EXPECT_EQ(SeedUpdateValue("door-lock.sbmd.js",
+                                  "1",
+                                  "locked",
+                                  "({ endpointId: '1', supplements: { attributes: { lockState: null }, "
+                                  "resources: { '1/locked': 'true' } } })"),
+                  "true");
+    }
+
+    TEST_F(SbmdDriverTest, DoorLockLockedSeedDefaultsUnlockedAtCommission)
+    {
+        EXPECT_EQ(SeedUpdateValue("door-lock.sbmd.js",
+                                  "1",
+                                  "locked",
+                                  "({ endpointId: '1', supplements: { attributes: { lockState: null }, "
+                                  "resources: { '1/locked': null } } })"),
+                  "false");
+    }
+
+    TEST_F(SbmdDriverTest, ContactSensorFaultedSeedPreservesOnColdCache)
+    {
+        EXPECT_EQ(SeedUpdateValue("contact-sensor.sbmd.js",
+                                  "1",
+                                  "faulted",
+                                  "({ endpointId: '1', supplements: { attributes: { stateValue: null }, "
+                                  "resources: { '1/faulted': 'false' } } })"),
+                  "false");
+    }
+
+    TEST_F(SbmdDriverTest, ContactSensorFaultedSeedFailsSafeAtCommission)
+    {
+        EXPECT_EQ(SeedUpdateValue("contact-sensor.sbmd.js",
+                                  "1",
+                                  "faulted",
+                                  "({ endpointId: '1', supplements: { attributes: { stateValue: null }, "
+                                  "resources: { '1/faulted': null } } })"),
+                  "true");
+    }
+
+    TEST_F(SbmdDriverTest, WaterLeakFaultedSeedPreservesOnColdCache)
+    {
+        EXPECT_EQ(SeedUpdateValue("water-leak-detector.sbmd.js",
+                                  "1",
+                                  "faulted",
+                                  "({ endpointId: '1', supplements: { attributes: { stateValue: null }, "
+                                  "resources: { '1/faulted': 'true' } } })"),
+                  "true");
+    }
+
+    TEST_F(SbmdDriverTest, WaterLeakFaultedSeedDefaultsNotFaultedAtCommission)
+    {
+        EXPECT_EQ(SeedUpdateValue("water-leak-detector.sbmd.js",
+                                  "1",
+                                  "faulted",
+                                  "({ endpointId: '1', supplements: { attributes: { stateValue: null }, "
+                                  "resources: { '1/faulted': null } } })"),
+                  "false");
     }
 
 } // namespace
