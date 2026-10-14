@@ -324,10 +324,6 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         }
     }
 
-    // Test seam: lets a unit test deterministically overlap this bind — now past activation but
-    // before the device is inserted — with a concurrent last-device removal. No-op in production.
-    OnBindActivatedTestHook();
-
     // The dispatch tables on the driver handle everything.
     device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
 
@@ -498,7 +494,7 @@ void SpecBasedMatterDeviceDriver::DeactivateIfIdle()
     // flight, and no device remains bound (rechecked under devicesMutex) — so a stale empty-map
     // observation, a rolled-back bind, or a device removed mid-bind can neither strand the driver
     // active nor shed state a concurrent bind still relies on.
-    if (driver->IsActivated() && bindsInProgress.load() == 0 && HasNoDevices())
+    if (driver->IsActivated() && bindsInProgress.load() == 0 && GetDeviceCount() == 0)
     {
         driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
 
@@ -514,8 +510,8 @@ void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()
     // takes it internally to release the handler references.
     CancelAllPendingOperations();
 
-    // The last bound device is gone; shed the driver's runtime state back to its claim stub if it is
-    // idle. DeactivateIfIdle defers when a bind is racing this removal (that bind's InFlightBind guard
+    // The last bound device is gone; shed the driver's runtime state back to its claim metadata if it
+    // is idle. DeactivateIfIdle defers when a bind is racing this removal (that bind's InFlightBind guard
     // will tear the driver down if it ends up the last to hold it).
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 

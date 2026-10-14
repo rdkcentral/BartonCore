@@ -257,14 +257,14 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                     continue;
                 }
 
-                // Shrink to the claim stub so an unclaimed driver holds only its metadata.
+                // Reduce to the claim metadata so an unclaimed driver holds only that.
                 std::optional<JSMemoryUsage> usageAfter;
 
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
                     auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
-                    sbmdDriver->Shrink();
+                    sbmdDriver->ReduceToClaimMetadata();
 
                     usageAfter = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
                 }

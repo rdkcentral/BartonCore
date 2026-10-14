@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: SBMD factory loads driver files
-The SBMD factory SHALL scan configured directories for `.sbmd.js` files (instead of `.sbmd` YAML files). For each file, the factory SHALL evaluate it in the mquickjs context, extract claim metadata to C++ structures, and register the driver with `MatterDriverFactory` in the **inactive** state. The factory SHALL NOT activate drivers at startup; after extracting a driver's claim metadata the factory SHALL release the spec source text and heavy parsed registration so that a registered-but-unused driver retains only its claim stub. The factory SHALL no longer use `SbmdParser` or yaml-cpp for driver loading.
+The SBMD factory SHALL scan configured directories for `.sbmd.js` files (instead of `.sbmd` YAML files). For each file, the factory SHALL evaluate it in the mquickjs context, extract claim metadata to C++ structures, and register the driver with `MatterDriverFactory` in the **inactive** state. The factory SHALL NOT activate drivers at startup; after extracting a driver's claim metadata the factory SHALL release the spec source text and heavy parsed registration so that a registered-but-unused driver retains only its claim metadata. The factory SHALL no longer use `SbmdParser` or yaml-cpp for driver loading.
 
 #### Scenario: Factory loads .sbmd.js files
 - **WHEN** the SBMD factory scans the specs directory at startup
@@ -17,7 +17,7 @@ The SBMD factory SHALL scan configured directories for `.sbmd.js` files (instead
 
 #### Scenario: Drivers registered inactive at startup
 - **WHEN** the SBMD factory finishes loading all `.sbmd.js` files at startup and no devices have been commissioned
-- **THEN** every registered driver is in the inactive state, holding only its claim stub, and no handler JSValues are rooted
+- **THEN** every registered driver is in the inactive state, holding only its claim metadata, and no handler JSValues are rooted
 
 ### Requirement: Driver claiming uses C++ metadata
 The driver claiming process (vendor-specific pass, then generic device-type pass) SHALL use C++ metadata extracted at load time. Claiming SHALL NOT require the driver to be activated (handler JSValues rooted). A matching driver SHALL be activated when a device is bound to it, and deactivated when its last bound device is removed.
@@ -28,4 +28,4 @@ The driver claiming process (vendor-specific pass, then generic device-type pass
 
 #### Scenario: Driver deactivated after last device removed
 - **WHEN** the last device bound to a previously active driver is removed
-- **THEN** the driver is deactivated and returns to the inactive claim-stub state, but continues to participate in future claiming using its metadata
+- **THEN** the driver is deactivated and returns to the inactive claim-metadata state, but continues to participate in future claiming using its metadata

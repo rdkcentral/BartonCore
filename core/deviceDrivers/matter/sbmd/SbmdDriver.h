@@ -105,15 +105,15 @@ namespace barton
         void Deactivate(JSContext *ctx);
 
         /**
-         * Shrink a loaded-but-inactive driver to its claim stub: release the load-time handler
+         * Reduce a loaded-but-inactive driver to its claim metadata: release the load-time handler
          * roots and free the retained source text and heavy parsed registration (endpoints,
          * resources, aliases, handler vectors), keeping only the claim metadata resident.
          *
-         * Intended to be called once after load/registration so an unclaimed driver holds only
-         * its stub. No-op if the driver is already a stub; refuses to run on an active driver.
+         * Intended to be called once after load/registration so an unclaimed driver holds only its
+         * claim metadata. No-op if the driver is already reduced; refuses to run on an active driver.
          * Caller must hold MQuickJsRuntime::GetMutex() (ReleaseHandlers() releases GC roots).
          */
-        void Shrink();
+        void ReduceToClaimMetadata();
 
         /**
          * Whether the driver is currently activated (handler references are held alive).
@@ -223,13 +223,13 @@ namespace barton
         /**
          * Read the spec file at registration->filePath into out. Returns false on any I/O error.
          */
-        bool ReadSpecFromDisk(std::string &out) const;
+        bool ReadSpecFromFile(std::string &out) const;
 
         /**
          * Compare a freshly re-evaluated registration's claim-identity fields (name, device class,
-         * device types, vendor/product IDs) against this driver's resident claim stub.
+         * device types, vendor/product IDs) against this driver's resident claim metadata.
          */
-        bool MatchesClaimStub(const SbmdRegistration &fresh) const;
+        bool MatchesClaimMetadata(const SbmdRegistration &fresh) const;
 
         /**
          * Free the retained source text and heavy parsed registration collections, leaving only

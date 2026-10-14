@@ -159,7 +159,7 @@ namespace
 
         /**
          * Write source to a file on disk and create a driver whose filePath is that file, so a
-         * shrunk driver can re-read its spec from disk on activation.
+         * driver reduced to its claim metadata can re-read its spec from disk on activation.
          */
         std::unique_ptr<SbmdDriver> CreateDriverFromFile(const std::string &source, const std::string &path)
         {
@@ -406,7 +406,7 @@ namespace
 
         auto &reg = driver->GetRegistration();
 
-        // Deactivation sheds the heavy parsed registration back to the claim stub.
+        // Deactivation sheds the heavy parsed registration back to the claim metadata.
         EXPECT_TRUE(reg.endpoints.empty());
         EXPECT_TRUE(reg.aliases.empty());
         EXPECT_TRUE(reg.attributeHandlers.empty());
@@ -859,7 +859,7 @@ namespace
     }
 
     // ========================================================================
-    // Shrink to claim stub + activation from disk
+    // Reduce to claim metadata + activation from disk
     // ========================================================================
 
     TEST_F(SbmdDriverTest, ShrinkReleasesRegistrationKeepsMetadata)
@@ -869,7 +869,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink();
+            driver->ReduceToClaimMetadata();
         }
 
         EXPECT_FALSE(driver->IsActivated());
@@ -894,7 +894,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink(); // frees the in-memory source; activation must re-read from disk
+            driver->ReduceToClaimMetadata(); // frees the in-memory source; activation must re-read from disk
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
@@ -920,7 +920,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink();
+            driver->ReduceToClaimMetadata();
             EXPECT_FALSE(driver->Activate(Ctx()));
         }
 
@@ -935,7 +935,7 @@ namespace
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-            driver->Shrink();
+            driver->ReduceToClaimMetadata();
         }
 
         // Overwrite the spec on disk with a different claim identity (device type changed).

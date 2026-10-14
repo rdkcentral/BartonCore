@@ -28,16 +28,50 @@
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include <app/data-model/Decode.h>
-#include <chrono>
 #include <cstring>
-#include <future>
-#include <thread>
 
 extern "C" {
 #include <icTypes/icHashMap.h>
 }
 
 using namespace barton;
+
+namespace barton
+{
+    // Friended (see SpecBasedMatterDeviceDriver.h) so the lifecycle tests can drive the private
+    // bind-lifecycle guard directly: the in-flight counter, the shared idle-teardown primitive, and
+    // the protected last-device hook.
+    class TestableSpecBasedMatterDeviceDriver : public SpecBasedMatterDeviceDriver
+    {
+    public:
+        using SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver;
+
+        // Activate the underlying driver and mirror the active-driver bookkeeping AddDevice performs,
+        // so a later DeactivateIfIdle keeps the gauge balanced.
+        bool ActivateForTest()
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+            if (!driver->Activate(MQuickJsRuntime::Instance().GetSharedContext()))
+            {
+                return false;
+            }
+
+            activeDriverCount.fetch_add(1);
+            return true;
+        }
+
+        void SetBindsInProgress(int n) { bindsInProgress.store(n); }
+
+        void CallOnLastDeviceRemoved() { OnLastDeviceRemoved(); }
+
+        void CallDeactivateIfIdle()
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            DeactivateIfIdle();
+        }
+    };
+} // namespace barton
 
 namespace
 {
@@ -574,12 +608,13 @@ namespace
     }
 
     // ========================================================================
-    // In-flight-bind lifecycle race tests
+    // In-flight-bind lifecycle guard tests
     //
-    // These deterministically overlap an in-progress AddDevice (past activation, before the device
-    // is inserted) with a last-device removal, using the OnBindActivatedTestHook test seam as a
-    // barrier. They verify the guard that keeps a racing removal from shedding an active bind, and
-    // that a failed bind still tears the driver down when it is the last to hold it.
+    // AddDevice brackets itself with the InFlightBind RAII guard (increment bindsInProgress on
+    // entry; decrement and DeactivateIfIdle on exit). These tests pin that guard's contract
+    // directly and deterministically via the friended Testable subclass — no threads, no barrier,
+    // no production test seam: a bind in flight defers last-device teardown, the deferred teardown
+    // is retried once idle, and a bound device suppresses teardown entirely.
     // ========================================================================
 
     const char *kRaceDriverSource = R"(
@@ -603,33 +638,7 @@ namespace
         function readIsOn(args) { return Sbmd.result().success(); }
     )";
 
-    // Exposes the protected last-device hook and barriers the activation seam so a test thread can
-    // step the bind deterministically.
-    class TestableLifecycleDriver : public SpecBasedMatterDeviceDriver
-    {
-    public:
-        using SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver;
-
-        void CallOnLastDeviceRemoved() { OnLastDeviceRemoved(); }
-
-        std::promise<void> reachedHook;
-        std::promise<void> proceed;
-        std::atomic<bool> hookEnabled {false};
-
-    protected:
-        void OnBindActivatedTestHook() override
-        {
-            if (!hookEnabled.load())
-            {
-                return;
-            }
-
-            reachedHook.set_value();
-            proceed.get_future().wait();
-        }
-    };
-
-    class SbmdLifecycleRaceTest : public ::testing::Test
+    class SbmdLifecycleGuardTest : public ::testing::Test
     {
     protected:
         static void SetUpTestSuite()
@@ -658,80 +667,52 @@ namespace
 
             return std::make_unique<SbmdDriver>(std::move(reg), kRaceDriverSource);
         }
-
-        // Drives AddDevice on a worker thread, pauses it at the post-activation seam, runs the
-        // supplied overlap action (a concurrent last-device removal), then releases the bind.
-        void RunOverlappingBind(TestableLifecycleDriver &driver,
-                                SbmdDriver *sbmd,
-                                std::unique_ptr<MatterDevice> device,
-                                bool &bindResult)
-        {
-            driver.hookEnabled = true;
-
-            auto reached = driver.reachedHook.get_future();
-
-            std::thread binder([&driver, &device, &bindResult] { bindResult = driver.AddDevice(std::move(device)); });
-
-            if (reached.wait_for(std::chrono::seconds(10)) != std::future_status::ready)
-            {
-                // Unblock a hook that may arrive late and reap the worker before failing, so
-                // std::thread's destructor does not std::terminate on a still-joinable thread.
-                driver.proceed.set_value();
-                binder.join();
-                FAIL() << "bind never reached the post-activation seam";
-            }
-
-            // The bind has activated the driver but not yet inserted its device.
-            EXPECT_TRUE(sbmd->IsActivated());
-
-            // Simulate the prior last device being removed while the bind is in flight.
-            driver.CallOnLastDeviceRemoved();
-            EXPECT_TRUE(sbmd->IsActivated()) << "an in-flight bind must defer last-device deactivation";
-
-            driver.proceed.set_value();
-            binder.join();
-        }
     };
 
-    TEST_F(SbmdLifecycleRaceTest, FailedBindDeactivatesAfterRacingRemoval)
+    TEST_F(SbmdLifecycleGuardTest, TeardownDeferredWhileBindInFlightThenRetriedWhenIdle)
     {
         auto sbmd = CreateRaceDriver();
         ASSERT_NE(sbmd, nullptr);
 
-        TestableLifecycleDriver driver(sbmd.get());
+        TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
+        ASSERT_TRUE(driver.ActivateForTest());
+        ASSERT_TRUE(sbmd->IsActivated());
 
-        // An unpopulated cache makes ResolveEndpointMap fail, so the bind fails after activation.
-        auto cache = std::make_shared<DeviceDataCache>("race-fail", nullptr);
-        auto device = std::make_unique<TestableMatterDevice>("race-fail", cache);
+        // A bind is in flight (activated, device not yet inserted): a racing last-device removal
+        // must not shed the driver's state out from under it.
+        driver.SetBindsInProgress(1);
+        driver.CallOnLastDeviceRemoved();
+        EXPECT_TRUE(sbmd->IsActivated()) << "teardown must be deferred while a bind is in flight";
 
-        bool bindResult = true;
-        RunOverlappingBind(driver, sbmd.get(), std::move(device), bindResult);
-
-        EXPECT_FALSE(bindResult) << "bind should fail when the device has no resolvable endpoints";
-        EXPECT_FALSE(sbmd->IsActivated()) << "a failed bind that is the last holder must deactivate the driver on exit";
+        // The bind finishes without leaving a device bound: the deferred teardown is retried as the
+        // in-flight count returns to zero, so the driver does not stay active forever.
+        driver.SetBindsInProgress(0);
+        driver.CallDeactivateIfIdle();
+        EXPECT_FALSE(sbmd->IsActivated()) << "deferred teardown must be retried once the driver is idle";
     }
 
-    TEST_F(SbmdLifecycleRaceTest, SuccessfulBindRetainsDriverAfterRacingRemoval)
+    TEST_F(SbmdLifecycleGuardTest, DeactivateIfIdleIsNoOpWhileDeviceBound)
     {
         auto sbmd = CreateRaceDriver();
         ASSERT_NE(sbmd, nullptr);
 
-        TestableLifecycleDriver driver(sbmd.get());
+        TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
 
-        // A cache with a matching endpoint lets ResolveEndpointMap and the bind succeed.
-        auto cache = std::make_shared<DeviceDataCache>("race-ok", nullptr);
+        // Bind a resolvable device through the real AddDevice path, then confirm an idle-teardown
+        // attempt is a no-op because a device is still bound.
+        auto cache = std::make_shared<DeviceDataCache>("idle-dev", nullptr);
         TestableMatterDevice::PopulateTestCache(cache,
                                                 {
                                                     1
         },
                                                 {{1, {0x0100}}});
-        auto device = std::make_unique<TestableMatterDevice>("race-ok", cache);
+        auto device = std::make_unique<TestableMatterDevice>("idle-dev", cache);
 
-        bool bindResult = false;
-        RunOverlappingBind(driver, sbmd.get(), std::move(device), bindResult);
+        ASSERT_TRUE(driver.AddDevice(std::move(device)));
+        ASSERT_TRUE(sbmd->IsActivated());
 
-        EXPECT_TRUE(bindResult) << "bind should succeed with a resolvable device";
-        EXPECT_TRUE(sbmd->IsActivated()) << "the driver stays active while the newly bound device remains";
+        driver.CallDeactivateIfIdle();
+        EXPECT_TRUE(sbmd->IsActivated()) << "a bound device must keep the driver active";
     }
 
 } // namespace

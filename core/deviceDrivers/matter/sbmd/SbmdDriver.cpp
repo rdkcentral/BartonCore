@@ -84,7 +84,7 @@ namespace barton
         icDebug("activating driver '%s'", registration->name.c_str());
 
         // Obtain the spec content: re-use the retained source if present, otherwise read the spec
-        // file from disk. A shrunk (claim-stub) driver has released its source, so it re-reads.
+        // file. A driver reduced to its claim metadata has released its source, so it re-reads.
         std::string diskSource;
         const char *specData = nullptr;
         size_t specLen = 0;
@@ -94,7 +94,7 @@ namespace barton
             specData = source.c_str();
             specLen = source.size();
         }
-        else if (ReadSpecFromDisk(diskSource))
+        else if (ReadSpecFromFile(diskSource))
         {
             specData = diskSource.c_str();
             specLen = diskSource.size();
@@ -118,7 +118,7 @@ namespace barton
 
         // The spec on disk may have changed since load. Refuse to activate against metadata that no
         // longer matches what the device claimed rather than dispatching to a mismatched driver.
-        if (!MatchesClaimStub(*freshReg))
+        if (!MatchesClaimMetadata(*freshReg))
         {
             icError("driver '%s' spec no longer matches its claim metadata; refusing to activate",
                     registration->name.c_str());
@@ -167,23 +167,21 @@ namespace barton
         registration->activated = false;
     }
 
-    void SbmdDriver::Shrink()
+    void SbmdDriver::ReduceToClaimMetadata()
     {
         if (registration->activated)
         {
-            icWarn("refusing to shrink active driver '%s'", registration->name.c_str());
+            icWarn("refusing to reduce active driver '%s'", registration->name.c_str());
             return;
         }
 
-        // Already a stub: source released and heavy collections empty.
-        if (source.empty() && registration->endpoints.empty() && registration->aliases.empty() &&
-            registration->attributeHandlers.empty() && registration->eventHandlers.empty() &&
-            registration->commandHandlers.empty())
+        // Already reduced: source released and heavy collections empty.
+        if (source.empty() && registration->IsReducedToClaimMetadata())
         {
             return;
         }
 
-        icDebug("shrinking driver '%s' to claim stub", registration->name.c_str());
+        icDebug("reducing driver '%s' to its claim metadata", registration->name.c_str());
 
         // Release the load-time handler roots before freeing the collections that hold them.
         ReleaseHandlers();
@@ -191,7 +189,7 @@ namespace barton
         ReleaseHeavyRegistration();
     }
 
-    bool SbmdDriver::ReadSpecFromDisk(std::string &out) const
+    bool SbmdDriver::ReadSpecFromFile(std::string &out) const
     {
         std::ifstream file(registration->filePath, std::ios::binary | std::ios::ate);
 
@@ -214,7 +212,7 @@ namespace barton
         return static_cast<bool>(file);
     }
 
-    bool SbmdDriver::MatchesClaimStub(const SbmdRegistration &fresh) const
+    bool SbmdDriver::MatchesClaimMetadata(const SbmdRegistration &fresh) const
     {
         const auto &stub = *registration;
 
@@ -225,10 +223,10 @@ namespace barton
 
     void SbmdDriver::ReleaseHeavyRegistration()
     {
-        // Reduce the registration to its claim stub — name, file path, device class, and the matter
-        // device-type/vendor/product IDs used for claiming — releasing the source, the heavy parsed
-        // collections, and every non-claim metadata field (swap-with-empty releases capacity). A
-        // subsequent activation re-reads the spec from disk and repopulates everything.
+        // Reduce the registration to its claim metadata — name, file path, device class, and the
+        // matter device-type/vendor/product IDs used for claiming — releasing the source, the heavy
+        // parsed collections, and every non-claim metadata field (swap-with-empty releases capacity).
+        // A subsequent activation re-reads the spec file and repopulates everything.
         std::string().swap(source);
 
         registration->schemaVersion.clear();

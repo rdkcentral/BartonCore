@@ -3,7 +3,7 @@
 ### Requirement: Driver lifecycle — activate and deactivate
 The runtime SHALL support activating a driver (re-reading its `.sbmd.js` file from disk, re-evaluating it, and GC-rooting handler JSValues) and deactivating a driver (releasing GC roots so handler objects are eligible for collection). Metadata required for claiming — device types, vendor/product IDs, device class, name, and the spec file path — SHALL remain available regardless of activation state.
 
-A driver SHALL be loaded in the inactive state. While inactive, the driver SHALL retain only a claim stub (the claiming metadata above) and SHALL NOT retain the spec source text or the heavy parsed registration (endpoint, resource, alias, and handler collections). Deactivation SHALL release the spec source text and the heavy parsed registration in addition to releasing handler GC roots, returning the driver to the claim-stub state. Because an inactive driver does not retain the source text, activation SHALL obtain the spec content by re-reading the spec file from disk at `filePath`; a driver that still holds its source (i.e. has not yet been shrunk) MAY re-evaluate that retained copy instead. In the production flow the factory shrinks every driver immediately after registration, so activation always re-reads from disk.
+A driver SHALL be loaded in the inactive state. While inactive, the driver SHALL retain only its claim metadata (the claiming metadata above) and SHALL NOT retain the spec source text or the heavy parsed registration (endpoint, resource, alias, and handler collections). Deactivation SHALL release the spec source text and the heavy parsed registration in addition to releasing handler GC roots, returning the driver to the claim-metadata state. Because an inactive driver does not retain the source text, activation SHALL obtain the spec content by re-reading the spec file from disk at `filePath`; a driver that still holds its source (i.e. has not yet been reduced to its claim metadata) MAY re-evaluate that retained copy instead. In the production flow the factory reduces every driver to its claim metadata immediately after registration, so activation always re-reads from disk.
 
 A driver SHALL remain activated for as long as at least one device is bound to it, and SHALL be deactivated only when its last bound device is removed. Before deactivation, any outstanding deferred operations SHALL be settled (completed as failures) so their handler references are released and no late response can dispatch against an inactive driver.
 
@@ -13,7 +13,7 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 
 #### Scenario: Driver deactivated when last device removed
 - **WHEN** the last device bound to a driver is removed
-- **THEN** the driver is deactivated, its handler GC roots are released, and its spec source text and heavy parsed registration are released back to the claim-stub state
+- **THEN** the driver is deactivated, its handler GC roots are released, and its spec source text and heavy parsed registration are released back to the claim-metadata state
 
 #### Scenario: Driver stays active while any device remains
 - **WHEN** a device bound to a driver is removed but at least one other device remains bound to the same driver
@@ -27,7 +27,7 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 - **WHEN** a driver is inactive
 - **THEN** its device types, vendor/product IDs, device class, name, and spec file path remain accessible for claiming decisions
 
-#### Scenario: Inactive driver retains only the claim stub
+#### Scenario: Inactive driver retains only its claim metadata
 - **WHEN** a driver has been loaded but not yet claimed by any device, or has been deactivated after its last device was removed
 - **THEN** the driver does not retain the spec source text or the heavy parsed registration (endpoints, resources, aliases, handler references)
 
@@ -35,8 +35,8 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 - **WHEN** an inactive driver is activated
 - **THEN** the runtime reads the spec file from `filePath`, re-evaluates it, and rebuilds the parsed registration and dispatch tables
 
-#### Scenario: Activation rejects a spec that no longer matches its claim stub
-- **WHEN** an inactive driver is activated and the re-read spec's claim-identity fields (name, device types, vendor/product IDs, device class) no longer match the claim stub, or the spec file cannot be read or parsed
+#### Scenario: Activation rejects a spec that no longer matches its claim metadata
+- **WHEN** an inactive driver is activated and the re-read spec's claim-identity fields (name, device types, vendor/product IDs, device class) no longer match the claim metadata, or the spec file cannot be read or parsed
 - **THEN** activation fails, the failure is logged, and the device bind is aborted rather than dispatching against a mismatched or partially built driver
 
 #### Scenario: Activation rejects a spec whose device-class or profile version changed

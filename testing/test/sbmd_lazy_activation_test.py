@@ -25,7 +25,7 @@
 """
 Integration tests for lazy SBMD driver activation.
 
-At startup SBMD drivers are loaded inactive (claim-stub only). A driver is
+At startup SBMD drivers are loaded inactive (claim metadata only). A driver is
 activated when a device first binds to it. These tests verify that behavior
 through the activation observability metrics:
 
@@ -44,14 +44,6 @@ from testing.mocks.devices.matter.matter_temperature_sensor import (
     MatterTemperatureSensor,
 )
 from testing.utils.barton_utils import commission_device, resource_uri
-
-_DEFERRED_SPEC = (
-    Path(__file__).resolve().parent.parent.parent
-    / "testing"
-    / "resources"
-    / "sbmd-specs"
-    / "deferred-command-test.sbmd.js"
-)
 
 pytestmark = [
     pytest.mark.requires_matterjs,
@@ -361,31 +353,39 @@ _COMMISSION_RESOLVE_TIMEOUT = 30
 
 
 @contextlib.contextmanager
-def _patched_spec(old, new):
-    """Replace the first occurrence of old with new in the deferred test spec on disk,
+def _patched_spec(spec_path, old, new):
+    """Replace the first occurrence of old with new in the given spec file on disk,
     restoring the original content afterward even on failure."""
-    original = _DEFERRED_SPEC.read_text()
-    assert old in original, f"expected {old!r} in {_DEFERRED_SPEC}"
+    spec_path = Path(spec_path)
+    original = spec_path.read_text()
+    assert old in original, f"expected {old!r} in {spec_path}"
 
     try:
-        _DEFERRED_SPEC.write_text(original.replace(old, new, 1))
+        spec_path.write_text(original.replace(old, new, 1))
         yield
     finally:
-        _DEFERRED_SPEC.write_text(original)
+        spec_path.write_text(original)
 
 
-def _assert_bind_rejected_on_version_change(default_environment, device, old, new):
+def _assert_bind_rejected_on_version_change(environment, device, old, new):
     """With Barton already running (drivers constructed from the original spec), change a
     version in the spec on disk and verify commissioning is rejected: the on-demand activation
     re-reads the changed spec, the version no longer matches the cached value, and the bind
-    fails so the device is never added and the activation is rolled back."""
-    client = default_environment.get_client()
+    fails so the device is never added and the activation is rolled back.
+
+    The spec is patched in the environment's isolated per-test specs copy, never the checked-in
+    resources, so this test leaves no working-tree changes even if interrupted."""
+
+    client = environment.get_client()
     # Ensure Barton is up and drivers were constructed from the original spec before patching.
     client.get_telemetry()
 
+    spec_path = (
+        Path(environment.get_sbmd_test_specs_dir()) / "deferred-command-test.sbmd.js"
+    )
     appeared = False
 
-    with _patched_spec(old, new):
+    with _patched_spec(spec_path, old, new):
         # commission_device reports only whether the detached commissioning attempt started;
         # the bind (and its rejection) happens later on that thread. Assert the request started
         # so a failure to even begin can't masquerade as a rejection via the no-event timeout.
@@ -398,9 +398,7 @@ def _assert_bind_rejected_on_version_change(default_environment, device, old, ne
         # successful bind would fire device-added (returns immediately), while a rejected bind
         # never does and the wait times out. Restoring only happens on leaving this block.
         try:
-            default_environment.wait_for_device_added(
-                timeout=_COMMISSION_RESOLVE_TIMEOUT
-            )
+            environment.wait_for_device_added(timeout=_COMMISSION_RESOLVE_TIMEOUT)
             appeared = True
         except AssertionError:
             # No device-added within the window; confirm none of the class slipped in regardless.
@@ -416,10 +414,10 @@ def _assert_bind_rejected_on_version_change(default_environment, device, old, ne
 
 
 def test_bind_rejected_when_device_class_version_changes(
-    default_environment, matter_deferred_cmd_test_device
+    isolated_sbmd_default_environment, matter_deferred_cmd_test_device
 ):
     _assert_bind_rejected_on_version_change(
-        default_environment,
+        isolated_sbmd_default_environment,
         matter_deferred_cmd_test_device,
         "deviceClassVersion: 1",
         "deviceClassVersion: 2",
@@ -427,10 +425,10 @@ def test_bind_rejected_when_device_class_version_changes(
 
 
 def test_bind_rejected_when_profile_version_changes(
-    default_environment, matter_deferred_cmd_test_device
+    isolated_sbmd_default_environment, matter_deferred_cmd_test_device
 ):
     _assert_bind_rejected_on_version_change(
-        default_environment,
+        isolated_sbmd_default_environment,
         matter_deferred_cmd_test_device,
         "profileVersion: 1",
         "profileVersion: 2",
@@ -438,12 +436,12 @@ def test_bind_rejected_when_profile_version_changes(
 
 
 def test_bind_rejected_when_profile_version_out_of_range(
-    default_environment, matter_deferred_cmd_test_device
+    isolated_sbmd_default_environment, matter_deferred_cmd_test_device
 ):
     # The base driver caches profile versions as 8-bit values. 257 narrows to 1 (== the cached
     # value), so a narrowing comparison would wrongly accept it; the out-of-range guard must reject.
     _assert_bind_rejected_on_version_change(
-        default_environment,
+        isolated_sbmd_default_environment,
         matter_deferred_cmd_test_device,
         "profileVersion: 1",
         "profileVersion: 257",
@@ -451,14 +449,14 @@ def test_bind_rejected_when_profile_version_out_of_range(
 
 
 def test_bind_rejected_when_profile_set_changes(
-    default_environment, matter_deferred_cmd_test_device
+    isolated_sbmd_default_environment, matter_deferred_cmd_test_device
 ):
     # Renaming the endpoint profile removes the cached 'deferredCmdTest' profile from the re-read
     # spec (and adds an unknown one), so the profile set no longer matches what was registered at
     # load. The claim identity (device class, device types) is unchanged, so this exercises the
-    # profile-set rejection rather than the claim-stub check.
+    # profile-set rejection rather than the claim-metadata check.
     _assert_bind_rejected_on_version_change(
-        default_environment,
+        isolated_sbmd_default_environment,
         matter_deferred_cmd_test_device,
         "profile: 'deferredCmdTest'",
         "profile: 'deferredCmdTestRenamed'",
