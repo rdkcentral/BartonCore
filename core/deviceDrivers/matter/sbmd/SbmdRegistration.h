@@ -208,6 +208,13 @@ namespace barton
 
         // Whether handler JSValues are currently held alive (driver is activated)
         bool activated = false;
+
+        // True once the heavy parsed data has been released and only the claim metadata remains.
+        bool IsReducedToClaimMetadata() const
+        {
+            return endpoints.empty() && aliases.empty() && attributeHandlers.empty() && eventHandlers.empty() &&
+                   commandHandlers.empty();
+        }
     };
 
 } // namespace barton

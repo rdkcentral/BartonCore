@@ -44,6 +44,25 @@ import {DimmablePlugInUnitDevice, DimmablePlugInUnitRequirements} from '@matter/
 import {VirtualDevice} from './VirtualDevice.js';
 import {parseArgs} from './parseArgs.js';
 
+// Module-level gate (each virtual device runs in its own node process) used to withhold the
+// OnOff Toggle command response on demand, so tests can hold a deferred SBMD operation pending.
+let toggleGate = null; // Promise the toggle handler awaits while armed, or null
+let releaseToggleGate = null; // Resolver for toggleGate
+
+/**
+ * OnOffServer whose Toggle command response can be withheld: when armed via the armToggleHang
+ * side-band op, toggle() blocks until releaseToggle is sent. Unarmed, it behaves normally.
+ */
+class GatedOnOffServer extends DimmablePlugInUnitRequirements.OnOffServer {
+    async toggle() {
+        if (toggleGate) {
+            await toggleGate;
+        }
+
+        return super.toggle();
+    }
+}
+
 export class DeferredCmdTestDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
@@ -52,6 +71,27 @@ export class DeferredCmdTestDevice extends VirtualDevice {
         });
 
         this.registerOperation('getState', () => this.handleGetState());
+
+        // Withhold the next Toggle response until releaseToggle, to hold a deferred op pending.
+        this.registerOperation('armToggleHang', () => {
+            if (!toggleGate) {
+                toggleGate = new Promise((resolve) => {
+                    releaseToggleGate = resolve;
+                });
+            }
+
+            return {armed: true};
+        });
+
+        this.registerOperation('releaseToggle', () => {
+            if (releaseToggleGate) {
+                releaseToggleGate();
+                releaseToggleGate = null;
+                toggleGate = null;
+            }
+
+            return {released: true};
+        });
     }
 
     getDeviceType() {
@@ -63,7 +103,7 @@ export class DeferredCmdTestDevice extends VirtualDevice {
         return [
             new Endpoint(
                 DimmablePlugInUnitDevice.with(
-                    DimmablePlugInUnitRequirements.OnOffServer,
+                    GatedOnOffServer,
                     DimmablePlugInUnitRequirements.LevelControlServer
                 ),
                 {

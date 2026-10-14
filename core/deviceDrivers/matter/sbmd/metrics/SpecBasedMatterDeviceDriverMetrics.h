@@ -44,6 +44,17 @@ namespace barton
         /** Record the in-flight gauge after a new deferred op is registered. */
         void RecordDeferredStart(int64_t inFlight);
 
+        /** Record a driver activation: bump the activation counter, set the active-driver gauge to
+         *  activeCount, and record the on-demand activation duration. */
+        void RecordDriverActivated(const char *driver, int64_t activeCount, double durationMs);
+
+        /** Record a driver deactivation, updating the active-driver gauge to activeCount. */
+        void RecordDriverDeactivated(const char *driver, int64_t activeCount);
+
+        /** Set the active-driver gauge to activeCount without recording an activation event.
+         *  Used to publish the true active-driver count (e.g. at factory startup). */
+        void RecordActiveDriverCount(int64_t activeCount);
+
         /** Record a deferred op overall-deadline timeout. */
         void RecordDeferredTimeout(const char *driver, const char *opType, const char *resourceId);
 
@@ -68,6 +79,10 @@ namespace barton
         ObservabilityGauge *deferredInFlightGauge = nullptr;
         ObservabilityHistogram *deferredDurationHisto = nullptr;
         ObservabilityHistogram *deferralDepthHisto = nullptr;
+        ObservabilityCounter *driverActivationCounter = nullptr;
+        ObservabilityCounter *driverDeactivationCounter = nullptr;
+        ObservabilityGauge *activeDriversGauge = nullptr;
+        ObservabilityHistogram *driverActivationDurationHisto = nullptr;
     };
 
 } // namespace barton
@@ -80,6 +95,12 @@ namespace barton
     {
     public:
         void RecordDeferredStart(int64_t) {}
+
+        void RecordDriverActivated(const char *, int64_t, double) {}
+
+        void RecordDriverDeactivated(const char *, int64_t) {}
+
+        void RecordActiveDriverCount(int64_t) {}
 
         void RecordDeferredTimeout(const char *, const char *, const char *) {}
 

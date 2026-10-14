@@ -27,6 +27,9 @@
 
 import pytest
 
+import shutil
+from pathlib import Path
+
 from testing.environment.base_environment_orchestrator import BaseEnvironmentOrchestrator
 
 
@@ -37,8 +40,8 @@ class DefaultEnvironmentOrchestrator(BaseEnvironmentOrchestrator):
     and implements the necessary methods to configure the Barton client
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, sbmd_test_specs_dir=None):
+        super().__init__(sbmd_test_specs_dir=sbmd_test_specs_dir)
 
     def _configure_client(self):
         """
@@ -82,3 +85,29 @@ def default_environment():
         yield default_env
     finally:
         default_env._cleanup()
+
+
+@pytest.fixture
+def isolated_sbmd_default_environment(tmp_path):
+    """
+    Default environment whose SBMD test specs are an isolated per-test copy.
+
+    Tests that mutate a spec file on disk (e.g. to exercise re-read validation) use this instead of
+    `default_environment` so they never modify the checked-in `testing/resources/sbmd-specs` files.
+    This keeps the working tree clean even if the test process is killed mid-run, and lets such tests
+    run in parallel without fighting over a shared spec file. Use `get_sbmd_test_specs_dir()` to find
+    the copy to patch.
+    """
+    source_specs = (
+        Path(__file__).parent.parent.parent / "testing" / "resources" / "sbmd-specs"
+    )
+    temp_specs = tmp_path / "sbmd-specs"
+    shutil.copytree(source_specs, temp_specs)
+
+    env = DefaultEnvironmentOrchestrator(sbmd_test_specs_dir=temp_specs)
+    env.start_client()
+    env.wait_for_client_to_be_ready()
+    try:
+        yield env
+    finally:
+        env._cleanup()

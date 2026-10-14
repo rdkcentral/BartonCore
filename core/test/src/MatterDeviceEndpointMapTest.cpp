@@ -24,13 +24,54 @@
 #include "MatterDeviceTestHelpers.h"
 #include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include <app/data-model/Decode.h>
+#include <cstring>
 
 extern "C" {
 #include <icTypes/icHashMap.h>
 }
 
 using namespace barton;
+
+namespace barton
+{
+    // Friended (see SpecBasedMatterDeviceDriver.h) so the lifecycle tests can drive the private
+    // bind-lifecycle guard directly: the in-flight counter, the shared idle-teardown primitive, and
+    // the protected last-device hook.
+    class TestableSpecBasedMatterDeviceDriver : public SpecBasedMatterDeviceDriver
+    {
+    public:
+        using SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver;
+
+        // Activate the underlying driver and mirror the active-driver bookkeeping AddDevice performs,
+        // so a later DeactivateIfIdle keeps the gauge balanced.
+        bool ActivateForTest()
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+            if (!driver->Activate(MQuickJsRuntime::Instance().GetSharedContext()))
+            {
+                return false;
+            }
+
+            activeDriverCount.fetch_add(1);
+            return true;
+        }
+
+        void SetBindsInProgress(int n) { bindsInProgress.store(n); }
+
+        void CallOnLastDeviceRemoved() { OnLastDeviceRemoved(); }
+
+        void CallDeactivateIfIdle()
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            DeactivateIfIdle();
+        }
+    };
+} // namespace barton
 
 namespace
 {
@@ -564,6 +605,114 @@ namespace
         ASSERT_NE(v2, nullptr);
         EXPECT_NE(*v1, *v2);
         EXPECT_EQ(*v2, *v1 + 1);
+    }
+
+    // ========================================================================
+    // In-flight-bind lifecycle guard tests
+    //
+    // AddDevice brackets itself with the InFlightBind RAII guard (increment bindsInProgress on
+    // entry; decrement and DeactivateIfIdle on exit). These tests pin that guard's contract
+    // directly and deterministically via the friended Testable subclass — no threads, no barrier,
+    // no production test seam: a bind in flight defers last-device teardown, the deferred teardown
+    // is retried once idle, and a bound device suppresses teardown entirely.
+    // ========================================================================
+
+    const char *kRaceDriverSource = R"(
+        SbmdDriver({
+            schemaVersion: "4.0",
+            driverVersion: 1,
+            name: "RaceTestDriver",
+            constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0 },
+            barton: { deviceClass: "raceLight", deviceClassVersion: 1 },
+            matter: { deviceTypes: [0x0100] },
+            aliases: { onOff: { clusterId: CL_ON_OFF, attributeId: ATTR_ON_OFF, type: "bool" } },
+            endpoints: {
+                "1": {
+                    profile: "raceLight",
+                    profileVersion: 1,
+                    resources: { isOn: { type: "boolean", modes: ["read"], read: readIsOn } },
+                },
+            },
+        });
+
+        function readIsOn(args) { return Sbmd.result().success(); }
+    )";
+
+    class SbmdLifecycleGuardTest : public ::testing::Test
+    {
+    protected:
+        static void SetUpTestSuite()
+        {
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(512 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+            ASSERT_NE(ctx, nullptr);
+            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
+            ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
+        }
+
+        static void TearDownTestSuite() { MQuickJsRuntime::Instance().Shutdown(); }
+
+        std::unique_ptr<SbmdDriver> CreateRaceDriver()
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto reg = SbmdLoader::LoadDriver(MQuickJsRuntime::Instance().GetSharedContext(),
+                                              "<race-test>",
+                                              kRaceDriverSource,
+                                              strlen(kRaceDriverSource));
+
+            if (!reg)
+            {
+                return nullptr;
+            }
+
+            return std::make_unique<SbmdDriver>(std::move(reg), kRaceDriverSource);
+        }
+    };
+
+    TEST_F(SbmdLifecycleGuardTest, TeardownDeferredWhileBindInFlightThenRetriedWhenIdle)
+    {
+        auto sbmd = CreateRaceDriver();
+        ASSERT_NE(sbmd, nullptr);
+
+        TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
+        ASSERT_TRUE(driver.ActivateForTest());
+        ASSERT_TRUE(sbmd->IsActivated());
+
+        // A bind is in flight (activated, device not yet inserted): a racing last-device removal
+        // must not shed the driver's state out from under it.
+        driver.SetBindsInProgress(1);
+        driver.CallOnLastDeviceRemoved();
+        EXPECT_TRUE(sbmd->IsActivated()) << "teardown must be deferred while a bind is in flight";
+
+        // The bind finishes without leaving a device bound: the deferred teardown is retried as the
+        // in-flight count returns to zero, so the driver does not stay active forever.
+        driver.SetBindsInProgress(0);
+        driver.CallDeactivateIfIdle();
+        EXPECT_FALSE(sbmd->IsActivated()) << "deferred teardown must be retried once the driver is idle";
+    }
+
+    TEST_F(SbmdLifecycleGuardTest, DeactivateIfIdleIsNoOpWhileDeviceBound)
+    {
+        auto sbmd = CreateRaceDriver();
+        ASSERT_NE(sbmd, nullptr);
+
+        TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
+
+        // Bind a resolvable device through the real AddDevice path, then confirm an idle-teardown
+        // attempt is a no-op because a device is still bound.
+        auto cache = std::make_shared<DeviceDataCache>("idle-dev", nullptr);
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    1
+        },
+                                                {{1, {0x0100}}});
+        auto device = std::make_unique<TestableMatterDevice>("idle-dev", cache);
+
+        ASSERT_TRUE(driver.AddDevice(std::move(device)));
+        ASSERT_TRUE(sbmd->IsActivated());
+
+        driver.CallDeactivateIfIdle();
+        EXPECT_TRUE(sbmd->IsActivated()) << "a bound device must keep the driver active";
     }
 
 } // namespace
