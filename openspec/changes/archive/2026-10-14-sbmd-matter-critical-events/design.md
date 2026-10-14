@@ -29,7 +29,7 @@ The Zigbee door lock driver (`zigbeeDoorLockDeviceDriver.c` + `doorLockCluster.c
 
 ### Decision 1: Dual-path live updates (attribute handler + event handler)
 
-All three drivers keep their existing `attributeHandlers` live-update handler **and** add an `eventHandlers` handler for the same state, both active. A `seed` handler additionally reads the relevant attribute once at commission time to establish initial resource state.
+All three drivers keep their existing `attributeHandlers` live-update handler **and** add an `eventHandlers` handler for the same state, both active. A `seed` handler additionally reads the relevant attribute to establish initial resource state at commission and re-establish it on each synchronize/reconnect (see Decision 5 for how the re-seed preserves an existing value when the attribute is unavailable).
 
 **Rationale**: The event alone is not a safe replacement for the attribute in released Matter 1.5.1:
 - `BooleanState.StateChange` is **optional** conformance (mandatory only under an in-progress spec ifdef) and **INFO** priority — a spec-conformant contact/leak sensor may never emit it. Removing `handleStateValue` would leave `faulted` frozen on such devices.
