@@ -267,11 +267,12 @@ static bool cameraStreamFunc(BCoreClient *client, gint argc, gchar **argv)
     }
 
     // Verify device exists
-    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, deviceId);
+    g_autoptr(GError) err = NULL;
+    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, deviceId, &err);
 
     if (device == NULL)
     {
-        emitError("Device '%s' not found\n", deviceId);
+        emitLookupFailure(err, "Device '%s'", deviceId);
 
         return false;
     }

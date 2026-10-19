@@ -192,11 +192,14 @@ bool deviceServiceIsReadyForPairing(void);
 
 /**
  * device service is ready for devices operations or not
+ * Becomes true only after every device needing startup reconfiguration is flagged as pending, and false once shutdown
+ * begins; the public client's NOT_READY gate relies on this.
  * @return true if device service is ready for device operation
  */
 bool deviceServiceIsReadyForDeviceOperation(void);
 /*
  * Checks if the device needs reconfiguration
+ * Supported private API: reads the device from the database, so it may be called for any known device at any time.
  *
  * @param deviceUuid the uuid of device
  * @return true if reconfiguration is required for the device

@@ -224,6 +224,8 @@ icLinkedList *__wrap_zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToS
                                                       uint32_t numScans);
 bool __wrap_deviceServiceRestoreConfig(const char *tempRestoreDir);
 bool __wrap_deviceServiceReloadDatabase(void);
+bool __wrap_deviceServiceIsReadyForDeviceOperation(void);
+bool __wrap_deviceServiceIsReconfigurationPending(const char *deviceUuid);
 
 // Mock Signal Handlers
 #define DECLARE_MOCK_EVENT_HANDLER(eventType)                                                                          \
@@ -355,8 +357,27 @@ static void registerSignalHandlers(BCoreClient *client)
                      NULL);
 }
 
+// Control the readiness/reconfiguration gate for client query APIs. Default to ready with no device
+// reconfiguring so existing tests exercise the normal path; gating tests toggle these.
+static bool mockServiceReady = true;
+static const char *mockReconfiguringUuid = NULL;
+
+// Reset the gate globals so a test that toggles them cannot bleed into other tests. Gating tests use
+// this as per-test setup (cmocka skips teardown when a test fails, but always runs setup) and as
+// teardown (so the tests without a reset that follow start from the defaults).
+static int reset_reconfiguration_mocks(void **state)
+{
+    (void) state;
+    mockServiceReady = true;
+    mockReconfiguringUuid = NULL;
+
+    return 0;
+}
+
 static int setup_b_core_client(void **state)
 {
+    reset_reconfiguration_mocks(state);
+
     g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
 
     expect_function_call(__wrap_deviceServiceInitialize);
@@ -776,11 +797,11 @@ static void test_b_core_client_get_device_by_id(void **state)
     BCoreClient *client = *state;
 
     // NULL client, valid id
-    g_autoptr(BCoreDevice) result1 = b_core_client_get_device_by_id(NULL, "id");
+    g_autoptr(BCoreDevice) result1 = b_core_client_get_device_by_id(NULL, "id", NULL);
     assert_null(result1);
 
     // valid client, NULL id
-    g_autoptr(BCoreDevice) result2 = b_core_client_get_device_by_id(client, NULL);
+    g_autoptr(BCoreDevice) result2 = b_core_client_get_device_by_id(client, NULL, NULL);
     assert_null(result2);
 
     // valid client, valid id
@@ -792,12 +813,194 @@ static void test_b_core_client_get_device_by_id(void **state)
     expect_string(__wrap_deviceServiceGetDevice, uuid, id);
     will_return(__wrap_deviceServiceGetDevice, g_steal_pointer(&device));
 
-    g_autoptr(BCoreDevice) result3 = b_core_client_get_device_by_id(client, id);
+    g_autoptr(BCoreDevice) result3 = b_core_client_get_device_by_id(client, id, NULL);
     assert_non_null(result3);
 
     g_autofree gchar *resultId = NULL;
     g_object_get(result3, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], &resultId, NULL);
     assert_string_equal(resultId, id);
+}
+
+// Every public entry point that refuses to serve while the service is not ready or the targeted device is
+// reconfiguring. Each targets device "gated-uuid".
+typedef enum
+{
+    GATED_GET_DEVICE_BY_ID,
+    GATED_GET_DEVICE_BY_URI,
+    GATED_GET_ENDPOINT_BY_ID,
+    GATED_GET_ENDPOINT_BY_URI,
+    GATED_GET_RESOURCE_BY_URI,
+    GATED_READ_RESOURCE,
+    GATED_READ_METADATA,
+    GATED_WRITE_METADATA,
+    GATED_ENTRY_POINT_COUNT
+} GatedEntryPoint;
+
+// Returns TRUE if the entry point produced a result. No backend expectations are queued by callers,
+// so reaching the backend fails the test (cmocka strict function_called checking).
+static gboolean invoke_gated_entry_point(BCoreClient *client, GatedEntryPoint entry_point, GError **error)
+{
+    switch (entry_point)
+    {
+        case GATED_GET_DEVICE_BY_ID:
+        {
+            g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, "gated-uuid", error);
+
+            return device != NULL;
+        }
+        case GATED_GET_DEVICE_BY_URI:
+        {
+            g_autoptr(BCoreDevice) device = b_core_client_get_device_by_uri(client, "/gated-uuid", error);
+
+            return device != NULL;
+        }
+        case GATED_GET_ENDPOINT_BY_ID:
+        {
+            g_autoptr(BCoreEndpoint) endpoint = b_core_client_get_endpoint_by_id(client, "gated-uuid", "1", error);
+
+            return endpoint != NULL;
+        }
+        case GATED_GET_ENDPOINT_BY_URI:
+        {
+            g_autoptr(BCoreEndpoint) endpoint = b_core_client_get_endpoint_by_uri(client, "/gated-uuid/ep/1", error);
+
+            return endpoint != NULL;
+        }
+        case GATED_GET_RESOURCE_BY_URI:
+        {
+            g_autoptr(BCoreResource) resource =
+                b_core_client_get_resource_by_uri(client, "/gated-uuid/ep/1/r/temp", error);
+
+            return resource != NULL;
+        }
+        case GATED_READ_RESOURCE:
+        {
+            g_autofree gchar *value = b_core_client_read_resource(client, "/gated-uuid/ep/1/r/temp", error);
+
+            return value != NULL;
+        }
+        case GATED_READ_METADATA:
+        {
+            g_autofree gchar *value = b_core_client_read_metadata(client, "/gated-uuid/m/key", error);
+
+            return value != NULL;
+        }
+        case GATED_WRITE_METADATA:
+            return b_core_client_write_metadata(client, "/gated-uuid/m/key", "value", error);
+        default:
+            fail_msg("unknown gated entry point %d", entry_point);
+
+            return FALSE;
+    }
+}
+
+static void assert_all_gated_entry_points_refuse(BCoreClient *client, BCoreServiceStateError expected_code)
+{
+    for (int entry_point = 0; entry_point < GATED_ENTRY_POINT_COUNT; entry_point++)
+    {
+        g_autoptr(GError) error = NULL;
+
+        assert_false(invoke_gated_entry_point(client, entry_point, &error));
+        assert_non_null(error);
+        assert_int_equal(error->domain, B_CORE_CLIENT_ERROR);
+        assert_int_equal(error->code, expected_code);
+    }
+}
+
+static void test_b_core_client_gated_entry_points_not_ready(void **state)
+{
+    mockServiceReady = false;
+
+    assert_all_gated_entry_points_refuse(*state, B_CORE_SERVICE_STATE_ERROR_NOT_READY);
+}
+
+static void test_b_core_client_gated_entry_points_reconfiguring(void **state)
+{
+    mockReconfiguringUuid = "gated-uuid";
+
+    assert_all_gated_entry_points_refuse(*state, B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING);
+}
+
+// Not-ready takes precedence, since readiness is checked before any per-device state.
+static void test_b_core_client_gated_entry_points_not_ready_and_reconfiguring(void **state)
+{
+    mockServiceReady = false;
+    mockReconfiguringUuid = "gated-uuid";
+
+    assert_all_gated_entry_points_refuse(*state, B_CORE_SERVICE_STATE_ERROR_NOT_READY);
+}
+
+// Only the owning device (the uri's first path segment) is gated; malformed uris carry no owning
+// device, so they fall through to the backend, which finds nothing.
+static void test_b_core_client_uri_gate_passes_other_and_malformed_uris(void **state)
+{
+    BCoreClient *client = *state;
+    mockReconfiguringUuid = "gated-uuid";
+
+    const char *uris[] = {"/other-uuid/ep/1/r/temp", "/", "gated-uuid/ep/1/r/temp", "//gated-uuid/ep/1/r/temp"};
+
+    for (size_t i = 0; i < G_N_ELEMENTS(uris); i++)
+    {
+        expect_function_call(__wrap_deviceServiceGetResourceByUri);
+        expect_string(__wrap_deviceServiceGetResourceByUri, uri, uris[i]);
+        will_return(__wrap_deviceServiceGetResourceByUri, NULL);
+
+        g_autoptr(GError) error = NULL;
+        g_autoptr(BCoreResource) result = b_core_client_get_resource_by_uri(client, uris[i], &error);
+        assert_null(result);
+        assert_null(error);
+    }
+}
+
+// List getters are never gated: a reconfiguring device still exists, and an empty list before ready
+// would be indistinguishable from "no devices" to callers that mirror the list.
+static void test_b_core_client_get_devices_ignores_gate(void **state)
+{
+    BCoreClient *client = *state;
+    mockServiceReady = false;
+    mockReconfiguringUuid = "reconf-uuid";
+
+    icLinkedList *devices = linkedListCreate();
+    icDevice *idleDevice = calloc(1, sizeof(icDevice));
+    idleDevice->uuid = strdup("idle-uuid");
+    icDevice *reconfDevice = calloc(1, sizeof(icDevice));
+    reconfDevice->uuid = strdup("reconf-uuid");
+    linkedListAppend(devices, idleDevice);
+    linkedListAppend(devices, reconfDevice);
+
+    will_return(__wrap_deviceServiceGetAllDevices, g_steal_pointer(&devices));
+    expect_function_call(__wrap_deviceServiceGetAllDevices);
+
+    g_autolist(BCoreDevice) result = b_core_client_get_devices(client);
+    assert_int_equal(g_list_length(result), 2);
+
+    g_autofree gchar *secondUuid = NULL;
+    g_object_get(
+        (BCoreDevice *) result->next->data, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], &secondUuid, NULL);
+    assert_string_equal(secondUuid, "reconf-uuid");
+}
+
+// Resource writes and executes are never gated: they act on the live device, and values written during
+// a pending reconfiguration are carried over by the swap (unlike metadata).
+static void test_b_core_client_write_and_execute_ignore_gate(void **state)
+{
+    BCoreClient *client = *state;
+    mockServiceReady = false;
+    mockReconfiguringUuid = "gated-uuid";
+    const char *uri = "/gated-uuid/ep/1/r/isOn";
+
+    expect_function_call(__wrap_deviceServiceWriteResource);
+    expect_string(__wrap_deviceServiceWriteResource, uri, uri);
+    expect_string(__wrap_deviceServiceWriteResource, resourceValue, "true");
+    will_return(__wrap_deviceServiceWriteResource, true);
+
+    assert_true(b_core_client_write_resource(client, uri, "true"));
+
+    expect_function_call(__wrap_deviceServiceExecuteResource);
+    expect_string(__wrap_deviceServiceExecuteResource, uri, uri);
+    will_return(__wrap_deviceServiceExecuteResource, true);
+
+    assert_true(b_core_client_execute_resource(client, uri, NULL, NULL));
 }
 
 static void test_b_core_client_get_endpoint_by_id(void **state)
@@ -808,16 +1011,15 @@ static void test_b_core_client_get_endpoint_by_id(void **state)
     const gchar *endpointId = "endpointId";
 
     // NULL client, valid deviceUuid, valid endpointId
-    g_autoptr(BCoreEndpoint) result1 =
-        b_core_client_get_endpoint_by_id(NULL, deviceUuid, endpointId);
+    g_autoptr(BCoreEndpoint) result1 = b_core_client_get_endpoint_by_id(NULL, deviceUuid, endpointId, NULL);
     assert_null(result1);
 
     // valid client, NULL deviceUuid, valid endpointId
-    g_autoptr(BCoreEndpoint) result2 = b_core_client_get_endpoint_by_id(client, NULL, endpointId);
+    g_autoptr(BCoreEndpoint) result2 = b_core_client_get_endpoint_by_id(client, NULL, endpointId, NULL);
     assert_null(result2);
 
     // valid client, valid deviceUuid, NULL endpointId
-    g_autoptr(BCoreEndpoint) result3 = b_core_client_get_endpoint_by_id(client, deviceUuid, NULL);
+    g_autoptr(BCoreEndpoint) result3 = b_core_client_get_endpoint_by_id(client, deviceUuid, NULL, NULL);
     assert_null(result3);
 
     // valid client, valid deviceUuid, valid endpointId
@@ -830,8 +1032,7 @@ static void test_b_core_client_get_endpoint_by_id(void **state)
     expect_string(__wrap_deviceServiceGetEndpointById, endpointId, endpointId);
     will_return(__wrap_deviceServiceGetEndpointById, g_steal_pointer(&endpoint));
 
-    g_autoptr(BCoreEndpoint) result4 =
-        b_core_client_get_endpoint_by_id(client, deviceUuid, endpointId);
+    g_autoptr(BCoreEndpoint) result4 = b_core_client_get_endpoint_by_id(client, deviceUuid, endpointId, NULL);
     assert_non_null(result4);
 
     g_autofree gchar *resultDeviceUuid = NULL;
@@ -854,15 +1055,15 @@ static void test_b_core_client_get_endpoint_by_uri(void **state)
     const gchar *uri = "some/uri";
 
     // NULL client, NULL uri
-    g_autoptr(BCoreEndpoint) result1 = b_core_client_get_endpoint_by_uri(NULL, NULL);
+    g_autoptr(BCoreEndpoint) result1 = b_core_client_get_endpoint_by_uri(NULL, NULL, NULL);
     assert_null(result1);
 
     // valid client, NULL uri
-    g_autoptr(BCoreEndpoint) result2 = b_core_client_get_endpoint_by_uri(client, NULL);
+    g_autoptr(BCoreEndpoint) result2 = b_core_client_get_endpoint_by_uri(client, NULL, NULL);
     assert_null(result2);
 
     // NULL client, valid uri
-    g_autoptr(BCoreEndpoint) result3 = b_core_client_get_endpoint_by_uri(NULL, uri);
+    g_autoptr(BCoreEndpoint) result3 = b_core_client_get_endpoint_by_uri(NULL, uri, NULL);
     assert_null(result3);
 
     icDeviceEndpoint *endpoint = calloc(1, sizeof(icDeviceEndpoint));
@@ -873,7 +1074,7 @@ static void test_b_core_client_get_endpoint_by_uri(void **state)
     will_return(__wrap_deviceServiceGetEndpointByUri, g_steal_pointer(&endpoint));
 
     // valid client, valid uri
-    g_autoptr(BCoreEndpoint) result4 = b_core_client_get_endpoint_by_uri(client, uri);
+    g_autoptr(BCoreEndpoint) result4 = b_core_client_get_endpoint_by_uri(client, uri, NULL);
     assert_non_null(result4);
 
     g_autofree gchar *resultUri = NULL;
@@ -1213,6 +1414,7 @@ static void test_b_core_client_read_resource(void **state)
     result = b_core_client_read_resource(client, uri, &err);
     assert_null(result);
     assert_int_equal(err->code, RESOURCE_NOT_READABLE);
+    g_clear_error(&err);
 
     // test a readable resource
     gchar *expectedValue = "a/wonderful/value";
@@ -1295,11 +1497,11 @@ static void test_b_core_client_get_device_by_uri(void **state)
     device->uri = strdup(uri);
 
     // NULL client, valid uri
-    g_autoptr(BCoreDevice) result1 = b_core_client_get_device_by_uri(NULL, uri);
+    g_autoptr(BCoreDevice) result1 = b_core_client_get_device_by_uri(NULL, uri, NULL);
     assert_null(result1);
 
     // valid client, NULL uri
-    g_autoptr(BCoreDevice) result2 = b_core_client_get_device_by_uri(client, NULL);
+    g_autoptr(BCoreDevice) result2 = b_core_client_get_device_by_uri(client, NULL, NULL);
     assert_null(result2);
 
     // valid client, valid uri
@@ -1307,7 +1509,7 @@ static void test_b_core_client_get_device_by_uri(void **state)
     expect_string(__wrap_deviceServiceGetDeviceByUri, uri, uri);
     will_return(__wrap_deviceServiceGetDeviceByUri, g_steal_pointer(&device));
 
-    g_autoptr(BCoreDevice) result3 = b_core_client_get_device_by_uri(client, uri);
+    g_autoptr(BCoreDevice) result3 = b_core_client_get_device_by_uri(client, uri, NULL);
     assert_non_null(result3);
 
     g_autofree gchar *resultUri = NULL;
@@ -1324,11 +1526,11 @@ static void test_b_core_client_get_resource_by_uri(void **state)
     deviceResource->uri = strdup(uri);
 
     // NULL client, valid uri
-    g_autoptr(BCoreResource) result1 = b_core_client_get_resource_by_uri(NULL, uri);
+    g_autoptr(BCoreResource) result1 = b_core_client_get_resource_by_uri(NULL, uri, NULL);
     assert_null(result1);
 
     // valid client, NULL uri
-    g_autoptr(BCoreResource) result2 = b_core_client_get_resource_by_uri(client, NULL);
+    g_autoptr(BCoreResource) result2 = b_core_client_get_resource_by_uri(client, NULL, NULL);
     assert_null(result2);
 
     // valid client, valid uri
@@ -1336,7 +1538,7 @@ static void test_b_core_client_get_resource_by_uri(void **state)
     expect_string(__wrap_deviceServiceGetResourceByUri, uri, uri);
     will_return(__wrap_deviceServiceGetResourceByUri, g_steal_pointer(&deviceResource));
 
-    g_autoptr(BCoreResource) result3 = b_core_client_get_resource_by_uri(client, uri);
+    g_autoptr(BCoreResource) result3 = b_core_client_get_resource_by_uri(client, uri, NULL);
     assert_non_null(result3);
 
     g_autofree gchar *resultUri = NULL;
@@ -1510,31 +1712,31 @@ static void test_b_core_client_write_metadata(void **state)
     gboolean result = FALSE;
 
     // NULL client, NULL uri, NULL metadata
-    result = b_core_client_write_metadata(NULL, NULL, NULL);
+    result = b_core_client_write_metadata(NULL, NULL, NULL, NULL);
     assert_false(result);
 
     // NULL client, NULL uri, valid metadata
-    result = b_core_client_write_metadata(NULL, NULL, metadata);
+    result = b_core_client_write_metadata(NULL, NULL, metadata, NULL);
     assert_false(result);
 
     // NULL client, valid uri, NULL metadata
-    result = b_core_client_write_metadata(NULL, uri, NULL);
+    result = b_core_client_write_metadata(NULL, uri, NULL, NULL);
     assert_false(result);
 
     // NULL client, valid uri, valid metadata
-    result = b_core_client_write_metadata(NULL, uri, metadata);
+    result = b_core_client_write_metadata(NULL, uri, metadata, NULL);
     assert_false(result);
 
     // valid client, NULL uri, NULL metadata
-    result = b_core_client_write_metadata(client, NULL, NULL);
+    result = b_core_client_write_metadata(client, NULL, NULL, NULL);
     assert_false(result);
 
     // valid client, NULL uri, valid metadata
-    result = b_core_client_write_metadata(client, NULL, metadata);
+    result = b_core_client_write_metadata(client, NULL, metadata, NULL);
     assert_false(result);
 
     // valid client, valid uri, NULL metadata
-    result = b_core_client_write_metadata(client, uri, NULL);
+    result = b_core_client_write_metadata(client, uri, NULL, NULL);
     assert_false(result);
 
     // internal error (false return)
@@ -1544,7 +1746,7 @@ static void test_b_core_client_write_metadata(void **state)
     will_return(__wrap_deviceServiceSetMetadata, false);
 
     // valid client, valid uri, valid metadata
-    result = b_core_client_write_metadata(client, uri, metadata);
+    result = b_core_client_write_metadata(client, uri, metadata, NULL);
     assert_false(result);
 
     // expect success (true return)
@@ -1554,7 +1756,7 @@ static void test_b_core_client_write_metadata(void **state)
     will_return(__wrap_deviceServiceSetMetadata, true);
 
     // valid client, valid uri, valid metadata
-    result = b_core_client_write_metadata(client, uri, metadata);
+    result = b_core_client_write_metadata(client, uri, metadata, NULL);
     assert_true(result);
 }
 
@@ -2740,6 +2942,55 @@ static void test_sendDeviceConfigureCompletedEvent(void **state)
 
     // valid deviceClass, valid uuid, recovery discoveryType
     sendDeviceConfigureCompletedEvent(deviceClass, deviceUuid, true);
+}
+
+static void test_sendDeviceReconfigurationFinishedEvent(void **state)
+{
+    const gchar *deviceUuid = "uuid";
+    const gchar *deviceClass = "deviceClass";
+    // Reconfiguration happens outside of any discovery session.
+    BCoreDiscoveryType discoveryType = B_CORE_DISCOVERY_TYPE_NONE;
+
+    // Missing identity: nothing is emitted (listeners compare deviceClass, so it must not be NULL).
+    sendDeviceReconfigurationFinishedEvent(NULL, deviceUuid, true);
+    sendDeviceReconfigurationFinishedEvent(deviceClass, NULL, false);
+
+    g_autoptr(BCoreDeviceConfigurationCompletedEvent) completedFixture =
+        b_core_device_configuration_completed_event_new();
+    g_object_set(completedFixture,
+                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_DEVICE_CLASS],
+                 deviceClass,
+                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_UUID],
+                 deviceUuid,
+                 B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROPERTY_NAMES
+                     [B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROP_SESSION_DISCOVERY_TYPE],
+                 discoveryType,
+                 NULL);
+    expect_function_call(mockHandleDeviceConfigurationCompletedEvent);
+    expect_check(mockHandleDeviceConfigurationCompletedEvent,
+                 event,
+                 (CheckParameterValue) checkBCoreDeviceConfigurationCompletedEventContents,
+                 completedFixture);
+
+    sendDeviceReconfigurationFinishedEvent(deviceClass, deviceUuid, true);
+
+    g_autoptr(BCoreDeviceConfigurationFailedEvent) failedFixture = b_core_device_configuration_failed_event_new();
+    g_object_set(failedFixture,
+                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_DEVICE_CLASS],
+                 deviceClass,
+                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_UUID],
+                 deviceUuid,
+                 B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROPERTY_NAMES
+                     [B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROP_SESSION_DISCOVERY_TYPE],
+                 discoveryType,
+                 NULL);
+    expect_function_call(mockHandleDeviceConfigurationFailedEvent);
+    expect_check(mockHandleDeviceConfigurationFailedEvent,
+                 event,
+                 (CheckParameterValue) checkBCoreDeviceConfigurationFailedEventContents,
+                 failedFixture);
+
+    sendDeviceReconfigurationFinishedEvent(deviceClass, deviceUuid, false);
 }
 
 static void test_sendDeviceConfigureFailedEvent(void **state)
@@ -5187,6 +5438,16 @@ DeviceServiceStatus *__wrap_deviceServiceGetStatus(void)
     return deviceServiceStatusFromJson(json);
 }
 
+bool __wrap_deviceServiceIsReadyForDeviceOperation(void)
+{
+    return mockServiceReady;
+}
+
+bool __wrap_deviceServiceIsReconfigurationPending(const char *deviceUuid)
+{
+    return mockReconfiguringUuid != NULL && deviceUuid != NULL && strcmp(deviceUuid, mockReconfiguringUuid) == 0;
+}
+
 icDevice *__wrap_deviceServiceGetDevice(const char *uuid)
 {
     function_called();
@@ -5453,6 +5714,21 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_b_core_client_commission_device),
         cmocka_unit_test(test_b_core_client_add_matter_device),
         cmocka_unit_test(test_b_core_client_get_device_by_id),
+        cmocka_unit_test_setup_teardown(
+            test_b_core_client_gated_entry_points_not_ready, reset_reconfiguration_mocks, reset_reconfiguration_mocks),
+        cmocka_unit_test_setup_teardown(test_b_core_client_gated_entry_points_reconfiguring,
+                                        reset_reconfiguration_mocks,
+                                        reset_reconfiguration_mocks),
+        cmocka_unit_test_setup_teardown(test_b_core_client_gated_entry_points_not_ready_and_reconfiguring,
+                                        reset_reconfiguration_mocks,
+                                        reset_reconfiguration_mocks),
+        cmocka_unit_test_setup_teardown(test_b_core_client_uri_gate_passes_other_and_malformed_uris,
+                                        reset_reconfiguration_mocks,
+                                        reset_reconfiguration_mocks),
+        cmocka_unit_test_setup_teardown(
+            test_b_core_client_get_devices_ignores_gate, reset_reconfiguration_mocks, reset_reconfiguration_mocks),
+        cmocka_unit_test_setup_teardown(
+            test_b_core_client_write_and_execute_ignore_gate, reset_reconfiguration_mocks, reset_reconfiguration_mocks),
         cmocka_unit_test(test_b_core_client_get_endpoint_by_id),
         cmocka_unit_test(test_b_core_client_get_endpoint_by_uri),
         cmocka_unit_test(test_b_core_client_get_devices),
@@ -5485,6 +5761,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sendDeviceConfigureStartedEvent),
         cmocka_unit_test(test_sendDeviceConfigureCompletedEvent),
         cmocka_unit_test(test_sendDeviceConfigureFailedEvent),
+        cmocka_unit_test(test_sendDeviceReconfigurationFinishedEvent),
         cmocka_unit_test(test_sendDeviceAddedEvent),
         cmocka_unit_test(test_sendDeviceRecoveredEvent),
         cmocka_unit_test(test_sendDeviceDiscoveryCompletedEvent),

@@ -31,14 +31,15 @@
 #include "barton-core-endpoint.h"
 #include "barton-core-initialize-params-container.h"
 #include "barton-core-utils.h"
+#include "device/icDevice.h"
 #include "device/icDeviceEndpoint.h"
 #include "deviceDiscoveryFilters.h"
 #include "deviceService.h"
 #include "deviceServiceConfiguration.h"
 #include "deviceServicePrivate.h"
 #include "event/deviceEventProducer.h"
+#include "icLog/logging.h"
 #include "icTypes/icLinkedList.h"
-#include "observability/observability.h"
 #include "icTypes/icLinkedListFuncs.h"
 #include "observability/observability.h"
 
@@ -49,6 +50,8 @@
 #ifdef BARTON_CONFIG_THREAD
 #include "subsystems/thread/threadSubsystem.h"
 #endif
+
+#define LOG_TAG "bCoreClient"
 
 G_DEFINE_QUARK(b - device - service - client - error - quark, b_core_client_error)
 
@@ -325,10 +328,63 @@ gboolean b_core_client_add_matter_device(BCoreClient *self,
     return deviceServiceAddMatterDevice(nodeId, timeoutSeconds) ? TRUE : FALSE;
 }
 
-BCoreDevice *b_core_client_get_device_by_id(BCoreClient *self, const gchar *id)
+static gboolean check_service_ready(GError **err)
+{
+    if (deviceServiceIsReadyForDeviceOperation() == false)
+    {
+        icLogDebug(LOG_TAG, "Refusing request: device service is not ready for device operation");
+        g_set_error_literal(err,
+                            B_CORE_CLIENT_ERROR,
+                            B_CORE_SERVICE_STATE_ERROR_NOT_READY,
+                            "Device service is not ready for device operation");
+
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static gboolean check_device_not_reconfiguring(const char *device_uuid, GError **err)
+{
+    if (device_uuid != NULL && deviceServiceIsReconfigurationPending(device_uuid) == true)
+    {
+        icLogDebug(LOG_TAG, "Refusing request: device %s is being reconfigured", device_uuid);
+        g_set_error(err,
+                    B_CORE_CLIENT_ERROR,
+                    B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING,
+                    "Device %s is being reconfigured",
+                    device_uuid);
+
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+// A NULL device_uuid checks service readiness only.
+static gboolean check_device_gate(const char *device_uuid, GError **err)
+{
+    return check_service_ready(err) && check_device_not_reconfiguring(device_uuid, err);
+}
+
+// Same gate, resolving the owning device uuid from a device/endpoint/resource/metadata uri.
+static gboolean check_uri_gate(const char *uri, GError **err)
+{
+    scoped_generic char *device_uuid = deviceUriGetDeviceUuid(uri);
+
+    return check_device_gate(device_uuid, err);
+}
+
+BCoreDevice *b_core_client_get_device_by_id(BCoreClient *self, const gchar *id, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(id != NULL, NULL);
+    g_return_val_if_fail(err == NULL || *err == NULL, NULL);
+
+    if (check_device_gate(id, err) == FALSE)
+    {
+        return NULL;
+    }
 
     scoped_icDevice *device = deviceServiceGetDevice(id);
     return convertIcDeviceToGObject(device);
@@ -346,20 +402,32 @@ GList *b_core_client_get_endpoints_by_profile(BCoreClient *self, const gchar *pr
 }
 
 BCoreEndpoint *
-b_core_client_get_endpoint_by_id(BCoreClient *self, const gchar *deviceId, const gchar *endpointId)
+b_core_client_get_endpoint_by_id(BCoreClient *self, const gchar *deviceId, const gchar *endpointId, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(deviceId != NULL, NULL);
     g_return_val_if_fail(endpointId != NULL, NULL);
+    g_return_val_if_fail(err == NULL || *err == NULL, NULL);
+
+    if (check_device_gate(deviceId, err) == FALSE)
+    {
+        return NULL;
+    }
 
     scoped_icDeviceEndpoint *endpoint = deviceServiceGetEndpointById(deviceId, endpointId);
     return convertIcDeviceEndpointToGObject(endpoint);
 }
 
-BCoreEndpoint *b_core_client_get_endpoint_by_uri(BCoreClient *self, const gchar *uri)
+BCoreEndpoint *b_core_client_get_endpoint_by_uri(BCoreClient *self, const gchar *uri, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
+    g_return_val_if_fail(err == NULL || *err == NULL, NULL);
+
+    if (check_uri_gate(uri, err) == FALSE)
+    {
+        return NULL;
+    }
 
     scoped_icDeviceEndpoint *endpoint = deviceServiceGetEndpointByUri(uri);
     return convertIcDeviceEndpointToGObject(endpoint);
@@ -394,6 +462,12 @@ gchar *b_core_client_read_resource(BCoreClient *self, const gchar *uri, GError *
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
+    g_return_val_if_fail(err == NULL || *err == NULL, NULL);
+
+    if (check_uri_gate(uri, err) == FALSE)
+    {
+        return NULL;
+    }
 
     gchar *retVal = NULL;
 
@@ -426,19 +500,31 @@ GList *b_core_client_get_devices_by_subsystem(BCoreClient *self, const gchar *su
     return devicesGlist;
 }
 
-BCoreDevice *b_core_client_get_device_by_uri(BCoreClient *self, const gchar *uri)
+BCoreDevice *b_core_client_get_device_by_uri(BCoreClient *self, const gchar *uri, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
+    g_return_val_if_fail(err == NULL || *err == NULL, NULL);
+
+    if (check_uri_gate(uri, err) == FALSE)
+    {
+        return NULL;
+    }
 
     scoped_icDevice *device = deviceServiceGetDeviceByUri(uri);
     return convertIcDeviceToGObject(device);
 }
 
-BCoreResource *b_core_client_get_resource_by_uri(BCoreClient *self, const gchar *uri)
+BCoreResource *b_core_client_get_resource_by_uri(BCoreClient *self, const gchar *uri, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
+    g_return_val_if_fail(err == NULL || *err == NULL, NULL);
+
+    if (check_uri_gate(uri, err) == FALSE)
+    {
+        return NULL;
+    }
 
     scoped_icDeviceResource *resource = deviceServiceGetResourceByUri(uri);
     BCoreResource *dsResource = convertIcDeviceResourceToGObject(resource);
@@ -511,11 +597,17 @@ gboolean b_core_client_set_system_property(BCoreClient *self, const gchar *name,
     return deviceServiceSetSystemProperty(name, value) ? TRUE : FALSE;
 }
 
-gboolean b_core_client_write_metadata(BCoreClient *self, const gchar *uri, const gchar *value)
+gboolean b_core_client_write_metadata(BCoreClient *self, const gchar *uri, const gchar *value, GError **err)
 {
     g_return_val_if_fail(self != NULL, FALSE);
     g_return_val_if_fail(uri != NULL, FALSE);
     g_return_val_if_fail(value != NULL, FALSE);
+    g_return_val_if_fail(err == NULL || *err == NULL, FALSE);
+
+    if (check_uri_gate(uri, err) == FALSE)
+    {
+        return FALSE;
+    }
 
     return deviceServiceSetMetadata(uri, value) ? TRUE : FALSE;
 }
@@ -524,6 +616,12 @@ gchar *b_core_client_read_metadata(BCoreClient *self, const gchar *uri, GError *
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
+    g_return_val_if_fail(err == NULL || *err == NULL, NULL);
+
+    if (check_uri_gate(uri, err) == FALSE)
+    {
+        return NULL;
+    }
 
     gchar *value = NULL;
     if (!deviceServiceGetMetadata(uri, &value))

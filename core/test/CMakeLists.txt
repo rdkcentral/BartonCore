@@ -49,6 +49,46 @@ bcore_add_cmocka_test(
 )
 
 bcore_add_cmocka_test(
+    NAME testDeviceServiceReconfiguration
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceServiceReconfigurationTest.c
+    WRAPPED_FUNCTIONS
+        subsystemManagerInitialize
+        subsystemManagerAllDriversStarted
+        subsystemManagerShutdown
+        subsystemManagerGetRegisteredSubsystems
+        deviceEventProducerStartup
+        deviceEventProducerShutdown
+        deviceEventHandlerStartup
+        deviceEventHandlerShutdown
+        deviceServiceCommFailInit
+        deviceServiceCommFailShutdown
+        deviceServiceCommFailSetTimeoutSecs
+        deviceStorageMonitorStart
+        deviceStorageMonitorStop
+        deviceDescriptorsInit
+        deviceServiceDeviceDescriptorsDestroy
+        deviceDriverManagerInitialize
+        deviceDriverManagerStartDeviceDrivers
+        deviceDriverManagerShutdown
+        deviceDriverManagerGetDeviceDriver
+        deviceDriverManagerGetDeviceDrivers
+        initEventTracker
+        shutDownEventTracker
+        scheduleDelayTask
+        cancelDelayTask
+        sendDeviceServiceStatusEvent
+        sendDeviceReconfigurationFinishedEvent
+        sendDeviceRemovedEvent
+        sendEndpointRemovedEvent
+        sendMetadataUpdatedEvent
+        threadPoolAddTask
+        observabilityGaugeCreate
+        observabilityGaugeRecord
+    LINK_LIBRARIES BartonCoreStatic
+    INCLUDES ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
+)
+
+bcore_add_cmocka_test(
     NAME testJsonDatabase
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/database/jsonDatabaseTest.c
     WRAPPED_FUNCTIONS

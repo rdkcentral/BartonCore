@@ -1101,7 +1101,7 @@ static void test_start_discovery_new_class_while_another_running(void **state)
  * the linker entirely.
  *
  * As a result, deviceServiceIsReadyForDeviceOperation() always returns the real value
- * (subsystemsReadyForDevices, which is false in tests), so:
+ * (deviceOperationsReady, which is false in tests), so:
  * - neverReject=true drivers: Always included (tested below)
  * - neverReject=false drivers: Always filtered out when service not ready
  *

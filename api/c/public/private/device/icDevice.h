@@ -120,3 +120,11 @@ const char *deviceGetResourceValueById(const icDevice *device, const char *resou
  * @return true if valid device uri pattern, otherwise false
  */
 bool deviceUriIsValid(const char *deviceUri, const char *deviceUuid);
+
+/**
+ * Extract the owning device uuid (the first path segment) from a device, endpoint, resource or
+ * metadata uri, e.g. "/abc/ep/1/r/x" -> "abc".
+ * @param uri
+ * @return the device uuid (caller frees), or NULL if uri is NULL or does not start with "/<uuid>"
+ */
+char *deviceUriGetDeviceUuid(const char *uri);
