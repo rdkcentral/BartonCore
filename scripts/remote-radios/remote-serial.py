@@ -842,8 +842,12 @@ class SSHTunnel:
         t = threading.Thread(target=self._run, daemon=True, name="ssh-tunnel")
         t.start()
 
-    def stop(self) -> None:
-        """Signal the tunnel to stop and remove the remote socket."""
+    def stop(self, remove_remote: bool = True) -> None:
+        """Signal the tunnel to stop and, normally, remove the remote socket.
+
+        remove_remote is False when another workstation has taken over the
+        radios: the socket at that path is then the new owner's.
+        """
         self._stop.set()
 
         if self._process:
@@ -851,6 +855,9 @@ class SSHTunnel:
                 self._process.terminate()
             except OSError:
                 pass
+
+        if not remove_remote:
+            return
 
         # Best-effort cleanup of the remote socket on shutdown.
         try:
@@ -1172,22 +1179,33 @@ def main() -> None:
 
     # ── Wait for Ctrl-C ───────────────────────────────────────────────────
     stop_event = threading.Event()
+    # SIGUSR1 means "another workstation has taken over": stop, but leave the
+    # remote sockets alone because they now belong to the new owner.
+    keep_remote = threading.Event()
 
     def handle_signal(sig, frame):
         info("Shutting down...")
         stop_event.set()
 
+    def handle_stand_down(sig, frame):
+        info("Another workstation has taken over; standing down.")
+        keep_remote.set()
+        stop_event.set()
+
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
+    if hasattr(signal, "SIGUSR1"):  # not available on Windows
+        signal.signal(signal.SIGUSR1, handle_stand_down)
 
     stop_event.wait()
 
     # ── Cleanup ───────────────────────────────────────────────────────────
+    remove_remote = not keep_remote.is_set()
     if usbip_tunnel is not None:
-        usbip_tunnel.stop()
+        usbip_tunnel.stop(remove_remote)
 
     if tunnel is not None:
-        tunnel.stop()
+        tunnel.stop(remove_remote)
 
     if relay is not None:
         relay.stop()

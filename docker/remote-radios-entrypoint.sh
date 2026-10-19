@@ -96,8 +96,16 @@ BT_USBIP_BUSID="${BT_USBIP_BUSID:-}"
 RADIO_CLAIM_DIR="${RADIO_CLAIM_DIR:-/run/remote-radios/claims}"
 SILABS_CLAIM="${SILABS_CLAIM:-${RADIO_CLAIM_DIR}/silabs.claim}"
 
-# Set while this container has released the Silabs radio to a claim holder.
+# Set while this container is running without the Silabs radio, and why:
+#   claim       another consumer holds the claim file
+#   absent      the workstation is not forwarding it (no tunnel socket yet)
+#   unavailable the socket exists but cpcd could not start on it
+# The container keeps running regardless; the service monitor connects the
+# radio as soon as the reason goes away.  Exiting instead would leave a
+# developer without Thread whenever their workstation was offline at the
+# moment the container started.
 SILABS_YIELDED=""
+SILABS_YIELD_REASON=""
 
 CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
 CPCD_CONF="${CPCD_CONF:-/usr/local/etc/cpcd.conf}"
@@ -187,6 +195,14 @@ silabs_claimed() {
 yield_silabs() {
     echo "[remote-radios] Silabs radio claimed via ${SILABS_CLAIM} — releasing it."
     SILABS_YIELDED=1
+    SILABS_YIELD_REASON=claim
+    stop_silabs_link
+    echo "[remote-radios] Silabs radio released; waiting for the claim to clear."
+}
+
+# stop_silabs_link — stop cpcd, then socat, so cpcd never reads from a
+# half-closed PTY.
+stop_silabs_link() {
     if [ -n "${CPCD_PID:-}" ]; then
         kill ${CPCD_PID} 2>/dev/null || true
         wait ${CPCD_PID} 2>/dev/null || true
@@ -198,17 +214,21 @@ yield_silabs() {
         SOCAT_PID=""
     fi
     rm -f "${VIRTUAL_TTY}"
-    echo "[remote-radios] Silabs radio released; waiting for the claim to clear."
 }
 
-# resume_silabs — reconnect after the claim is released.  Non-zero on failure
-# so the monitor can back off and retry.
+# resume_silabs — connect the radio once nothing prevents it.  Non-zero on
+# failure so the monitor can back off and retry.
 resume_silabs() {
-    echo "[remote-radios] Silabs claim cleared — reconnecting."
+    case "${SILABS_YIELD_REASON}" in
+        claim)  echo "[remote-radios] Silabs claim cleared — reconnecting." ;;
+        absent) echo "[remote-radios] Silabs tunnel socket appeared — connecting." ;;
+        *)      echo "[remote-radios] Retrying the Silabs radio..." ;;
+    esac
     start_silabs_socat || return 1
     restart_cpcd || return 1
     SILABS_YIELDED=""
-    echo "[remote-radios] Silabs radio reclaimed."
+    SILABS_YIELD_REASON=""
+    echo "[remote-radios] Silabs radio connected."
     return 0
 }
 
@@ -596,13 +616,21 @@ service_monitor() {
         # left to a race.
         if [ -n "${SILABS_SOCKET}" ]; then
             if silabs_claimed; then
-                [ -z "${SILABS_YIELDED}" ] && yield_silabs
+                if [ -z "${SILABS_YIELDED}" ]; then
+                    yield_silabs
+                else
+                    SILABS_YIELD_REASON=claim
+                fi
             elif [ -n "${SILABS_YIELDED}" ]; then
-                if resume_silabs; then
+                if [ ! -S "${SILABS_SOCKET}" ]; then
+                    # Still not forwarded.  Nothing to try until it appears.
+                    SILABS_YIELD_REASON=absent
+                elif resume_silabs; then
                     backoff=5
                 else
-                    backoff=$((backoff < 60 ? backoff * 2 : 60))
-                    echo "[monitor] Could not reclaim the Silabs radio; retrying in ${backoff}s..." >&2
+                    SILABS_YIELD_REASON=unavailable
+                    backoff=$((backoff * 2 < 60 ? backoff * 2 : 60))
+                    echo "[monitor] Could not connect the Silabs radio; retrying in ${backoff}s..." >&2
                 fi
             fi
         fi
@@ -652,12 +680,12 @@ service_monitor() {
                     kill ${CPCD_PID} 2>/dev/null || true
                     wait ${CPCD_PID} 2>/dev/null || true
                     if ! start_silabs_socat; then
-                        backoff=$((backoff < 60 ? backoff * 2 : 60))
+                        backoff=$((backoff * 2 < 60 ? backoff * 2 : 60))
                         echo "[monitor] socat restart failed; retrying in ${backoff}s..." >&2
                         continue
                     fi
                     if ! restart_cpcd; then
-                        backoff=$((backoff < 60 ? backoff * 2 : 60))
+                        backoff=$((backoff * 2 < 60 ? backoff * 2 : 60))
                         echo "[monitor] cpcd restart failed; retrying in ${backoff}s..." >&2
                         continue
                     fi
@@ -666,7 +694,7 @@ service_monitor() {
                     ;;
                 cpcd)
                     if ! restart_cpcd; then
-                        backoff=$((backoff < 60 ? backoff * 2 : 60))
+                        backoff=$((backoff * 2 < 60 ? backoff * 2 : 60))
                         echo "[monitor] cpcd restart failed; retrying in ${backoff}s..." >&2
                         continue
                     fi
@@ -680,7 +708,7 @@ service_monitor() {
         if [ -n "${restartBt}" ]; then
             teardown_bluetooth_chain
             if ! start_bluetooth_chain; then
-                backoff=$((backoff < 60 ? backoff * 2 : 60))
+                backoff=$((backoff * 2 < 60 ? backoff * 2 : 60))
                 echo "[monitor] Bluetooth chain restart failed; retrying in ${backoff}s..." >&2
                 continue
             fi
@@ -719,20 +747,13 @@ if [ -n "${SILABS_SOCKET}" ]; then
     #--------------------------------------------------------------------------
     echo "[remote-radios] Silabs remote mode: bridging UNIX socket ${SILABS_SOCKET}"
 
-    # Wait for the workstation's remote-serial.py to create the socket.
-    SILABS_WAIT_MAX=60
+    # Give a workstation that is just connecting a moment to create the
+    # socket, but never wait on it indefinitely here: everything else (the
+    # Bluetooth dongle, the service monitor) would be held up too.
+    SILABS_WAIT_MAX=20
     silabsWaitCount=0
     echo "[remote-radios] Waiting for Silabs tunnel socket ${SILABS_SOCKET}..."
-
-    while [ ! -S "${SILABS_SOCKET}" ]; do
-
-        if [ ${silabsWaitCount} -ge ${SILABS_WAIT_MAX} ]; then
-            echo "[remote-radios] ERROR: Silabs tunnel socket ${SILABS_SOCKET} did not appear after ${SILABS_WAIT_MAX}s." >&2
-            echo "[remote-radios]        Ensure remote-radios-setup.sh (remote-serial.py) is running on your workstation." >&2
-            echo "[remote-radios]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
-            exit 1
-        fi
-
+    while [ ! -S "${SILABS_SOCKET}" ] && [ ${silabsWaitCount} -lt ${SILABS_WAIT_MAX} ]; do
         sleep 2
         silabsWaitCount=$((silabsWaitCount + 2))
     done
@@ -742,11 +763,23 @@ if [ -n "${SILABS_SOCKET}" ]; then
         # Start released rather than stealing the link from the claim holder.
         # The service monitor connects as soon as the claim clears.
         SILABS_YIELDED=1
+        SILABS_YIELD_REASON=claim
         echo "[remote-radios] Silabs radio is claimed via ${SILABS_CLAIM} — starting without it."
+    elif [ ! -S "${SILABS_SOCKET}" ]; then
+        SILABS_YIELDED=1
+        SILABS_YIELD_REASON=absent
+        echo "[remote-radios] Silabs tunnel socket ${SILABS_SOCKET} is not present yet — starting without it." >&2
+        echo "[remote-radios]   It connects automatically once your workstation forwards the radio" >&2
+        echo "[remote-radios]   (remote-radios.service; see docs/REMOTE_RADIO_FOR_DEVELOPMENT.md)." >&2
     else
         echo "[remote-radios] Silabs tunnel socket is present.  Starting socat bridge..."
-        start_silabs_socat
-        echo "[remote-radios] Virtual serial device ready: ${RADIO_DEVICE} (via ${SILABS_SOCKET})"
+        if start_silabs_socat; then
+            echo "[remote-radios] Virtual serial device ready: ${RADIO_DEVICE} (via ${SILABS_SOCKET})"
+        else
+            SILABS_YIELDED=1
+            SILABS_YIELD_REASON=unavailable
+            echo "[remote-radios] Could not bridge the Silabs socket — the monitor will retry." >&2
+        fi
     fi
 
 elif [ -n "${SILABS_DEVICE}" ]; then
@@ -805,10 +838,21 @@ fi
 write_cpcd_conf
 
 if [ -n "${SILABS_YIELDED}" ]; then
-    echo "[remote-radios] Deferring cpcd until the Silabs claim clears."
+    echo "[remote-radios] Deferring cpcd until the Silabs radio is available (${SILABS_YIELD_REASON})."
 else
     echo "[remote-radios] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
-    start_cpcd
+    if [ -n "${SILABS_SOCKET}" ]; then
+        # A forwarded radio can be slow or briefly unreachable; keep running
+        # and let the monitor retry rather than exiting.
+        if ! start_cpcd nonfatal; then
+            stop_silabs_link
+            SILABS_YIELDED=1
+            SILABS_YIELD_REASON=unavailable
+            echo "[remote-radios] cpcd did not start — the monitor will retry." >&2
+        fi
+    else
+        start_cpcd
+    fi
 fi
 
 ###############################################################################
@@ -847,11 +891,15 @@ echo "[remote-radios] Starting otbr-agent (backbone: ${BACKBONE_IF})..."
 otbr_backoff=2
 
 while true; do
-    # Wait for cpcd to be alive before starting otbr-agent.
-    while ! pgrep -x cpcd >/dev/null 2>&1; do
+    # Wait for cpcd to be alive before starting otbr-agent.  This can last as
+    # long as the radio is not forwarded, so say so once rather than every
+    # few seconds.
+    if ! pgrep -x cpcd >/dev/null 2>&1; then
         echo "[remote-radios] Waiting for cpcd before starting otbr-agent..." >&2
-        sleep 5
-    done
+        while ! pgrep -x cpcd >/dev/null 2>&1; do
+            sleep 5
+        done
+    fi
 
     otbr_start=$(date +%s)
     # otbr-agent registers on the dev server's shared bus, next to org.bluez,
@@ -878,5 +926,5 @@ while true; do
 
     echo "[remote-radios] otbr-agent exited (code ${otbr_exit}) after ${otbr_elapsed}s; restarting in ${otbr_backoff}s..." >&2
     sleep "${otbr_backoff}"
-    otbr_backoff=$((otbr_backoff < 30 ? otbr_backoff * 2 : 30))
+    otbr_backoff=$((otbr_backoff * 2 < 30 ? otbr_backoff * 2 : 30))
 done

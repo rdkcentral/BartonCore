@@ -275,6 +275,44 @@ Re-run the script any time to change the dev server, re-detect radios after a
 hardware change, or pick up an updated checkout; it restarts the service only
 when something actually changed.
 
+### More than one workstation
+
+You can set up several workstations, an office machine and a laptop say, but
+only one of them forwards at a time: they all forward to the same sockets in
+your `~/.remote-radios` on the dev server. Whichever is forwarding holds a
+lease, `~/.remote-radios/owner` on the dev server, and refreshes it every 30
+seconds. Your other workstations **stand by**: they open no tunnels, and their
+dongles stay with their own Bluetooth. Their journal says who has the radios:
+
+```text
+Radios for you@it are being forwarded from tlea-workstation (forwarding since …); standing by.
+```
+
+A standing-by workstation takes over by itself when the lease is released,
+because the forwarding workstation stopped its service or logged out, or when
+the lease goes stale, because that workstation vanished without stopping (a
+closed laptop, a lost VPN connection) and has not refreshed it for two minutes.
+
+To switch immediately instead, run this on the workstation you want to use:
+
+```bash
+~/.config/remote-radios/bin/remote-radios-setup.sh --take-over
+```
+
+It claims the lease, waits about 45 seconds for the other workstation to
+notice and stand down, then restarts the local service. The other workstation
+stops forwarding without touching the sockets on the dev server, and its
+dongle returns to its own Bluetooth. The radios container on the dev server
+switches to the new radios by itself.
+
+Isolation is per dev-server **user account**. Two developers with different
+accounts never contend; this lease only arbitrates between your own
+workstations.
+
+Every one of your workstations must run a version of the setup that includes
+the lease: an older one ignores it and will fight the others for the sockets.
+Re-run the setup on each to update it.
+
 ### Windows workstations
 
 `remote-radios-setup.sh` is a Bash script and needs systemd and the in-tree
@@ -495,16 +533,24 @@ nsenter --net=/run/host-netns bluetoothctl list
 
 ## Teardown
 
-- **Workstation:** `systemctl --user stop remote-radios.service`. That removes
-  the remote sockets and env hint, stops both tunnels, and returns the dongle
-  to the normal kernel driver so your workstation's own Bluetooth can use it
-  again. To stop it coming back at the next login, add
+- **Workstation:** `systemctl --user stop remote-radios.service`. That releases
+  the lease, removes the remote sockets and env hint, stops both tunnels, and
+  returns the dongle to the normal kernel driver so your workstation's own
+  Bluetooth can use it again. To stop it coming back at the next login, add
   `systemctl --user disable remote-radios.service`.
-- **Dev server:** stop the container with
-  `docker compose -f docker/compose.yaml -f docker/compose.remote-radios.yaml down`.
+- **Dev server:** stop your radios container with
+
+  ```bash
+  cd docker
+  docker compose -p "$USER-radios" -f compose.yaml -f compose.remote-radios.yaml down
+  ```
 
 Teardown also happens automatically when the dev server becomes unreachable,
 and the service stops at logout.
+
+The radios container does **not** need stopping when your workstation goes
+away. It keeps running without the radios, and connects them again as soon as
+a workstation forwards them, whether that is the same one or another of yours.
 
 ---
 
@@ -523,8 +569,15 @@ and the service stops at logout.
   ~10 seconds; the service polls for it. Check the journal for
   `Silabs radio appeared` or `Bluetooth dongle ... appeared`. If the radio is a
   different unit than the one saved, re-run the setup script to re-detect.
-- **"Silabs tunnel socket did not appear"** — ensure `remote-radios.service` is
-  active on your workstation and that your VPN/SSH is up.
+- **The container logs "Silabs tunnel socket … is not present yet — starting
+  without it"** — no workstation is forwarding the radio. Check that
+  `remote-radios.service` is active on the workstation you are using and that
+  your VPN is up. The container connects the radio by itself once it arrives;
+  it does not need restarting.
+- **Your workstation's journal says it is "standing by"** — another of your
+  workstations holds the radios. Stop the service there, or run
+  `remote-radios-setup.sh --take-over` here; see
+  [More than one workstation](#more-than-one-workstation).
 - **"usb-ip service not reachable"** — the reverse tunnel or `usbipd` on the
   workstation is down; check the service journal, or re-run the setup script.
 - **"no new HCI device appeared after usb-ip attach"** — confirm the dongle is

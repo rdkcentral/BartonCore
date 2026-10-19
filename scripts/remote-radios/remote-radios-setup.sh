@@ -1013,15 +1013,177 @@ EOF" 2>/dev/null || warn "Could not write remote radios.env hint."
 }
 
 # ---------------------------------------------------------------------------
+# Ownership lease
+# ---------------------------------------------------------------------------
+# A developer may set up more than one workstation (an office machine and a
+# laptop, say), but every one of them forwards to the same per-user sockets on
+# the dev server, so only one can forward at a time.  Two at once delete and
+# re-create each other's sockets in a loop, and can leave the dev server's
+# Bluetooth adapter half-initialised.
+#
+# The forwarding workstation therefore holds a lease, ~/.remote-radios/owner on
+# the dev server, and refreshes it while it runs.  Any other workstation stands
+# by — no tunnels, and its dongle stays with its own Bluetooth — until the
+# lease is released (the owner stopped) or goes stale (the owner vanished
+# without stopping, e.g. a closed laptop), then takes over.  `--take-over`
+# claims it immediately; the previous owner notices on its next refresh.
+#
+# The lease is updated under flock on the dev server, and timestamps come from
+# the dev server's clock, so workstations' clocks need not agree.
+LEASE_RENEW_SECS=30
+LEASE_STALE_SECS=120
+LEASE_HOLDER=""
+LEASE_RENEWED_AT=0
+
+# A stable identity for this workstation, and a readable label for messages.
+MACHINE_ID="$(tr -cd 'A-Za-z0-9' < /etc/machine-id 2>/dev/null)"
+[ -n "$MACHINE_ID" ] || MACHINE_ID="$(hostname | tr -cd 'A-Za-z0-9._-')"
+HOST_LABEL="$(hostname -s 2>/dev/null | tr -cd 'A-Za-z0-9._-')"
+[ -n "$HOST_LABEL" ] || HOST_LABEL="$MACHINE_ID"
+
+# Runs on the dev server.  Args: mode id host stale [paths to remove on release]
+#   acquire  take or refresh the lease unless another live workstation holds it
+#   force    take it regardless (--take-over)
+#   release  give it up, and remove the given paths, only if we hold it
+# Prints OK / TOOK <prev-host> / HELD <host> <since> <age> / RELEASED.
+# Exit: 0 held by us (or released), 2 held by another, 3 could not lock.
+LEASE_REMOTE_SCRIPT='
+set -u
+mode=$1; id=$2; host=$3; stale=$4; shift 4
+dir="$HOME/.remote-radios"; f="$dir/owner"
+mkdir -p "$dir" && chmod 700 "$dir"
+exec 9>"$dir/.owner.lock"
+flock -w 10 9 || { echo LOCKFAIL; exit 3; }
+now=$(date +%s)
+cur_id=""; cur_host=""; cur_since=""; cur_hb=0
+if [ -f "$f" ]; then
+    cur_id=$(sed -n "s/^machine_id=//p" "$f")
+    cur_host=$(sed -n "s/^host=//p" "$f")
+    cur_since=$(sed -n "s/^since=//p" "$f")
+    cur_hb=$(sed -n "s/^heartbeat=//p" "$f")
+fi
+case "$cur_hb" in ""|*[!0-9]*) cur_hb=0 ;; esac
+if [ "$mode" = release ]; then
+    if [ "$cur_id" = "$id" ]; then
+        rm -f "$f" "$dir/radios.env" "$@"
+    fi
+    echo RELEASED; exit 0
+fi
+age=$((now - cur_hb))
+if [ -n "$cur_id" ] && [ "$cur_id" != "$id" ] && [ "$age" -lt "$stale" ] && [ "$mode" != force ]; then
+    echo "HELD ${cur_host:-unknown} ${cur_since:-unknown} $age"; exit 2
+fi
+since=$cur_since
+[ "$cur_id" = "$id" ] || since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+printf "machine_id=%s\nhost=%s\nsince=%s\nheartbeat=%s\n" "$id" "$host" "$since" "$now" > "$f.tmp.$$"
+mv -f "$f.tmp.$$" "$f"
+if [ -n "$cur_id" ] && [ "$cur_id" != "$id" ]; then echo "TOOK ${cur_host:-unknown}"; else echo OK; fi
+'
+
+# lease_op <mode> [remote paths...] — run the lease script on the dev server.
+# Sets LEASE_HOLDER (and LEASE_REPLY); returns the script's exit status, or
+# 255 when the dev server could not be reached.
+lease_op() {
+    local mode="$1"; shift
+    local args="" a
+    # The arguments pass through the dev server's login shell, which may not be
+    # bash; the values are identifiers and paths, so single quotes suffice.
+    for a in "$mode" "$MACHINE_ID" "$HOST_LABEL" "$LEASE_STALE_SECS" "$@"; do
+        case "$a" in *\'*) warn "Refusing lease argument containing a quote: $a"; return 3 ;; esac
+        args="$args '$a'"
+    done
+    # No forwards on this connection: the user's ssh config may define some
+    # for this host, and they are not ours to set up.
+    # Under `set -e` a failing command substitution would end the script, so
+    # the status is captured explicitly; callers must do the same.
+    local rc=0
+    LEASE_REPLY="$(ssh -o BatchMode=yes -o ConnectTimeout=8 -o ClearAllForwardings=yes \
+        "$SSH_TARGET" "bash -s --${args}" <<< "$LEASE_REMOTE_SCRIPT" 2>/dev/null)" || rc=$?
+    LEASE_HOLDER=""
+    case "$LEASE_REPLY" in
+        HELD\ *) LEASE_HOLDER="$(set -- $LEASE_REPLY; echo "$2 (forwarding since $3)")" ;;
+        TOOK\ *) LEASE_HOLDER="$(set -- $LEASE_REPLY; echo "$2")" ;;
+    esac
+    [ "$rc" -eq 0 ] && LEASE_RENEWED_AT=$SECONDS
+    return $rc
+}
+
+# wait_for_lease — block until this workstation holds the lease.
+wait_for_lease() {
+    local announced="" unreachable=""
+    local rc
+    while true; do
+        rc=0
+        lease_op acquire || rc=$?
+        case $rc in
+            0)
+                case "$LEASE_REPLY" in
+                    TOOK*) ok "Took over the radios from ${LEASE_HOLDER}, which stopped refreshing its lease." ;;
+                esac
+                [ -n "$announced" ] && ok "This workstation now forwards the radios to ${SSH_TARGET}."
+                return 0
+                ;;
+            2)
+                if [ "$announced" != "$LEASE_HOLDER" ]; then
+                    info "Radios for ${SSH_TARGET} are being forwarded from ${LEASE_HOLDER}; standing by."
+                    info "To use this workstation instead, stop remote-radios.service there, or run:"
+                    info "    ${INSTALLED_SETUP} --take-over"
+                    announced="$LEASE_HOLDER"
+                fi
+                ;;
+            *)
+                if [ -z "$unreachable" ]; then
+                    warn "Could not check radio ownership on ${SSH_TARGET}; retrying."
+                    unreachable=1
+                fi
+                ;;
+        esac
+        sleep 15
+    done
+}
+
+# release_dongle — hand the Bluetooth dongle back to this workstation.
+release_dongle() {
+    [ -n "${BT_BUSID:-}" ] || return 0
+    sudo -n "$RELEASE_HELPER" "$BT_BUSID" >> "${STATE_DIR}/usbip-bind.log" 2>&1 || true
+    BIND_HELPER_PID=""
+}
+
+# stand_down — another workstation has taken the lease: stop forwarding without
+# touching the sockets on the dev server, which are now the new owner's.
+stand_down() {
+    warn "${LEASE_HOLDER:-Another workstation} has taken over forwarding the radios; standing down."
+    if [ -n "${SILABS_TUNNEL_PID:-}" ]; then
+        kill -USR1 "$SILABS_TUNNEL_PID" 2>/dev/null || true
+        wait "$SILABS_TUNNEL_PID" 2>/dev/null || true
+        SILABS_TUNNEL_PID=""
+    fi
+    if [ -n "${BT_TUNNEL_PID:-}" ]; then
+        kill "$BT_TUNNEL_PID" 2>/dev/null || true
+        BT_TUNNEL_PID=""
+    fi
+    release_dongle
+}
+
+# start_forwarding — export the dongle and bring up both tunnels.
+start_forwarding() {
+    start_bind_helper
+    start_silabs_tunnel
+    start_bt_tunnel
+    write_remote_env_hint
+}
+
+# ---------------------------------------------------------------------------
 # Teardown + monitor
 # ---------------------------------------------------------------------------
 teardown() {
     info "Tearing down remote-radios tunnels..."
     [ -n "${SILABS_TUNNEL_PID:-}" ] && kill "$SILABS_TUNNEL_PID" 2>/dev/null || true
     [ -n "${BT_TUNNEL_PID:-}" ] && kill "$BT_TUNNEL_PID" 2>/dev/null || true
-    # Remove remote sockets + env hint.
-    ssh -o BatchMode=yes -o ConnectTimeout=5 "$SSH_TARGET" \
-        "rm -f ${SILABS_SOCK_REMOTE} ${BT_USBIP_SOCK_REMOTE:-} ~/.remote-radios/radios.env" 2>/dev/null || true
+    # Give up the lease, removing the remote sockets and env hint — but only if
+    # this workstation still holds it; otherwise they belong to the new owner.
+    lease_op release ${SILABS_SOCK_REMOTE:+"$SILABS_SOCK_REMOTE"} \
+        ${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"} || true
     ok "Teardown complete."
 }
 
@@ -1039,10 +1201,26 @@ monitor_loop() {
             while ! vpn_is_up; do sleep 10; done
             info "Connectivity restored — re-establishing tunnels..."
             resolve_remote_params
+            # Another workstation may have taken over while this one was away.
+            wait_for_lease
             start_silabs_tunnel
             start_bt_tunnel
             write_remote_env_hint
             continue
+        fi
+
+        # Keep the lease fresh, and give way if another workstation has taken
+        # it (`--take-over`, or this one was away long enough for it to go
+        # stale).  An unreachable dev server is left to the VPN check above.
+        if [ $((SECONDS - LEASE_RENEWED_AT)) -ge "$LEASE_RENEW_SECS" ]; then
+            local rc=0
+            lease_op acquire || rc=$?
+            if [ "$rc" -eq 2 ]; then
+                stand_down
+                wait_for_lease
+                start_forwarding
+                continue
+            fi
         fi
 
         # Hot-plug recovery.  The service starts at login, which is routinely
@@ -1108,10 +1286,43 @@ service starts at login and stops at logout; re-run this script only to change
 the dev server or to pick up an updated checkout.
 
 Options:
+  --take-over [<user>@<devserver>]
+                                 Forward from this workstation now, taking over
+                                 from another of your workstations that is
+                                 currently forwarding.  Without this, a second
+                                 workstation waits until the first stops (or has
+                                 been unreachable for ${LEASE_STALE_SECS}s).
   --service <user>@<devserver>   Run as the service itself (used by the unit;
                                  not normally invoked by hand).
   -h, --help                     Show this help.
 EOF
+}
+
+# take_over — make this workstation the one forwarding the radios now, rather
+# than waiting for the current owner to stop or go stale.
+take_over() {
+    load_config
+    SSH_TARGET="${1:-${SSH_TARGET:-}}"
+    [ -n "$SSH_TARGET" ] || die "No dev server configured; run ${SCRIPT_NAME} <user>@<devserver> first."
+    [ -f "${SYSTEMD_USER_DIR}/${SERVICE_NAME}" ] \
+        || die "${SERVICE_NAME} is not installed here; run ${SCRIPT_NAME} <user>@<devserver> first."
+
+    lease_op force || die "Could not reach ${SSH_TARGET} to take over the radios."
+
+    case "$LEASE_REPLY" in
+        TOOK*)
+            ok "Took over the radios from ${LEASE_HOLDER}."
+            # Let the previous owner notice and stand down before this one
+            # creates its sockets, so the two never forward at the same time.
+            local settle=$((LEASE_RENEW_SECS + 15))
+            info "Waiting ${settle}s for ${LEASE_HOLDER} to stand down..."
+            sleep "$settle"
+            ;;
+        *) ok "This workstation already holds the radios for ${SSH_TARGET}." ;;
+    esac
+
+    systemctl --user restart "$SERVICE_NAME"
+    ok "remote-radios.service restarted; it forwards from this workstation."
 }
 
 # Resolve the radios named in the saved config, without prompting.
@@ -1133,11 +1344,11 @@ run_as_service() {
         || die "No radios configured; run ${SCRIPT_NAME} <user>@<devserver> first."
 
     [ -n "${SILABS_DEV:-}" ] && ok "Silabs radio: ${SILABS_DEV}"
-    start_bind_helper
     resolve_remote_params
-    start_silabs_tunnel
-    start_bt_tunnel
-    write_remote_env_hint
+    # Only one of the developer's workstations forwards at a time; until this
+    # one holds the lease it leaves the dongle alone and opens no tunnels.
+    wait_for_lease
+    start_forwarding
     ok "Remote radios are forwarded to ${SSH_TARGET}."
     monitor_loop
 }
@@ -1149,6 +1360,7 @@ main() {
     case "${1:-}" in
         -h|--help) usage; exit 0 ;;
         --service) SERVICE_MODE=1; shift ;;
+        --take-over) shift; take_over "$@"; exit $? ;;
     esac
 
     if [ "$SERVICE_MODE" -eq 1 ]; then
