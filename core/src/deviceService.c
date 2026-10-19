@@ -84,6 +84,7 @@
 #include "deviceServicePrivate.h"
 #include "event/deviceEventProducer.h"
 #include "icUtil/systemCommandUtils.h"
+#include "observability/observabilityMetrics.h"
 #include "subsystemManager.h"
 
 #define logFmt(fmt) "%s: " fmt, __func__
@@ -160,7 +161,18 @@ static void pendingReconfigurationFreeFunc(void *key, void *value);
 
 static void reconfigureDeviceTask(void *arg);
 
+static void
+FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, const char *deviceClass, bool result);
+
+static bool DeviceNeedsReconfiguring(const icDevice *device);
+
 static void waitForOrCancelPendingReconfiguration(const char *uuid);
+
+static ReconfigureDeviceContext *CancelReconfigurationTask(ReconfigureDeviceContext *ctx);
+
+static pthread_cond_t *ReconfigurationControlCond(void);
+
+static bool IsReconfigurationContextPendingLocked(const ReconfigureDeviceContext *ctx);
 
 /* Private data */
 
@@ -246,12 +258,14 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(ReconfigureDeviceContext, releaseReconfigureDevice
 
 static pthread_mutex_t discoveryControlMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static icHashMap *activeDiscoveries = NULL;
-#define RECONFIGURATION_TIMEOUT_SEC            (30 * 60)
-#define PENDING_RECONFIGURATION_TIMEOUT_SEC    (1 * 60)
-#define MAX_PENDING_RECONFIGURATION_WAIT_COUNT 2
+#define RECONFIGURATION_TIMEOUT_SEC         (30 * 60)
+#define PENDING_RECONFIGURATION_TIMEOUT_SEC (1 * 60)
+#define SHUTDOWN_RECONFIGURATION_WAIT_SEC   (2 * PENDING_RECONFIGURATION_TIMEOUT_SEC)
 static pthread_mutex_t reconfigurationControlMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-static pthread_cond_t reconfigurationControlCond = PTHREAD_COND_INITIALIZER;
+// Only access through ReconfigurationControlCond(): timed waits need the monotonic clock initTimedWaitCond() sets.
+static pthread_cond_t reconfigurationControlCond;
 static icHashMap *pendingReconfiguration = NULL;
+static ObservabilityGauge *pendingReconfigurationGauge = NULL;
 static uint16_t discoveryTimeoutSeconds = 0;
 
 static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const char *deviceClass,
@@ -264,7 +278,12 @@ static bool deviceServiceIsUriAccessible(const char *uri);
 
 static pthread_mutex_t subsystemsAreReadyMutex = PTHREAD_MUTEX_INITIALIZER;
 
+// Subsystems can serve devices; set before the startup reconfiguration/synchronization pass.
 static bool subsystemsReadyForDevices = false;
+
+// Published readiness (deviceServiceIsReadyForDeviceOperation); set only after the startup pass has marked every device
+// needing reconfiguration as pending, so no caller can observe "ready" while a soon-to-be-replaced device is unflagged.
+static bool deviceOperationsReady = false;
 
 static bool isDeviceDescriptorsListReady = false;
 
@@ -289,6 +308,8 @@ static icThreadPool *deviceInitializerThreadPool = NULL;
 #define MAX_DEVICE_SYNC_THREADS 5
 #define MAX_DEVICE_SYNC_QUEUE   128
 static void startDeviceInitialization(void);
+
+static void deviceSynchronizationTask(void *arg);
 
 // 1 more minute than we allow for a legacy sensor to upgrade
 #define MAX_DRIVERS_SHUTDOWN_SECS (31 * 60)
@@ -1973,6 +1994,9 @@ bool deviceServiceStart(void)
     failedToPair = hashMapCreate();
     mutexLock(&reconfigurationControlMutex);
     pendingReconfiguration = hashMapCreate();
+    pendingReconfigurationGauge = observabilityGaugeCreate(
+        "device.reconfiguration.pending", "Devices with a pending or in-progress reconfiguration", "1");
+    observabilityGaugeRecord(pendingReconfigurationGauge, 0);
     mutexUnlock(&reconfigurationControlMutex);
 
     if (deviceDriverManagerInitialize() != true)
@@ -2018,6 +2042,7 @@ void deviceServiceShutdown()
     //
     mutexLock(&subsystemsAreReadyMutex);
     subsystemsReadyForDevices = false;
+    deviceOperationsReady = false;
     mutexUnlock(&subsystemsAreReadyMutex);
 
     mutexLock(&deviceDescriptorsListLatestMutex);
@@ -2032,6 +2057,7 @@ void deviceServiceShutdown()
     mutexLock(&reconfigurationControlMutex);
     hashMapDestroy(pendingReconfiguration, pendingReconfigurationFreeFunc);
     pendingReconfiguration = NULL;
+    g_clear_pointer(&pendingReconfigurationGauge, observabilityGaugeRelease);
     mutexUnlock(&reconfigurationControlMutex);
 
     deviceServiceCommFailShutdown();
@@ -3182,13 +3208,22 @@ bool deviceServiceIsReadyForPairing(void)
 bool deviceServiceIsReadyForDeviceOperation(void)
 {
     pthread_mutex_lock(&subsystemsAreReadyMutex);
-    bool retVal = subsystemsReadyForDevices;
+    bool retVal = deviceOperationsReady;
     pthread_mutex_unlock(&subsystemsAreReadyMutex);
 
     return retVal;
 }
 
 /****************** PRIVATE INTERNAL FUNCTIONS ***********************/
+
+static bool SubsystemsAreReadyForDevices(void)
+{
+    pthread_mutex_lock(&subsystemsAreReadyMutex);
+    bool retVal = subsystemsReadyForDevices;
+    pthread_mutex_unlock(&subsystemsAreReadyMutex);
+
+    return retVal;
+}
 
 static bool deviceDescriptorsListIsReady(void)
 {
@@ -3300,14 +3335,47 @@ static void subsystemManagerReadyForDevicesCallback()
 
     icLogDebug(LOG_TAG, "Subsystem manager is ready for devices");
     pthread_mutex_lock(&subsystemsAreReadyMutex);
-    subsystemsReadyForDevices = true;
+    bool stopping = deviceServiceIsShuttingDown();
+
+    // A subsystem can finish initializing during shutdown; don't undo shutdown's reset of this flag.
+    if (stopping == false)
+    {
+        subsystemsReadyForDevices = true;
+    }
+
     pthread_mutex_unlock(&subsystemsAreReadyMutex);
+
+    if (stopping == true)
+    {
+        icLogDebug(LOG_TAG, "Shutting down; ignoring subsystems ready for devices");
+
+        return;
+    }
+
+    // Mark every device needing reconfiguration as pending before readiness is published (to the client gate,
+    // device service status, drivers and the ready event), so no device is readable while awaiting replacement.
+    startDeviceInitialization();
+
+    // Shutdown sets its flag before clearing readiness under this mutex, so readiness is never re-published after it.
+    pthread_mutex_lock(&subsystemsAreReadyMutex);
+    bool publishReadiness = deviceServiceIsShuttingDown() == false;
+
+    if (publishReadiness == true)
+    {
+        deviceOperationsReady = true;
+    }
+
+    pthread_mutex_unlock(&subsystemsAreReadyMutex);
+
+    if (publishReadiness == false)
+    {
+        icLogDebug(LOG_TAG, "Shutting down; not publishing readiness for device operation");
+
+        return;
+    }
 
     notifyDriversForServiceStatusChange();
     sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonReadyForDeviceOperation);
-    // Load up a background threadpool that will perform any required device initialization
-    //
-    startDeviceInitialization();
 }
 
 // the time zone changed... notify any devices that have the well-known timezone resource
@@ -3687,7 +3755,7 @@ static void reconfigureDeviceTask(void *arg)
     }
     else
     {
-        // these resources are destroyed when the device is destroyed in deviceInitializationTask
+        // these resources are destroyed when the device is destroyed at the end of this task
         icDeviceResource *manufacturer =
             deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_MANUFACTURER);
         icDeviceResource *model = deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_MODEL);
@@ -3780,26 +3848,50 @@ static void reconfigureDeviceTask(void *arg)
         }
     }
 
-    // invoke the reconfiguration completed callback
+    FinishReconfiguration(ctx, deviceUuid, device != NULL ? device->deviceClass : NULL, result);
+}
+
+/*
+ * Completion order matters: the callback runs while the device is still pending, the device then stops being pending,
+ * and only after that are clients notified, so a listener can query the device as soon as it hears the event. Nothing
+ * is sent for an unknown device or during shutdown.
+ */
+static void
+FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, const char *deviceClass, bool result)
+{
+    mutexLock(&ctx->mtx);
+    ctx->taskHandle = 0;
+    mutexUnlock(&ctx->mtx);
+
     if (ctx->reconfigurationCompleted != NULL)
     {
         ctx->reconfigurationCompleted(result, ctx->deviceUuid);
     }
 
-    // remove the context from pending reconfiguration hashmap
     deviceServiceRemoveReconfigureDeviceContext(ctx);
+
+    if (deviceClass != NULL && deviceServiceIsShuttingDown() == false)
+    {
+        sendDeviceReconfigurationFinishedEvent(deviceClass, deviceUuid, result);
+    }
 }
 
 bool deviceServiceDeviceNeedsReconfiguring(const char *deviceUuid)
 {
-    bool retVal = false;
-
     scoped_icDevice *device = deviceServiceGetDevice(deviceUuid);
     if (device == NULL)
     {
         icError("Failed to get device for uuid: %s", deviceUuid);
+
         return false;
     }
+
+    return DeviceNeedsReconfiguring(device);
+}
+
+static bool DeviceNeedsReconfiguring(const icDevice *device)
+{
+    bool retVal = false;
 
     DeviceDriver *driver = getDeviceDriverForUri(device->uri);
     if (driver == NULL)
@@ -3870,23 +3962,16 @@ bool deviceServiceDeviceNeedsReconfiguring(const char *deviceUuid)
 
 static void reconfigurationCompletedCallback(bool result, const char *deviceUuid)
 {
-    // This reconfiguration is part of initial device startup where we either reconfigure or synchronize.
-    // If re-configuring failed, then fall back to synchronization.
-    if (result == false && deviceServiceIsReadyForDeviceOperation())
+    // A failed startup reconfiguration falls back to synchronization. It is queued so the device stops being pending
+    // without waiting for it, and the queued task skips drivers that don't implement synchronizeDevice().
+    if (result == false && SubsystemsAreReadyForDevices() &&
+        threadPoolAddTask(deviceInitializerThreadPool, deviceSynchronizationTask, strdup(deviceUuid), NULL) == false)
     {
-        scoped_icDevice *device = deviceServiceGetDevice(deviceUuid);
-        if (device != NULL)
-        {
-            DeviceDriver *driver = getDeviceDriverForUri(device->uri);
-            if (driver != NULL)
-            {
-                driver->synchronizeDevice(driver->callbackContext, device);
-            }
-        }
+        icLogError(LOG_TAG, "%s: failed to add deviceSynchronizationTask to thread pool", __FUNCTION__);
     }
 }
 
-static void deviceInitializationTask(void *arg)
+static void deviceSynchronizationTask(void *arg)
 {
     char *uuid = (char *) arg;
 
@@ -3902,16 +3987,8 @@ static void deviceInitializationTask(void *arg)
         DeviceDriver *driver = getDeviceDriverForUri(device->uri);
         if (driver != NULL)
         {
-            // a device can optionally be reconfigured OR synchronized (reconfiguration covers synchronization)
-            if (deviceServiceDeviceNeedsReconfiguring(uuid) == true)
-            {
-                // scheduling a asynchronous reconfiguration to run now
-                deviceServiceReconfigureDevice(uuid, 0, reconfigurationCompletedCallback, false);
-            }
-            // if reconfiguration is not required, then just synchronize the device.
-            // The synchronize device operation is synchronous (ie blocking) unlike
-            // reconfiguration which is asynchronous
-            else if (driver->synchronizeDevice != NULL)
+            // Devices needing reconfiguration were already scheduled by startDeviceInitialization.
+            if (driver->synchronizeDevice != NULL)
             {
                 driver->synchronizeDevice(driver->callbackContext, device);
             }
@@ -3931,13 +4008,32 @@ static void startDeviceInitialization(void)
 {
     icLinkedList *devices = jsonDatabaseGetDevices();
     icLinkedListIterator *iterator = linkedListIteratorCreate(devices);
-    while (linkedListIteratorHasNext(iterator))
+    while (linkedListIteratorHasNext(iterator) && deviceServiceIsShuttingDown() == false)
     {
         icDevice *device = linkedListIteratorGetNext(iterator);
-        if (threadPoolAddTask(deviceInitializerThreadPool, deviceInitializationTask, strdup(device->uuid), NULL) ==
+
+        // Scheduled synchronously so the device is already pending when readiness is published.
+        if (DeviceNeedsReconfiguring(device) == true)
+        {
+            // A repeated pass may see a device an earlier pass is still reconfiguring (which covers synchronization).
+            if (deviceServiceIsReconfigurationPending(device->uuid) == true)
+            {
+                continue;
+            }
+
+            // ...or one it already finished, since this snapshot may predate that.
+            if (deviceServiceDeviceNeedsReconfiguring(device->uuid) == true)
+            {
+                deviceServiceReconfigureDevice(device->uuid, 0, reconfigurationCompletedCallback, false);
+
+                continue;
+            }
+        }
+
+        if (threadPoolAddTask(deviceInitializerThreadPool, deviceSynchronizationTask, strdup(device->uuid), NULL) ==
             false)
         {
-            icLogError(LOG_TAG, "%s: failed to add deviceInitializationTask to thread pool", __FUNCTION__);
+            icLogError(LOG_TAG, "%s: failed to add deviceSynchronizationTask to thread pool", __FUNCTION__);
         }
     }
     linkedListIteratorDestroy(iterator);
@@ -4559,7 +4655,7 @@ DeviceServiceStatus *deviceServiceGetStatus(void)
     result->discoveringDeviceClasses = linkedListCreate();
     result->findingOrphanedDevices = false;
 
-    // if all the subsystems are ready, it means we can operate paired devices.
+    // ready once subsystems are ready and devices needing startup reconfiguration are flagged as pending.
     //
     result->isReadyForDeviceOperation = deviceServiceIsReadyForDeviceOperation();
     // we cannot pair unless all subsystems are ready
@@ -4768,49 +4864,51 @@ static void waitForOrCancelPendingReconfiguration(const char *uuid)
         return;
     }
 
-    mutexLock(&ctx->mtx);
-    uint32_t taskHandle = ctx->taskHandle;
-    mutexUnlock(&ctx->mtx);
+    ReconfigureDeviceContext *taskRef = CancelReconfigurationTask(ctx);
 
-    if (isDelayTaskWaiting(taskHandle) == true)
+    if (taskRef != NULL)
     {
-        cancelDelayTask(taskHandle);
+        releaseReconfigureDeviceContext(taskRef);
         deviceServiceRemoveReconfigureDeviceContext(ctx);
+
         return;
     }
 
     if (sendReconfigurationSignal(ctx, true) == true)
     {
-        bool done = false;
         struct timespec start, now;
 
         getCurrentTime(&start, supportMonotonic());
 
-        while (done == false)
+        mutexLock(&reconfigurationControlMutex);
+
+        // Check before every wait: the task may finish (and broadcast) before this thread starts waiting.
+        while (IsReconfigurationContextPendingLocked(ctx) == true)
         {
             getCurrentTime(&now, supportMonotonic());
 
-            long elapsed_sec = now.tv_sec - start.tv_sec;
-            if (elapsed_sec >= PENDING_RECONFIGURATION_TIMEOUT_SEC)
+            long elapsedSecs = now.tv_sec - start.tv_sec;
+
+            if (elapsedSecs >= PENDING_RECONFIGURATION_TIMEOUT_SEC)
             {
-                done = true;
                 icError("Device pending reconfiguration is taking too long to cancel");
-                continue;
+                break;
             }
 
-            mutexLock(&reconfigurationControlMutex);
-            incrementalCondTimedWait(&reconfigurationControlCond,
+            incrementalCondTimedWait(ReconfigurationControlCond(),
                                      &reconfigurationControlMutex,
-                                     (PENDING_RECONFIGURATION_TIMEOUT_SEC - elapsed_sec));
-            mutexUnlock(&reconfigurationControlMutex);
-
-            done = deviceServiceIsReconfigurationPending(uuid) == false;
+                                     (int) (PENDING_RECONFIGURATION_TIMEOUT_SEC - elapsedSecs));
         }
+
+        mutexUnlock(&reconfigurationControlMutex);
     }
 }
 
 static void cancelPendingReconfigurationTasks()
 {
+    // Snapshot under the control lock; the scheduler nests ctx->mtx -> control, so never take ctx->mtx under it.
+    g_autoptr(GPtrArray) contexts = g_ptr_array_new_with_free_func((GDestroyNotify) releaseReconfigureDeviceContext);
+
     mutexLock(&reconfigurationControlMutex);
     icHashMapIterator *pendingIt = hashMapIteratorCreate(pendingReconfiguration);
     while (hashMapIteratorHasNext(pendingIt))
@@ -4819,51 +4917,105 @@ static void cancelPendingReconfigurationTasks()
         uint16_t keyLen;
         ReconfigureDeviceContext *ctx;
         hashMapIteratorGetNext(pendingIt, &deviceUuid, &keyLen, (void **) &ctx);
+        g_ptr_array_add(contexts, acquireReconfigureDeviceContext(ctx));
+    }
 
-        mutexLock(&ctx->mtx);
-        uint32_t taskHandle = ctx->taskHandle;
-        mutexUnlock(&ctx->mtx);
+    hashMapIteratorDestroy(pendingIt);
+    mutexUnlock(&reconfigurationControlMutex);
 
-        // cancel the waiting tasks
-        if (isDelayTaskWaiting(taskHandle))
+    for (guint i = 0; i < contexts->len; i++)
+    {
+        ReconfigureDeviceContext *ctx = g_ptr_array_index(contexts, i);
+        ReconfigureDeviceContext *taskRef = CancelReconfigurationTask(ctx);
+
+        if (taskRef != NULL)
         {
-            cancelDelayTask(taskHandle);
-            hashMapIteratorDeleteCurrent(pendingIt, pendingReconfigurationFreeFunc);
+            releaseReconfigureDeviceContext(taskRef);
+            deviceServiceRemoveReconfigureDeviceContext(ctx);
         }
         else
         {
-            // Send terminate signal to the tasks that are already scheduled and waiting
             sendReconfigurationSignal(ctx, true);
         }
     }
-    hashMapIteratorDestroy(pendingIt);
-    mutexUnlock(&reconfigurationControlMutex);
+}
+
+/*
+ * Cancels a reconfiguration task that has not started. Returns the task's context reference (which the caller must
+ * release) on success, or NULL if the task has started or finished. Runs under ctx->mtx, which the finishing task takes
+ * to clear its handle, because bartoncommon may reuse a finished task's handle.
+ */
+static ReconfigureDeviceContext *CancelReconfigurationTask(ReconfigureDeviceContext *ctx)
+{
+    ReconfigureDeviceContext *taskRef = NULL;
+
+    mutexLock(&ctx->mtx);
+
+    if (ctx->taskHandle != 0)
+    {
+        taskRef = (ReconfigureDeviceContext *) cancelDelayTask(ctx->taskHandle);
+
+        // The cancelled task's record is freed and its handle may be reused, so no later canceller may use it.
+        if (taskRef != NULL)
+        {
+            ctx->taskHandle = 0;
+        }
+    }
+
+    mutexUnlock(&ctx->mtx);
+
+    return taskRef;
 }
 
 static void waitForPendingReconfigurationsToComplete()
 {
-    LOCK_SCOPE(reconfigurationControlMutex);
-    uint16_t waitCount = 0;
-    while (waitCount < MAX_PENDING_RECONFIGURATION_WAIT_COUNT)
-    {
-        uint16_t count = 0;
-        if (pendingReconfiguration != NULL)
-        {
-            count = hashMapCount(pendingReconfiguration);
-        }
+    // A deadline rather than a wake-up count: unrelated completions also broadcast.
+    const long timeoutSecs = SHUTDOWN_RECONFIGURATION_WAIT_SEC;
+    struct timespec start, now;
 
-        if (count == 0)
+    getCurrentTime(&start, supportMonotonic());
+
+    LOCK_SCOPE(reconfigurationControlMutex);
+
+    while (pendingReconfiguration != NULL && hashMapCount(pendingReconfiguration) > 0)
+    {
+        getCurrentTime(&now, supportMonotonic());
+
+        long elapsedSecs = now.tv_sec - start.tv_sec;
+
+        if (elapsedSecs >= timeoutSecs)
         {
+            icWarn("%" PRIu16 " reconfiguration tasks still running after %ld seconds; continuing shutdown",
+                   hashMapCount(pendingReconfiguration),
+                   timeoutSecs);
             break;
         }
-        else
-        {
-            icDebug("%" PRIu16 " reconfiguration tasks are blocking", count);
-            incrementalCondTimedWait(
-                &reconfigurationControlCond, &reconfigurationControlMutex, PENDING_RECONFIGURATION_TIMEOUT_SEC);
-        }
-        waitCount++;
+
+        icDebug("%" PRIu16 " reconfiguration tasks are blocking", hashMapCount(pendingReconfiguration));
+        incrementalCondTimedWait(
+            ReconfigurationControlCond(), &reconfigurationControlMutex, (int) (timeoutSecs - elapsedSecs));
     }
+}
+
+static void InitReconfigurationControlCond(void)
+{
+    initTimedWaitCond(&reconfigurationControlCond);
+}
+
+static pthread_cond_t *ReconfigurationControlCond(void)
+{
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+
+    pthread_once(&once, InitReconfigurationControlCond);
+
+    return &reconfigurationControlCond;
+}
+
+// Caller holds reconfigurationControlMutex.
+static bool IsReconfigurationContextPendingLocked(const ReconfigureDeviceContext *ctx)
+{
+    return pendingReconfiguration != NULL &&
+           hashMapGet(pendingReconfiguration, ctx->deviceUuid, (uint16_t) (strlen(ctx->deviceUuid) + 1)) == ctx;
 }
 
 static void pendingReconfigurationFreeFunc(void *key, void *value)
@@ -4880,12 +5032,19 @@ static bool deviceServiceSetReconfigureDeviceContext(ReconfigureDeviceContext *c
 {
     bool result = false;
     mutexLock(&reconfigurationControlMutex);
-    if (ctx != NULL && pendingReconfiguration != NULL)
+
+    // Shutdown sets its flag before snapshotting this map, so refusing here means no context escapes cancellation.
+    if (ctx != NULL && pendingReconfiguration != NULL && deviceServiceIsShuttingDown() == false)
     {
-        result = hashMapPut(pendingReconfiguration,
-                            ctx->deviceUuid,
-                            (uint16_t) (strlen(ctx->deviceUuid) + 1),
-                            acquireReconfigureDeviceContext(ctx));
+        ReconfigureDeviceContext *mapRef = acquireReconfigureDeviceContext(ctx);
+        result = hashMapPut(pendingReconfiguration, ctx->deviceUuid, (uint16_t) (strlen(ctx->deviceUuid) + 1), mapRef);
+
+        if (result == false)
+        {
+            releaseReconfigureDeviceContext(mapRef);
+        }
+
+        observabilityGaugeRecord(pendingReconfigurationGauge, hashMapCount(pendingReconfiguration));
     }
     mutexUnlock(&reconfigurationControlMutex);
     return result;
@@ -5004,13 +5163,18 @@ static bool deviceServiceRemoveReconfigureDeviceContext(ReconfigureDeviceContext
     mutexLock(&reconfigurationControlMutex);
     if (ctx != NULL && pendingReconfiguration != NULL)
     {
-        result = hashMapDelete(pendingReconfiguration,
-                               ctx->deviceUuid,
-                               (uint16_t) (strlen(ctx->deviceUuid) + 1),
-                               pendingReconfigurationFreeFunc);
-        // signal that pending reconfiguration hasmap has shrunk,
-        // which means reconfiguration task has completed.
-        pthread_cond_broadcast(&reconfigurationControlCond);
+        uint16_t keyLen = (uint16_t) (strlen(ctx->deviceUuid) + 1);
+
+        // Only remove this context; a newer reconfiguration of the same device may have replaced it.
+        if (hashMapGet(pendingReconfiguration, ctx->deviceUuid, keyLen) == ctx)
+        {
+            result = hashMapDelete(pendingReconfiguration, ctx->deviceUuid, keyLen, pendingReconfigurationFreeFunc);
+        }
+
+        observabilityGaugeRecord(pendingReconfigurationGauge, hashMapCount(pendingReconfiguration));
+
+        // Wake waiters to re-check pending state.
+        pthread_cond_broadcast(ReconfigurationControlCond());
     }
     mutexUnlock(&reconfigurationControlMutex);
     return result;
@@ -5025,29 +5189,47 @@ void deviceServiceReconfigureDevice(const char *deviceUuid,
     if (deviceServiceIsReconfigurationPending(deviceUuid) == false)
     {
         icDebug("Scheduling reconfiguration for device %s after %d seconds", deviceUuid, delaySeconds);
-        ReconfigureDeviceContext *ctx = g_atomic_rc_box_new0(ReconfigureDeviceContext);
-        ctx->deviceUuid = strdup(deviceUuid);
-        mutexInitWithType(&ctx->mtx, PTHREAD_MUTEX_ERRORCHECK);
-        pthread_cond_init(&ctx->cond, NULL);
-        ctx->reconfigurationCompleted = reconfigurationCompleted;
-        ctx->shouldTerminate = false;
-        ctx->isSignaled = false;
-        ctx->isAllowedAsap = allowAsap;
+        ReconfigureDeviceContext *taskRef = g_atomic_rc_box_new0(ReconfigureDeviceContext);
+        taskRef->deviceUuid = strdup(deviceUuid);
+        mutexInitWithType(&taskRef->mtx, PTHREAD_MUTEX_ERRORCHECK);
+        initTimedWaitCond(&taskRef->cond);
+        taskRef->reconfigurationCompleted = reconfigurationCompleted;
+        taskRef->shouldTerminate = false;
+        taskRef->isSignaled = false;
+        taskRef->isAllowedAsap = allowAsap;
 
         // The RECONFIGURATION_TIMEOUT_SEC limits how long we should wait before we give up
         // trying to reconfigure a sleepy device.
-        ctx->timeoutSeconds = RECONFIGURATION_TIMEOUT_SEC;
+        taskRef->timeoutSeconds = RECONFIGURATION_TIMEOUT_SEC;
 
-        // add the context to pending reconfiguration hashmap
-        if (deviceServiceSetReconfigureDeviceContext(ctx) == false)
+        // Hold a local reference and the context mutex from before the device becomes pending until the handle is
+        // stored, so a fast zero-delay task cannot free the context first and a removal never reads an unset handle.
+        g_autoptr(ReconfigureDeviceContext) localRef = acquireReconfigureDeviceContext(taskRef);
+        mutexLock(&localRef->mtx);
+
+        if (deviceServiceSetReconfigureDeviceContext(localRef) == false)
         {
-            icError("Failed to add reconfiguration device context to pending reconfiguration list, not scheduling "
-                    "reconfiguration task");
+            mutexUnlock(&localRef->mtx);
+            icDebug("Not scheduling reconfiguration for device %s: one is already pending or the service is shutting "
+                    "down",
+                    deviceUuid);
+            releaseReconfigureDeviceContext(taskRef);
+
             return;
         }
-        // schedule reconfiguration
-        ctx->taskHandle = scheduleDelayTask(delaySeconds, DELAY_SECS, reconfigureDeviceTask, ctx);
-        ctx = NULL;
+
+        // On success the scheduled task owns taskRef.
+        localRef->taskHandle = scheduleDelayTask(delaySeconds, DELAY_SECS, reconfigureDeviceTask, taskRef);
+        uint32_t taskHandle = localRef->taskHandle;
+        mutexUnlock(&localRef->mtx);
+
+        if (taskHandle == 0)
+        {
+            // The task will never run, so nothing else would clear the pending state for this device.
+            icError("Failed to schedule reconfiguration task for device %s", deviceUuid);
+            deviceServiceRemoveReconfigureDeviceContext(localRef);
+            releaseReconfigureDeviceContext(taskRef);
+        }
     }
     else
     {

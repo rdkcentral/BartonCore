@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <glib.h>
 #include <stdbool.h>
 
 typedef bool (*processLineCallback)(const char *line, void *userData);
@@ -46,3 +47,9 @@ __attribute__((format(__printf__, 1, 2))) void emitOutput(const char *format, ..
  * Emit an error message to the terminal.  This will be displayed in a way that doesn't mangle the prompt.
  */
 __attribute__((format(__printf__, 1, 2))) void emitError(const char *format, ...);
+
+/**
+ * Emit an error for a failed single-item lookup: "<what> not found", or "<what> unavailable: <reason>" when the
+ * client refused the request (err set, e.g. not ready or reconfiguring).
+ */
+__attribute__((format(__printf__, 2, 3))) void emitLookupFailure(const GError *err, const char *format, ...);

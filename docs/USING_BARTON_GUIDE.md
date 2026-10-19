@@ -40,3 +40,32 @@ Barton's API is based upon GObject (the GLib Object System) in native C as the p
    Once devices are added, additional signals can be connected to get events from those as well.
 7. Perform some action with the client such as commissioning a new Matter device with `b_core_client_commission_device` or changing a resource on a device to perform some action with `b_core_client_write_resource`
 
+### Service Readiness and Device Reconfiguration
+
+Barton occasionally rebuilds an existing device in the background (for example after a firmware
+upgrade or a driver update), which replaces its stored data. To avoid handing out data that is about
+to change, the single-device read functions (`b_core_client_get_device_by_id`, `_get_device_by_uri`,
+`_get_endpoint_by_id`, `_get_endpoint_by_uri`, `_get_resource_by_uri`, `_read_resource`,
+`_read_metadata`) and `b_core_client_write_metadata` can fail with a `GError` in the
+`B_CORE_CLIENT_ERROR` domain:
+
+- `B_CORE_SERVICE_STATE_ERROR_NOT_READY`: the service has not yet emitted the `status-changed` event with
+  reason `READY_FOR_DEVICE_OPERATION` (or is shutting down). Wait for that event, then retry.
+- `B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING`: the device is being reconfigured. Retry after
+  `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED` or `_FAILED` arrives for that device with
+  session discovery type `B_CORE_DISCOVERY_TYPE_NONE`. Those events are sent whenever a reconfiguration
+  finishes, so they are also the cue to re-read a device you have cached. Connect to these signals
+  before querying, so a reconfiguration that finishes in between is not missed. No event is sent if
+  the reconfiguration could not be scheduled, the device was removed before its reconfiguration
+  started, or the service is shutting down, so also retry with a bounded backoff rather than waiting
+  only for the event.
+
+Treat both as "try again later", not "not found", and pass a `GError **` rather than `NULL` so you can
+tell them apart. List functions (such as `b_core_client_get_devices`), `b_core_client_write_resource`
+and `b_core_client_execute_resource` are never refused; lists include devices that are being
+reconfigured.
+
+`b_core_client_stop` lets a reconfiguration that is still running finish, so it can take up to 120
+seconds. If your host stops the process sooner, the interrupted reconfiguration is retried the next
+time Barton starts.
+

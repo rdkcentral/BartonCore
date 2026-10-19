@@ -205,6 +205,16 @@ void sendDeviceConfigureCompletedEvent(const char *deviceClass, const char *uuid
 void sendDeviceConfigureFailedEvent(const char *deviceClass, const char *uuid, bool forRecovery);
 
 /*
+ * broadcast a device configuration completed or failed event for an existing device that finished
+ * reconfiguring outside of any discovery session (session discovery type NONE)
+ *
+ * @param uuid - the UUID of the device that was reconfigured
+ * @param deviceClass - the class of the device that was reconfigured
+ * @param succeeded - true to send a completed event, false to send a failed event
+ */
+void sendDeviceReconfigurationFinishedEvent(const char *deviceClass, const char *uuid, bool succeeded);
+
+/*
  * broadcast a device service storage changed event
  *
  * @param whatChanged - what kind of file change occurred
