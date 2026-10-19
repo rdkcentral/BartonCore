@@ -617,18 +617,18 @@ namespace
     // is retried once idle, and a bound device suppresses teardown entirely.
     // ========================================================================
 
-    const char *kRaceDriverSource = R"(
+    const char *kGuardDriverSource = R"(
         SbmdDriver({
             schemaVersion: "4.0",
             driverVersion: 1,
-            name: "RaceTestDriver",
+            name: "GuardTestDriver",
             constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0 },
-            barton: { deviceClass: "raceLight", deviceClassVersion: 1 },
+            barton: { deviceClass: "guardLight", deviceClassVersion: 1 },
             matter: { deviceTypes: [0x0100] },
             aliases: { onOff: { clusterId: CL_ON_OFF, attributeId: ATTR_ON_OFF, type: "bool" } },
             endpoints: {
                 "1": {
-                    profile: "raceLight",
+                    profile: "guardLight",
                     profileVersion: 1,
                     resources: { isOn: { type: "boolean", modes: ["read"], read: readIsOn } },
                 },
@@ -652,26 +652,26 @@ namespace
 
         static void TearDownTestSuite() { MQuickJsRuntime::Instance().Shutdown(); }
 
-        std::unique_ptr<SbmdDriver> CreateRaceDriver()
+        std::unique_ptr<SbmdDriver> CreateGuardDriver()
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto reg = SbmdLoader::LoadDriver(MQuickJsRuntime::Instance().GetSharedContext(),
-                                              "<race-test>",
-                                              kRaceDriverSource,
-                                              strlen(kRaceDriverSource));
+                                              "<guard-test>",
+                                              kGuardDriverSource,
+                                              strlen(kGuardDriverSource));
 
             if (!reg)
             {
                 return nullptr;
             }
 
-            return std::make_unique<SbmdDriver>(std::move(reg), kRaceDriverSource);
+            return std::make_unique<SbmdDriver>(std::move(reg), kGuardDriverSource);
         }
     };
 
     TEST_F(SbmdLifecycleGuardTest, TeardownDeferredWhileBindInFlightThenRetriedWhenIdle)
     {
-        auto sbmd = CreateRaceDriver();
+        auto sbmd = CreateGuardDriver();
         ASSERT_NE(sbmd, nullptr);
 
         TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
@@ -693,7 +693,7 @@ namespace
 
     TEST_F(SbmdLifecycleGuardTest, DeactivateIfIdleIsNoOpWhileDeviceBound)
     {
-        auto sbmd = CreateRaceDriver();
+        auto sbmd = CreateGuardDriver();
         ASSERT_NE(sbmd, nullptr);
 
         TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
@@ -713,6 +713,51 @@ namespace
 
         driver.CallDeactivateIfIdle();
         EXPECT_TRUE(sbmd->IsActivated()) << "a bound device must keep the driver active";
+    }
+
+    TEST_F(SbmdLifecycleGuardTest, FailedBindDeactivatesOnExit)
+    {
+        auto sbmd = CreateGuardDriver();
+        ASSERT_NE(sbmd, nullptr);
+
+        TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
+
+        // The driver is freshly constructed and still holds its source, so AddDevice's Activate()
+        // re-evaluates that retained source and succeeds. Do NOT deactivate it first: that would
+        // free the source (ReleaseHeavyRegistration), making Activate() re-read the pseudo-path and
+        // fail at activate_failed, which bypasses the rollback this test covers (that distinct path
+        // is exercised by FailedActivationAbortsBind below). The unpopulated cache then makes
+        // ResolveEndpointMap fail after activation, so the bind fails on the post-activation path and
+        // the real InFlightBind RAII destructor must roll the activation back.
+        auto cache = std::make_shared<DeviceDataCache>("bind-fail", nullptr);
+        auto device = std::make_unique<TestableMatterDevice>("bind-fail", cache);
+
+        EXPECT_FALSE(driver.AddDevice(std::move(device)));
+        EXPECT_FALSE(sbmd->IsActivated()) << "a failed bind must deactivate the driver it activated";
+    }
+
+    TEST_F(SbmdLifecycleGuardTest, FailedActivationAbortsBind)
+    {
+        auto sbmd = CreateGuardDriver();
+        ASSERT_NE(sbmd, nullptr);
+
+        TestableSpecBasedMatterDeviceDriver driver(sbmd.get());
+
+        // Reduce the driver to its claim metadata so it releases its retained source. Its file path
+        // is a pseudo-path, so the on-demand re-read inside AddDevice's Activate() then fails,
+        // deterministically exercising the activate_failed abort before any device is bound (the
+        // complement of FailedBindDeactivatesOnExit's post-activation rollback).
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            sbmd->ReduceToClaimMetadata();
+        }
+        ASSERT_FALSE(sbmd->IsActivated());
+
+        auto cache = std::make_shared<DeviceDataCache>("activate-fail", nullptr);
+        auto device = std::make_unique<TestableMatterDevice>("activate-fail", cache);
+
+        EXPECT_FALSE(driver.AddDevice(std::move(device)));
+        EXPECT_FALSE(sbmd->IsActivated()) << "a failed activation must leave the driver inactive and bind nothing";
     }
 
 } // namespace

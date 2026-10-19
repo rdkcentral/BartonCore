@@ -214,11 +214,11 @@ namespace barton
 
     bool SbmdDriver::MatchesClaimMetadata(const SbmdRegistration &fresh) const
     {
-        const auto &stub = *registration;
+        const auto &claim = *registration;
 
-        return fresh.name == stub.name && fresh.barton.deviceClass == stub.barton.deviceClass &&
-               fresh.matter.deviceTypes == stub.matter.deviceTypes && fresh.matter.vendorId == stub.matter.vendorId &&
-               fresh.matter.productId == stub.matter.productId;
+        return fresh.name == claim.name && fresh.barton.deviceClass == claim.barton.deviceClass &&
+               fresh.matter.deviceTypes == claim.matter.deviceTypes && fresh.matter.vendorId == claim.matter.vendorId &&
+               fresh.matter.productId == claim.matter.productId;
     }
 
     void SbmdDriver::ReleaseHeavyRegistration()

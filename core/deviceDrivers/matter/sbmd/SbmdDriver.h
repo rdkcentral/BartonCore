@@ -121,8 +121,16 @@ namespace barton
         bool IsActivated() const;
 
         /**
-         * Get the driver registration (always available, even when deactivated).
-         * Handler JSValues are only valid when activated.
+         * Get the driver registration.
+         *
+         * Only the claim-identity fields (`name`, `filePath`, `barton.deviceClass`, and
+         * `matter.deviceTypes`/`vendorId`/`productId`) are valid in every state. While the driver is
+         * inactive the remaining fields are released or zeroed (endpoints, aliases, handlers,
+         * `reporting`, `featureClusters`, `defaultTimeoutMs`, `schemaVersion`, `driverVersion`,
+         * `barton.deviceClassVersion`, `matter.revision`), and handler JSValues are valid only while
+         * activated. `Activate()` replaces the underlying registration object, so a reference returned
+         * here (including `GetName()`'s, which points into the same object) MUST NOT be held across an
+         * activation or deactivation.
          */
         const SbmdRegistration &GetRegistration() const;
 

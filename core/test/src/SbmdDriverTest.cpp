@@ -494,7 +494,7 @@ namespace
                 name: "CmdLifecycleTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: {
                     echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
                 },
@@ -549,7 +549,7 @@ namespace
                 name: "CmdDeactivateTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: { echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO } },
                 commandHandlers: {
                     handleEcho: { aliases: ["echoCmd"], handler: fn },
@@ -604,6 +604,121 @@ namespace
         }
 
         EXPECT_FALSE(driver->IsActivated());
+    }
+
+    // ========================================================================
+    // Numeric claim/version field range validation
+    //
+    // The loader reads numeric fields through JS_ToUint32, which wraps values >= 2^32 and then
+    // narrows; without a range check an out-of-range disk edit could alias a smaller in-range value
+    // and slip a changed claim identity or version past re-read validation. The loader must reject
+    // such values at parse time (so a tampered re-read fails activation, and the bind is rejected).
+    // ========================================================================
+
+    TEST_F(SbmdDriverTest, ProfileVersionAboveUint8Rejected)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadProfileVersion",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+                endpoints: { "1": { profile: "test", profileVersion: 257, resources: {} } },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, ProfileVersionWraparoundRejected)
+    {
+        // 4294967297 == 2^32 + 1 wraps to 1 under JS_ToUint32; the saturating range check must catch
+        // it before it aliases a valid cached version.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "WrappingProfileVersion",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+                endpoints: { "1": { profile: "test", profileVersion: 4294967297, resources: {} } },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, DeviceTypeAboveUint16Rejected)
+    {
+        // 0x10100 narrows to 0x0100 (a valid device type); the range check must reject it.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadDeviceType",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x10100] },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, VendorIdAboveUint16Rejected)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadVendorId",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100], vendorId: 0x10000, productId: 0x1 },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, DeviceClassVersionAboveUint8Rejected)
+    {
+        // deviceClassVersion is published as uint8; 256 narrows to 0 and would alias, so reject it.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadDeviceClassVersion",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 256 },
+                matter: { deviceTypes: [0x0100] },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, Uint16AndUint8BoundaryValuesAccepted)
+    {
+        // Exactly at the limits: these must load so the range check does not reject valid specs.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BoundaryValues",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 255 },
+                matter: { deviceTypes: [0xFFFF], vendorId: 0xFFFF, productId: 0xFFFF },
+                endpoints: { "1": { profile: "test", profileVersion: 255, resources: {} } },
+            });
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+        EXPECT_EQ(driver->GetRegistration().matter.deviceTypes.front(), 0xFFFF);
     }
 
     // ========================================================================
@@ -862,7 +977,7 @@ namespace
     // Reduce to claim metadata + activation from disk
     // ========================================================================
 
-    TEST_F(SbmdDriverTest, ShrinkReleasesRegistrationKeepsMetadata)
+    TEST_F(SbmdDriverTest, ReduceToClaimMetadataReleasesRegistrationKeepsMetadata)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -886,7 +1001,7 @@ namespace
         EXPECT_TRUE(reg.attributeHandlers.empty());
     }
 
-    TEST_F(SbmdDriverTest, ActivateAfterShrinkReadsFromDisk)
+    TEST_F(SbmdDriverTest, ActivateAfterReduceReadsFromDisk)
     {
         auto path = UniqueSpecPath("disk_reread");
         auto driver = CreateDriverFromFile(kDriverSource, path.string());
@@ -914,7 +1029,7 @@ namespace
 
     TEST_F(SbmdDriverTest, ActivateFailsWhenSourceUnavailable)
     {
-        // A shrunk driver whose spec file does not exist on disk cannot activate.
+        // A driver reduced to its claim metadata whose spec file does not exist on disk cannot activate.
         auto driver = CreateDriver(); // filePath "<test>", no file on disk
         ASSERT_NE(driver, nullptr);
 

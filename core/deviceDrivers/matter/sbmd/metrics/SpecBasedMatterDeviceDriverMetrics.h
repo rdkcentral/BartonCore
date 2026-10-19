@@ -51,6 +51,10 @@ namespace barton
         /** Record a driver deactivation, updating the active-driver gauge to activeCount. */
         void RecordDriverDeactivated(const char *driver, int64_t activeCount);
 
+        /** Record a failed on-demand activation (spec unreadable/unparseable, claim-identity
+         *  mismatch, or a device-class/profile version mismatch), attributed by driver and reason. */
+        void RecordDriverActivationFailed(const char *driver, const char *reason);
+
         /** Set the active-driver gauge to activeCount without recording an activation event.
          *  Used to publish the true active-driver count (e.g. at factory startup). */
         void RecordActiveDriverCount(int64_t activeCount);
@@ -81,6 +85,7 @@ namespace barton
         ObservabilityHistogram *deferralDepthHisto = nullptr;
         ObservabilityCounter *driverActivationCounter = nullptr;
         ObservabilityCounter *driverDeactivationCounter = nullptr;
+        ObservabilityCounter *driverActivationFailureCounter = nullptr;
         ObservabilityGauge *activeDriversGauge = nullptr;
         ObservabilityHistogram *driverActivationDurationHisto = nullptr;
     };
@@ -99,6 +104,8 @@ namespace barton
         void RecordDriverActivated(const char *, int64_t, double) {}
 
         void RecordDriverDeactivated(const char *, int64_t) {}
+
+        void RecordDriverActivationFailed(const char *, const char *) {}
 
         void RecordActiveDriverCount(int64_t) {}
 

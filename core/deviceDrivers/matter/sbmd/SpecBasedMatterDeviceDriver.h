@@ -193,6 +193,16 @@ namespace barton
          */
         void DeactivateIfIdle();
 
+        /**
+         * Tear the driver down if it is idle, from a bind's exit path. Deactivation clears the
+         * dispatch tables, which report dispatch (HandleAttributeReport/Event/Command) reads on the
+         * Matter thread; this marshals the teardown onto the Matter thread so the two cannot race.
+         * When the Matter stack is not running there are no subscriptions delivering reports, so it
+         * runs directly. The running check is non-constructing, so this never instantiates the
+         * Matter singleton.
+         */
+        void TeardownIfIdle();
+
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);

@@ -179,6 +179,13 @@ namespace
 #endif
 } // namespace
 
+std::atomic<bool> Matter::stackRunning {false};
+
+bool Matter::IsStackRunning()
+{
+    return stackRunning.load();
+}
+
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
 {
     MatterDriverFactory::Instance();
@@ -421,6 +428,7 @@ bool Matter::Start()
     }
 
     state.store(State::running);
+    stackRunning.store(true);
 
     SetAccessRestrictionList();
 
@@ -498,6 +506,7 @@ bool Matter::Stop()
     icDebug();
 
     state.store(State::stopping);
+    stackRunning.store(false);
 
     chip::DeviceLayer::PlatformMgr().StopEventLoopTask();
 

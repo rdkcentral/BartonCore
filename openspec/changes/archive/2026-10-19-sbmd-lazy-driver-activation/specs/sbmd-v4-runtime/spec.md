@@ -40,8 +40,12 @@ A driver SHALL remain activated for as long as at least one device is bound to i
 - **THEN** activation fails, the failure is logged, and the device bind is aborted rather than dispatching against a mismatched or partially built driver
 
 #### Scenario: Activation rejects a spec whose device-class or profile version changed
-- **WHEN** a device binds and the re-read spec's `barton.deviceClassVersion`, an endpoint `profileVersion`, or the set of endpoint profiles differs from what the driver was registered with at load (a profile added, removed, a version changed, or a `profileVersion` outside the `uint8` range)
+- **WHEN** a device binds and the re-read spec's `barton.deviceClassVersion`, an endpoint `profileVersion`, or the set of endpoint profiles differs from what the driver was registered with at load (a profile added, removed, or a version changed)
 - **THEN** the bind is rejected and the driver is deactivated, because commissioning and reconfiguration publish/compare the versions cached at registration while the re-read handlers would run the changed spec
+
+#### Scenario: Loading rejects a spec with an out-of-range numeric claim/version field
+- **WHEN** a spec is loaded (at startup or re-read on activation) whose `matter.deviceTypes` entries or `matter.vendorId`/`matter.productId` do not fit `uint16`, or whose `barton.deviceClassVersion` or an endpoint `profileVersion` does not fit `uint8`
+- **THEN** the spec fails to load, so a value that would otherwise wrap or narrow into an aliasing claim identity or version can never be published or compared; at startup the driver is not registered, and on re-read the activation fails and the bind is aborted
 
 #### Scenario: Last-device deactivation deferred while a bind is in flight
 - **WHEN** a driver's last device is removed at the same time a new matching device is being commissioned, so the removal's empty-map observation races the in-progress bind that has already activated the driver but not yet inserted its device

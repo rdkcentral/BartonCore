@@ -76,6 +76,25 @@ When a Matter device is commissioned, a two-pass claiming process selects the
 best-matching driver. At runtime, the driver's handler functions translate
 between Barton resource operations and Matter attribute/command interactions.
 
+> **Operational note — specs are re-read from disk at runtime.** At startup each
+> driver is loaded only far enough to extract its claim metadata, then reduced to
+> that metadata to save memory; its spec source and parsed registration are
+> released. A driver is **activated on demand** by re-reading its `.sbmd.js` file
+> from its configured directory the first time a device binds to it, and is
+> deactivated again when its last device is removed. Consequently the configured
+> SBMD spec directories and their `.sbmd.js` files **must remain present and
+> readable for the lifetime of the process**. Editing a spec on disk without
+> restarting is not a supported live-reload: if an edit changes a claim-identity
+> field (device class, device types, vendor/product IDs) or a version field
+> (device-class version, endpoint profile version, or the set of endpoint
+> profiles), subsequent binds to that driver are **rejected** until the process
+> restarts. Numeric claim/version fields are also range-checked when a spec is
+> read: `deviceTypes`, `vendorId`, and `productId` must fit `uint16`, and
+> `deviceClassVersion` and endpoint `profileVersion` must fit `uint8`. An
+> out-of-range value makes the spec **fail to load** — at startup the driver is
+> not registered at all, and an out-of-range edit discovered on re-read fails
+> activation so the bind is rejected.
+
 ```mermaid
 flowchart TB
     subgraph Barton["Barton Device Service"]
@@ -147,7 +166,7 @@ Every `.sbmd.js` file has two sections:
 
 ```js
 SbmdDriver({
-  schemaVersion: "5.0",
+  schemaVersion: "5.1",
   driverVersion: "1.0",
   name: "...",
   constants:         { ... },
@@ -298,7 +317,7 @@ barton: {
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `deviceClass` | string | yes | Barton device class identifier. |
-| `deviceClassVersion` | number | yes | Version of the device class schema. |
+| `deviceClassVersion` | number | yes | Version of the device class schema. Must fit `uint8` (0–255); a larger value fails to load. |
 
 ### 4.5 Matter
 
@@ -313,10 +332,10 @@ matter: {
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `deviceTypes` | number[] | yes | Matter device type IDs this driver handles. |
+| `deviceTypes` | number[] | yes | Matter device type IDs this driver handles. Each must fit `uint16` (0–`0xFFFF`); a spec with a larger value fails to load. |
 | `revision` | number | no | Minimum Matter device type revision required. |
-| `vendorId` | number | no | Matter vendor ID for vendor-specific matching. |
-| `productId` | number | no | Matter product ID for vendor-specific matching. Requires `vendorId`. |
+| `vendorId` | number | no | Matter vendor ID for vendor-specific matching. Must fit `uint16` (0–`0xFFFF`); a larger value fails to load. |
+| `productId` | number | no | Matter product ID for vendor-specific matching. Requires `vendorId`. Must fit `uint16` (0–`0xFFFF`); a larger value fails to load. |
 | `featureClusters` | number[] | no | Cluster IDs whose feature maps should be cached and made available to handlers via `args.clusterFeatureMaps`. |
 | `defaultTimeoutMs` | number | no | Default timeout in milliseconds for deferred operations (`requestCommand`, `readAttribute`). Overrides the system default. Can be overridden per-operation via `timeoutMs`. |
 
@@ -427,7 +446,7 @@ endpoints: {
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `profile` | string | yes | Barton resource profile name. |
-| `profileVersion` | number | yes | Profile version. |
+| `profileVersion` | number | yes | Profile version. Must fit `uint8` (0–255); a larger value fails to load. |
 | `resources` | object | yes | Resource declarations (keyed by resource name). |
 
 #### 4.8.1 Resource Declaration
@@ -1275,7 +1294,7 @@ level control).
 
 ```js
 SbmdDriver({
-  schemaVersion: "5.0",
+  schemaVersion: "5.1",
   driverVersion: "1.0",
   name: "Light",
 
@@ -1427,7 +1446,7 @@ but shows the minimum required structure.
 
 ```js
 SbmdDriver({
-  schemaVersion: "5.0",
+  schemaVersion: "5.1",
   driverVersion: "1.0",
   name: "Light (Inline)",
 
@@ -1490,7 +1509,7 @@ production drivers.
 
 ```js
 SbmdDriver({
-  schemaVersion: "5.0",
+  schemaVersion: "5.1",
   driverVersion: "1.0",
   name: "Light (Minimal)",
 
@@ -1565,7 +1584,7 @@ aliases, supplements, persistent and transient data storage, invoke with
 
 ```js
 SbmdDriver({
-  schemaVersion: "5.0",
+  schemaVersion: "5.1",
   driverVersion: "1.0",
   name: "Door Lock",
 

@@ -187,7 +187,18 @@ namespace barton
          */
         inline chip::FabricIndex GetFabricIndex() { return myFabricIndex; }
 
+        /**
+         * Reads the live instance state; callers must already hold (or be willing to construct) the
+         * singleton. Leaf paths that may run before construction should prefer IsStackRunning().
+         */
         inline bool IsRunning() { return state == State::running; }
+
+        /**
+         * Non-constructing check for whether the Matter stack is running. Unlike GetInstance(), this
+         * never instantiates the singleton, so a leaf path (e.g. driver teardown) can test it before
+         * the subsystem has been constructed without triggering construction.
+         */
+        static bool IsStackRunning();
 
         /**
          * Execute work on the Matter stack. If already on the Matter stack, executes
@@ -197,6 +208,7 @@ namespace barton
 
     private:
         static Matter *instance;
+        static std::atomic<bool> stackRunning;
         IcLogger logger;
 
         Matter();

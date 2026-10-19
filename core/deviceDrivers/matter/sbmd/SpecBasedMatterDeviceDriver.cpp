@@ -279,9 +279,19 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         {
             self->bindsInProgress.fetch_sub(1);
 
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-
-            self->DeactivateIfIdle();
+            // This destructor is noexcept; a leaked exception would std::terminate the process.
+            try
+            {
+                self->TeardownIfIdle();
+            }
+            catch (const std::exception &e)
+            {
+                icError("TeardownIfIdle threw during bind exit: %s", e.what());
+            }
+            catch (...)
+            {
+                icError("TeardownIfIdle threw during bind exit");
+            }
         }
     } inFlightBind {this};
 
@@ -302,6 +312,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 icError("Failed to activate SBMD driver '%s' for device %s",
                         driver->GetName().c_str(),
                         device->GetDeviceId().c_str());
+                metrics.RecordDriverActivationFailed(driver->GetDriverStem().c_str(), "activate_failed");
                 return false;
             }
 
@@ -312,6 +323,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             if (!ActivatedSpecMatchesCachedVersions())
             {
                 driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
+                metrics.RecordDriverActivationFailed(driver->GetDriverStem().c_str(), "version_mismatch");
 
                 return false;
             }
@@ -442,8 +454,9 @@ bool SpecBasedMatterDeviceDriver::ActivatedSpecMatchesCachedVersions()
     {
         freshProfiles.insert(endpoint.profile);
 
-        // Profile versions are tracked as uint8 across the device model; a wider spec value would be
-        // narrowed and could alias onto the cached version, so reject it instead of comparing narrowed.
+        // Defense in depth: the loader already rejects a spec whose profileVersion exceeds uint8 at
+        // parse time, so this should be unreachable; keep it so a future loader change cannot let a
+        // wider value narrow and alias onto the cached version here.
         if (endpoint.profileVersion > UINT8_MAX)
         {
             icError("SBMD driver '%s' endpoint '%s' profile version %" PRIu32 " is out of range; refusing bind",
@@ -499,6 +512,34 @@ void SpecBasedMatterDeviceDriver::DeactivateIfIdle()
         driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
 
         metrics.RecordDriverDeactivated(driver->GetDriverStem().c_str(), activeDriverCount.fetch_sub(1) - 1);
+    }
+}
+
+void SpecBasedMatterDeviceDriver::TeardownIfIdle()
+{
+    // Cheap lock-free pre-check to skip the (successful) common path where a device is now bound;
+    // the authoritative re-check happens under the JS mutex in DeactivateIfIdle below.
+    if (bindsInProgress.load() != 0 || GetDeviceCount() != 0)
+    {
+        return;
+    }
+
+    auto teardown = [this] {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        DeactivateIfIdle();
+    };
+
+    // Serialize with report dispatch, which runs on the Matter thread. A live loop means a
+    // subscription could be delivering reports into the dispatch tables Deactivate() frees, so run
+    // the teardown there; with no loop there are no reports and running directly is safe. The
+    // running check is non-constructing so this never instantiates the Matter singleton.
+    if (Matter::IsStackRunning())
+    {
+        RunOnMatterSync(teardown);
+    }
+    else
+    {
+        teardown();
     }
 }
 

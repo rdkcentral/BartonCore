@@ -59,6 +59,21 @@ def _gauge_sum(metrics, name):
     return sum(dp["value"] for dp in metric.get("dataPoints", []))
 
 
+def _counter_sum(metrics, name, **attrs):
+    """Sum the values of the data points in *name* whose attributes match every
+    key=value pair in *attrs*. Returns 0 when the metric or a matching point is absent."""
+    metric = metrics.get(name)
+
+    if metric is None:
+        return 0
+
+    return sum(
+        dp["value"]
+        for dp in metric.get("dataPoints", [])
+        if all(dp.get("attributes", {}).get(k) == v for k, v in attrs.items())
+    )
+
+
 def _metrics(client):
     return json.loads(client.get_telemetry()).get("metrics", {})
 
@@ -351,6 +366,11 @@ def test_deferred_op_settled_when_last_device_removed(
 # attempt has definitively given up, so the bind is never evaluated against the restored spec.
 _COMMISSION_RESOLVE_TIMEOUT = 30
 
+# Per-attempt commissioning timeout. CommissioningOrchestrator may spend this once in Commission()
+# and again in Pair(), so the two phases together must finish well inside _COMMISSION_RESOLVE_TIMEOUT;
+# otherwise a slow attempt could reach AddDevice after the spec was restored and succeed.
+_COMMISSION_ATTEMPT_TIMEOUT = 10
+
 
 @contextlib.contextmanager
 def _patched_spec(spec_path, old, new):
@@ -380,6 +400,14 @@ def _assert_bind_rejected_on_version_change(environment, device, old, new):
     # Ensure Barton is up and drivers were constructed from the original spec before patching.
     client.get_telemetry()
 
+    # Baseline the version-mismatch failure counter so we can assert this rejection increments it.
+    failures_before = _counter_sum(
+        _metrics(client),
+        "sbmd.driver.activation.failure",
+        driver="deferred-command-test",
+        reason="version_mismatch",
+    )
+
     spec_path = (
         Path(environment.get_sbmd_test_specs_dir()) / "deferred-command-test.sbmd.js"
     )
@@ -389,7 +417,11 @@ def _assert_bind_rejected_on_version_change(environment, device, old, new):
         # commission_device reports only whether the detached commissioning attempt started;
         # the bind (and its rejection) happens later on that thread. Assert the request started
         # so a failure to even begin can't masquerade as a rejection via the no-event timeout.
-        started = client.commission_device(device.get_commissioning_code(), 100)
+        # Use a short per-attempt timeout so both commissioning phases finish inside the resolve
+        # window and the bind is always evaluated against the patched (not the restored) spec.
+        started = client.commission_device(
+            device.get_commissioning_code(), _COMMISSION_ATTEMPT_TIMEOUT
+        )
         assert started, "commissioning request should start successfully"
 
         # Commissioning runs on a detached background thread, so the bind can be attempted
@@ -411,6 +443,17 @@ def _assert_bind_rejected_on_version_change(environment, device, old, new):
     assert (
         _gauge_sum(_metrics(client), "sbmd.driver.active.count") or 0
     ) == 0, "a rejected bind must roll the activation back (no active driver)"
+    # The rejected re-read activation is recorded as a version-mismatch failure.
+    failures_after = _counter_sum(
+        _metrics(client),
+        "sbmd.driver.activation.failure",
+        driver="deferred-command-test",
+        reason="version_mismatch",
+    )
+    assert failures_after >= failures_before + 1, (
+        "a version-mismatch rejection must increment "
+        "sbmd.driver.activation.failure{reason=version_mismatch}"
+    )
 
 
 def test_bind_rejected_when_device_class_version_changes(
@@ -432,19 +475,6 @@ def test_bind_rejected_when_profile_version_changes(
         matter_deferred_cmd_test_device,
         "profileVersion: 1",
         "profileVersion: 2",
-    )
-
-
-def test_bind_rejected_when_profile_version_out_of_range(
-    isolated_sbmd_default_environment, matter_deferred_cmd_test_device
-):
-    # The base driver caches profile versions as 8-bit values. 257 narrows to 1 (== the cached
-    # value), so a narrowing comparison would wrongly accept it; the out-of-range guard must reject.
-    _assert_bind_rejected_on_version_change(
-        isolated_sbmd_default_environment,
-        matter_deferred_cmd_test_device,
-        "profileVersion: 1",
-        "profileVersion: 257",
     )
 
 

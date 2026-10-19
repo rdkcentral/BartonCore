@@ -45,6 +45,8 @@ namespace barton
             observabilityCounterCreate("sbmd.driver.activation", "Number of SBMD driver activations", "1");
         driverDeactivationCounter =
             observabilityCounterCreate("sbmd.driver.deactivation", "Number of SBMD driver deactivations", "1");
+        driverActivationFailureCounter = observabilityCounterCreate(
+            "sbmd.driver.activation.failure", "Number of failed SBMD driver activations", "1");
         activeDriversGauge =
             observabilityGaugeCreate("sbmd.driver.active.count", "Number of SBMD drivers currently activated", "1");
         driverActivationDurationHisto = observabilityHistogramCreate(
@@ -69,6 +71,12 @@ namespace barton
     {
         observabilityCounterAddWithAttrs(driverDeactivationCounter, 1, "driver", driver, nullptr);
         observabilityGaugeRecord(activeDriversGauge, activeCount);
+    }
+
+    void SpecBasedMatterDeviceDriverMetrics::RecordDriverActivationFailed(const char *driver, const char *reason)
+    {
+        observabilityCounterAddWithAttrs(
+            driverActivationFailureCounter, 1, "driver", driver, "reason", reason, nullptr);
     }
 
     void SpecBasedMatterDeviceDriverMetrics::RecordActiveDriverCount(int64_t activeCount)

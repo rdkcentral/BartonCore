@@ -66,6 +66,23 @@ namespace barton
         std::optional<uint16_t> GetOptUint16Prop(JSContext *ctx, JSValue obj, const char *name);
 
         /**
+         * Convert a JS numeric value to an unsigned integer in [0, maxValue] using saturating
+         * conversion, so a value that would wrap through JS_ToUint32 (>= 2^31) or narrow into a
+         * smaller in-range value is rejected instead of silently aliasing it. `maxValue` must be
+         * <= INT32_MAX. Returns true and sets `out` when the value is a non-negative integer no
+         * greater than `maxValue`; returns false otherwise.
+         */
+        bool ToBoundedUint(JSContext *ctx, JSValue val, uint32_t maxValue, uint32_t &out);
+
+        /**
+         * Read an optional uint16 property, validating its raw value fits uint16 (so an out-of-range
+         * disk edit cannot alias the stored value). Returns false if the property is present but out
+         * of range; on success sets `out` to the value, or leaves it nullopt when the property is
+         * absent.
+         */
+        bool ReadOptBoundedUint16Prop(JSContext *ctx, JSValue obj, const char *name, std::optional<uint16_t> &out);
+
+        /**
          * Get the length of a JS array, or 0 if it has no length.
          */
         uint32_t GetArrayLength(JSContext *ctx, JSValue arr);
@@ -79,11 +96,6 @@ namespace barton
          * Read a JS array of strings.
          */
         std::vector<std::string> GetStringArray(JSContext *ctx, JSValue arr);
-
-        /**
-         * Read a JS array of uint16_t values.
-         */
-        std::vector<uint16_t> GetUint16Array(JSContext *ctx, JSValue arr);
 
         /**
          * Read a JS array of uint32_t values.
