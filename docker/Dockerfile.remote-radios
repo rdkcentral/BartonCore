@@ -171,7 +171,7 @@ RUN cd /tmp && \
     git checkout ${OTBR_GIT_REV} && \
     ${APPLY_PATCHES_PATH} /tmp/patches/otbr . && \
     cd script && \
-    OTBR_MDNS=avahi ./bootstrap && \
+    OTBR_MDNS=mDNSResponder ./bootstrap && \
     ./cmake-build \
     -DOTBR_DUA_ROUTING=ON \
     -DOTBR_DNSSD_DISCOVERY_PROXY=ON \
@@ -204,7 +204,7 @@ RUN cd /tmp && \
     -DOTBR_BACKBONE_ROUTER=ON \
     -DOT_BACKBONE_ROUTER_DUA_NDPROXYING=ON \
     -DOT_BACKBONE_ROUTER_MULTICAST_ROUTING=ON \
-    -DOTBR_MDNS=avahi \
+    -DOTBR_MDNS=mDNSResponder \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DOTBR_TELEMETRY_DATA_API=ON \
     -DOT_CLI_VENDOR_EXTENSION=/tmp/gecko_sdk/protocol/openthread/platform-abstraction/posix/posix_vendor_cli.cmake \
@@ -217,10 +217,6 @@ RUN cd /tmp && \
     ninja install && \
     cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
     rm -rf /tmp/ot-br-posix /tmp/gecko_sdk
-
-# Standalone D-Bus config for the private daemon (used with --config-file,
-# not --system, to bypass Ubuntu's mandatory deny policy in system.conf).
-COPY remote-radios-dbus.conf /etc/remote-radios-dbus.conf
 
 # Clean up patches
 RUN rm -rf /tmp/patches

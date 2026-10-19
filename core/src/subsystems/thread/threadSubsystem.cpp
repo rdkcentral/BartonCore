@@ -29,6 +29,7 @@
 #include "icConcurrent/delayedTask.h"
 #include "subsystemManagerCallbacks.h"
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 
@@ -48,11 +49,11 @@ extern "C" {
 #include "OpenThreadClient.hpp"
 #include <glib.h>
 
-#define logFmt(fmt)                                  "%s: " fmt, __func__
-#define LOG_TAG                                      "threadSubsystem"
+#define logFmt(fmt)                "%s: " fmt, __func__
+#define LOG_TAG                    "threadSubsystem"
 
-#define NETWORK_BLOB_PROPERTY_NAME                   "threadNetworkConfig"
-#define MONITOR_TASK_INTERVAL_SECS                   60
+#define NETWORK_BLOB_PROPERTY_NAME "threadNetworkConfig"
+#define MONITOR_TASK_INTERVAL_SECS 60
 
 using namespace barton;
 
@@ -175,6 +176,13 @@ static bool migrate(uint16_t oldVersion, uint16_t newVersion)
     return true;
 }
 
+const char *threadSubsystemGetInterfaceName(void)
+{
+    const char *name = std::getenv("BARTON_THREAD_INTERFACE");
+
+    return (name != nullptr && *name != '\0') ? name : "wpan0";
+}
+
 bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info)
 {
     icDebug();
@@ -209,7 +217,7 @@ bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info)
         g_return_val_if_fail(extendedPanId != UINT64_MAX, false);
         g_return_val_if_fail(networkKey.size() == THREAD_NETWORK_KEY_LEN, false);
         g_return_val_if_fail(!activeTlvs.empty(), false);
-        //pendingTlvs can be empty
+        // pendingTlvs can be empty
         g_return_val_if_fail(borderAgentId.size() == THREAD_BORDER_AGENT_ID_LEN, false);
         g_return_val_if_fail(threadVersion != 0, false);
 
@@ -414,10 +422,7 @@ static bool initializeThreadStack(void)
         if (!otClient)
         {
             otClient = new OpenThreadClient(
-                []()
-                {
-                        sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonSubsystemStatus);
-                });
+                []() { sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonSubsystemStatus); });
         }
     }
 

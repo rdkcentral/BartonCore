@@ -50,6 +50,7 @@ Licensed under the BSD-3 License
 extern "C" {
 #include "glib.h"
 #include "icLog/logging.h"
+#include "threadSubsystem.h"
 }
 
 #include "OpenThreadClient.hpp"
@@ -92,16 +93,6 @@ namespace
         }
 
         return ATTACH_WAIT_SECONDS_DEFAULT;
-    }
-
-    // Some development configurations place otbr-agent on a different bus from
-    // the rest of the system services.  This optionally overrides the bus the
-    // Thread client connects to; unset, the ordinary system bus is used.
-    const char *GetThreadDBusAddress()
-    {
-        const char *address = std::getenv("BARTON_THREAD_DBUS_ADDRESS");
-
-        return (address != nullptr && *address != '\0') ? address : nullptr;
     }
 } // namespace
 
@@ -202,8 +193,7 @@ namespace barton
                     if (datasetRetryCount == 0 || datasetRetryCount % 10 == 0)
                     {
                         icDebug("Active dataset not yet available (error=%d), retrying (%" PRId64 "ms remaining)...",
-                                (int) threadApiCallError,
-                                (int64_t) timer.count());
+                                (int) threadApiCallError, (int64_t) timer.count());
                     }
 
                     datasetRetryCount++;
@@ -562,30 +552,8 @@ namespace barton
         // manages a dbusconnection to the system bus socket and I don't know what kind of issues it would cause if we
         // each had refs to the dbusconnection but different methods of processing data. Until that's investigated, this
         // at least gets us our own sandbox to play in.
-        const char *threadBusAddress = GetThreadDBusAddress();
-
-        if (threadBusAddress != nullptr)
-        {
-            // Open the configured bus directly rather than the system bus.
-            dbusConnection = std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>>(
-                dbus_connection_open_private(threadBusAddress, dbusError.get()), ReleaseDBusConnection);
-
-            // Opening an address yields an unregistered connection, so complete
-            // the handshake that dbus_bus_get_private() would have done.
-            if (dbusConnection != nullptr && !dbus_error_is_set(dbusError.get()) &&
-                !dbus_bus_register(dbusConnection.get(), dbusError.get()))
-            {
-                icError("DBus error registering with %s: %s",
-                        threadBusAddress,
-                        dbus_error_is_set(dbusError.get()) ? dbusError->message : "unknown");
-                return;
-            }
-        }
-        else
-        {
-            dbusConnection = std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>>(
-                dbus_bus_get_private(DBUS_BUS_SYSTEM, dbusError.get()), ReleaseDBusConnection);
-        }
+        dbusConnection = std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>>(
+            dbus_bus_get_private(DBUS_BUS_SYSTEM, dbusError.get()), ReleaseDBusConnection);
 
         if (dbus_error_is_set(dbusError.get()))
         {
@@ -628,7 +596,8 @@ namespace barton
             icDebug("dbus dispatch thread terminated");
         }).detach();
 
-        threadApiBus = std::unique_ptr<ThreadApiDBus>(new ThreadApiDBus(dbusConnection.get()));
+        threadApiBus = std::unique_ptr<ThreadApiDBus>(
+            new ThreadApiDBus(dbusConnection.get(), threadSubsystemGetInterfaceName()));
 
         if (threadApiBus)
         {

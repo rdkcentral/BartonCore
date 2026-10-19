@@ -51,6 +51,10 @@ fi
 
 # Add a catch-all ULA route via the remote-radios container.
 # 'replace' is idempotent — updates the route if it already exists.
-sudo ip -6 route replace fd00::/8 via "${OTBR_IPV6}" dev eth0 2>/dev/null || true
+# The radios network is not necessarily eth0: the container is also on its
+# workspace network.  Use whichever interface reaches the border router.
+OTBR_DEV=$(ip -6 route get "${OTBR_IPV6}" 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p')
+OTBR_DEV="${OTBR_DEV:-eth0}"
+sudo ip -6 route replace fd00::/8 via "${OTBR_IPV6}" dev "${OTBR_DEV}" 2>/dev/null || true
 
 echo "[setup-thread-routes] Thread route installed: fd00::/8 via ${OTBR_IPV6}"

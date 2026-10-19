@@ -263,6 +263,14 @@ echo "RADIO_CLAIM_DIR=$radioClaimDirValue" >> $OUTFILE
 echo "RADIO_CLAIM_DIR_HOST=$radioClaimDirHostValue" >> $OUTFILE
 echo "SILABS_DEVICE=$silabsDeviceValue" >> $OUTFILE
 echo "BACKBONE_IF=$backboneIfValue" >> $OUTFILE
+
+# Each developer's border router registers on the dev server's shared D-Bus as
+# io.openthread.BorderRouter.<interface>, so the interface name must be unique
+# on the server.  The uid is; "wpan" is kept as the prefix because the Matter
+# SDK recognises Thread interfaces by it.  Deliberately not named
+# BARTON_THREAD_INTERFACE: every barton container reads this file, and only
+# the remote-radios overlay should change which border router Barton uses.
+echo "REMOTE_RADIOS_THREAD_INTERFACE=wpan$(id -u)" >> $OUTFILE
 echo "BT_USBIP_SOCKET=$btUsbipSocketValue" >> $OUTFILE
 echo "BT_USBIP_SOCKET_HOST=$btUsbipSocketHostValue" >> $OUTFILE
 # Bind-mount the usbip socket's parent DIRECTORY (not the file), same rationale
@@ -287,13 +295,22 @@ if ! docker network ls --format '{{.Name}}' | grep -Fxq "$NETWORK_NAME"; then
     docker network create --ipv6 --subnet $IPV6_SUBNET $NETWORK_NAME
 fi
 
-# Ensure the shared private D-Bus volume exists.  It is owned by neither
-# Compose project: the remote-radios container writes the socket there and the
-# barton container reads it, and those two run in separate projects so that a
-# plain `./dockerw` does not treat the long-lived radios container as an orphan.
-# Creating it here (like the network above) lets both declare it `external`,
-# which is what stops Compose warning that it belongs to the other project.
-DBUS_VOLUME_NAME="$USER-$BARTON_WORKSPACE_ID-remote-radios-dbus-socket"
+# Ensure the per-user remote-radios network and volume exist.  The radios stack
+# is per user rather than per workspace — the radio sockets in ~/.remote-radios
+# are per user — so all of a user's workspaces share it.  Neither belongs to a
+# single Compose project (the radios container and each workspace's barton
+# container run in separate ones), so they are created here and declared
+# `external`, like the network above.
+RADIOS_NETWORK_NAME="$USER-remote-radios-net"
+if ! docker network ls --format '{{.Name}}' | grep -Fxq "$RADIOS_NETWORK_NAME"; then
+    _SUBNET_HASH=$(echo "$USER-remote-radios" | sha256sum | cut -c1-8)
+    echo "Network $RADIOS_NETWORK_NAME does not exist. Creating it..."
+    docker network create --ipv6 \
+        --subnet "fd00:${_SUBNET_HASH:0:4}:${_SUBNET_HASH:4:4}::/64" \
+        "$RADIOS_NETWORK_NAME" >/dev/null
+    unset _SUBNET_HASH
+fi
+DBUS_VOLUME_NAME="$USER-remote-radios-dbus-socket"
 if ! docker volume ls --format '{{.Name}}' | grep -Fxq "$DBUS_VOLUME_NAME"; then
     echo "Volume $DBUS_VOLUME_NAME does not exist. Creating it..."
     docker volume create "$DBUS_VOLUME_NAME" >/dev/null

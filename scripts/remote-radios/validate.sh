@@ -109,7 +109,7 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "remote-radios" /entrypoint.sh 2>/dev/nu
         if [ -n "$COMPOSE_PROJECT" ]; then
             # The radios container runs in a sibling project, "<ours>-radios"
             # (see dockerw); fall back to our own for pre-split installations.
-            for _proj in "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
+            for _proj in "${BUILDER_USER:-${USER:-}}-radios" "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
                 _filter=$(python3 -c "
 import json, sys, urllib.parse
 print(urllib.parse.quote(json.dumps(
@@ -176,17 +176,25 @@ sys.stdout.buffer.flush()
             --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
 
         if [ -n "$COMPOSE_PROJECT" ]; then
-            # The radios container runs in a sibling project, "<ours>-radios",
-            # so that a plain ./dockerw does not treat it as an orphan.  Look
-            # there first, then in our own project for installations predating
-            # that split.
-            for _proj in "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
+            # The radios container runs in its own per-user project,
+            # "<user>-radios", shared by all of the user's workspaces.  Look
+            # there first, then in the older per-workspace locations.
+            for _proj in "${BUILDER_USER:-${USER:-}}-radios" "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
                 OTBR_CONTAINER=$($DOCKER_CMD ps \
                     --filter "label=com.docker.compose.project=${_proj}" \
                     --filter "name=remote-radios" \
                     --format '{{.Names}}' 2>/dev/null | head -1) || true
                 [ -n "$OTBR_CONTAINER" ] && break
             done
+        fi
+
+        # Outside any container (e.g. on the dev server host) there is no
+        # project to scope by, but the user's own radios project is known.
+        if [ -z "$OTBR_CONTAINER" ]; then
+            OTBR_CONTAINER=$($DOCKER_CMD ps \
+                --filter "label=com.docker.compose.project=${BUILDER_USER:-${USER:-}}-radios" \
+                --filter "name=remote-radios" \
+                --format '{{.Names}}' 2>/dev/null | head -1) || true
         fi
 
         # Fallback: broad search if project detection failed (e.g. running
@@ -227,7 +235,6 @@ BT_USBIP_BUSID="${BT_USBIP_BUSID:-}"
 CPC_SOCKET_DIR="${CPC_SOCKET_DIR:-/dev/shm}"
 CPC_SOCKET_BASE="${CPC_SOCKET_DIR}/cpcd/${CPC_INSTANCE}"
 DBUS_DIR="${DBUS_DIR:-/var/run/remote-radios-dbus}"
-DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
 # org.bluez is published by the dev server's own bluetoothd, not by a daemon in
 # this container, so Bluetooth checks use that bus rather than the private one.
 HOST_DBUS_SOCKET="${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}"
@@ -337,46 +344,29 @@ check_container_env() {
 }
 
 ###############################################################################
-# Section 2: D-Bus
+# Section 2: Shared state and D-Bus
 ###############################################################################
 check_dbus() {
-    section "D-Bus"
+    section "Shared state and D-Bus"
 
-    # D-Bus socket directory
+    # Directory shared with the barton containers; carries ble_adapter_id.
     if [ -d "${DBUS_DIR}" ]; then
-        pass "D-Bus directory" "${DBUS_DIR} exists"
+        pass "Shared state directory" "${DBUS_DIR} exists"
     else
-        fail "D-Bus directory" "${DBUS_DIR} not found"
-        return
+        fail "Shared state directory" "${DBUS_DIR} not found"
     fi
 
-    # D-Bus socket
-    if [ -S "${DBUS_SOCKET_PATH}" ]; then
-        pass "D-Bus socket" "${DBUS_SOCKET_PATH} exists"
+    # Thread and Bluetooth both use the dev server's own system bus.
+    if [ ! -S "${HOST_DBUS_SOCKET}" ]; then
+        fail "Dev server D-Bus" "${HOST_DBUS_SOCKET} not mounted"
+    elif ! command -v dbus-send >/dev/null 2>&1; then
+        skip "Dev server D-Bus" "dbus-send not available"
+    elif DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}" \
+        dbus-send --system --dest=org.freedesktop.DBus --print-reply \
+            /org/freedesktop/DBus org.freedesktop.DBus.ListNames >/dev/null 2>&1; then
+        pass "Dev server D-Bus" "Can list bus names on ${HOST_DBUS_SOCKET}"
     else
-        fail "D-Bus socket" "${DBUS_SOCKET_PATH} not found"
-    fi
-
-    # D-Bus daemon process
-    local dbus_pid
-    dbus_pid=$(pgrep -x dbus-daemon 2>/dev/null | head -1) || true
-    if [ -n "$dbus_pid" ]; then
-        pass "D-Bus daemon" "PID $dbus_pid"
-    else
-        fail "D-Bus daemon" "dbus-daemon not running"
-    fi
-
-    # Verify we can talk to D-Bus
-    if command -v dbus-send >/dev/null 2>&1; then
-        if DBUS_SYSTEM_BUS_ADDRESS="unix:path=${DBUS_SOCKET_PATH}" \
-           dbus-send --system --dest=org.freedesktop.DBus --print-reply \
-           /org/freedesktop/DBus org.freedesktop.DBus.ListNames >/dev/null 2>&1; then
-            pass "D-Bus connectivity" "Can list bus names"
-        else
-            fail "D-Bus connectivity" "Cannot communicate with D-Bus"
-        fi
-    else
-        skip "D-Bus connectivity" "dbus-send not available"
+        fail "Dev server D-Bus" "Cannot communicate with ${HOST_DBUS_SOCKET}"
     fi
 }
 
@@ -758,30 +748,58 @@ check_otbr() {
         fail "otbr-agent process" "Not running"
     fi
 
-    # Check wpan0 interface
-    if ip link show wpan0 >/dev/null 2>&1; then
+    # This developer's Thread interface (wpan<uid> under remote-radios).
+    local tif="${THREAD_INTERFACE:-wpan0}"
+    if ip link show "$tif" >/dev/null 2>&1; then
         local wpan_state
-        wpan_state=$(ip -br link show wpan0 2>/dev/null | awk '{print $2}') || wpan_state="unknown"
-        pass "wpan0 interface" "State: ${wpan_state}"
+        wpan_state=$(ip -br link show "$tif" 2>/dev/null | awk '{print $2}') || wpan_state="unknown"
+        pass "${tif} interface" "State: ${wpan_state}"
 
         local v6_addrs
-        v6_addrs=$(ip -6 addr show dev wpan0 scope global 2>/dev/null | grep -c "inet6") || v6_addrs=0
+        v6_addrs=$(ip -6 addr show dev "$tif" scope global 2>/dev/null | grep -c "inet6") || v6_addrs=0
         if [ "$v6_addrs" -gt 0 ]; then
-            pass "wpan0 IPv6 addresses" "${v6_addrs} global address(es)"
+            pass "${tif} IPv6 addresses" "${v6_addrs} global address(es)"
         else
-            warn "wpan0 IPv6 addresses" "No global IPv6 — Thread network may not be formed"
+            warn "${tif} IPv6 addresses" "No global IPv6 — Thread network may not be formed"
         fi
     else
-        warn "wpan0 interface" "Not found yet — otbr-agent may still be starting (created a few seconds after cpcd is ready)"
+        warn "${tif} interface" "Not found yet — otbr-agent may still be starting (created a few seconds after cpcd is ready)"
     fi
 
-    # Check avahi-daemon
-    local avahi_pid
-    avahi_pid=$(pgrep -x avahi-daemon 2>/dev/null | head -1) || true
-    if [ -n "$avahi_pid" ]; then
-        pass "avahi-daemon" "PID $avahi_pid"
+    # The border router must be registered on the dev server's bus, where
+    # Barton and Matter look for it alongside org.bluez.
+    local otbr_name="io.openthread.BorderRouter.${tif}"
+    if DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}" \
+        timeout 5 dbus-send --system --dest=org.freedesktop.DBus --print-reply \
+            /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner \
+            "string:${otbr_name}" >/dev/null 2>&1; then
+        pass "Border router on shared bus" "${otbr_name}"
     else
-        warn "avahi-daemon" "Not running (otbr-agent may fail with OTBR_MDNS=avahi)"
+        fail "Border router on shared bus" "${otbr_name} not registered — is docker/remote-radios-host-dbus.conf installed on the dev server?"
+    fi
+
+    # mdnsd (mDNSResponder) publishes the border router's services.
+    local mdnsd_pid
+    mdnsd_pid=$(pgrep -x mdnsd 2>/dev/null | head -1) || true
+    if [ -z "$mdnsd_pid" ]; then
+        fail "mdnsd" "Not running — otbr-agent cannot publish its mDNS services"
+    elif [ ! -S /var/run/mdnsd ]; then
+        fail "mdnsd" "PID $mdnsd_pid but socket /var/run/mdnsd is missing"
+    else
+        pass "mdnsd" "PID $mdnsd_pid"
+    fi
+
+    # The border router advertises itself as _meshcop._udp once it is up;
+    # commissioners (including Matter) find it this way.
+    if command -v dns-sd >/dev/null 2>&1; then
+        local meshcop
+        meshcop=$(timeout 4 dns-sd -B _meshcop._udp local. 2>/dev/null \
+            | awk '/ Add /{ $1=$2=$3=$4=$5=$6=""; sub(/^ +/, ""); print; exit }') || true
+        if [ -n "$meshcop" ]; then
+            pass "MeshCoP advertisement" "$meshcop"
+        else
+            warn "MeshCoP advertisement" "No _meshcop._udp service seen — the border router is not advertising yet"
+        fi
     fi
 }
 

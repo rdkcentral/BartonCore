@@ -39,11 +39,11 @@
 #     kernel btusb driver registers and bluetoothd then manages.
 #
 # Services started (in order):
-#   1. private D-Bus system bus
-#   2. avahi-daemon  (mDNS/DNS-SD — required by otbr-agent built with avahi)
+#   1. shared state directory (ble_adapter_id)
+#   2. mdnsd         (mDNSResponder — otbr-agent's mDNS publisher)
 #   3. socat         (UNIX socket -> PTY) for the Silabs radio  [remote mode]
 #   4. cpcd          (CPC daemon — serial <-> CPC socket)
-#   5. usbip attach + bluetoothd for the Bluetooth dongle
+#   5. usbip attach of the Bluetooth dongle (managed by the dev server's bluetoothd)
 #   6. otbr-agent    (Thread Border Router — CPC socket <-> D-Bus API)
 #
 # Environment variables:
@@ -66,9 +66,9 @@
 #   CPC_INSTANCE              - CPC daemon instance name (default: cpcd_0)
 #   BACKBONE_IF               - Thread backbone interface (e.g. eth0)
 #   CPCD_CONF                 - path to the cpcd config file
-#   DBUS_DIR                  - private shared D-Bus socket directory
-#   DBUS_SOCKET_PATH          - socket path for the private system bus
-#   DBUS_SYSTEM_BUS_ADDRESS   - D-Bus address used by otbr-agent and clients
+#   DBUS_DIR                  - directory shared with barton (ble_adapter_id)
+#   HOST_DBUS_SOCKET          - the dev server's system bus socket, mounted in
+#   THREAD_INTERFACE          - this developer's Thread interface (wpan<uid>)
 #
 # See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup and hardware info.
 #
@@ -102,7 +102,6 @@ SILABS_YIELDED=""
 CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
 CPCD_CONF="${CPCD_CONF:-/usr/local/etc/cpcd.conf}"
 DBUS_DIR="${DBUS_DIR:-/var/run/remote-radios-dbus}"
-DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
 
 # The dev server's own bluetoothd owns every Bluetooth adapter; this container
 # attaches its developer's dongle over usb-ip and then stays out of the way.
@@ -116,7 +115,14 @@ DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
 HOST_DBUS_SOCKET="${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}"
 BT_DBUS_ADDRESS="unix:path=${HOST_DBUS_SOCKET}"
 
-DBUS_SYSTEM_BUS_ADDRESS="${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=${DBUS_SOCKET_PATH}}"
+# This developer's Thread interface.  otbr-agent registers on the shared bus as
+# io.openthread.BorderRouter.<THREAD_INTERFACE>, so it must be unique on the dev
+# server (dockerw derives it from the developer's uid).
+THREAD_INTERFACE="${THREAD_INTERFACE:-wpan0}"
+export THREAD_INTERFACE
+
+# Everything in this container that uses D-Bus uses the dev server's bus.
+DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}"
 export DBUS_SYSTEM_BUS_ADDRESS
 
 HOST_NETNS="/run/host-netns"
@@ -321,10 +327,9 @@ restart_cpcd() {
 # The dedicated Bluetooth USB dongle is forwarded from the developer's
 # workstation via usb-ip.  Attaching it here creates a REAL HCI device in the
 # host network namespace (AF_BLUETOOTH sockets only work in the initial netns),
-# which the kernel btusb driver registers and bluetoothd then manages.  It
-# inherits this container's
-# private DBUS_SYSTEM_BUS_ADDRESS so org.bluez lives on our private bus, never
-# the host's — and we never touch the workstation's own Bluetooth adapter.
+# which the kernel btusb driver registers and the dev server's shared
+# bluetoothd then manages.  The workstation's own Bluetooth adapter is never
+# touched.
 
 # bt_usbip_attach — attach the dongle over usb-ip in the host netns.
 # Auto-detects the busid if BT_USBIP_BUSID is unset.  Returns non-zero on
@@ -443,7 +448,7 @@ bt_usbip_detach() {
 # Unlike the old CPC path, the usb-ip dongle registers its own HCI device
 # directly (kernel btusb driver), so no bt_host_cpc_hci_bridge / btattach /
 # PTY-proxy is needed.  We only need to identify the new adapter index and
-# start bluetoothd bound to our private D-Bus.
+# wait for the dev server's bluetoothd to register it.
 start_bluetooth_chain() {
     echo "[remote-radios] Starting Bluetooth chain (usb-ip attach -> bluetoothd)..."
 
@@ -687,20 +692,15 @@ service_monitor() {
 }
 
 ###############################################################################
-# 1. Start a private D-Bus system bus
+# 1. Prepare the shared state directory
 #
-# The shared 'dbus-socket' named volume is mounted at ${DBUS_DIR}. This is a
-# private socket directory used only by the remote-radios and barton
-# containers; it is not the host's /var/run/dbus.
+# The shared 'dbus-socket' named volume is mounted at ${DBUS_DIR} and is shared
+# with every one of this user's barton containers.  It carries ble_adapter_id.
+# No D-Bus daemon runs here: otbr-agent and org.bluez both use the dev server's
+# own system bus (see HOST_DBUS_SOCKET).
 ###############################################################################
-echo "[remote-radios] Starting private D-Bus system bus at ${DBUS_SYSTEM_BUS_ADDRESS}..."
 mkdir -p "${DBUS_DIR}"
-if [ -S "${DBUS_SOCKET_PATH}" ]; then
-    echo "[remote-radios] Removing stale D-Bus socket ${DBUS_SOCKET_PATH}..."
-    rm -f "${DBUS_SOCKET_PATH}"
-fi
-dbus-daemon --config-file=/etc/remote-radios-dbus.conf --fork --nopidfile
-echo "[remote-radios] Private D-Bus started."
+rm -f "${DBUS_DIR}/system_bus_socket"
 
 ###############################################################################
 # 2. Establish the Silabs serial link and start CPC
@@ -773,12 +773,26 @@ else
 fi
 
 ###############################################################################
-# 3. Start Avahi daemon (required by otbr-agent — built with OTBR_MDNS=avahi)
+# 3. Start mdnsd (mDNSResponder — otbr-agent's mDNS publisher)
+#
+# mDNSResponder is used rather than avahi because it is reached over a local
+# socket, not D-Bus: otbr-agent's own D-Bus API lives on a bus shared by every
+# developer on the dev server, where only one org.freedesktop.Avahi could exist.
+# mdnsd runs in this container's network namespace, so each developer's
+# instance answers only for their own border router.
 ###############################################################################
-echo "[remote-radios] Starting avahi-daemon..."
-mkdir -p /var/run/avahi-daemon
-avahi-daemon --daemonize --no-chroot
-echo "[remote-radios] avahi-daemon started."
+echo "[remote-radios] Starting mdnsd..."
+rm -f /var/run/mdnsd
+/usr/sbin/mdnsd
+for _ in $(seq 1 50); do
+    [ -S /var/run/mdnsd ] && break
+    sleep 0.1
+done
+if [ -S /var/run/mdnsd ]; then
+    echo "[remote-radios] mdnsd started."
+else
+    echo "[remote-radios] WARNING: mdnsd socket /var/run/mdnsd did not appear." >&2
+fi
 
 ###############################################################################
 # 4. Configure and start cpcd
@@ -840,8 +854,12 @@ while true; do
     done
 
     otbr_start=$(date +%s)
+    # otbr-agent registers on the dev server's shared bus, next to org.bluez,
+    # because Matter needs the border router and BlueZ on one bus.  The unique
+    # interface name keeps each developer's registration distinct there.
+    DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}" \
     otbr-agent \
-        -I wpan0 \
+        -I "${THREAD_INTERFACE}" \
         -B "${BACKBONE_IF}" \
         -d 7 \
         -v \

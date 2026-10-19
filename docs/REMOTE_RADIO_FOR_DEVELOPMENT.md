@@ -24,39 +24,92 @@ remote-radios container on the dev server:
 ```
   WORKSTATION (your desk)                       DEV SERVER "it"                  remote-radios container (privileged)
   ─────────────────────                         ───────────────                  ───────────────────────────────────
-  Silabs radio ──serial──▶ remote-serial.py ──ssh -R──▶ ~/.remote-radios/radios/silabs.sock ──(bind mount)──▶ socat → /dev/ttyRadio → cpcd ─┬─▶ otbr-agent (Thread, D-Bus)
+  Silabs radio ──serial──▶ remote-serial.py ──ssh -R──▶ ~/.remote-radios/radios/silabs.sock ──(bind mount)──▶ socat → /dev/ttyRadio → cpcd ─┬─▶ otbr-agent (Thread)
                                                                                                                                        └─▶ zigbeed → ZigbeeCore (Zigbee)
-  BT dongle ───usb-ip────▶ usbipd/usbip bind ─ssh -R (port base+UID)─▶ usbip attach (in container, host netns) ─▶ hciX ─▶ bluetoothd (private D-Bus) ─▶ org.bluez ─▶ Matter SDK
+  BT dongle ───usb-ip────▶ usbipd/usbip bind ─ssh -R─▶ ~/.remote-radios/usbip/usbipd.sock ──▶ usbip attach (host netns) ─▶ hciX ─▶ dev server's bluetoothd ─▶ org.bluez
 ```
 
 Key properties:
 
 - **Your workstation's own Bluetooth is never touched.** Only a dedicated USB
   dongle (not the adapter your desktop bluetoothd is using) is forwarded.
-- **Private per-developer D-Bus.** The container runs its own dbus-daemon; both
-  otbr-agent and BlueZ register on it, never the host/system bus.
-- **Per-user isolation.** The Silabs tunnel uses a per-user UNIX socket (0700
-  dir); the Bluetooth usb-ip tunnel uses a per-user port (base + your remote
-  UID). Developers can't collide with each other.
+- **One D-Bus: the dev server's own.** Your border router (`otbr-agent`) and
+  BlueZ (`org.bluez`) both live on the dev server's system bus, because Matter
+  requires both on the same bus. Your border router registers there under a
+  name unique to you, `io.openthread.BorderRouter.wpan<uid>`.
+- **Per-user isolation.** Your radio sockets are in your own `~/.remote-radios`
+  (mode `0700`), your Thread interface is named after your uid, and your radios
+  container sits on a Docker network that only your containers join. Developers
+  cannot collide with each other.
 
 ### Container architecture
 
 | Container | Runs | Provides |
 |---|---|---|
-| `remote-radios` | cpcd, otbr-agent, socat, usbip attach, bluetoothd | Thread + Zigbee (CPC) and BLE (real HCI dongle) over a shared private D-Bus |
-| `barton` (devcontainer) | Barton application code, Matter SDK | Consumes Thread over D-Bus and BLE via BlueZ |
+| `remote-radios` (one per user) | cpcd, otbr-agent, mdnsd, socat, usbip attach | Thread + CPC, and your dongle attached as an HCI adapter |
+| `barton` (devcontainer, one per workspace) | Barton application code, Matter SDK | Consumes Thread and BLE over the dev server's D-Bus |
 
-A named Docker volume shares the private D-Bus socket directory
-(`/var/run/remote-radios-dbus`) between the two containers. This is **not** the
-host's system D-Bus.
+The radios stack belongs to **you**, not to a workspace: the radio sockets in
+`~/.remote-radios` are per user, so there is exactly one stack to share. It runs
+in the Compose project `<user>-radios` on the network `<user>-remote-radios-net`.
+Every one of your BartonCore workspaces joins that network in addition to its
+own, and `./dockerw -T` in a second workspace reuses the running stack rather
+than starting another. `dockerw` never recreates a running radios stack, because
+another workspace may be using it; to pick up changes to its compose files or
+entrypoint, recreate it explicitly:
+
+```bash
+cd docker
+docker compose -p "$USER-radios" -f compose.yaml -f compose.remote-radios.yaml \
+    up -d --force-recreate remote-radios
+```
+
+A per-user Docker volume, mounted at `/var/run/remote-radios-dbus`, carries
+`ble_adapter_id` from the radios container to each of your barton containers.
+
+### How Thread and Matter find your border router
+
+otbr-agent derives its D-Bus name from its Thread interface, and
+`docker/setupDockerEnv.sh` names that interface `wpan<uid>` (for example
+`wpan1000`), unique on the server. The remote-radios overlay passes the same
+name to Barton as `BARTON_THREAD_INTERFACE`, which Barton's Thread client and
+the Matter SDK both use to select the border router. Without the overlay it
+defaults to `wpan0`, so nothing changes for anyone not using remote radios.
+
+The Matter SDK hardcodes `wpan0` upstream. BartonCore carries a patch,
+`third_party/matter/barton-library/patches/0004-*`, that adds
+`ThreadStackManagerImpl::SetThreadInterfaceName()`.
+
+otbr-agent publishes its services with mDNSResponder (`mdnsd`) rather than
+avahi. Avahi is reached over D-Bus, and only one `org.freedesktop.Avahi` can
+exist on the shared bus; mDNSResponder uses a local socket instead.
+
+### How Matter discovery stays private
+
+Thread devices do not use mDNS on the mesh. They register their services with
+your border router over SRP, and otbr republishes them as mDNS on its backbone,
+the `<user>-remote-radios-net` Docker network. Matter's queries go out on that
+network and your `mdnsd` answers. mDNS is link-local multicast, which never
+leaves the network it was sent on, and Docker drops traffic between networks,
+so you never discover another developer's devices. Once a device is found,
+Matter talks to it by unicast IPv6: `./dockerw -T` installs a route for
+`fd00::/8` via your border router, which forwards onto your Thread mesh.
+
+This is why `./dockerw -T` refuses `-H` (host networking). On the host network
+your container would be on every developer's Docker networks at once.
 
 ### How BLE adapter selection works
 
-The `remote-radios` entrypoint attaches the dongle over usb-ip, identifies the
-newly-created HCI index (e.g. `hci1`, distinct from any host built-in `hci0`),
-and writes it to `/var/run/remote-radios-dbus/ble_adapter_id`. Barton reads
-this (or the `device.matter.bleAdapterId` property) to configure the Matter
-SDK's BLE adapter.
+The dev server runs a single `bluetoothd` for everyone. The kernel only allows
+Bluetooth sockets in the host's network namespace, and `bluetoothd` cannot be
+limited to one adapter, so a second daemon would fight the first over every
+dongle. One daemon managing many adapters is what BlueZ is designed for.
+
+The `remote-radios` entrypoint attaches your dongle over usb-ip, identifies the
+newly-created HCI index (e.g. `hci1`), and writes it to
+`/var/run/remote-radios-dbus/ble_adapter_id`. Barton reads this (or the
+`device.matter.bleAdapterId` property) to choose your adapter from the ones the
+shared daemon manages.
 
 ### Sharing the radios with other projects
 
@@ -66,13 +119,13 @@ other stacks do not each attach the hardware themselves.
 
 | Consumer | Gets Thread/Zigbee via | Gets Bluetooth via |
 |---|---|---|
-| `barton` devcontainer | otbr-agent over the shared private D-Bus | BlueZ over the shared private D-Bus |
-| ZigbeeCore (`./run.sh -r`) | the Silabs socket directly, under a claim | the shared private D-Bus |
+| `barton` devcontainer | your otbr-agent, over the dev server's D-Bus | BlueZ, over the dev server's D-Bus |
+| ZigbeeCore (`./run.sh -r`) | the Silabs socket directly, under a claim | BlueZ, over the dev server's D-Bus |
 | zilker | BartonCore's device service | BartonCore's device service |
 | HH4 (QEMU guest) | the Silabs socket directly, under a claim | attaches the dongle itself over usb-ip |
 
 Everything that runs on the dev server shares its kernel, so it can consume the
-hub concurrently over sockets and D-Bus. A **VM guest cannot**: it has its own
+radios container concurrently over sockets and D-Bus. A **VM guest cannot**: it has its own
 kernel and its own BlueZ, so it needs the devices themselves.
 
 Both radios are therefore exclusive, and consumers take turns rather than
@@ -268,29 +321,34 @@ pip install --user pyserial
 
 (`usbip` is provided by the `usbip` or `linux-tools-generic` package.)
 
-**Dev server:** Docker with your user in the `docker` group. No host `sudo` is
-required for usb-ip on the dev server — the dongle is attached **inside** the
-privileged container.
+**Dev server:** Docker with your user in the `docker` group. No `sudo` is
+needed on the dev server for usb-ip — the dongle is attached **inside** the
+privileged container. The dev server needs two things set up once, by an
+administrator, for all developers:
 
-The dev server must **not** run its own Bluetooth daemon. Linux does not place
-the Bluetooth stack in a network namespace, so when usb-ip attaches your dongle
-it becomes visible to the dev server's host `bluetoothd` as well as to the one
-inside the container. BlueZ cannot share an adapter between two daemons: the
-host daemon claims it first, and every BLE operation in the container then
-fails with `No default controller available` — while `hciconfig` still cheerfully
-reports the adapter `UP RUNNING`, which makes this failure easy to misread.
+1. **Its own Bluetooth daemon must be running.** Every developer's dongle is
+   handed to it:
 
-If the dev server has no Bluetooth hardware of its own (the usual case for a
-build server), disable the daemon there once:
+   ```bash
+   sudo systemctl unmask bluetooth.service
+   sudo systemctl enable --now bluetooth.service
+   ```
 
-```bash
-sudo systemctl mask --now bluetooth.service
-```
+   (An older version of this guide said to mask `bluetooth.service`; unmask it.)
 
-Masking rather than disabling matters: `bluetooth.service` is a D-Bus-activated
-unit, so anything that touches `org.bluez` on the system bus can otherwise
-start it again. This does not affect the container, which runs its own
-`bluetoothd` on a private D-Bus.
+2. **A D-Bus policy for the border routers.** Each developer's otbr-agent
+   registers on the system bus as `io.openthread.BorderRouter.wpan<uid>`, and
+   the default system-bus policy denies it:
+
+   ```bash
+   sudo install -m 0644 docker/remote-radios-host-dbus.conf \
+       /etc/dbus-1/system.d/remote-radios.conf
+   ```
+
+   The policy only covers `io.openthread.BorderRouter.*` names: otbr-agent
+   (root in each container) may own them and local users may call them. Any
+   developer on the server can therefore call any border router, not only
+   their own. `dbus-daemon` picks the file up automatically.
 
 ### Privileges
 
@@ -356,8 +414,9 @@ server. The radio parameters flow in automatically from
 ```
 
 `-T` layers in `docker/compose.remote-radios.yaml` and starts the
-`remote-radios` container before opening the Barton shell. Barton is
-automatically pointed at the private D-Bus.
+`remote-radios` container if it is not already running, then opens the Barton
+shell pointed at the dev server's D-Bus and your border router, with a route to
+your Thread network installed. `-T` cannot be combined with `-H`.
 
 ### Devcontainer (VS Code)
 
@@ -398,6 +457,7 @@ exporting before `dockerw`.
 | `RADIO_CLAIM_DIR` | Container path of the claims directory (default `/run/remote-radios/claims`) |
 | `RADIO_CLAIM_DIR_HOST` | Host path of that directory (bind-mount source, read-only in the container) |
 | `BACKBONE_IF` | Thread backbone interface (default: host default route) |
+| `REMOTE_RADIOS_THREAD_INTERFACE` | Your Thread interface, `wpan<uid>`. Passed to otbr-agent as `-I` and to Barton as `BARTON_THREAD_INTERFACE` |
 
 ---
 
@@ -415,10 +475,12 @@ It also runs directly inside the `remote-radios` container. It does **not** run
 from the Barton devcontainer: that container has neither the Docker CLI nor the
 Docker socket, so it cannot reach the radio container to re-exec into it.
 
-It checks the private D-Bus, the Silabs socket/socat/`/dev/ttyRadio`/cpcd
-chain, otbr-agent, and (when a dongle is configured) usb-ip reachability, the
-imported device, the dongle's HCI adapter, `bluetoothd`, and
-`ble_adapter_id`.
+It checks the dev server's D-Bus, the Silabs socket/socat/`/dev/ttyRadio`/cpcd
+chain, otbr-agent and its registration on the shared bus, `mdnsd` and the
+border router's MeshCoP advertisement, and (when a dongle is configured) usb-ip
+reachability, the imported device, the dongle's HCI adapter, the dev server's
+`bluetoothd`, `ble_adapter_id`, and a BLE scan that must see at least one
+device.
 
 ### Manual BLE verification
 
@@ -483,17 +545,24 @@ and the service stops at logout.
   and is waiting. It reclaims the radio automatically once that run exits. If a
   stale claim is left behind after a crash, delete
   `~/.remote-radios/claims/silabs.claim`.
-- **`No default controller available`, or the validator reports "Controller
-  hciN not available to bluetoothd"** — another `bluetoothd` has claimed the
-  dongle. Almost always this is the dev server's own `bluetooth.service`; run
-  `sudo systemctl mask --now bluetooth.service` there and restart the
-  remote-radios container. Note that `hciconfig` will report the adapter
-  `UP RUNNING` throughout, because the kernel side is genuinely fine — only
-  bluetoothd ownership is missing.
+- **The validator reports "org.bluez absent" or "Controller hciN not
+  available to the dev server's bluetoothd"** — the dev server's
+  `bluetooth.service` is not running, or is masked. See the dev server
+  prerequisites above.
+- **"Border router on shared bus … not registered", or Matter logs
+  `ServiceUnknown: The name io.openthread.BorderRouter.wpan<uid> was not
+  provided`** — the dev server is missing the D-Bus policy
+  (`/etc/dbus-1/system.d/remote-radios.conf`; see the prerequisites), or
+  otbr-agent is still starting. otbr-agent registers about a minute after the
+  container starts.
+- **Matter finds a Thread device but cannot reach it** — check for the route
+  with `ip -6 route show fd00::/8` in the Barton container. `./dockerw -T` and
+  the devcontainer install it automatically; run
+  `docker/setup-thread-routes.sh` to add it by hand.
 - **BLE scan finds zero devices** — treated as a failure, not a warning: an
   adapter that is present but deaf is indistinguishable from a working one by
-  any other check. Confirm the dongle's antenna/placement and that no second
-  `bluetoothd` is competing for it.
+  any other check. Confirm the dongle's antenna and placement. Remember it
+  scans what is near *the workstation forwarding the dongle*, not near you.
 - **BLE stops working while an HH4 guest is running** — expected. A usb-ip
   dongle can be attached by one host at a time, so the guest took it. The
   container's monitor re-attaches it when the guest shuts down. For simultaneous

@@ -37,6 +37,17 @@ extern "C" {
 #define THREAD_SUBSYSTEM_NAME "thread"
 
 /**
+ * Get the name of the Thread network interface, which also selects the
+ * OpenThread Border Router instance to talk to.
+ *
+ * Normally "wpan0". Some development configurations run several border
+ * routers on one host and set BARTON_THREAD_INTERFACE to choose between them.
+ *
+ * @return the interface name; never NULL
+ */
+const char *threadSubsystemGetInterfaceName(void);
+
+/**
  * Retrieve current thread network information.
  *
  * @param info a pointer to an allocated ThreadNetworkInfo struct that will receive the information

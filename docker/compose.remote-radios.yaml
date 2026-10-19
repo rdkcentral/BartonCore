@@ -26,8 +26,9 @@
 #
 #   - cpcd        : CPC daemon (Silabs Zigbee/Thread serial <-> CPC socket)
 #   - otbr-agent  : OpenThread Border Router agent (CPC socket <-> D-Bus API)
-#   - bluetoothd  : BlueZ, managing a dedicated Bluetooth USB dongle attached
-#                   over usb-ip, exposing org.bluez on a private D-Bus
+#   - mdnsd       : mDNSResponder, publishing the border router's services
+#   - usbip       : attaches the developer's Bluetooth dongle, which the dev
+#                   server's own bluetoothd then manages
 #
 # The two radios are independent physical devices forwarded from the
 # developer's workstation:
@@ -36,9 +37,9 @@
 #   - Bluetooth USB dongle       : usb-ip, attached inside this (privileged)
 #     container — no host root required on the dev server.
 #
-# A named volume (dbus-socket) shares a private D-Bus socket directory between
-# this container and the main barton/devcontainer.  This is not the host's
-# /var/run/dbus; this container starts and owns its own private dbus-daemon.
+# Thread and Bluetooth both use the dev server's own system bus, mounted in at
+# /run/host-dbus.  A per-user named volume (dbus-socket) shares a small state
+# directory, holding ble_adapter_id, with each of the user's barton containers.
 #
 # Running this overlay is OPTIONAL.  It is only layered in when a developer has
 # forwarded radios (via scripts/remote-radios/remote-radios-setup.sh) and runs
@@ -92,18 +93,18 @@ services:
         sysctls:
             - net.ipv6.conf.all.forwarding=1
             - net.ipv6.conf.all.proxy_ndp=1
-        # Connect to the same per-user IPv6 bridge network as the barton service so
-        # that:
-        #   - each user on a shared server gets an isolated wpan0 interface
-        #   - NAT64/iptables rules are scoped to this container's network namespace
-        #   - D-Bus communication with the barton container is via the
-        #     dbus-socket volume, so no direct network path is required
+        # The radios stack is per *user*, not per workspace: the radio sockets in
+        # ~/.remote-radios are per user, so there is exactly one stack to share.
+        # It sits on its own per-user network, which every one of the user's
+        # barton containers joins in addition to its workspace network.  The
+        # network is private to the user, so mDNS (and therefore Matter
+        # discovery) never reaches another developer's border router.
         networks:
-            - barton-ip6net
+            remote-radios-net:
+                aliases:
+                    - remote-radios
         volumes:
-            # Share a private D-Bus socket directory with the barton/devcontainer
-            # service so Barton code can talk to otbr-agent (and org.bluez) over
-            # D-Bus without ever touching the host's system bus.
+            # Shared with the user's barton containers; carries ble_adapter_id.
             - dbus-socket:/var/run/remote-radios-dbus
             # Bind-mount the developer's per-user Silabs serial tunnel socket
             # DIRECTORY (not the socket file).  remote-radios-setup.sh
@@ -162,54 +163,59 @@ services:
             - BACKBONE_IF=${BACKBONE_IF:-}
             # Where to look for radio claim files (see the entrypoint).
             - RADIO_CLAIM_DIR=${RADIO_CLAIM_DIR:-/run/remote-radios/claims}
-            - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/remote-radios-dbus/system_bus_socket
             # The dev server's shared bluetoothd owns every adapter; this is
             # where the container reaches it.  See BT_DBUS_ADDRESS in the
             # entrypoint for why a single shared daemon is required.
             - HOST_DBUS_SOCKET=${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}
+            # This developer's Thread interface.  otbr-agent registers on the
+            # dev server's shared bus as io.openthread.BorderRouter.<name>, so
+            # the name must be unique on the server; setupDockerEnv.sh derives
+            # it from the developer's uid.
+            - THREAD_INTERFACE=${REMOTE_RADIOS_THREAD_INTERFACE:-wpan0}
             - CPC_INSTANCE=${CPC_INSTANCE:-cpcd_0}
         # Restart automatically if the stack crashes, but limit retries so a
         # missing/invalid radio does not cause an infinite restart loop and log
         # spam when this overlay is included without hardware.
         restart: on-failure:5
-    # Give the barton service both buses it needs.  Thread and Bluetooth are
-    # deliberately on different ones: org.bluez comes from the dev server's
-    # single shared bluetoothd (the kernel allows AF_BLUETOOTH only in the
-    # initial netns, and bluetoothd cannot be scoped to one adapter), while
-    # otbr-agent is per-developer and stays on this stack's private bus next to
-    # the avahi and cpcd instances it depends on.
+    # Barton reaches both Bluetooth and Thread over the dev server's own system
+    # bus.  org.bluez comes from the server's single shared bluetoothd (the
+    # kernel allows AF_BLUETOOTH only in the initial netns, and bluetoothd
+    # cannot be scoped to one adapter), and each developer's otbr-agent
+    # registers there under its own interface name.  Matter requires both on
+    # one bus.
     barton:
+        # Join the user's radios network as well as the workspace network.
+        networks:
+            - barton-ip6net
+            - remote-radios-net
         volumes:
             - dbus-socket:/var/run/remote-radios-dbus
             # Expose the host network namespace so tools requiring AF_BLUETOOTH
             # (e.g. bluetoothctl) can run via nsenter.
             - /proc/1/ns/net:/run/host-netns:ro
-            # The dev server's own D-Bus, where the shared bluetoothd publishes
-            # org.bluez.
+            # The dev server's own D-Bus: org.bluez and the border routers.
             - /run/dbus:/run/host-dbus:ro
         environment:
-            # Bluetooth.  Matter's BLE layer resolves through this variable, so
-            # it names the shared bus; ble_adapter_id picks this developer's
-            # adapter out of the several the shared daemon manages.
             - DBUS_SYSTEM_BUS_ADDRESS=${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=/run/host-dbus/system_bus_socket}
-            # Thread.  Consumed by OpenThreadClient only; unset, it falls back
-            # to the ordinary system bus and nothing changes.
-            - BARTON_THREAD_DBUS_ADDRESS=${BARTON_THREAD_DBUS_ADDRESS:-unix:path=/var/run/remote-radios-dbus/system_bus_socket}
+            # Selects this developer's border router; ble_adapter_id likewise
+            # selects their Bluetooth adapter.
+            - BARTON_THREAD_INTERFACE=${REMOTE_RADIOS_THREAD_INTERFACE:-wpan0}
 networks:
-    # Reuse the same per-user IPv6 bridge network defined in compose.yaml so
-    # that remote-radios is properly segmented from the host network and each
-    # user on a shared server gets their own isolated namespace.
     barton-ip6net:
         name: $BUILDER_USER-$BARTON_WORKSPACE_ID-barton-ip6net
         # Network is created by setupDockerEnv.sh and declared in compose.yaml
         external: true
+    # Per-user network for the radios stack, shared by all of the user's
+    # workspaces.  Created by setupDockerEnv.sh.
+    remote-radios-net:
+        name: $BUILDER_USER-remote-radios-net
+        external: true
 volumes:
-    # Per-user/workspace named volume that shares /var/run/remote-radios-dbus
-    # between the remote-radios container (where the private dbus-daemon writes
-    # its socket) and the devcontainer/barton container (where Barton connects).
-    # Those two run in different Compose projects, so the volume is created by
-    # setupDockerEnv.sh and declared external here — otherwise Compose objects
-    # that it was created for the other project.
+    # Per-user named volume that shares /var/run/remote-radios-dbus (where the
+    # radios container publishes ble_adapter_id) with every one of the user's
+    # barton containers.  They run in different Compose projects, so the
+    # volume is created by setupDockerEnv.sh and declared external here —
+    # otherwise Compose objects that it was created for the other project.
     dbus-socket:
-        name: $BUILDER_USER-$BARTON_WORKSPACE_ID-remote-radios-dbus-socket
+        name: $BUILDER_USER-remote-radios-dbus-socket
         external: true
