@@ -103,6 +103,19 @@ CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
 CPCD_CONF="${CPCD_CONF:-/usr/local/etc/cpcd.conf}"
 DBUS_DIR="${DBUS_DIR:-/var/run/remote-radios-dbus}"
 DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
+
+# The dev server's own bluetoothd owns every Bluetooth adapter; this container
+# attaches its developer's dongle over usb-ip and then stays out of the way.
+#
+# This is not a preference, it is forced.  The kernel refuses AF_BLUETOOTH
+# outside the initial network namespace, so every bluetoothd on the machine
+# necessarily shares one namespace, and bluetoothd has no option restricting it
+# to a single adapter — two daemons therefore fight over every dongle.  One
+# daemon managing many adapters is exactly what BlueZ is designed for, and each
+# developer's Barton selects its own adapter through ble_adapter_id.
+HOST_DBUS_SOCKET="${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}"
+BT_DBUS_ADDRESS="unix:path=${HOST_DBUS_SOCKET}"
+
 DBUS_SYSTEM_BUS_ADDRESS="${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=${DBUS_SOCKET_PATH}}"
 export DBUS_SYSTEM_BUS_ADDRESS
 
@@ -481,12 +494,9 @@ start_bluetooth_chain() {
         fi
     done
 
-    # Power the dongle up and (re)start bluetoothd bound to our private D-Bus.
+    # Power the dongle up.  The dev server's bluetoothd picks it up from here.
     nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" up 2>/dev/null || true
-    pkill -x bluetoothd 2>/dev/null || true
-    sleep 0.5
-    echo "[remote-radios] Starting bluetoothd (host netns, private D-Bus)..."
-    nsenter --net="${HOST_NETNS}" bluetoothd &
+    echo "[remote-radios] Handing ${radioHci} to the dev server's bluetoothd."
     sleep 3
 
     # The adapter existing in sysfs is NOT proof that BLE works.  bluetoothd
@@ -499,11 +509,11 @@ start_bluetooth_chain() {
         waited=$((waited + 1))
     done
     if ! bt_controller_registered; then
-        echo "[remote-radios] WARNING: bluetoothd started but does not expose ${radioHci} on D-Bus." >&2
-        echo "[remote-radios]          BLE will not work.  The usual cause is a second bluetoothd" >&2
-        echo "[remote-radios]          on the dev server claiming the adapter first: BlueZ cannot" >&2
-        echo "[remote-radios]          share an adapter between daemons.  On the dev server run:" >&2
-        echo "[remote-radios]              sudo systemctl mask --now bluetooth.service" >&2
+        echo "[remote-radios] WARNING: the dev server's bluetoothd does not expose ${radioHci}." >&2
+        echo "[remote-radios]          BLE will not work.  On the dev server run:" >&2
+        echo "[remote-radios]              sudo systemctl unmask bluetooth.service" >&2
+        echo "[remote-radios]              sudo systemctl enable --now bluetooth.service" >&2
+        echo "[remote-radios]          and check that ${HOST_DBUS_SOCKET} is mounted here." >&2
         return 1
     fi
 
@@ -513,7 +523,8 @@ start_bluetooth_chain() {
 
 # teardown_bluetooth_chain — stop bluetoothd and detach the dongle.
 teardown_bluetooth_chain() {
-    pkill -x bluetoothd 2>/dev/null || true
+    # bluetoothd belongs to the dev server and is shared with other developers,
+    # so it is never stopped from here.
     if [ -n "${BT_HCI_INDEX:-}" ]; then
         nsenter --net="${HOST_NETNS}" hciconfig "hci${BT_HCI_INDEX}" down 2>/dev/null || true
     fi
@@ -533,7 +544,7 @@ teardown_bluetooth_chain() {
 bt_controller_registered() {
     local idx="${BT_HCI_INDEX:-}"
     [ -n "$idx" ] || return 1
-    DBUS_SYSTEM_BUS_ADDRESS="unix:path=${DBUS_SOCKET_PATH}" \
+    DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}" \
         timeout 5 dbus-send --system --dest=org.bluez --print-reply \
             "/org/bluez/hci${idx}" org.freedesktop.DBus.Properties.Get \
             string:org.bluez.Adapter1 string:Address >/dev/null 2>&1

@@ -20,7 +20,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ------------------------------ tabstop = 4 ----------------------------------
-
 #
 # Optional Docker Compose overlay that adds a container managing a developer's
 # forwarded physical radios:
@@ -73,7 +72,6 @@
 #                   interface detected by docker/setupDockerEnv.sh.
 #
 # ─────────────────────────────────────────────────────────────────────────────
-
 services:
     remote-radios:
         build:
@@ -134,6 +132,12 @@ services:
             # the usb-ip-created HCI device) live in the initial (host) netns.
             # AF_BLUETOOTH sockets are only available in the host netns.
             - /proc/1/ns/net:/run/host-netns:ro
+            # Bind-mount the dev server's own D-Bus directory (read-only) so
+            # this container can reach the dev server's
+            # shared bluetoothd.  Only the socket is used; nothing here is
+            # written.  See the BT_DBUS_ADDRESS comment in the entrypoint for
+            # why a single shared bluetoothd is required.
+            - /run/dbus:/run/host-dbus:ro
             # Mount the host kernel modules (read-only) so the privileged
             # container can load vhci-hcd (usb-ip client) itself, without
             # requiring host root/sudo on the dev server.
@@ -159,26 +163,38 @@ services:
             # Where to look for radio claim files (see the entrypoint).
             - RADIO_CLAIM_DIR=${RADIO_CLAIM_DIR:-/run/remote-radios/claims}
             - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/remote-radios-dbus/system_bus_socket
+            # The dev server's shared bluetoothd owns every adapter; this is
+            # where the container reaches it.  See BT_DBUS_ADDRESS in the
+            # entrypoint for why a single shared daemon is required.
+            - HOST_DBUS_SOCKET=${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}
             - CPC_INSTANCE=${CPC_INSTANCE:-cpcd_0}
         # Restart automatically if the stack crashes, but limit retries so a
         # missing/invalid radio does not cause an infinite restart loop and log
         # spam when this overlay is included without hardware.
         restart: on-failure:5
-
-    # Add the shared private D-Bus socket volume to the barton service so
-    # Barton can reach otbr-agent and org.bluez when explicitly requested,
-    # without requiring any code changes.  By default Barton continues to use
-    # the standard system bus so simulated/default flows keep working unless
-    # the private socket is explicitly selected via DBUS_SYSTEM_BUS_ADDRESS.
+    # Give the barton service both buses it needs.  Thread and Bluetooth are
+    # deliberately on different ones: org.bluez comes from the dev server's
+    # single shared bluetoothd (the kernel allows AF_BLUETOOTH only in the
+    # initial netns, and bluetoothd cannot be scoped to one adapter), while
+    # otbr-agent is per-developer and stays on this stack's private bus next to
+    # the avahi and cpcd instances it depends on.
     barton:
         volumes:
             - dbus-socket:/var/run/remote-radios-dbus
             # Expose the host network namespace so tools requiring AF_BLUETOOTH
             # (e.g. bluetoothctl) can run via nsenter.
             - /proc/1/ns/net:/run/host-netns:ro
+            # The dev server's own D-Bus, where the shared bluetoothd publishes
+            # org.bluez.
+            - /run/dbus:/run/host-dbus:ro
         environment:
-            - DBUS_SYSTEM_BUS_ADDRESS=${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=/var/run/remote-radios-dbus/system_bus_socket}
-
+            # Bluetooth.  Matter's BLE layer resolves through this variable, so
+            # it names the shared bus; ble_adapter_id picks this developer's
+            # adapter out of the several the shared daemon manages.
+            - DBUS_SYSTEM_BUS_ADDRESS=${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=/run/host-dbus/system_bus_socket}
+            # Thread.  Consumed by OpenThreadClient only; unset, it falls back
+            # to the ordinary system bus and nothing changes.
+            - BARTON_THREAD_DBUS_ADDRESS=${BARTON_THREAD_DBUS_ADDRESS:-unix:path=/var/run/remote-radios-dbus/system_bus_socket}
 networks:
     # Reuse the same per-user IPv6 bridge network defined in compose.yaml so
     # that remote-radios is properly segmented from the host network and each
@@ -187,7 +203,6 @@ networks:
         name: $BUILDER_USER-$BARTON_WORKSPACE_ID-barton-ip6net
         # Network is created by setupDockerEnv.sh and declared in compose.yaml
         external: true
-
 volumes:
     # Per-user/workspace named volume that shares /var/run/remote-radios-dbus
     # between the remote-radios container (where the private dbus-daemon writes

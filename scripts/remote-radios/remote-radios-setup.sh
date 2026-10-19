@@ -436,11 +436,23 @@ fi
 # Single-instance guard.  A user systemd manager cannot signal these root-owned
 # helpers, so `systemctl --user restart` leaves the previous one running; two
 # watchdogs would then fight over the same dongle.  The kernel drops this lock
-# automatically when the holder dies, so it never goes stale.
+# automatically when the holder dies, so it never goes stale -- provided no
+# child inherits the descriptor, which is why usbipd is started with 9>&-.
 mkdir -p /run/remote-radios
 exec 9>"/run/remote-radios/usbipd-bind-${BUSID}.lock"
 if ! flock -n 9; then
-    log "another instance is already managing ${BUSID}; exiting."
+    # Distinguish a genuine second instance from a descriptor leak, which
+    # otherwise looks identical and silently stops the dongle being bound ever
+    # again.
+    holder="$(cat "/run/remote-radios/usbipd-bind-${BUSID}.pid" 2>/dev/null || true)"
+    if [ -n "$holder" ] && [ -d "/proc/${holder}" ]; then
+        log "another instance (pid ${holder}) is already managing ${BUSID}; exiting."
+    else
+        log "ERROR: the lock for ${BUSID} is held but no bind helper is running."
+        log "       Something inherited the lock descriptor -- almost certainly a"
+        log "       usbipd left over from an older version of this helper."
+        log "       Clear it with:  sudo pkill -x usbipd"
+    fi
     exit 0
 fi
 echo "$$" > "/run/remote-radios/usbipd-bind-${BUSID}.pid"
@@ -461,7 +473,11 @@ fi
 
 ensure_usbipd() {
     if ! pgrep -x usbipd >/dev/null 2>&1; then
-        usbipd -D
+        # Close the lock fd in the child.  usbipd daemonizes and would
+        # otherwise inherit fd 9 and hold the single-instance flock for its
+        # whole lifetime -- outliving this helper, so that every later instance
+        # sees the lock taken and exits, and the dongle is never bound again.
+        usbipd -D 9>&-
         sleep 1
     fi
 }

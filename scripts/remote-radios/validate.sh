@@ -228,6 +228,10 @@ CPC_SOCKET_DIR="${CPC_SOCKET_DIR:-/dev/shm}"
 CPC_SOCKET_BASE="${CPC_SOCKET_DIR}/cpcd/${CPC_INSTANCE}"
 DBUS_DIR="${DBUS_DIR:-/var/run/remote-radios-dbus}"
 DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
+# org.bluez is published by the dev server's own bluetoothd, not by a daemon in
+# this container, so Bluetooth checks use that bus rather than the private one.
+HOST_DBUS_SOCKET="${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}"
+BT_DBUS_ADDRESS="unix:path=${HOST_DBUS_SOCKET}"
 HOST_NETNS="/run/host-netns"
 VIRTUAL_TTY="/dev/ttyRadio"
 
@@ -323,7 +327,7 @@ check_container_env() {
     fi
 
     # Required commands
-    for cmd in bluetoothd hcitool hciconfig nsenter usbip python3 socat cpcd; do
+    for cmd in bluetoothctl hcitool hciconfig nsenter usbip python3 socat cpcd; do
         if command -v "$cmd" >/dev/null 2>&1; then
             pass "Command: $cmd" "$(command -v "$cmd")"
         else
@@ -520,17 +524,18 @@ check_ble_chain() {
         fail "Bluetooth HCI device" "No HCI device in host netns — usb-ip attach may have failed"
     fi
 
-    # bluetoothd
-    local bluetoothd_pid
-    bluetoothd_pid=$(pgrep -x bluetoothd 2>/dev/null | head -1) || true
-    if [ -n "$bluetoothd_pid" ]; then
-        if is_process_alive "$bluetoothd_pid"; then
-            pass "bluetoothd" "PID $bluetoothd_pid (alive)"
-        else
-            fail "bluetoothd" "PID $bluetoothd_pid (ZOMBIE)"
-        fi
+    # bluetoothd.  It belongs to the dev server and is shared by everyone using
+    # the machine, so there is no process of ours to look for — what matters is
+    # that org.bluez answers on the bus we point Barton at.
+    if [ ! -S "${HOST_DBUS_SOCKET}" ]; then
+        fail "bluetoothd bus" "${HOST_DBUS_SOCKET} not mounted — cannot reach the dev server's bluetoothd"
+    elif DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}" \
+        timeout 5 dbus-send --system --dest=org.freedesktop.DBus --print-reply \
+            /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner \
+            string:org.bluez >/dev/null 2>&1; then
+        pass "bluetoothd" "org.bluez present on the dev server's bus"
     else
-        fail "bluetoothd" "Not running — Bluetooth operations will fail"
+        fail "bluetoothd" "org.bluez absent — on the dev server run: sudo systemctl enable --now bluetooth.service"
     fi
 
     # ble_adapter_id must exist and match an existing hci device.
@@ -691,7 +696,7 @@ check_ble_scan() {
             echo "scan off"
             sleep 1
             echo "quit"
-        } | DBUS_SYSTEM_BUS_ADDRESS="unix:path=${DBUS_SOCKET_PATH}" \
+        } | DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}" \
             timeout 20 nsenter --net="${HOST_NETNS}" \
             bluetoothctl --agent=NoInputNoOutput 2>&1
     ) || true
@@ -702,7 +707,7 @@ check_ble_scan() {
     # Check for concrete failure signatures before deciding the scan ran.
     if echo "$btctl_output" | grep -qi "not available\|not found\|No default controller"; then
         fail "BLE LE scan" \
-            "Controller ${target_hci} (${bd_addr}) not available to bluetoothd — another bluetoothd (such as the dev server's own bluetooth.service) has most likely claimed the adapter"
+            "Controller ${target_hci} (${bd_addr}) not available to the dev server's bluetoothd — check that the adapter is powered and that bluetooth.service is running there"
     elif echo "$btctl_output" | grep -qi "InProgress"; then
         fail "BLE LE scan" "bluetoothd reports scan InProgress — a stale scan may be stuck"
     else
