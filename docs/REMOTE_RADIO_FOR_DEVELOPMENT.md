@@ -25,7 +25,7 @@ remote-radios container on the dev server:
   WORKSTATION (your desk)                       DEV SERVER "it"                  remote-radios container (privileged)
   ─────────────────────                         ───────────────                  ───────────────────────────────────
   Silabs radio ──serial──▶ remote-serial.py ──ssh -R──▶ ~/.remote-radios/radios/silabs.sock ──(bind mount)──▶ socat → /dev/ttyRadio → cpcd ─┬─▶ otbr-agent (Thread)
-                                                                                                                                       └─▶ zigbeed → ZigbeeCore (Zigbee)
+                                                                                                                                       └─▶ remote-zigbee container: zigbeed → ZigbeeCore (Zigbee)
   BT dongle ───usb-ip────▶ usbipd/usbip bind ─ssh -R─▶ ~/.remote-radios/usbip/usbipd.sock ──▶ usbip attach (host netns) ─▶ hciX ─▶ dev server's bluetoothd ─▶ org.bluez
 ```
 
@@ -47,11 +47,12 @@ Key properties:
 | Container | Runs | Provides |
 |---|---|---|
 | `remote-radios` (one per user) | cpcd, otbr-agent, mdnsd, socat, usbip attach | Thread + CPC, and your dongle attached as an HCI adapter |
-| `barton` (devcontainer, one per workspace) | Barton application code, Matter SDK | Consumes Thread and BLE over the dev server's D-Bus |
+| `remote-zigbee` (one per user, from ZigbeeCore) | zigbeed, ZigbeeCore, socat | Zigbee, using the radios container's cpcd |
+| `barton` (devcontainer, one per workspace) | Barton application code, Matter SDK | Consumes Thread and BLE over the dev server's D-Bus, and Zigbee from `remote-zigbee` |
 
 The radios stack belongs to **you**, not to a workspace: the radio sockets in
 `~/.remote-radios` are per user, so there is exactly one stack to share. It runs
-in the Compose project `<user>-radios` on the network `<user>-remote-radios-net`.
+in the Compose project `<user>-remote-radios` on the network `<user>-remote-radios`.
 Every one of your BartonCore workspaces joins that network in addition to its
 own, and `./dockerw -T` in a second workspace reuses the running stack rather
 than starting another. `dockerw` never recreates a running radios stack, because
@@ -60,12 +61,25 @@ entrypoint, recreate it explicitly:
 
 ```bash
 cd docker
-docker compose -p "$USER-radios" -f compose.yaml -f compose.remote-radios.yaml \
+docker compose -p "$USER-remote-radios" -f compose.yaml -f compose.remote-radios.yaml \
     up -d --force-recreate remote-radios
 ```
 
-A per-user Docker volume, mounted at `/var/run/remote-radios-dbus`, carries
-`ble_adapter_id` from the radios container to each of your barton containers.
+Everything this creates on the dev server is named after you:
+
+| Kind | Name | Scope |
+|---|---|---|
+| Container, image and Compose project | `<user>-remote-radios` | One per user |
+| Zigbee container and Compose project | `<user>-remote-zigbee` | One per user, started from ZigbeeCore |
+| Network | `<user>-remote-radios` | One per user, joined by each of your workspaces |
+| Volume | `<user>-remote-radios-state` | One per user |
+| Workspace network | `<user>-<workspace>` | One per BartonCore workspace |
+
+The volume is mounted in parts. Its `ble/` directory appears at
+`/var/run/remote-radios-dbus` and carries `ble_adapter_id` from the radios
+container to each of your barton containers. Its `cpcd/` directory appears at
+`/dev/shm/cpcd` and holds cpcd's sockets. These mounts need Docker Engine 26 and
+Compose 2.23 or later.
 
 ### How Thread and Matter find your border router
 
@@ -88,7 +102,7 @@ exist on the shared bus; mDNSResponder uses a local socket instead.
 
 Thread devices do not use mDNS on the mesh. They register their services with
 your border router over SRP, and otbr republishes them as mDNS on its backbone,
-the `<user>-remote-radios-net` Docker network. Matter's queries go out on that
+the `<user>-remote-radios` Docker network. Matter's queries go out on that
 network and your `mdnsd` answers. mDNS is link-local multicast, which never
 leaves the network it was sent on, and Docker drops traffic between networks,
 so you never discover another developer's devices. Once a device is found,
@@ -120,7 +134,7 @@ other stacks do not each attach the hardware themselves.
 | Consumer | Gets Thread/Zigbee via | Gets Bluetooth via |
 |---|---|---|
 | `barton` devcontainer | your otbr-agent, over the dev server's D-Bus | BlueZ, over the dev server's D-Bus |
-| ZigbeeCore (`./run.sh -r`) | the Silabs socket directly, under a claim | BlueZ, over the dev server's D-Bus |
+| ZigbeeCore (`remote-zigbee` container) | the radios container's cpcd, shared with Thread | BlueZ, over the dev server's D-Bus |
 | zilker | BartonCore's device service | BartonCore's device service |
 | HH4 (QEMU guest) | the Silabs socket directly, under a claim | attaches the dongle itself over usb-ip |
 
@@ -134,9 +148,9 @@ compete:
 - **Silabs radio** — the workstation relay serves one client at a time. A
   consumer that wants it creates `~/.remote-radios/claims/silabs.claim`. The
   container watches that file, stops cpcd and its socat bridge while it exists,
-  and reclaims the radio once it is removed. ZigbeeCore's `run.sh -r` and HH4's
-  `hh4-run.sh` both take this claim and release it on exit, including on
-  interrupt, so handover needs no manual steps.
+  and reclaims the radio once it is removed. HH4's `hh4-run.sh` takes this
+  claim and releases it on exit, including on interrupt, so handover needs no
+  manual steps. Zigbee does not need it: it shares the radios container's cpcd.
 - **Bluetooth dongle** — a usb-ip device can be attached by one host only, and
   the kernel grants exclusive access per `hciN` (a second stack binding it gets
   `-EBUSY` or `-EUSERS`). When an HH4 guest attaches the dongle the container
@@ -456,6 +470,30 @@ server. The radio parameters flow in automatically from
 shell pointed at the dev server's D-Bus and your border router, with a route to
 your Thread network installed. `-T` cannot be combined with `-H`.
 
+### Zigbee
+
+Zigbee comes from ZigbeeCore's `remote-zigbee` container, which runs zigbeed and
+ZigbeeCore against the radios container's cpcd. The multi-PAN radio serves both
+networks at once: otbr-agent uses spinel interface 2 and zigbeed interface 1,
+on the same channel. Set it up once from a ZigbeeCore checkout (see "Remote
+radios" in its README):
+
+```bash
+./dockerw ./build.sh             # in ZigbeeCore
+scripts/remote-zigbee.sh up      # zigbeed and ZigbeeCore
+```
+
+That records the checkout in `~/.remote-radios/zigbee.env`. From then on
+`./dockerw -T` starts the container whenever it is not running, and points
+Barton at it by setting `ZIGBEE_CORE_IP=remote-zigbee`. ZigbeeCore is reached
+over your private radios network, and sends its events back to the barton
+container at its alias `barton` there. If two of your workspaces run at once,
+both answer to that alias; only one can usefully use Zigbee anyway.
+
+Without it, `./dockerw -T` says so, and Barton must be run with Zigbee disabled
+(`-z` for the reference app); otherwise it waits for a ZigbeeCore that never
+answers.
+
 ### Devcontainer (VS Code)
 
 The overlay is intentionally **not** in the default devcontainer stack (it
@@ -495,6 +533,7 @@ exporting before `dockerw`.
 | `RADIO_CLAIM_DIR` | Container path of the claims directory (default `/run/remote-radios/claims`) |
 | `RADIO_CLAIM_DIR_HOST` | Host path of that directory (bind-mount source, read-only in the container) |
 | `BACKBONE_IF` | Thread backbone interface (default: host default route) |
+| `ZIGBEE_CORE_IP` | Address or host name of ZigbeeCore, used when the `ZIGBEE_CORE_IP` system property is unset. `./dockerw -T` sets it to `remote-zigbee` when Zigbee is set up |
 | `REMOTE_RADIOS_THREAD_INTERFACE` | Your Thread interface, `wpan<uid>`. Passed to otbr-agent as `-I` and to Barton as `BARTON_THREAD_INTERFACE` |
 
 ---
@@ -518,7 +557,9 @@ chain, otbr-agent and its registration on the shared bus, `mdnsd` and the
 border router's MeshCoP advertisement, and (when a dongle is configured) usb-ip
 reachability, the imported device, the dongle's HCI adapter, the dev server's
 `bluetoothd`, `ble_adapter_id`, and a BLE scan that must see at least one
-device.
+device. When the `remote-zigbee` container is running it also checks that
+zigbeed is attached to the radio and that otbr-agent is on the other spinel
+interface.
 
 ### Manual BLE verification
 
@@ -542,7 +583,7 @@ nsenter --net=/run/host-netns bluetoothctl list
 
   ```bash
   cd docker
-  docker compose -p "$USER-radios" -f compose.yaml -f compose.remote-radios.yaml down
+  docker compose -p "$USER-remote-radios" -f compose.yaml -f compose.remote-radios.yaml down
   ```
 
 Teardown also happens automatically when the dev server becomes unreachable,
@@ -593,11 +634,15 @@ a workstation forwards them, whether that is the same one or another of yours.
   logging `flipping RTS/CTS flow control`. To skip the six-second detection
   window, pass `--rtscts` or `--no-rtscts` explicitly.
 - **cpcd keeps stopping, or the log says "Silabs radio claimed via ..."** — this
-  is the claim protocol working. Another project (an `hh4-run.sh` guest, or
-  ZigbeeCore's `./run.sh -r`) is using the radio, so the container released it
+  is the claim protocol working. An `hh4-run.sh` guest is using the radio, so
+  the container released it
   and is waiting. It reclaims the radio automatically once that run exits. If a
   stale claim is left behind after a crash, delete
   `~/.remote-radios/claims/silabs.claim`.
+- **The reference app stops after "Using defaults" and prints nothing more** —
+  Barton is waiting for ZigbeeCore. Set up the `remote-zigbee` container (see
+  "Zigbee" above), or disable Zigbee (`-z`). If the container is running, check
+  `docker logs $USER-remote-zigbee` and the validator's Zigbee section.
 - **The validator reports "org.bluez absent" or "Controller hciN not
   available to the dev server's bluetoothd"** — the dev server's
   `bluetooth.service` is not running, or is masked. See the dev server

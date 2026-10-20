@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -422,9 +423,9 @@ static void waitForInitialZigbeeCoreStartup(void)
         //
         timeTrackerDestroy(timer);
 
-        // We have seen an issue where a watchdog delegate says its restarting ZigbeeCore after a radio upgrade, but for some
-        // reason ZigbeeCore doesn't really restart.  This is an attempt to catch that condition and let the watchdog delegate
-        // try one more time
+        // We have seen an issue where a watchdog delegate says its restarting ZigbeeCore after a radio upgrade, but for
+        // some reason ZigbeeCore doesn't really restart.  This is an attempt to catch that condition and let the
+        // watchdog delegate try one more time
         if (zhalHeartbeatRc != 0)
         {
             g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
@@ -526,7 +527,10 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
 
     if (ip == NULL)
     {
-        ip = strdup(DEFAULT_ZIGBEE_CORE_IP);
+        // Some development configurations run ZigbeeCore in a separate
+        // container and name it through the environment.
+        const char *envIp = getenv(ZIGBEE_CORE_IP_PROPERTY_NAME);
+        ip = strdup((envIp != NULL && *envIp != '\0') ? envIp : DEFAULT_ZIGBEE_CORE_IP);
     }
 
     if (port == NULL)
@@ -1785,7 +1789,6 @@ int zigbeeSubsystemBindingClearTarget(uint64_t eui64,
     return zhalBindingClearTarget(eui64, endpointId, clusterId, targetEui64, targetEndpointId);
 }
 
-
 int zigbeeSubsystemAttributesSetReporting(uint64_t eui64,
                                           uint8_t endpointId,
                                           uint16_t clusterId,
@@ -1833,6 +1836,13 @@ static uint64_t loadLocalEui64(void)
     g_autoptr(BCorePropertyProvider) propProvider = deviceServiceConfigurationGetPropertyProvider();
     g_autofree gchar *localEui64String =
         b_core_property_provider_get_property_as_string(propProvider, LOCAL_EUI64_PROP_KEY, NULL);
+
+    // Unset until a network has been formed, as on a first start.  ZigbeeCore
+    // treats an all-zero address as none assigned.
+    if (localEui64String == NULL)
+    {
+        return 0;
+    }
 
     errno = 0;
     gchar *endptr = NULL;
@@ -3064,8 +3074,8 @@ static uint8_t calculateBestChannel(void)
 
     uint32_t scanCount =
         b_core_property_provider_get_property_as_uint32(propertyProvider,
-                                                                  CPE_DIAGNOSTIC_ZIGBEEDATA_PER_CHANNEL_NUMBER_OF_SCANS,
-                                                                  DEFAULT_ZIGBEE_PER_CHANNEL_NUMBER_OF_SCANS);
+                                                        CPE_DIAGNOSTIC_ZIGBEEDATA_PER_CHANNEL_NUMBER_OF_SCANS,
+                                                        DEFAULT_ZIGBEE_PER_CHANNEL_NUMBER_OF_SCANS);
 
     uint8_t channels[] = {15, 19, 20, 25};
     int8_t bestScore = 0;
@@ -3231,8 +3241,8 @@ static void startChannelChangeDeviceWatchdog(uint8_t previousChannel, uint8_t ta
 
     uint32_t rejoinTimeoutMinutes =
         b_core_property_provider_get_property_as_uint32(propertyProvider,
-                                                                  CPE_ZIGBEE_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES,
-                                                                  DEFAULT_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES);
+                                                        CPE_ZIGBEE_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES,
+                                                        DEFAULT_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES);
 
     // the task will clean up the deviceIdsInCommFail and the arg instance
     ChannelChangeDeviceWatchdogArg *arg = calloc(1, sizeof(*arg));
@@ -3281,8 +3291,8 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
     AUTO_CLEAN(securityStateDestroy__auto) SecurityState *state = deviceServiceGetSecurityState();
 #endif
 
-    if (b_core_property_provider_get_property_as_bool(
-            propertyProvider, CPE_ZIGBEE_CHANNEL_CHANGE_ENABLED_KEY, true) == false)
+    if (b_core_property_provider_get_property_as_bool(propertyProvider, CPE_ZIGBEE_CHANNEL_CHANGE_ENABLED_KEY, true) ==
+        false)
     {
         icLogWarn(LOG_TAG,
                   "%s: attempt to change to channel while %s=false.  Denied",
@@ -4424,10 +4434,10 @@ static void zigbeeLinkQualityConfigure(void)
 
     pthread_mutex_lock(&configMtx);
     // determine link quality value based on given rssi and lqi, once this property is set to true
-    useLqiForLinkQuality = b_core_property_provider_get_property_as_bool(
-        propertyProvider, ZIGBEE_LINK_QUALITY_LQI_ENABLED_PROP, false);
-    useRssiForLinkQuality = b_core_property_provider_get_property_as_bool(
-        propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_ENABLED_PROP, true);
+    useLqiForLinkQuality =
+        b_core_property_provider_get_property_as_bool(propertyProvider, ZIGBEE_LINK_QUALITY_LQI_ENABLED_PROP, false);
+    useRssiForLinkQuality =
+        b_core_property_provider_get_property_as_bool(propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_ENABLED_PROP, true);
     crossAboveDb = b_core_property_provider_get_property_as_uint8(
         propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_CROSS_ABOVE_DB_PROP, DEFAULT_RSSI_QUALITY_CROSS_ABOVE_DB);
     crossBelowDb = b_core_property_provider_get_property_as_uint8(
@@ -4687,8 +4697,7 @@ static void configureMonitors(void)
         // and trigger recovery. It was not possible using deviceCommunicationWatchdog reports only.
         //
         mutexLock(&commFailControlMutex);
-        fastCommFailTimer =
-            b_core_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
+        fastCommFailTimer = b_core_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
         initTimedWaitCond(&commFailControlCond);
         commfailMonitorThreadRunning =
             createThread(&commFailMonitorThreadId, checkAllDevicesInCommThreadProc, NULL, "commFailPoll");

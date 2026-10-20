@@ -284,9 +284,13 @@ if [ -n "$btUsbipSocketValue" ]; then
 fi
 ##############################################################################
 
-# Ensure the container network exists
-NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID-barton-ip6net"
-_SUBNET_HASH=$(echo "$USER-$BARTON_WORKSPACE_ID" | sha256sum | cut -c1-8)
+# Ensure the workspace network exists.
+NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID"
+# The subnet is derived from the name.  The "-ip6" suffix in the hash input
+# keeps it clear of the subnet used by this network's previous name,
+# "<user>-<workspace>-barton-ip6net", which Docker would otherwise reject as an
+# overlap while the old network still exists.
+_SUBNET_HASH=$(echo "$USER-$BARTON_WORKSPACE_ID-ip6" | sha256sum | cut -c1-8)
 IPV6_SUBNET="fd00:${_SUBNET_HASH:0:4}:${_SUBNET_HASH:4:4}::/64"
 unset _SUBNET_HASH
 
@@ -295,25 +299,27 @@ if ! docker network ls --format '{{.Name}}' | grep -Fxq "$NETWORK_NAME"; then
     docker network create --ipv6 --subnet $IPV6_SUBNET $NETWORK_NAME
 fi
 
-# Ensure the per-user remote-radios network and volume exist.  The radios stack
-# is per user rather than per workspace — the radio sockets in ~/.remote-radios
-# are per user — so all of a user's workspaces share it.  Neither belongs to a
-# single Compose project (the radios container and each workspace's barton
-# container run in separate ones), so they are created here and declared
-# `external`, like the network above.
-RADIOS_NETWORK_NAME="$USER-remote-radios-net"
+# Retire the network under its previous name once nothing uses it.  Removal
+# fails harmlessly while a container (an open devcontainer, say) is attached.
+OLD_NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID-barton-ip6net"
+if docker network ls --format '{{.Name}}' | grep -Fxq "$OLD_NETWORK_NAME"; then
+    docker network rm "$OLD_NETWORK_NAME" >/dev/null 2>&1 \
+        && echo "Removed network $OLD_NETWORK_NAME (renamed to $NETWORK_NAME)."
+fi
+
+# Ensure the per-user remote-radios network exists.  The radios stack is per
+# user rather than per workspace — the radio sockets in ~/.remote-radios are per
+# user — so all of a user's workspaces share it.  It belongs to no single
+# Compose project (the radios containers and each workspace's barton container
+# run in separate ones), so it is created here and declared `external`.
+RADIOS_NETWORK_NAME="$USER-remote-radios"
 if ! docker network ls --format '{{.Name}}' | grep -Fxq "$RADIOS_NETWORK_NAME"; then
-    _SUBNET_HASH=$(echo "$USER-remote-radios" | sha256sum | cut -c1-8)
+    _SUBNET_HASH=$(echo "$USER-remote-radios-ip6" | sha256sum | cut -c1-8)
     echo "Network $RADIOS_NETWORK_NAME does not exist. Creating it..."
     docker network create --ipv6 \
         --subnet "fd00:${_SUBNET_HASH:0:4}:${_SUBNET_HASH:4:4}::/64" \
         "$RADIOS_NETWORK_NAME" >/dev/null
     unset _SUBNET_HASH
-fi
-DBUS_VOLUME_NAME="$USER-remote-radios-dbus-socket"
-if ! docker volume ls --format '{{.Name}}' | grep -Fxq "$DBUS_VOLUME_NAME"; then
-    echo "Volume $DBUS_VOLUME_NAME does not exist. Creating it..."
-    docker volume create "$DBUS_VOLUME_NAME" >/dev/null
 fi
 
 # Build the image if it doesn't exist
@@ -325,3 +331,29 @@ else
     echo "Image $IMAGE not found, building..."
     $DIR/build.sh
 fi
+
+# Ensure the per-user remote-radios state volume exists.  Containers mount
+# parts of it by subpath:
+#   ble/   ble_adapter_id, published by the radios container to Barton
+#   cpcd/  cpcd's sockets, shared by the radios and zigbee containers
+# A subpath mount fails if the directory does not exist, so create both.  This
+# needs Docker Engine 26 and Compose 2.23 or later.
+STATE_VOLUME_NAME="$USER-remote-radios-state"
+_engine=$(docker version --format '{{.Server.Version}}' 2>/dev/null)
+_compose=$(docker compose version --short 2>/dev/null)
+if [ ! -d "$HOME/.remote-radios" ]; then
+    :   # remote radios have never been set up for this user
+elif [ "${_engine%%.*}" -lt 26 ] 2>/dev/null || \
+    [ "$(printf '%s\n2.23\n' "${_compose#v}" | sort -V | head -1)" != "2.23" ]; then
+    # Only remote radios need subpath mounts, so this must not stop anyone else.
+    echo "Note: remote radios (./dockerw -T) need Docker Engine 26+ and Compose 2.23+;" \
+        "found Engine ${_engine:-?}, Compose ${_compose:-?}." >&2
+else
+    if ! docker volume ls --format '{{.Name}}' | grep -Fxq "$STATE_VOLUME_NAME"; then
+        echo "Volume $STATE_VOLUME_NAME does not exist. Creating it..."
+        docker volume create "$STATE_VOLUME_NAME" >/dev/null
+        docker run --rm -v "$STATE_VOLUME_NAME:/state" --entrypoint sh "$IMAGE" \
+            -c 'mkdir -p /state/ble /state/cpcd' >/dev/null
+    fi
+fi
+unset _engine _compose

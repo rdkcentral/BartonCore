@@ -107,9 +107,9 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "remote-radios" /entrypoint.sh 2>/dev/nu
             | python3 -c "import json,sys; print(json.load(sys.stdin)['Config']['Labels'].get('com.docker.compose.project',''))" 2>/dev/null) || true
 
         if [ -n "$COMPOSE_PROJECT" ]; then
-            # The radios container runs in a sibling project, "<ours>-radios"
-            # (see dockerw); fall back to our own for pre-split installations.
-            for _proj in "${BUILDER_USER:-${USER:-}}-radios" "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
+            # The radios container runs in its own per-user project,
+            # "<user>-remote-radios" (see dockerw).
+            for _proj in "${BUILDER_USER:-${USER:-}}-remote-radios"; do
                 _filter=$(python3 -c "
 import json, sys, urllib.parse
 print(urllib.parse.quote(json.dumps(
@@ -177,9 +177,8 @@ sys.stdout.buffer.flush()
 
         if [ -n "$COMPOSE_PROJECT" ]; then
             # The radios container runs in its own per-user project,
-            # "<user>-radios", shared by all of the user's workspaces.  Look
-            # there first, then in the older per-workspace locations.
-            for _proj in "${BUILDER_USER:-${USER:-}}-radios" "${COMPOSE_PROJECT}-radios" "${COMPOSE_PROJECT}"; do
+            # "<user>-remote-radios", shared by all of the user's workspaces.
+            for _proj in "${BUILDER_USER:-${USER:-}}-remote-radios"; do
                 OTBR_CONTAINER=$($DOCKER_CMD ps \
                     --filter "label=com.docker.compose.project=${_proj}" \
                     --filter "name=remote-radios" \
@@ -192,7 +191,7 @@ sys.stdout.buffer.flush()
         # project to scope by, but the user's own radios project is known.
         if [ -z "$OTBR_CONTAINER" ]; then
             OTBR_CONTAINER=$($DOCKER_CMD ps \
-                --filter "label=com.docker.compose.project=${BUILDER_USER:-${USER:-}}-radios" \
+                --filter "label=com.docker.compose.project=${BUILDER_USER:-${USER:-}}-remote-radios" \
                 --filter "name=remote-radios" \
                 --format '{{.Names}}' 2>/dev/null | head -1) || true
         fi
@@ -804,6 +803,41 @@ check_otbr() {
 }
 
 ###############################################################################
+# Section: Zigbee (ZigbeeCore's remote-zigbee container)
+###############################################################################
+check_zigbee() {
+    section "Zigbee (remote-zigbee container)"
+
+    # Optional: present only when set up from a ZigbeeCore checkout.  Checked
+    # without connecting to ZigbeeCore.
+    if ! getent hosts remote-zigbee >/dev/null 2>&1; then
+        skip "remote-zigbee container" "Not running — set it up from ZigbeeCore with scripts/remote-zigbee.sh up"
+        return
+    fi
+    pass "remote-zigbee container" "Resolvable on this user's radios network"
+
+    # Thread and Zigbee share the multi-PAN radio, each on its own spinel
+    # interface: otbr-agent on 2, zigbeed on 1.
+    if pgrep -a otbr-agent 2>/dev/null | grep -q "iid=2"; then
+        pass "otbr-agent spinel interface" "iid=2 (zigbeed uses 1)"
+    else
+        fail "otbr-agent spinel interface" "otbr-agent is not on iid=2 and will collide with zigbeed"
+    fi
+
+    # cpcd's own count of clients on the radio endpoint (12): otbr-agent and
+    # zigbeed.  The kernel's socket tables do not show the zigbee container's
+    # connection reliably from here.
+    local cpcd_log="${CPCD_LOG:-/tmp/cpcd.log}" clients
+    clients=$(sed -n 's/.*Endpoint socket #12: Client [a-z]*\. \([0-9]*\) connection.*/\1/p' \
+        "$cpcd_log" 2>/dev/null | tail -1)
+    if [ "${clients:-0}" -ge 2 ]; then
+        pass "zigbeed on the radio" "${clients} clients on cpcd endpoint 12 (otbr-agent and zigbeed)"
+    else
+        fail "zigbeed on the radio" "${clients:-0} client(s) on cpcd endpoint 12 — zigbeed is not attached; see: docker logs \${USER}-remote-zigbee"
+    fi
+}
+
+###############################################################################
 # Section 8: Known Pitfalls
 ###############################################################################
 check_known_pitfalls() {
@@ -944,6 +978,7 @@ check_ble_chain
 check_hci
 check_ble_scan
 check_otbr
+check_zigbee
 check_known_pitfalls
 print_summary
 

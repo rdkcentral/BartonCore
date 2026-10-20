@@ -85,7 +85,7 @@ $DIR/docker/setupDockerEnv.sh
 # The project is per user, not per workspace: the radio sockets it consumes are
 # per user, so all of a user's BartonCore workspaces share one radios stack.
 RADIOS_PROJECT="$(. "${DIR}/docker/.env" >/dev/null 2>&1; \
-    printf '%s-radios' "${BUILDER_USER}")"
+    printf '%s-remote-radios' "${BUILDER_USER}")"
 
 COMPOSE_FILES=(-f "${DIR}/docker/compose.yaml")
 if [ "$USE_REMOTE_RADIOS" = true ]; then
@@ -125,6 +125,33 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
         notice "remote-radios container started in the background."
     fi
     EXTRA_ENV="${EXTRA_ENV} -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/host-dbus/system_bus_socket"
+
+    # Zigbee comes from ZigbeeCore's remote-zigbee container, set up from a
+    # ZigbeeCore checkout with scripts/remote-zigbee.sh, which records where
+    # that checkout is.  Start the container if it is not running, and point
+    # Barton at it.
+    ZIGBEE_HINT="${HOME}/.remote-radios/zigbee.env"
+    zigbeeContainer="$(id -un)-remote-zigbee"
+    if [ -f "$ZIGBEE_HINT" ]; then
+        zigbeeDir="$(sed -n 's/^ZIGBEECORE_DIR=//p' "$ZIGBEE_HINT")"
+        zigbeeRun="$(sed -n 's/^RUN_ZIGBEECORE=//p' "$ZIGBEE_HINT")"
+        if [ "$(docker inspect -f '{{.State.Running}}' "$zigbeeContainer" 2>/dev/null)" = true ]; then
+            notice "Using running remote-zigbee container (${zigbeeContainer})."
+        elif [ -x "${zigbeeDir}/scripts/remote-zigbee.sh" ]; then
+            notice "Starting remote-zigbee container from ${zigbeeDir}..."
+            if [ "$zigbeeRun" = 0 ]; then
+                "${zigbeeDir}/scripts/remote-zigbee.sh" up --dev >/dev/null
+            else
+                "${zigbeeDir}/scripts/remote-zigbee.sh" up >/dev/null
+            fi
+        else
+            notice "Zigbee unavailable: ${ZIGBEE_HINT} names ${zigbeeDir}, which has no scripts/remote-zigbee.sh."
+        fi
+        EXTRA_ENV="${EXTRA_ENV} -e ZIGBEE_CORE_IP=remote-zigbee"
+    else
+        notice "Zigbee is not set up; run Barton with -z, or set it up from a ZigbeeCore checkout:"
+        notice "    scripts/remote-zigbee.sh up"
+    fi
 fi
 
 # create a unique container name prefixed with the user id, useful when on a shared machine
@@ -141,8 +168,11 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
     RUN_CMD=(bash -c 'docker/setup-thread-routes.sh >&2 || true; exec "$@"' dockerw "${RUN_CMD[@]}")
 fi
 
+# --use-aliases: `run` otherwise ignores the service's network aliases, and
+# ZigbeeCore's remote-zigbee container reaches Barton by its alias, barton.
 docker compose "${COMPOSE_FILES[@]}" run \
     --rm \
+    --use-aliases \
     --name ${CONTAINER_NAME} \
     ${COMPOSE_INTERACTIVE_FLAGS} \
     --workdir "${DIR}" \

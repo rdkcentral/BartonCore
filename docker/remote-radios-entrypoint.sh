@@ -722,8 +722,9 @@ service_monitor() {
 ###############################################################################
 # 1. Prepare the shared state directory
 #
-# The shared 'dbus-socket' named volume is mounted at ${DBUS_DIR} and is shared
-# with every one of this user's barton containers.  It carries ble_adapter_id.
+# The ble/ part of the per-user <user>-remote-radios-state volume is mounted at
+# ${DBUS_DIR} and shared with each of this user's barton containers.  It
+# carries ble_adapter_id.  (Its cpcd/ part holds cpcd's sockets.)
 # No D-Bus daemon runs here: otbr-agent and org.bluez both use the dev server's
 # own system bus (see HOST_DBUS_SOCKET).
 ###############################################################################
@@ -905,13 +906,17 @@ while true; do
     # otbr-agent registers on the dev server's shared bus, next to org.bluez,
     # because Matter needs the border router and BlueZ on one bus.  The unique
     # interface name keeps each developer's registration distinct there.
+    #
+    # The radio is multi-PAN: Thread and Zigbee share it through this cpcd,
+    # each host using its own spinel interface ID.  Silicon Labs' convention
+    # is iid=1 for zigbeed and iid=2 for otbr-agent; iid 0 is broadcast.
     DBUS_SYSTEM_BUS_ADDRESS="${BT_DBUS_ADDRESS}" \
     otbr-agent \
         -I "${THREAD_INTERFACE}" \
         -B "${BACKBONE_IF}" \
         -d 7 \
         -v \
-        "spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0" &
+        "spinel+cpc://${CPC_INSTANCE}?iid=2&iid-list=0" &
     OTBR_PID=$!
     set +e
     wait ${OTBR_PID} 2>/dev/null

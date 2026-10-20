@@ -38,8 +38,9 @@
 #     container — no host root required on the dev server.
 #
 # Thread and Bluetooth both use the dev server's own system bus, mounted in at
-# /run/host-dbus.  A per-user named volume (dbus-socket) shares a small state
-# directory, holding ble_adapter_id, with each of the user's barton containers.
+# /run/host-dbus.  A per-user named volume, <user>-remote-radios-state, carries
+# ble_adapter_id to each of the user's barton containers and shares cpcd's
+# sockets with the user's zigbee container.
 #
 # Running this overlay is OPTIONAL.  It is only layered in when a developer has
 # forwarded radios (via scripts/remote-radios/remote-radios-setup.sh) and runs
@@ -75,6 +76,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 services:
     remote-radios:
+        # Exactly one per user, so it is named outright; an accidental second
+        # instance then fails instead of quietly appearing as "-2".
+        container_name: $BUILDER_USER-remote-radios
+        image: $BUILDER_USER-remote-radios
         build:
             context: .
             dockerfile: Dockerfile.remote-radios
@@ -100,12 +105,23 @@ services:
         # network is private to the user, so mDNS (and therefore Matter
         # discovery) never reaches another developer's border router.
         networks:
-            remote-radios-net:
+            remote-radios:
                 aliases:
                     - remote-radios
         volumes:
-            # Shared with the user's barton containers; carries ble_adapter_id.
-            - dbus-socket:/var/run/remote-radios-dbus
+            # ble_adapter_id, published to the user's barton containers.
+            - type: volume
+              source: state
+              target: /var/run/remote-radios-dbus
+              volume:
+                  subpath: ble
+            # cpcd's sockets.  The path is compiled into cpcd and libcpc, so it
+            # must be /dev/shm/cpcd here and in the zigbee container.
+            - type: volume
+              source: state
+              target: /dev/shm/cpcd
+              volume:
+                  subpath: cpcd
             # Bind-mount the developer's per-user Silabs serial tunnel socket
             # DIRECTORY (not the socket file).  remote-radios-setup.sh
             # (remote-serial.py) serves the socket inside this dir on the dev
@@ -186,10 +202,18 @@ services:
     barton:
         # Join the user's radios network as well as the workspace network.
         networks:
-            - barton-ip6net
-            - remote-radios-net
+            workspace: {}
+            remote-radios:
+                # ZigbeeCore sends its events here (ZB_CLIENT_IP).  With two of
+                # the user's workspaces running at once, both answer to it.
+                aliases:
+                    - barton
         volumes:
-            - dbus-socket:/var/run/remote-radios-dbus
+            - type: volume
+              source: state
+              target: /var/run/remote-radios-dbus
+              volume:
+                  subpath: ble
             # Expose the host network namespace so tools requiring AF_BLUETOOTH
             # (e.g. bluetoothctl) can run via nsenter.
             - /proc/1/ns/net:/run/host-netns:ro
@@ -201,21 +225,19 @@ services:
             # selects their Bluetooth adapter.
             - BARTON_THREAD_INTERFACE=${REMOTE_RADIOS_THREAD_INTERFACE:-wpan0}
 networks:
-    barton-ip6net:
-        name: $BUILDER_USER-$BARTON_WORKSPACE_ID-barton-ip6net
+    workspace:
+        name: $BUILDER_USER-$BARTON_WORKSPACE_ID
         # Network is created by setupDockerEnv.sh and declared in compose.yaml
         external: true
     # Per-user network for the radios stack, shared by all of the user's
     # workspaces.  Created by setupDockerEnv.sh.
-    remote-radios-net:
-        name: $BUILDER_USER-remote-radios-net
+    remote-radios:
+        name: $BUILDER_USER-remote-radios
         external: true
 volumes:
-    # Per-user named volume that shares /var/run/remote-radios-dbus (where the
-    # radios container publishes ble_adapter_id) with every one of the user's
-    # barton containers.  They run in different Compose projects, so the
-    # volume is created by setupDockerEnv.sh and declared external here —
-    # otherwise Compose objects that it was created for the other project.
-    dbus-socket:
-        name: $BUILDER_USER-remote-radios-dbus-socket
+    # Per-user state shared across Compose projects (the radios containers and
+    # each workspace's barton container run in separate ones), so it is created
+    # by setupDockerEnv.sh and declared external.  Mounted by subpath; see there.
+    state:
+        name: $BUILDER_USER-remote-radios-state
         external: true
