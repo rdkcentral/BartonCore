@@ -688,7 +688,7 @@ namespace
                     CMD_PING: 0x01,
                 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: {
                     echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
                     pingCmd: { clusterId: CL_TEST, commandId: CMD_PING },
@@ -751,7 +751,7 @@ namespace
                 name: "CmdClearTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: { echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO } },
                 commandHandlers: {
                     handleEcho: { aliases: ["echoCmd"], handler: fn },
@@ -787,7 +787,7 @@ namespace
                 name: "CmdInvokeTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0, EP: "1" },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: { echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO } },
                 commandHandlers: {
                     handleEcho: {
@@ -859,7 +859,7 @@ namespace
                 name: "CmdWildcardTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: {
                     echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
                     anyTestCmd: { clusterId: CL_TEST },

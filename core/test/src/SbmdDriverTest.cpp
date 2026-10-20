@@ -31,7 +31,11 @@
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
+#include <atomic>
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
+#include <random>
 #include <string>
 
 extern "C" {
@@ -122,12 +126,50 @@ namespace
         }
 
         /**
+         * A unique spec-file path under the temp directory. Per-process salt plus a per-call
+         * counter keep concurrent test runs on the same host from colliding on fixed filenames.
+         */
+        std::filesystem::path UniqueSpecPath(const std::string &tag)
+        {
+            static const std::string salt = [] {
+                std::random_device rd;
+                return std::to_string(rd()) + "_" + std::to_string(rd());
+            }();
+            static std::atomic<unsigned> counter {0};
+
+            return std::filesystem::temp_directory_path() /
+                   ("sbmd_" + tag + "_" + salt + "_" + std::to_string(counter.fetch_add(1)) + ".sbmd.js");
+        }
+
+        /**
          * Create a driver from the test source. Loads it initially to get metadata.
          */
         std::unique_ptr<SbmdDriver> CreateDriver(const std::string &source = kDriverSource)
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto reg = SbmdLoader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
+
+            if (!reg)
+            {
+                return nullptr;
+            }
+
+            return std::make_unique<SbmdDriver>(std::move(reg), source);
+        }
+
+        /**
+         * Write source to a file on disk and create a driver whose filePath is that file, so a
+         * driver reduced to its claim metadata can re-read its spec from disk on activation.
+         */
+        std::unique_ptr<SbmdDriver> CreateDriverFromFile(const std::string &source, const std::string &path)
+        {
+            {
+                std::ofstream out(path, std::ios::binary | std::ios::trunc);
+                out.write(source.data(), static_cast<std::streamsize>(source.size()));
+            }
+
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto reg = SbmdLoader::LoadDriver(Ctx(), path, source.c_str(), source.size());
 
             if (!reg)
             {
@@ -351,7 +393,7 @@ namespace
         EXPECT_FALSE(driver->IsActivated());
     }
 
-    TEST_F(SbmdDriverTest, HandlersUndefinedAfterDeactivation)
+    TEST_F(SbmdDriverTest, HandlersReleasedAfterDeactivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -364,15 +406,12 @@ namespace
 
         auto &reg = driver->GetRegistration();
 
-        // Resource handlers should be reset
-        ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
-        EXPECT_TRUE(JS_IsUndefined(reg.endpoints[0].resources[0].write->handler));
-        EXPECT_TRUE(JS_IsUndefined(reg.endpoints[0].resources[0].read->handler));
-        EXPECT_TRUE(JS_IsUndefined(reg.endpoints[0].resources[0].seed->handler));
-
-        // Device handlers should be reset
-        ASSERT_EQ(reg.attributeHandlers.size(), 1u);
-        EXPECT_TRUE(JS_IsUndefined(reg.attributeHandlers[0].handler));
+        // Deactivation sheds the heavy parsed registration back to the claim metadata.
+        EXPECT_TRUE(reg.endpoints.empty());
+        EXPECT_TRUE(reg.aliases.empty());
+        EXPECT_TRUE(reg.attributeHandlers.empty());
+        EXPECT_TRUE(reg.eventHandlers.empty());
+        EXPECT_TRUE(reg.commandHandlers.empty());
     }
 
     TEST_F(SbmdDriverTest, MetadataPreservedAfterDeactivation)
@@ -412,7 +451,9 @@ namespace
 
     TEST_F(SbmdDriverTest, ReactivateAfterDeactivate)
     {
-        auto driver = CreateDriver();
+        // Deactivation releases the source, so re-activation re-reads the spec from disk.
+        auto path = UniqueSpecPath("reactivate");
+        auto driver = CreateDriverFromFile(kDriverSource, path.string());
         ASSERT_NE(driver, nullptr);
 
         {
@@ -440,6 +481,8 @@ namespace
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
+
+        std::filesystem::remove(path);
     }
 
     TEST_F(SbmdDriverTest, CommandHandlerCallableAfterActivation)
@@ -451,7 +494,7 @@ namespace
                 name: "CmdLifecycleTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: {
                     echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
                 },
@@ -497,7 +540,7 @@ namespace
         }
     }
 
-    TEST_F(SbmdDriverTest, CommandHandlersUndefinedAfterDeactivation)
+    TEST_F(SbmdDriverTest, CommandHandlersReleasedAfterDeactivation)
     {
         const char *source = R"(
             SbmdDriver({
@@ -506,7 +549,7 @@ namespace
                 name: "CmdDeactivateTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
-                matter: { deviceTypes: [0xFFF10000] },
+                matter: { deviceTypes: [0x0100] },
                 aliases: { echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO } },
                 commandHandlers: {
                     handleEcho: { aliases: ["echoCmd"], handler: fn },
@@ -525,8 +568,7 @@ namespace
         }
 
         auto &reg = driver->GetRegistration();
-        ASSERT_EQ(reg.commandHandlers.size(), 1u);
-        EXPECT_TRUE(JS_IsUndefined(reg.commandHandlers[0].handler));
+        EXPECT_TRUE(reg.commandHandlers.empty());
     }
 
     // ========================================================================
@@ -562,6 +604,121 @@ namespace
         }
 
         EXPECT_FALSE(driver->IsActivated());
+    }
+
+    // ========================================================================
+    // Numeric claim/version field range validation
+    //
+    // The loader reads numeric fields through JS_ToUint32, which wraps values >= 2^32 and then
+    // narrows; without a range check an out-of-range disk edit could alias a smaller in-range value
+    // and slip a changed claim identity or version past re-read validation. The loader must reject
+    // such values at parse time (so a tampered re-read fails activation, and the bind is rejected).
+    // ========================================================================
+
+    TEST_F(SbmdDriverTest, ProfileVersionAboveUint8Rejected)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadProfileVersion",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+                endpoints: { "1": { profile: "test", profileVersion: 257, resources: {} } },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, ProfileVersionWraparoundRejected)
+    {
+        // 4294967297 == 2^32 + 1 wraps to 1 under JS_ToUint32; the saturating range check must catch
+        // it before it aliases a valid cached version.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "WrappingProfileVersion",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+                endpoints: { "1": { profile: "test", profileVersion: 4294967297, resources: {} } },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, DeviceTypeAboveUint16Rejected)
+    {
+        // 0x10100 narrows to 0x0100 (a valid device type); the range check must reject it.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadDeviceType",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x10100] },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, VendorIdAboveUint16Rejected)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadVendorId",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100], vendorId: 0x10000, productId: 0x1 },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, DeviceClassVersionAboveUint8Rejected)
+    {
+        // deviceClassVersion is published as uint8; 256 narrows to 0 and would alias, so reject it.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BadDeviceClassVersion",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 256 },
+                matter: { deviceTypes: [0x0100] },
+            });
+        )";
+
+        EXPECT_EQ(CreateDriver(source), nullptr);
+    }
+
+    TEST_F(SbmdDriverTest, Uint16AndUint8BoundaryValuesAccepted)
+    {
+        // Exactly at the limits: these must load so the range check does not reject valid specs.
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "BoundaryValues",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 255 },
+                matter: { deviceTypes: [0xFFFF], vendorId: 0xFFFF, productId: 0xFFFF },
+                endpoints: { "1": { profile: "test", profileVersion: 255, resources: {} } },
+            });
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+        EXPECT_EQ(driver->GetRegistration().matter.deviceTypes.front(), 0xFFFF);
     }
 
     // ========================================================================
@@ -814,6 +971,116 @@ namespace
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             driver->Deactivate(Ctx());
         }
+    }
+
+    // ========================================================================
+    // Reduce to claim metadata + activation from disk
+    // ========================================================================
+
+    TEST_F(SbmdDriverTest, ReduceToClaimMetadataReleasesRegistrationKeepsMetadata)
+    {
+        auto driver = CreateDriver();
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->ReduceToClaimMetadata();
+        }
+
+        EXPECT_FALSE(driver->IsActivated());
+
+        auto &reg = driver->GetRegistration();
+        // Claim metadata remains resident.
+        EXPECT_EQ(reg.name, "TestDriver");
+        EXPECT_EQ(reg.barton.deviceClass, "light");
+        ASSERT_EQ(reg.matter.deviceTypes.size(), 1u);
+        EXPECT_EQ(reg.matter.deviceTypes[0], 0x0100);
+        // Heavy collections are released.
+        EXPECT_TRUE(reg.endpoints.empty());
+        EXPECT_TRUE(reg.aliases.empty());
+        EXPECT_TRUE(reg.attributeHandlers.empty());
+    }
+
+    TEST_F(SbmdDriverTest, ActivateAfterReduceReadsFromDisk)
+    {
+        auto path = UniqueSpecPath("disk_reread");
+        auto driver = CreateDriverFromFile(kDriverSource, path.string());
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->ReduceToClaimMetadata(); // frees the in-memory source; activation must re-read from disk
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        EXPECT_TRUE(driver->IsActivated());
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_FALSE(reg.endpoints.empty());
+        ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->Deactivate(Ctx());
+        }
+
+        std::filesystem::remove(path);
+    }
+
+    TEST_F(SbmdDriverTest, ActivateFailsWhenSourceUnavailable)
+    {
+        // A driver reduced to its claim metadata whose spec file does not exist on disk cannot activate.
+        auto driver = CreateDriver(); // filePath "<test>", no file on disk
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->ReduceToClaimMetadata();
+            EXPECT_FALSE(driver->Activate(Ctx()));
+        }
+
+        EXPECT_FALSE(driver->IsActivated());
+    }
+
+    TEST_F(SbmdDriverTest, ActivateRejectsMismatchedSpec)
+    {
+        auto path = UniqueSpecPath("mismatch");
+        auto driver = CreateDriverFromFile(kDriverSource, path.string());
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            driver->ReduceToClaimMetadata();
+        }
+
+        // Overwrite the spec on disk with a different claim identity (device type changed).
+        const std::string changed = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "TestDriver",
+                constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0 },
+                barton: { deviceClass: "light", deviceClassVersion: 1 },
+                matter: { deviceTypes: [0x0101] },
+                aliases: { onOff: { clusterId: CL_ON_OFF, attributeId: ATTR_ON_OFF, type: "bool" } },
+                endpoints: { "1": { profile: "light", profileVersion: 1, resources: {
+                    isOn: { type: "boolean", modes: ["read"], read: readIsOn } } } },
+            });
+            function readIsOn(args) { return Sbmd.result().success(); }
+        )";
+        {
+            std::ofstream out(path.string(), std::ios::binary | std::ios::trunc);
+            out.write(changed.data(), static_cast<std::streamsize>(changed.size()));
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            EXPECT_FALSE(driver->Activate(Ctx()));
+        }
+
+        EXPECT_FALSE(driver->IsActivated());
+
+        std::filesystem::remove(path);
     }
 
 } // namespace

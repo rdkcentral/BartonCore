@@ -105,13 +105,32 @@ namespace barton
         void Deactivate(JSContext *ctx);
 
         /**
+         * Reduce a loaded-but-inactive driver to its claim metadata: release the load-time handler
+         * roots and free the retained source text and heavy parsed registration (endpoints,
+         * resources, aliases, handler vectors), keeping only the claim metadata resident.
+         *
+         * Intended to be called once after load/registration so an unclaimed driver holds only its
+         * claim metadata. No-op if the driver is already reduced; refuses to run on an active driver.
+         * Caller must hold MQuickJsRuntime::GetMutex() (ReleaseHandlers() releases GC roots).
+         */
+        void ReduceToClaimMetadata();
+
+        /**
          * Whether the driver is currently activated (handler references are held alive).
          */
         bool IsActivated() const;
 
         /**
-         * Get the driver registration (always available, even when deactivated).
-         * Handler JSValues are only valid when activated.
+         * Get the driver registration.
+         *
+         * Only the claim-identity fields (`name`, `filePath`, `barton.deviceClass`, and
+         * `matter.deviceTypes`/`vendorId`/`productId`) are valid in every state. While the driver is
+         * inactive the remaining fields are released or zeroed (endpoints, aliases, handlers,
+         * `reporting`, `featureClusters`, `defaultTimeoutMs`, `schemaVersion`, `driverVersion`,
+         * `barton.deviceClassVersion`, `matter.revision`), and handler JSValues are valid only while
+         * activated. `Activate()` replaces the underlying registration object, so a reference returned
+         * here (including `GetName()`'s, which points into the same object) MUST NOT be held across an
+         * activation or deactivation.
          */
         const SbmdRegistration &GetRegistration() const;
 
@@ -208,6 +227,23 @@ namespace barton
          * heldFn SafeJSValue keeps it alive; callers must invoke through entry.Fn(), not the raw copy.
          */
         void HoldIfValid(JSContext *ctx, SbmdHandler &entry);
+
+        /**
+         * Read the spec file at registration->filePath into out. Returns false on any I/O error.
+         */
+        bool ReadSpecFromFile(std::string &out) const;
+
+        /**
+         * Compare a freshly re-evaluated registration's claim-identity fields (name, device class,
+         * device types, vendor/product IDs) against this driver's resident claim metadata.
+         */
+        bool MatchesClaimMetadata(const SbmdRegistration &fresh) const;
+
+        /**
+         * Free the retained source text and heavy parsed registration collections, leaving only
+         * the claim metadata resident. Handler roots must already be released before calling.
+         */
+        void ReleaseHeavyRegistration();
 
         std::unique_ptr<SbmdRegistration> registration;
         std::string source; // Retained for re-activation

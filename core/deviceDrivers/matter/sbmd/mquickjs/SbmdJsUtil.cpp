@@ -90,6 +90,50 @@ namespace barton
             return static_cast<uint16_t>(*opt);
         }
 
+        bool ToBoundedUint(JSContext *ctx, JSValue val, uint32_t maxValue, uint32_t &out)
+        {
+            // Saturating conversion: values >= 2^31 clamp to INT32_MAX (never wrap), and anything
+            // above maxValue or negative is rejected rather than narrowed into an aliasing value.
+            int sat = 0;
+
+            if (JS_ToInt32Sat(ctx, &sat, val) < 0)
+            {
+                return false;
+            }
+
+            if (sat < 0 || static_cast<uint32_t>(sat) > maxValue)
+            {
+                return false;
+            }
+
+            out = static_cast<uint32_t>(sat);
+
+            return true;
+        }
+
+        bool ReadOptBoundedUint16Prop(JSContext *ctx, JSValue obj, const char *name, std::optional<uint16_t> &out)
+        {
+            SafeJSValue val(ctx, JS_GetPropertyStr(ctx, obj, name));
+
+            if (JS_IsUndefined(val.Get()) || JS_IsNull(val.Get()))
+            {
+                out = std::nullopt;
+
+                return true;
+            }
+
+            uint32_t value = 0;
+
+            if (!ToBoundedUint(ctx, val.Get(), UINT16_MAX, value))
+            {
+                return false;
+            }
+
+            out = static_cast<uint16_t>(value);
+
+            return true;
+        }
+
         uint32_t GetArrayLength(JSContext *ctx, JSValue arr)
         {
             SafeJSValue lenVal(ctx, JS_GetPropertyStr(ctx, arr, "length"));
@@ -128,23 +172,6 @@ namespace barton
                 {
                     result.emplace_back(str);
                 }
-            }
-
-            return result;
-        }
-
-        std::vector<uint16_t> GetUint16Array(JSContext *ctx, JSValue arr)
-        {
-            SafeJSValue rootedArray(ctx, arr);
-            std::vector<uint16_t> result;
-            uint32_t len = GetArrayLength(ctx, rootedArray.Get());
-
-            for (uint32_t i = 0; i < len; i++)
-            {
-                SafeJSValue elem(ctx, JS_GetPropertyUint32(ctx, rootedArray.Get(), i));
-                uint32_t val = 0;
-                JS_ToUint32(ctx, &val, elem.Get());
-                result.push_back(static_cast<uint16_t>(val));
             }
 
             return result;

@@ -6,6 +6,16 @@ each spec's `schemaVersion` field is validated against the schema's expected
 version. Each versioned heading below describes the changes introduced by that
 version.
 
+## v5.1
+
+- Breaking: numeric claim/version fields are now range-validated at parse time:
+  `matter.deviceTypes`, `matter.vendorId`, and `matter.productId` must fit
+  `uint16` (0–65535), and `barton.deviceClassVersion` and endpoint
+  `profileVersion` must fit `uint8` (0–255). A spec with an out-of-range value
+  previously loaded with the value silently wrapped/narrowed; it now fails to
+  load. This closes a gap where a disk re-read of a spec could alias a changed
+  claim identity or version past activation's validation.
+
 ## v5.0
 
 - The schema version is no longer encoded in the schema filename

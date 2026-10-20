@@ -637,7 +637,20 @@ namespace barton
         if (!JS_IsUndefined(bartonVal.Get()) && !JS_IsNull(bartonVal.Get()))
         {
             out.barton.deviceClass = GetStringProp(ctx, bartonVal.Get(), "deviceClass");
-            out.barton.deviceClassVersion = GetUint32Prop(ctx, bartonVal.Get(), "deviceClassVersion", 0);
+
+            // deviceClassVersion is a version field tracked as uint8 downstream and compared on re-read;
+            // a value outside [0, 255] would wrap/narrow into an aliasing version, so reject the spec here.
+            SafeJSValue deviceClassVersionVal(ctx, JS_GetPropertyStr(ctx, bartonVal.Get(), "deviceClassVersion"));
+            uint32_t deviceClassVersion = 0;
+
+            if ((!JS_IsUndefined(deviceClassVersionVal.Get()) && !JS_IsNull(deviceClassVersionVal.Get())) &&
+                !ToBoundedUint(ctx, deviceClassVersionVal.Get(), UINT8_MAX, deviceClassVersion))
+            {
+                icError("Registration '%s' has a barton deviceClassVersion outside the uint8 range", out.name.c_str());
+                return false;
+            }
+
+            out.barton.deviceClassVersion = deviceClassVersion;
         }
 
         // Matter metadata
@@ -647,14 +660,43 @@ namespace barton
         {
             SafeJSValue deviceTypes(ctx, JS_GetPropertyStr(ctx, matterVal.Get(), "deviceTypes"));
 
-            if (!JS_IsUndefined(deviceTypes.Get()))
+            if (!JS_IsUndefined(deviceTypes.Get()) && !JS_IsNull(deviceTypes.Get()))
             {
-                out.matter.deviceTypes = GetUint16Array(ctx, deviceTypes.Get());
+                // Claim-identity field: a device type that does not fit uint16 would wrap/narrow into
+                // an aliasing value on re-read, so reject the spec rather than accept a changed id.
+                uint32_t typeCount = GetArrayLength(ctx, deviceTypes.Get());
+
+                for (uint32_t i = 0; i < typeCount; i++)
+                {
+                    SafeJSValue elem(ctx, JS_GetPropertyUint32(ctx, deviceTypes.Get(), i));
+                    uint32_t deviceType = 0;
+
+                    if (!ToBoundedUint(ctx, elem.Get(), UINT16_MAX, deviceType))
+                    {
+                        icError("Registration '%s' has a matter.deviceTypes entry outside the uint16 range",
+                                out.name.c_str());
+                        return false;
+                    }
+
+                    out.matter.deviceTypes.push_back(static_cast<uint16_t>(deviceType));
+                }
             }
 
             out.matter.revision = GetOptUint32Prop(ctx, matterVal.Get(), "revision");
-            out.matter.vendorId = GetOptUint16Prop(ctx, matterVal.Get(), "vendorId");
-            out.matter.productId = GetOptUint16Prop(ctx, matterVal.Get(), "productId");
+
+            // vendorId/productId are also claim-identity fields; reject out-of-range edits (see above).
+            if (!ReadOptBoundedUint16Prop(ctx, matterVal.Get(), "vendorId", out.matter.vendorId))
+            {
+                icError("Registration '%s' has a matter vendorId outside the uint16 range", out.name.c_str());
+                return false;
+            }
+
+            if (!ReadOptBoundedUint16Prop(ctx, matterVal.Get(), "productId", out.matter.productId))
+            {
+                icError("Registration '%s' has a matter productId outside the uint16 range", out.name.c_str());
+                return false;
+            }
+
             out.matter.defaultTimeoutMs = GetOptUint32Prop(ctx, matterVal.Get(), "defaultTimeoutMs");
 
             SafeJSValue featureClusters(ctx, JS_GetPropertyStr(ctx, matterVal.Get(), "featureClusters"));
@@ -727,7 +769,20 @@ namespace barton
             SbmdEndpoint endpoint;
             endpoint.id = epId;
             endpoint.profile = GetStringProp(ctx, epVal.Get(), "profile");
-            endpoint.profileVersion = GetUint32Prop(ctx, epVal.Get(), "profileVersion", 0);
+
+            // profileVersion is tracked as uint8 downstream and compared on re-read; a value outside
+            // [0, 255] would wrap/narrow into an aliasing version, so reject the spec here.
+            SafeJSValue profileVersionVal(ctx, JS_GetPropertyStr(ctx, epVal.Get(), "profileVersion"));
+            uint32_t profileVersion = 0;
+
+            if ((!JS_IsUndefined(profileVersionVal.Get()) && !JS_IsNull(profileVersionVal.Get())) &&
+                !ToBoundedUint(ctx, profileVersionVal.Get(), UINT8_MAX, profileVersion))
+            {
+                icError("Endpoint '%s' has a profileVersion outside the uint8 range", epId.c_str());
+                return false;
+            }
+
+            endpoint.profileVersion = profileVersion;
 
             // Extract resources
             SafeJSValue resourcesVal(ctx, JS_GetPropertyStr(ctx, epVal.Get(), "resources"));
