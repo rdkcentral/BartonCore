@@ -22,7 +22,7 @@ remote-radios container on the dev server:
 | Dedicated Bluetooth USB dongle (e.g. TP-Link UB500) | BLE for Matter commissioning (Matter SDK ↔ BlueZ) | usb-ip, reverse-tunnelled over SSH |
 
 ```
-  WORKSTATION (your desk)                       DEV SERVER "it"                  remote-radios container (privileged)
+  WORKSTATION (your desk)                       DEV SERVER                       remote-radios container (privileged)
   ─────────────────────                         ───────────────                  ───────────────────────────────────
   Silabs radio ──serial──▶ remote-serial.py ──ssh -R──▶ ~/.remote-radios/radios/silabs.sock ──(bind mount)──▶ socat → /dev/ttyRadio → cpcd ─┬─▶ otbr-agent (Thread)
                                                                                                                                        └─▶ remote-zigbee container: zigbeed → ZigbeeCore (Zigbee)
@@ -299,7 +299,7 @@ seconds. Your other workstations **stand by**: they open no tunnels, and their
 dongles stay with their own Bluetooth. Their journal says who has the radios:
 
 ```text
-Radios for you@it are being forwarded from tlea-workstation (forwarding since …); standing by.
+Radios for you@devserver are being forwarded from other-workstation (forwarding since …); standing by.
 ```
 
 A standing-by workstation takes over by itself when the lease is released,
