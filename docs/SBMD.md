@@ -438,7 +438,10 @@ endpoints: {
   modes: ["read"],
   seed: {
     supplements: {
+      // Also read the resource's own value so the seed can preserve it when
+      // the attribute is unavailable on a reconnect (see "Re-seed safety").
       attributes: ["lockState"],
+      resources: ["1/locked"],
     },
     handler: seedLockedResource,
   },
@@ -451,7 +454,7 @@ endpoints: {
 | `modes` | string[] | no | Access modes. See below. |
 | `prerequisites` | string[] | no | Alias names that must be satisfied before the resource is created (see [4.3 Aliases](#43-aliases)). Default: none (always created). |
 | `optional` | boolean | no | Controls behavior when `prerequisites` are not met. If `false` (default), commissioning **fails**. If `true`, the resource is **silently skipped**. Has no effect without `prerequisites`. |
-| `seed` | object \| function | no | Initialization handler, run on device discovery and each Barton startup. |
+| `seed` | object \| function | no | Initialization handler; re-runs on device discovery and on every synchronize/reconnect. See **Re-seed safety** below. |
 | `read` | object \| function | no | Read handler (for readable resources). |
 | `write` | object \| function | no | Write handler. Object form `{ supplements, handler }` for pre-fetched data; bare function otherwise. |
 | `execute` | object \| function | no | Execute handler (for `type: "function"` resources). Object form `{ supplements, handler }` for pre-fetched data; bare function otherwise. |
@@ -512,10 +515,28 @@ so `modes` is not needed. You may still include opt-out modes such as
 
 **Seed vs Read**
 
-- `seed` runs when the device is first discovered **and** each time Barton
-  starts up, to synchronize the resource value from device attributes (missed
-  events during downtime may have left the cached value stale). After seeding,
-  reads return the cached value and do not invoke a handler.
+- `seed` runs when the device is first discovered **and** on every
+  synchronize/reconnect (including each Barton startup), to synchronize the
+  resource value from device attributes (missed events during downtime may have
+  left the cached value stale). After seeding, reads return the cached value and
+  do not invoke a handler.
+
+  **Re-seed safety:** because `seed` re-runs on reconnect, an attribute
+  supplement MAY be `null` when the subscription cache has not yet been
+  repopulated (a cold cache). A seed that maps a missing attribute straight to a
+  default can clobber a still-valid value — e.g. report a locked door as
+  unlocked, or clear a live fault. When the backing attribute is unavailable,
+  also read the resource's own current value (via `supplements.resources`) and
+  preserve it, falling back to the default only at commission when no value
+  exists yet. The door-lock `locked` seed and the sensor `faulted` seeds use
+  this pattern.
+
+  Preserving is a **deliberate tradeoff**: the preserved value can be briefly
+  stale (e.g. a door unlocked during downtime reports `locked="true"`) until the
+  first attribute report repopulates the cache — typically within seconds on a
+  healthy reconnect, longer if the device is unreachable. Preserve is still the
+  safe choice because the opposite error (reporting a locked door as unlocked,
+  or clearing a live fault) is the dangerous one.
 - `read` runs on **every** read request. Use this for resources that must
   always fetch a fresh value from the device.
 
@@ -679,9 +700,9 @@ A handler can inspect which trigger field is present to determine the context.
 
 | Field | Type | Present when invoked as | Description |
 |---|---|---|---|
-| `args.attribute` | `{ clusterId, attributeId, value, alias }` | attribute handler | The attribute that triggered the handler. `value` is the decoded attribute value. `alias` is the alias name if the handler was registered via `aliases`, otherwise `null`. |
+| `args.attribute` | `{ clusterId, attributeId, tlvBase64 }` | attribute handler | The attribute that triggered the handler. `tlvBase64` is the base64-encoded TLV attribute value; decode it with `Sbmd.Tlv.decode()`. |
 | `args.event` | `{ clusterId, eventId, tlvBase64 }` | event handler | The event that triggered the handler. `tlvBase64` is the base64-encoded TLV event payload; decode it with `Sbmd.Tlv.decode()`. Payload-less events (those with no TLV payload) are **not dispatched** — the handler is never invoked for them — so `tlvBase64` is always present when a handler runs. A struct payload decodes to an object keyed by each field's numeric TLV context tag (access by tag number, e.g. `decoded[0]` for context tag 0); a single scalar payload decodes to the value directly. |
-| `args.command` | `{ clusterId, commandId, data, alias }` | command handler | The command that triggered the handler. `data` is the decoded command payload. `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.command` | `{ clusterId, commandId, tlvBase64 }` | command handler | The command that triggered the handler. `tlvBase64` is the base64-encoded TLV command payload; decode it with `Sbmd.Tlv.decode()`. |
 | `args.response` | `{ clusterId, commandId, data }` | command response handler | The response to a pending `requestCommand`. `data` is the base64-encoded TLV payload, or `null`. |
 | `args.resource` | `{ resourceId, input }` | resource handler (read/write/execute/seed) | The resource being operated on. `input` is the write value or execute argument (string), `null` for reads. |
 
@@ -711,7 +732,7 @@ with the originating handler. They receive the following additional fields:
 
 | Handler type | Trigger field | Typical use |
 |---|---|---|
-| `seed` handler | `args.resource` | Resource initialization from device attributes (runs on discovery and startup). |
+| `seed` handler | `args.resource` | Resource initialization from device attributes (re-runs on discovery and every synchronize/reconnect; see **Re-seed safety**). |
 | `read` handler | `args.resource` | Fetch fresh value for a resource read. |
 | `write` handler | `args.resource` | Translate a Barton write into a Matter attribute write or command. |
 | `execute` handler | `args.resource` | Translate a Barton execute into a Matter command invoke. |
@@ -824,7 +845,7 @@ commandHandlers: {
 
 function handleUserCommandResponses(args) {
   return Sbmd.result()
-    .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
+    .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(Sbmd.Tlv.decode(args.command.tlvBase64)))
     .success();
 }
 ```
@@ -960,7 +981,7 @@ Read a Matter attribute from the device. Completion is deferred to the
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `onResponse` | function | yes | Response handler. Receives `args.attribute` (`{ clusterId, attributeId, value }`) and `args.handlerContext`. Must end with an explicit terminal. |
+| `onResponse` | function | yes | Response handler. Receives `args.attribute` (`{ clusterId, attributeId, value }`, where `value` is the base64-encoded TLV; decode with `Sbmd.Tlv.decode()`) and `args.handlerContext`. Must end with an explicit terminal. |
 | `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type, matterCode }`) and `args.handlerContext`. Must end with an explicit terminal. |
 | `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. |
 | `timeoutMs` | number | no | Read timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
@@ -1406,12 +1427,12 @@ function writeCurrentLevel(args) {
 
 function handleOnOffAttribute(args) {
   return Sbmd.result()
-    .dataModel.updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false")
+    .dataModel.updateResource(EP_LIGHT, RES_IS_ON, (Sbmd.Tlv.decode(args.attribute.tlvBase64) === true) ? "true" : "false")
     .success();
 }
 
 function handleCurrentLevelAttribute(args) {
-  var percent = Math.round(args.attribute.value / 254 * 100);
+  var percent = Math.round(Sbmd.Tlv.decode(args.attribute.tlvBase64) / 254 * 100);
 
   return Sbmd.result()
     .dataModel.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
@@ -1473,7 +1494,7 @@ SbmdDriver({
       attributeId: 0x0000,
       handler: function (args) {
         return Sbmd.result()
-          .dataModel.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
+          .dataModel.updateResource("1", "isOn", Sbmd.Tlv.decode(args.attribute.tlvBase64) ? "true" : "false")
           .success();
       },
     },
@@ -1532,7 +1553,7 @@ SbmdDriver({
 function lightHandler(args) {
   if (args.attribute) {
     return Sbmd.result()
-      .dataModel.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
+      .dataModel.updateResource("1", "isOn", Sbmd.Tlv.decode(args.attribute.tlvBase64) ? "true" : "false")
       .success();
   }
 
@@ -1704,6 +1725,9 @@ SbmdDriver({
           seed: {
             supplements: {
               attributes: ["lockState"],
+              // Also read the resource's own value so the seed can preserve it
+              // when lockState is unavailable on a reconnect (see "Re-seed safety").
+              resources: [EP_LOCK + "/" + RES_LOCKED],
             },
             handler: seedLockedResource,
           },
@@ -1821,11 +1845,26 @@ SbmdDriver({
 // ---------------------------------------------------------------------------
 
 function seedLockedResource(args) {
-  var value = args.supplements.attributes.lockState;
-  var isLocked = (value === 1);
+  var tlvBase64 = args.supplements.attributes.lockState;
+  var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
+
+  // LockState: 1 = Locked. This seed re-runs on every synchronize/reconnect, so
+  // when lockState is uncached (cold cache) preserve the existing value rather
+  // than reporting a locked door as unlocked; default to "false" only at
+  // commission when no value exists yet (see "Re-seed safety").
+  var locked;
+
+  if (value === 1) {
+    locked = "true";
+  } else if (value !== null && value !== undefined) {
+    locked = "false";
+  } else {
+    var existing = args.supplements.resources[EP_LOCK + "/" + RES_LOCKED];
+    locked = (existing !== null && existing !== undefined) ? existing : "false";
+  }
 
   return Sbmd.result()
-    .dataModel.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
+    .dataModel.updateResource(EP_LOCK, RES_LOCKED, locked)
     .success();
 }
 
@@ -1869,7 +1908,7 @@ function executeLockAction(args) {
 // ---------------------------------------------------------------------------
 
 function handleLockStateAttribute(args) {
-  var isLocked = (args.attribute.value === 1);
+  var isLocked = (Sbmd.Tlv.decode(args.attribute.tlvBase64) === 1);
 
   // This handler is included as an example of a handler with a single alias.
   // This overall lock example should not really do this since the state
@@ -1881,14 +1920,15 @@ function handleLockStateAttribute(args) {
 
 function handleActuatorAttributes(args) {
   var currentLocked = args.supplements.resources[EP_LOCK + "/" + RES_LOCKED];
+  var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
   if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
     return Sbmd.result()
-      .dataModel.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false")
+      .dataModel.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, value ? "true" : "false")
       .success();
   } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
     return Sbmd.result()
-      .dataModel.updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
+      .dataModel.updateResource(EP_LOCK, RES_DOOR_STATE, String(value))
       .log("doorState changed while locked=" + currentLocked)
       .success();
   }
@@ -1955,7 +1995,7 @@ function handleLockEventCatchAll(args) {
 // ---------------------------------------------------------------------------
 
 function handleGetCredentialStatusResponse(args) {
-  var response = args.command.data;
+  var response = Sbmd.Tlv.decode(args.command.tlvBase64);
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
   return Sbmd.result()
@@ -1966,7 +2006,7 @@ function handleGetCredentialStatusResponse(args) {
 
 function handleUserCommandResponses(args) {
   return Sbmd.result()
-    .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
+    .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(Sbmd.Tlv.decode(args.command.tlvBase64)))
     .success();
 }
 

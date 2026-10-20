@@ -253,12 +253,17 @@ interface SbmdHandlerArgsBase {
 interface SbmdAttributeTrigger {
     clusterId: number;
     attributeId: number;
-    /** Decoded attribute value. */
-    value: any;
-    /** Base64-encoded TLV data. */
-    tlvBase64: string;
-    /** Alias name if registered via aliases, otherwise null. */
-    alias: string | null;
+    /**
+     * Base64-encoded TLV attribute value, present on attribute handlers. Decode
+     * with `Sbmd.Tlv.decode()`.
+     */
+    tlvBase64?: string;
+    /**
+     * Base64-encoded TLV value delivered to a `readAttribute` `onResponse`
+     * handler. Decode with `Sbmd.Tlv.decode()`. (Present only on readAttribute
+     * responses.)
+     */
+    value?: string;
 }
 
 /** Event trigger (present on event handlers). */
@@ -280,11 +285,12 @@ interface SbmdEventTrigger {
 interface SbmdCommandTrigger {
     clusterId: number;
     commandId: number;
-    /** Decoded command payload. */
-    data: any;
-    /** Base64-encoded TLV data. */
-    tlvBase64: string;
-    alias: string | null;
+    /**
+     * Base64-encoded TLV command payload. Decode with `Sbmd.Tlv.decode()`.
+     * Omitted only for a payload-less command (rare — command payloads are
+     * normally structs), mirroring `SbmdAttributeTrigger.tlvBase64`.
+     */
+    tlvBase64?: string;
 }
 
 /** Response trigger (present on requestCommand response handlers). */

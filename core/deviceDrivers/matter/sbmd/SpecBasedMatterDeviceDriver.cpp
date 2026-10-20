@@ -742,17 +742,31 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     hctx.endpointId = endpointId;
 
     // Resolve declared supplements up front (device-service I/O) so the JS mutex is held
-    // only around the JS work below.
+    // only around the JS work below. Resource/persistent/transient supplements query
+    // device-service storage (not the live device), so they are prefetched even when the
+    // MatterDevice is unavailable (e.g. removed concurrently mid-synchronize). This lets a
+    // re-seed preserve an existing resource value via supplements.resources instead of
+    // clobbering it with the commission default. Only attribute supplements need the device.
     FetchedSupplements supplements;
+    AttributeSupplementFetcher attrFetcher;
 
     if (device != nullptr)
     {
-        supplements = SbmdHandlerInvoker::PrefetchSupplements(resource.seed->supplements,
-                                                              MakeAttrFetcher(*device),
-                                                              MakeResFetcher(deviceId),
-                                                              MakePersistFetcher(deviceId),
-                                                              MakeTransientFetcher(deviceId));
+        attrFetcher = MakeAttrFetcher(*device);
     }
+    else
+    {
+        attrFetcher = [](const std::string &) -> std::optional<std::string> { return std::nullopt; };
+        icDebug("Seeding '%s' for %s without a live MatterDevice; attribute supplements stubbed",
+                resource.id.c_str(),
+                deviceId.c_str());
+    }
+
+    supplements = SbmdHandlerInvoker::PrefetchSupplements(resource.seed->supplements,
+                                                          attrFetcher,
+                                                          MakeResFetcher(deviceId),
+                                                          MakePersistFetcher(deviceId),
+                                                          MakeTransientFetcher(deviceId));
 
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
@@ -1996,39 +2010,32 @@ ResourceSupplementFetcher SpecBasedMatterDeviceDriver::MakeResFetcher(const std:
 {
     return [deviceUuid](const std::string &path) -> std::optional<std::string> {
         // Parse path: "endpointId/resourceId" or just "resourceId"
-        const char *epId = nullptr;
         std::string resourceId;
         auto slashPos = path.find('/');
+
+        // deviceServiceGetResourceById returns an owned copy (see deviceServicePrivate.h);
+        // scoped_icDeviceResource frees it on every return path.
+        scoped_icDeviceResource *res = nullptr;
 
         if (slashPos != std::string::npos)
         {
             std::string endpointPart = path.substr(0, slashPos);
             resourceId = path.substr(slashPos + 1);
-            // deviceServiceGetResourceById expects NULL for device-level
-            icDeviceResource *res =
-                deviceServiceGetResourceById(deviceUuid.c_str(), endpointPart.c_str(), resourceId.c_str());
-
-            if (res != nullptr && res->value != nullptr)
-            {
-                std::string val(res->value);
-                return val;
-            }
-
-            return std::nullopt;
+            res = deviceServiceGetResourceById(deviceUuid.c_str(), endpointPart.c_str(), resourceId.c_str());
         }
         else
         {
             resourceId = path;
-            icDeviceResource *res = deviceServiceGetResourceById(deviceUuid.c_str(), nullptr, resourceId.c_str());
-
-            if (res != nullptr && res->value != nullptr)
-            {
-                std::string val(res->value);
-                return val;
-            }
-
-            return std::nullopt;
+            // deviceServiceGetResourceById takes NULL for a device-level resource
+            res = deviceServiceGetResourceById(deviceUuid.c_str(), nullptr, resourceId.c_str());
         }
+
+        if (res != nullptr && res->value != nullptr)
+        {
+            return std::string(res->value);
+        }
+
+        return std::nullopt;
     };
 }
 

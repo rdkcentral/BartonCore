@@ -355,30 +355,43 @@ if (BCORE_MATTER)
         target_link_libraries(testSbmdFactory bCoreConfig)
     endif()
 
-    bcore_add_cpp_test(
-        NAME testSbmdCameraWebrtc
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdCameraWebrtcTest.cpp
-                ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDriverTestSupport.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdJsUtil.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
-                ${SBMD_METRICS_SRC}
-                ${SBMD_OBS_NOOP_SRC}
-        LIBS mquickjs gmock BartonCommon::xhLog BartonCommon::xhConcurrent cjson
-        INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                 ${PROJECT_SOURCE_DIR}/core
+    # Shared build inputs for the real-driver SBMD test targets (camera + seed handler):
+    # the test support stub plus the production SBMD runtime sources they both exercise.
+    set(SBMD_REAL_DRIVER_TEST_SRCS
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDriverTestSupport.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdJsUtil.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+        ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        ${SBMD_METRICS_SRC}
+        ${SBMD_OBS_NOOP_SRC}
     )
 
-    if (TARGET testSbmdCameraWebrtc)
-        target_link_libraries(testSbmdCameraWebrtc bCoreConfig)
-        target_compile_definitions(testSbmdCameraWebrtc PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
-    endif()
+    # Both real-driver SBMD test targets share the same sources, libs, includes,
+    # bCoreConfig link, and SBMD_SPEC_DIR definition; they differ only in the test file.
+    function(sbmd_add_real_driver_test target test_src)
+        bcore_add_cpp_test(
+            NAME ${target}
+            SOURCES ${test_src}
+                    ${SBMD_REAL_DRIVER_TEST_SRCS}
+            LIBS mquickjs gmock BartonCommon::xhLog BartonCommon::xhConcurrent cjson
+            INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                     ${PROJECT_SOURCE_DIR}/core
+        )
+
+        if (TARGET ${target})
+            target_link_libraries(${target} bCoreConfig)
+            target_compile_definitions(${target} PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+        endif()
+    endfunction()
+
+    sbmd_add_real_driver_test(testSbmdCameraWebrtc ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdCameraWebrtcTest.cpp)
+    sbmd_add_real_driver_test(testSbmdSeedHandler ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdSeedHandlerTest.cpp)
 
     # SBMD observability tests — only meaningful with the in-memory backend.
     if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
