@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Agent Skill: Debug
+
+## Purpose
+
+Defines the structure and required content of the `debug` agent skill, covering the three debugging workflows — gdb for the reference app and unit tests, pdb for Python integration tests, and gdb with `python3-gdb` for native visibility from Python — plus ASAN considerations and an error-recovery pattern.
+
+## Requirements
 
 ### Requirement: Debug skill SKILL.md conforms to Agent Skills spec
 The `debug` skill SHALL be located at `.github/skills/debug/SKILL.md`. The frontmatter SHALL include `name: debug`, a `description` field explaining the skill covers debugging BartonCore with gdb and pdb, and `compatibility` noting the BartonCore Docker development container.

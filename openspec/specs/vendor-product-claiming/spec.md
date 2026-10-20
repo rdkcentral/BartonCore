@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Vendor and Product Claiming
+
+## Purpose
+
+Specifies vendor and product ID claiming for SBMD drivers: declaring vendor/product IDs in specs, `DeviceDataCache` accessors, claim semantics, and vendor-specific driver priority.
+
+## Requirements
 
 ### Requirement: Vendor ID and product ID in SBMD specs
 The `matterMeta` section of an SBMD spec SHALL support optional `vendorId` and `productId` fields (unsigned 16-bit integers). When omitted, the driver SHALL use device-type matching as before.

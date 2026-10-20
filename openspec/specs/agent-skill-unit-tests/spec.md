@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Agent Skill: Unit Tests
+
+## Purpose
+
+Defines the structure and required content of the `run-unit-tests` agent skill, covering `ctest` execution, test filtering, and the CMocka and Google Test frameworks used by BartonCore's C/C++ unit tests.
+
+## Requirements
 
 ### Requirement: Unit test skill SKILL.md conforms to Agent Skills spec
 The `run-unit-tests` skill SHALL be located at `.github/skills/run-unit-tests/SKILL.md`. The frontmatter SHALL include `name: run-unit-tests`, a `description` field explaining the skill covers running C/C++ unit tests, and `compatibility` noting the BartonCore Docker development container.

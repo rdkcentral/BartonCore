@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Matter Thermostat SBMD Driver
+
+## Purpose
+
+Specifies the SBMD driver that claims the Matter Thermostat device type and maps its cluster attributes — setpoints, absolute limits, system mode, running state, and optional fan controls — to Barton resources with subscription reporting.
+
+## Requirements
 
 ### Requirement: Matter Thermostat device type claiming
 The SBMD driver SHALL claim Matter devices with device type ID 0x0301 (Thermostat) and register them under the Barton `thermostat` device class.

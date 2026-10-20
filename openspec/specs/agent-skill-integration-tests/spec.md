@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Agent Skill: Integration Tests
+
+## Purpose
+
+Defines the structure and required content of the `run-integration-tests` agent skill, covering pytest execution via `py_test.sh`, test filtering, prerequisites, and pytest configuration for BartonCore's Python integration tests.
+
+## Requirements
 
 ### Requirement: Integration test skill SKILL.md conforms to Agent Skills spec
 The `run-integration-tests` skill SHALL be located at `.github/skills/run-integration-tests/SKILL.md`. The frontmatter SHALL include `name: run-integration-tests`, a `description` field explaining the skill covers running Python integration tests, and `compatibility` noting the BartonCore Docker development container.
