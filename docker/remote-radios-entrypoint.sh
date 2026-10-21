@@ -501,15 +501,17 @@ bt_usbip_record_port() {
     echo "[remote-radios] Bluetooth dongle attached on vhci port ${newPorts%% *}"
 }
 
-# bt_usbip_detach — detach only the usb-ip port this user's container attached.
+# bt_usbip_detach [this-session] — detach only the usb-ip port this user's
+# container attached.  A port in the error state no longer reports its devid,
+# so it is detached only with "this-session", i.e. when this container attached
+# it during this run.  A record left by an earlier, unclean run may name a port
+# that was since reused by another developer, so then only a devid match counts.
 bt_usbip_detach() {
     [ -r "${BT_USBIP_PORT_FILE}" ] || return 0
     local port devid
     read -r port devid < "${BT_USBIP_PORT_FILE}" || true
-    # Detach only if the port still carries our device, or is our port stuck in
-    # the error state (its devid is no longer reported then).
     if [ -n "${port}" ] && { vhci_used_ports | grep -qx "${port} ${devid}" \
-        || vhci_ports_in_state 007 | grep -q "^${port} "; }; then
+        || { [ "${1:-}" = this-session ] && vhci_ports_in_state 007 | grep -q "^${port} "; }; }; then
         echo "[remote-radios] Detaching Bluetooth dongle from vhci port ${port}"
         usbip detach -p "${port}" 2>/dev/null || true
     fi
@@ -608,7 +610,7 @@ teardown_bluetooth_chain() {
     if [ -n "${BT_HCI_INDEX:-}" ]; then
         nsenter --net="${HOST_NETNS}" hciconfig "hci${BT_HCI_INDEX}" down 2>/dev/null || true
     fi
-    bt_usbip_detach
+    bt_usbip_detach this-session
     # Stop the usbip socat bridge so a restart re-establishes it cleanly.
     [ -n "${BT_SOCAT_PID:-}" ] && kill "${BT_SOCAT_PID}" 2>/dev/null || true
     sleep 1

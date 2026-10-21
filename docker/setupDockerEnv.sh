@@ -312,8 +312,11 @@ fi
 # user — so all of a user's workspaces share it.  It belongs to no single
 # Compose project (the radios containers and each workspace's barton container
 # run in separate ones), so it is created here and declared `external`.
+# Only for users who asked for radios (dockerw -T) or have set them up, so a
+# plain dockerw never depends on this extra network.
 RADIOS_NETWORK_NAME="$USER-remote-radios"
-if ! docker network ls --format '{{.Name}}' | grep -Fxq "$RADIOS_NETWORK_NAME"; then
+if { [ "${REMOTE_RADIOS_REQUESTED:-false}" = true ] || [ -d "$HOME/.remote-radios" ]; } && \
+    ! docker network ls --format '{{.Name}}' | grep -Fxq "$RADIOS_NETWORK_NAME"; then
     _SUBNET_HASH=$(echo "$USER-remote-radios-ip6" | sha256sum | cut -c1-8)
     echo "Network $RADIOS_NETWORK_NAME does not exist. Creating it..."
     docker network create --ipv6 \
@@ -353,8 +356,12 @@ else
     if ! docker volume ls --format '{{.Name}}' | grep -Fxq "$STATE_VOLUME_NAME"; then
         echo "Volume $STATE_VOLUME_NAME does not exist. Creating it..."
         docker volume create "$STATE_VOLUME_NAME" >/dev/null
+        _init_state=true
+    fi
+    # Also on every -T run, so an existing or partially created volume is repaired.
+    if [ "${_init_state:-false}" = true ] || [ "${REMOTE_RADIOS_REQUESTED:-false}" = true ]; then
         docker run --rm -v "$STATE_VOLUME_NAME:/state" --entrypoint sh "$IMAGE" \
             -c 'mkdir -p /state/ble /state/cpcd' >/dev/null
     fi
 fi
-unset _engine _compose
+unset _engine _compose _init_state

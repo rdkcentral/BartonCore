@@ -74,6 +74,7 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     checkinstall \
     socat \
     iproute2 \
+    kmod \
     iptables \
     ipset \
     udev \
