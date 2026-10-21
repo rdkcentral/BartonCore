@@ -33,8 +33,9 @@
 #
 # The container is NOT built or started by default. It is activated by:
 #   - CLI:          ./dockerw -T bash
-#   - Devcontainer: This overlay is included by default in the devcontainer
-#       compose stack.
+#   - Devcontainer: Not supported; the overlay is deliberately left out of
+#       .devcontainer/devcontainer.json.  Use ./dockerw -T from the dev server
+#       host instead.
 #
 # See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for full setup instructions,
 # including how to use USB-IP to forward a locally connected radio to a remote
