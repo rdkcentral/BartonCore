@@ -149,8 +149,12 @@ The Matter subsystem SHALL configure BLE commissioning on the BlueZ HCI adapter 
 - **THEN** a warning SHALL be logged and BLE SHALL be configured on `hci0`
 
 ### Requirement: Configurable Thread border router interface in the Matter SDK
-The Matter SDK SHALL be patched (patch 0004, `linux-make-the-OpenThread-border-router-interface-configurable`) so that its Linux Thread stack manager addresses `io.openthread.BorderRouter.<interface>` for a configurable interface. The Matter subsystem SHALL set the interface from the Thread subsystem's interface name before `InitThreadStack()`, and SHALL fail Matter initialization if setting it fails.
+The Matter SDK SHALL be patched (patch 0004, `linux-make-the-OpenThread-border-router-interface-configurable`) so that its Linux Thread stack manager addresses `io.openthread.BorderRouter.<interface>` for a configurable interface. The Matter subsystem SHALL set the interface from the Thread subsystem's interface name before `InitThreadStack()`, and SHALL fail Matter initialization if setting it fails. When built against a Matter SDK without the patch, the Matter subsystem SHALL fail initialization if the Thread interface name is not the default `wpan0`.
 
 #### Scenario: Non-default border router
 - **WHEN** the Thread interface name is `wpan1000`
 - **THEN** the Matter SDK SHALL communicate with `io.openthread.BorderRouter.wpan1000`
+
+#### Scenario: Unpatched SDK with a non-default interface
+- **WHEN** the Matter SDK lacks the patch and the Thread interface name is `wpan1000`
+- **THEN** Matter initialization SHALL fail with an error naming the interface, rather than silently using `wpan0`

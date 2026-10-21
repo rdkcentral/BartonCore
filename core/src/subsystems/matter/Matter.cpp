@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
@@ -354,6 +355,17 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
         CHIP_NO_ERROR)
     {
         icError("SetThreadInterfaceName(%s) failed: %s", threadSubsystemGetInterfaceName(), err.AsString());
+        return false;
+    }
+#elif defined(BARTON_CONFIG_THREAD)
+    // Without the SDK patch Matter always uses the default interface, so it would silently talk to a different border
+    // router than the Thread subsystem.
+    if (strcmp(threadSubsystemGetInterfaceName(), THREAD_INTERFACE_NAME_DEFAULT) != 0)
+    {
+        icError("Thread interface %s is configured, but this Matter SDK only supports %s "
+                "(the SetThreadInterfaceName patch is missing)",
+                threadSubsystemGetInterfaceName(),
+                THREAD_INTERFACE_NAME_DEFAULT);
         return false;
     }
 #endif
