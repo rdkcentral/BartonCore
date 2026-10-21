@@ -183,9 +183,13 @@ namespace barton
         std::atomic_bool ready;
         std::function<void(void)>  configChangedCallback;
         uint64_t connectionGeneration = 0; // guarded by dbusConnectionGuard
+        std::mutex connectGuard;
+        std::atomic_bool serviceAvailable {true};
+        std::atomic_bool connectFailureLogged {false};
 
         void Connect();
-        bool EnsureConnected();
+        bool EnsureConnected(bool requireService = false);
+        bool BorderRouterServiceAvailable();
 
         static void ReleaseDBusConnection(DBusConnection *connection);
         static DeviceRole TranslateOTBRDeviceRole(otbr::DBus::DeviceRole role);

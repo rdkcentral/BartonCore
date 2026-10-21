@@ -118,7 +118,7 @@ namespace barton
 
         g_return_val_if_fail(networkName.size() <= 16, retVal);
 
-        if (!EnsureConnected())
+        if (!EnsureConnected(true))
         {
             return retVal;
         }
@@ -267,7 +267,7 @@ namespace barton
 
         g_return_val_if_fail(!networkDataTlvs.empty(), false);
 
-        if (!EnsureConnected())
+        if (!EnsureConnected(true))
         {
             return false;
         }
@@ -293,7 +293,10 @@ namespace barton
     {
         std::vector<uint8_t> retVal;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -309,7 +312,10 @@ namespace barton
     {
         std::vector<uint8_t> retVal;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -329,7 +335,10 @@ namespace barton
     {
         uint16_t retVal = UINT16_MAX;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -345,7 +354,10 @@ namespace barton
     {
         uint16_t retVal = UINT16_MAX;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -361,7 +373,10 @@ namespace barton
     {
         uint64_t retVal = UINT64_MAX;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -377,7 +392,10 @@ namespace barton
     {
         std::vector<uint8_t> retVal;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -393,7 +411,10 @@ namespace barton
     {
         std::string retVal;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -409,7 +430,10 @@ namespace barton
     {
         DeviceRole retVal = DEVICE_ROLE_UNKNOWN;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -430,7 +454,10 @@ namespace barton
     {
         std::vector<uint8_t> retVal;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -446,7 +473,10 @@ namespace barton
     {
         uint16_t retVal = 0;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -462,7 +492,10 @@ namespace barton
     {
         bool retVal = false;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -478,7 +511,10 @@ namespace barton
     {
         bool retVal = false;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -499,7 +535,10 @@ namespace barton
     {
         bool retVal = true;
 
-        g_return_val_if_fail(ready, retVal);
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         ClientError error = ClientError::ERROR_NONE;
@@ -522,7 +561,10 @@ namespace barton
 
         icDebug();
 
-        g_return_val_if_fail(ready, false);
+        if (!EnsureConnected())
+        {
+            return false;
+        }
 
         // NOTE: the current dbus client api does not have a definition for this method, so we have
         //  to call it manually.  We should ditch this once the client api is updated.
@@ -578,7 +620,7 @@ namespace barton
         return result;
     }
 
-    bool OpenThreadClient::EnsureConnected()
+    bool OpenThreadClient::EnsureConnected(bool requireService)
     {
         bool connected = false;
 
@@ -589,36 +631,97 @@ namespace barton
 
         if (!connected)
         {
-            icInfo("Connecting to the system D-Bus for the Thread border router");
+            // One reconnect at a time; other callers fail fast instead of queueing behind a slow bus.
+            std::unique_lock<std::mutex> connectLock(connectGuard, std::try_to_lock);
+            if (!connectLock.owns_lock())
+            {
+                return false;
+            }
+
             Connect();
+
+            if (!ready)
+            {
+                return false;
+            }
         }
+
+        if (!requireService)
+        {
+            return true;
+        }
+
+        // otbr-agent may still be starting (or restarting). Wait for it to own its bus name rather than issuing calls
+        // against a half-started agent; the subsystem monitor retries.
+        bool available = BorderRouterServiceAvailable();
+
+        if (available != serviceAvailable.exchange(available))
+        {
+            if (available)
+            {
+                icInfo("Thread border router service is available on D-Bus");
+            }
+            else
+            {
+                icWarn("Thread border router service is not available on D-Bus yet");
+            }
+        }
+
+        return available;
+    }
+
+    bool OpenThreadClient::BorderRouterServiceAvailable()
+    {
+        // Bounded, unlike dbus_bus_name_has_owner(), so a stalled bus cannot hold the connection lock for long.
+        constexpr int NAME_OWNER_TIMEOUT_MS = 2000;
 
         std::lock_guard<std::mutex> lock(dbusConnectionGuard);
 
-        if (!ready)
+        if (!ready || !threadApiBus)
         {
             return false;
         }
 
-        // otbr-agent may still be starting (or restarting). Wait for it to own its
-        // bus name rather than issuing calls against a half-started agent; the
-        // subsystem monitor retries.
         std::string serviceName = OTBR_DBUS_SERVER_PREFIX + threadApiBus->GetInterfaceName();
-        if (!dbus_bus_name_has_owner(dbusConnection.get(), serviceName.c_str(), nullptr))
+        const char *serviceNameStr = serviceName.c_str();
+
+        std::unique_ptr<DBusMessage, void (*)(DBusMessage *)> message(
+            dbus_message_new_method_call(DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "NameHasOwner"),
+            dbus_message_unref);
+
+        if (!message || !dbus_message_append_args(message.get(), DBUS_TYPE_STRING, &serviceNameStr, DBUS_TYPE_INVALID))
         {
-            icWarn("Thread border router service %s is not available on D-Bus yet", serviceName.c_str());
             return false;
         }
 
-        return true;
+        DBusError error;
+        dbus_error_init(&error);
+
+        std::unique_ptr<DBusMessage, void (*)(DBusMessage *)> reply(
+            dbus_connection_send_with_reply_and_block(
+                dbusConnection.get(), message.get(), NAME_OWNER_TIMEOUT_MS, &error),
+            dbus_message_unref);
+
+        dbus_bool_t hasOwner = FALSE;
+        bool ok = reply && !dbus_error_is_set(&error) &&
+                  dbus_message_get_args(reply.get(), &error, DBUS_TYPE_BOOLEAN, &hasOwner, DBUS_TYPE_INVALID);
+
+        if (dbus_error_is_set(&error))
+        {
+            icDebug("NameHasOwner(%s) failed: %s", serviceNameStr, error.message);
+        }
+
+        dbus_error_free(&error);
+
+        return ok && hasOwner;
     }
 
     void OpenThreadClient::Connect()
     {
         icDebug();
 
-        std::lock_guard<std::mutex> lock(dbusConnectionGuard);
-
+        // The new connection is set up without holding dbusConnectionGuard, so a slow or absent bus does not block
+        // callers still using the previous connection.
         std::unique_ptr<DBusError, std::function<void(DBusError *)>> dbusError(new DBusError(), [](DBusError *error) {
             dbus_error_free(error);
             delete error;
@@ -630,15 +733,15 @@ namespace barton
         // manages a dbusconnection to the system bus socket and I don't know what kind of issues it would cause if we
         // each had refs to the dbusconnection but different methods of processing data. Until that's investigated, this
         // at least gets us our own sandbox to play in.
-        //
-        // On a reconnect the previous connection and ThreadApiDBus stay in place until the new ones are ready, so
-        // concurrent callers never see them disappear.
         std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> newConnection(
             dbus_bus_get_private(DBUS_BUS_SYSTEM, dbusError.get()), ReleaseDBusConnection);
 
         if (dbus_error_is_set(dbusError.get()) || !newConnection)
         {
-            icError("DBus error creating connection: %s", dbusError->message ? dbusError->message : "unknown");
+            if (!connectFailureLogged.exchange(true))
+            {
+                icError("DBus error creating connection: %s", dbusError->message ? dbusError->message : "unknown");
+            }
             return;
         }
 
@@ -663,10 +766,32 @@ namespace barton
         std::unique_ptr<ThreadApiDBus> newThreadApiBus(
             new ThreadApiDBus(newConnection.get(), threadSubsystemGetInterfaceName()));
 
-        // Any previous dispatch thread exits once it sees the generation change.
-        uint64_t generation = ++connectionGeneration;
-        threadApiBus = std::move(newThreadApiBus);
-        dbusConnection = std::move(newConnection);
+        std::unique_ptr<ThreadApiDBus> oldThreadApiBus;
+        std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> oldConnection;
+        uint64_t generation = 0;
+
+        {
+            std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+
+            // Any previous dispatch thread exits once it sees the generation change.
+            generation = ++connectionGeneration;
+            oldThreadApiBus = std::move(threadApiBus);
+            oldConnection = std::move(dbusConnection);
+            threadApiBus = std::move(newThreadApiBus);
+            dbusConnection = std::move(newConnection);
+            ready = true;
+        }
+
+        // ThreadApiDBus registers a message filter and pending-call callbacks with its own address and never
+        // removes them, so close the old connection before destroying the old ThreadApiDBus; nothing can dispatch
+        // those callbacks once the connection is closed.
+        oldConnection.reset();
+        oldThreadApiBus.reset();
+
+        if (connectFailureLogged.exchange(false))
+        {
+            icInfo("Connected to the system D-Bus");
+        }
 
         std::thread([this, generation]() {
             while (true)
@@ -683,7 +808,7 @@ namespace barton
 
                 if (ret == FALSE)
                 {
-                    // The next CreateNetwork/RestoreNetwork reconnects.
+                    // The next OpenThreadClient call reconnects.
                     ready = false;
                     lock.unlock();
                     icError("Failed to dispatch dbus connection");
@@ -693,8 +818,6 @@ namespace barton
 
             icDebug("dbus dispatch thread terminated");
         }).detach();
-
-        ready = true;
     }
 
     void OpenThreadClient::ReleaseDBusConnection(DBusConnection *connection)
