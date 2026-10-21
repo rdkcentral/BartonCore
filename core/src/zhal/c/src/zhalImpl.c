@@ -24,7 +24,6 @@
 #include <arpa/inet.h>
 #include <glib.h>
 #include <inttypes.h>
-#include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -719,37 +718,6 @@ static int getAvailableWork(icQueue *availableWork)
     return result;
 }
 
-/*
- * Resolve the ZigbeeCore address, which may be a host name (as when ZigbeeCore
- * runs in another container).  Resolved for each connection so that it follows
- * ZigbeeCore if its address changes.
- */
-static bool resolveZigbeeCoreAddress(struct in_addr *out)
-{
-    if (inet_aton(zigbeeIp, out) != 0)
-    {
-        return true;
-    }
-
-    struct addrinfo hints;
-    struct addrinfo *result = NULL;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    int rc = getaddrinfo(zigbeeIp, NULL, &hints, &result);
-    if (rc != 0 || result == NULL)
-    {
-        icLogWarn(LOG_TAG, "unable to resolve ZigbeeCore address %s: %s", zigbeeIp, gai_strerror(rc));
-        return false;
-    }
-
-    *out = ((struct sockaddr_in *) result->ai_addr)->sin_addr;
-    freeaddrinfo(result);
-    return true;
-}
-
 /* send over the socket and await initial synchronous response (quick).  Returns true if that was successful */
 static bool xmit(WorkItem *item)
 {
@@ -760,10 +728,7 @@ static bool xmit(WorkItem *item)
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(zigbeePort);
-    if (resolveZigbeeCoreAddress(&addr.sin_addr) == false)
-    {
-        return false;
-    }
+    inet_aton(zigbeeIp, &(addr.sin_addr));
 
     if ((sock = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1)
     {

@@ -77,9 +77,14 @@ set -e
 
 # Silabs radio: either a bind-mounted UNIX socket (remote tunnel) or a local
 # USB serial device.  Neither is defaulted; the validation section below exits
-# with a clear message if both are unset.
+# with a clear message if both are unset.  SILABS_DEVICE is only ever set on
+# purpose, so it wins over the socket, which the compose overlay defaults.
 SILABS_SOCKET="${SILABS_SOCKET:-}"
 SILABS_DEVICE="${SILABS_DEVICE:-}"
+if [ -n "${SILABS_DEVICE}" ] && [ -n "${SILABS_SOCKET}" ]; then
+    echo "[remote-radios] SILABS_DEVICE is set — using the local radio and ignoring SILABS_SOCKET."
+    SILABS_SOCKET=""
+fi
 
 # Bluetooth dongle over usb-ip.
 BT_USBIP_SOCKET="${BT_USBIP_SOCKET:-}"
@@ -375,13 +380,10 @@ bt_usbip_attach() {
         modprobe btusb 2>/dev/null || true
     fi
 
-    # Clear any stale imported ports left by a previous unclean session — usb-ip
-    # can otherwise reject a fresh attach with "Device in error state".
-    local stalePorts
-    stalePorts=$(usbip port 2>/dev/null | awk '/^Port [0-9]+:/ {gsub(/[^0-9]/,"",$2); print $2}')
-    for p in ${stalePorts}; do
-        usbip detach -p "${p}" 2>/dev/null || true
-    done
+    # Clear a stale port left by a previous unclean session of THIS user's
+    # container — usb-ip can otherwise reject a fresh attach with "Device in
+    # error state".  Other users' imported ports are never touched.
+    bt_usbip_detach
 
     # The workstation's usbipd is reverse-tunnelled to a bind-mounted UNIX
     # socket (BT_USBIP_SOCKET).  usbip speaks TCP, so bridge the socket to a
@@ -439,26 +441,79 @@ bt_usbip_attach() {
 
     echo "[remote-radios] Attaching Bluetooth dongle via usb-ip (busid ${busid})..."
     local attach_out attach_rc
+    local portsBefore
+    portsBefore=$(vhci_used_ports)
     attach_out=$(usbip --tcp-port "${BT_USBIP_TCP_PORT}" attach -r 127.0.0.1 -b "${busid}" 2>&1)
     attach_rc=$?
     if [ ${attach_rc} -ne 0 ]; then
         echo "[remote-radios] usbip attach failed for busid ${busid}: ${attach_out}" >&2
         return 1
     fi
+    bt_usbip_record_port "${portsBefore}"
 
-    # Record which busid we attached (informational; teardown detaches by port).
+    # Record which busid we attached (informational; teardown uses BT_USBIP_PORT_FILE).
     BT_USBIP_ATTACHED_BUSID="${busid}"
     export BT_USBIP_ATTACHED_BUSID
     return 0
 }
 
-# bt_usbip_detach — detach all usb-ip ports we own (best effort).
-bt_usbip_detach() {
-    local ports
-    ports=$(usbip port 2>/dev/null | awk '/^Port [0-9]+:/ {gsub(/[^0-9]/,"",$2); print $2}')
-    for p in ${ports}; do
-        usbip detach -p "${p}" 2>/dev/null || true
+# The vhci-hcd controller is shared by every container on the host, so
+# `usbip port` lists other developers' dongles too.  The port this container
+# attached, and the remote device id it carried, are recorded in this user's
+# own state directory; only a port that still matches that record is detached.
+BT_USBIP_PORT_FILE="${DBUS_DIR}/usbip_port"
+
+# vhci_ports_in_state <sta> — print "<port> <devid>" for vhci ports in a state
+# (006 == VDEV_ST_USED, 007 == VDEV_ST_ERROR; enum usbip_device_status in
+# drivers/usb/usbip/usbip_common.h, printed by vhci_sysfs.c).
+vhci_ports_in_state() {
+    local f
+    for f in /sys/devices/platform/vhci_hcd.*/status*; do
+        [ -r "${f}" ] || continue
+        # Columns: hub port sta spd dev sockfd local_busid
+        awk -v sta="$1" '$3 == sta { print ($2 + 0), $5 }' "${f}"
+    done | sort -u
+}
+
+# A port reads 005 (VDEV_ST_NOTASSIGNED, devid not shown) right after attach and
+# 006 (VDEV_ST_USED) once the device has enumerated, so callers wait for 006.
+vhci_used_ports() {
+    vhci_ports_in_state 006
+}
+
+# bt_usbip_record_port <ports-before> — record the port our attach created.
+bt_usbip_record_port() {
+    local before="$1" after newPorts tries=0
+    while :; do
+        after=$(vhci_used_ports)
+        newPorts=$(comm -13 <(printf '%s\n' "${before}" | sort) <(printf '%s\n' "${after}" | sort) | sed '/^$/d')
+        [ -n "${newPorts}" ] || [ ${tries} -ge 20 ] && break
+        tries=$((tries + 1))
+        sleep 0.5
     done
+    if [ "$(printf '%s\n' "${newPorts}" | sed '/^$/d' | wc -l)" -ne 1 ]; then
+        echo "[remote-radios] WARNING: could not identify the vhci port for this attach;" >&2
+        echo "[remote-radios]          it will not be detached automatically." >&2
+        rm -f "${BT_USBIP_PORT_FILE}"
+        return 0
+    fi
+    printf '%s\n' "${newPorts}" > "${BT_USBIP_PORT_FILE}"
+    echo "[remote-radios] Bluetooth dongle attached on vhci port ${newPorts%% *}"
+}
+
+# bt_usbip_detach — detach only the usb-ip port this user's container attached.
+bt_usbip_detach() {
+    [ -r "${BT_USBIP_PORT_FILE}" ] || return 0
+    local port devid
+    read -r port devid < "${BT_USBIP_PORT_FILE}" || true
+    # Detach only if the port still carries our device, or is our port stuck in
+    # the error state (its devid is no longer reported then).
+    if [ -n "${port}" ] && { vhci_used_ports | grep -qx "${port} ${devid}" \
+        || vhci_ports_in_state 007 | grep -q "^${port} "; }; then
+        echo "[remote-radios] Detaching Bluetooth dongle from vhci port ${port}"
+        usbip detach -p "${port}" 2>/dev/null || true
+    fi
+    rm -f "${BT_USBIP_PORT_FILE}"
 }
 
 # start_bluetooth_chain — attach the dongle, identify its HCI device, and start

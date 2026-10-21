@@ -31,8 +31,9 @@
 #include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
 #include <icLog/logging.h>
+#include <icTime/timeUtils.h>
 #include <icUtil/stringUtils.h>
-#include <netdb.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <string.h>
@@ -58,11 +59,21 @@ static pthread_cond_t STARTUP_COND = PTHREAD_COND_INITIALIZER;
 static void *invokeIpcHandlerCallback(void *arg);
 static void *invokeEventHandlerCallback(void *arg);
 
-// the host name of the event producer
-static char *eventProducerHostname = NULL;
+// The address of the event producer (ZigbeeCore).  Written only before the receiver thread is created and after it
+// has been joined, so the thread reads it without locking.
+static struct in_addr eventProducerAddress;
+
+// Untrusted packets are logged at most once per interval so that a flood cannot flood the log
+#define UNTRUSTED_SOURCE_LOG_INTERVAL_MILLIS (60 * 1000)
 
 int zhalAsyncReceiverStart(const char *host, zhalIpcResponseHandler ipcHandler, zhalEventHandler eventHandler)
 {
+    if (host == NULL || inet_pton(AF_INET, host, &eventProducerAddress) != 1)
+    {
+        icLogError(LOG_TAG, "event producer address '%s' is not an IPv4 address", stringCoalesce(host));
+        return -1;
+    }
+
     myIpcHandler = ipcHandler;
     myEventHandler = eventHandler;
 
@@ -71,8 +82,6 @@ int zhalAsyncReceiverStart(const char *host, zhalIpcResponseHandler ipcHandler, 
     initTimedWaitCond(&STARTUP_COND);
 
     pthread_mutex_lock(&STARTUP_MTX);
-
-    eventProducerHostname = strdup(host);
 
     createThread(&asyncThread, asyncReceiverThreadProc, NULL, "zhalAsyncRcvr");
 
@@ -96,8 +105,6 @@ int zhalAsyncReceiverStop()
     pthread_mutex_lock(&STARTUP_MTX);
     bool asyncReceiverThreadWasRunning = asyncReceiverThreadRunning;
     asyncReceiverThreadRunning = false;
-    free(eventProducerHostname);
-    eventProducerHostname = NULL;
     pthread_mutex_unlock(&STARTUP_MTX);
 
     if (asyncReceiverThreadWasRunning == true)
@@ -172,7 +179,7 @@ static int setupAsyncSocket()
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
 
-    if (stringCompare("127.0.0.1", eventProducerHostname, false) == 0)
+    if (eventProducerAddress.s_addr == htonl(INADDR_LOOPBACK))
     {
         // the event producer is on loopback, so just bind that
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -195,42 +202,19 @@ static int setupAsyncSocket()
     return sockFD;
 }
 
-/*
- * Events are trusted from loopback, and from the ZigbeeCore we send requests
- * to when that is another host (as when it runs in another container).  The
- * name is resolved on each check so that it follows ZigbeeCore if its address
- * changes; any other source might be destructive and is only logged.
- */
-static bool isTrustedEventSource(const struct in_addr *source)
+bool zhalAsyncReceiverIsTrustedSource(const struct in_addr *source, const struct in_addr *producer)
 {
+    if (source == NULL)
+    {
+        return false;
+    }
+
     if (source->s_addr == htonl(INADDR_LOOPBACK))
     {
         return true;
     }
 
-    if (eventProducerHostname == NULL || stringCompare("127.0.0.1", eventProducerHostname, false) == 0)
-    {
-        return false;
-    }
-
-    struct addrinfo hints;
-    struct addrinfo *result = NULL;
-    bool trusted = false;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-
-    if (getaddrinfo(eventProducerHostname, NULL, &hints, &result) == 0)
-    {
-        for (struct addrinfo *ai = result; ai != NULL && trusted == false; ai = ai->ai_next)
-        {
-            trusted = ((struct sockaddr_in *) ai->ai_addr)->sin_addr.s_addr == source->s_addr;
-        }
-        freeaddrinfo(result);
-    }
-
-    return trusted;
+    return producer != NULL && producer->s_addr != htonl(INADDR_ANY) && source->s_addr == producer->s_addr;
 }
 
 static void *asyncReceiverThreadProc(void *arg)
@@ -249,6 +233,8 @@ static void *asyncReceiverThreadProc(void *arg)
     int maxFD = sockFD > pipeFDs[0] ? sockFD + 1 : pipeFDs[0] + 1;
 
     char *recvBuf = (char *) malloc(ASYNC_RECVBUF_SIZE * sizeof(char));
+    uint64_t untrustedPacketCount = 0;
+    uint64_t lastUntrustedLogTime = 0;
 
     while (sockFD >= 0)
     {
@@ -285,7 +271,7 @@ static void *asyncReceiverThreadProc(void *arg)
 
         recvBuf[nbytes] = '\0'; // null terminate
 
-        if (isTrustedEventSource(&remoteAddr.sin_addr))
+        if (zhalAsyncReceiverIsTrustedSource(&remoteAddr.sin_addr, &eventProducerAddress))
         {
             cJSON *asyncJson = cJSON_Parse(recvBuf);
             if (asyncJson == NULL)
@@ -322,8 +308,20 @@ static void *asyncReceiverThreadProc(void *arg)
         }
         else
         {
-            icLogWarn(
-                LOG_TAG, "Received async event from invalid source address: [%s]", inet_ntoa(remoteAddr.sin_addr));
+            untrustedPacketCount++;
+
+            uint64_t now = getMonotonicMillis();
+            if (lastUntrustedLogTime == 0 || now - lastUntrustedLogTime >= UNTRUSTED_SOURCE_LOG_INTERVAL_MILLIS)
+            {
+                char sourceStr[INET_ADDRSTRLEN] = "";
+                inet_ntop(AF_INET, &remoteAddr.sin_addr, sourceStr, sizeof(sourceStr));
+                icLogWarn(LOG_TAG,
+                          "Ignored %" PRIu64 " async event(s) from untrusted source addresses; latest from [%s]",
+                          untrustedPacketCount,
+                          sourceStr);
+                untrustedPacketCount = 0;
+                lastUntrustedLogTime = now;
+            }
         }
     }
 

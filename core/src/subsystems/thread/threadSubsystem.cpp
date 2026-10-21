@@ -29,7 +29,6 @@
 #include "icConcurrent/delayedTask.h"
 #include "subsystemManagerCallbacks.h"
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <mutex>
 
@@ -178,9 +177,20 @@ static bool migrate(uint16_t oldVersion, uint16_t newVersion)
 
 const char *threadSubsystemGetInterfaceName(void)
 {
-    const char *name = std::getenv("BARTON_THREAD_INTERFACE");
+    static std::once_flag interfaceNameOnce;
+    static std::string interfaceName;
 
-    return (name != nullptr && *name != '\0') ? name : "wpan0";
+    // Read once so that every caller (Matter and the OTBR client) agrees on the border router for this run
+    std::call_once(interfaceNameOnce, []() {
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        scoped_generic char *name = b_core_property_provider_get_property_as_string(
+            propertyProvider, B_CORE_BARTON_THREAD_INTERFACE_NAME, THREAD_INTERFACE_NAME_DEFAULT);
+
+        interfaceName = (name != nullptr && *name != '\0') ? name : THREAD_INTERFACE_NAME_DEFAULT;
+        icInfo("Using Thread interface %s", interfaceName.c_str());
+    });
+
+    return interfaceName.c_str();
 }
 
 bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info)

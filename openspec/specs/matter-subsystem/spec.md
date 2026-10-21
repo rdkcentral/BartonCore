@@ -132,3 +132,25 @@ The Matter subsystem SHALL support opening an Enhanced Commissioning Window on c
 #### Scenario: Open commissioning window
 - **WHEN** `b_core_client_open_commissioning_window()` is called with a device ID and timeout
 - **THEN** the Matter subsystem SHALL open an Enhanced Commissioning Window and return `BCoreCommissioningInfo` with manual code and QR code
+
+### Requirement: BLE adapter selection
+The Matter subsystem SHALL configure BLE commissioning on the BlueZ HCI adapter given by the `barton.ble.adapterId` property (`B_CORE_BARTON_BLE_ADAPTER_ID`, uint32). The value SHALL be from 0 to 9999 (the Linux HCI id limit); when the property is unset, or out of range or not a number, the Matter subsystem SHALL use `hci0` and log which adapter it chose and why. The Matter subsystem SHALL NOT read the adapter from files or environment variables. The Matter SDK SHALL accept LE-only adapters (Matter patch 0003, `fix-ble-support-LE-only-adapters-in-BluezObjectManag`).
+
+#### Scenario: Adapter not configured
+- **WHEN** `barton.ble.adapterId` is not set
+- **THEN** BLE SHALL be configured on `hci0`
+
+#### Scenario: Adapter configured
+- **WHEN** `barton.ble.adapterId` is `1`
+- **THEN** BLE SHALL be configured on `hci1`
+
+#### Scenario: Invalid adapter
+- **WHEN** `barton.ble.adapterId` is `-1`, `10000`, or `abc`
+- **THEN** a warning SHALL be logged and BLE SHALL be configured on `hci0`
+
+### Requirement: Configurable Thread border router interface in the Matter SDK
+The Matter SDK SHALL be patched (patch 0004, `linux-make-the-OpenThread-border-router-interface-configurable`) so that its Linux Thread stack manager addresses `io.openthread.BorderRouter.<interface>` for a configurable interface. The Matter subsystem SHALL set the interface from the Thread subsystem's interface name before `InitThreadStack()`, and SHALL fail Matter initialization if setting it fails.
+
+#### Scenario: Non-default border router
+- **WHEN** the Thread interface name is `wpan1000`
+- **THEN** the Matter SDK SHALL communicate with `io.openthread.BorderRouter.wpan1000`

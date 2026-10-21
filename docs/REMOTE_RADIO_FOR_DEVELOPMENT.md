@@ -121,9 +121,10 @@ dongle. One daemon managing many adapters is what BlueZ is designed for.
 
 The `remote-radios` entrypoint attaches your dongle over usb-ip, identifies the
 newly-created HCI index (e.g. `hci1`), and writes it to
-`/var/run/remote-radios-dbus/ble_adapter_id`. Barton reads this (or the
-`device.matter.bleAdapterId` property) to choose your adapter from the ones the
-shared daemon manages.
+`/var/run/remote-radios-dbus/ble_adapter_id`. `./dockerw -T` exports it as
+`BARTON_BLE_ADAPTER_ID` in the barton container, and the reference app passes it
+to Barton as the `barton.ble.adapterId` property, which chooses your adapter from
+the ones the shared daemon manages. Barton itself does not read the file.
 
 ### Sharing the radios with other projects
 
@@ -485,7 +486,10 @@ scripts/remote-zigbee.sh up      # zigbeed and ZigbeeCore
 
 That records the checkout in `~/.remote-radios/zigbee.env`. From then on
 `./dockerw -T` starts the container whenever it is not running, and points
-Barton at it by setting `ZIGBEE_CORE_IP=remote-zigbee`. ZigbeeCore is reached
+Barton at it by setting `ZIGBEE_CORE_IP` to the container's IPv4 address on your
+radios network (Barton accepts only a numeric address, because it trusts
+ZigbeeCore's events by their source address). If the `remote-zigbee` container is
+recreated and gets a new address, restart the barton container. ZigbeeCore is reached
 over your private radios network, and sends its events back to the barton
 container at its alias `barton` there. If two of your workspaces run at once,
 both answer to that alias; only one can usefully use Zigbee anyway.
@@ -498,8 +502,10 @@ answers.
 
 The overlay is intentionally **not** in the default devcontainer stack (it
 would force every developer to build a privileged container and repoint D-Bus).
-Use the `dockerw -T` CLI path from within the devcontainer for forwarded
-radios.
+Use the `dockerw -T` CLI path for forwarded radios. Run it from a shell on the
+dev server host (for example over SSH, or VS Code's integrated terminal
+connected to the host rather than to the container); `dockerw` refuses to run
+inside a container.
 
 ---
 
@@ -511,6 +517,11 @@ instead of using the tunnel:
 ```bash
 SILABS_DEVICE=/dev/ttyACM0 ./dockerw -T bash
 ```
+
+The machine with the radio needs the same one-time host setup as a dev server
+(the Bluetooth daemon and the D-Bus policy above); without the policy,
+otbr-agent cannot register on the system bus. To return to the tunnel later,
+clear the saved device with `SILABS_DEVICE= ./dockerw -T bash`.
 
 A dev-server-attached Bluetooth dongle can likewise be bound with `usbip` on the
 dev server and pointed at via `BT_USBIP_SOCKET` (a bind-mounted usbipd socket).
@@ -533,8 +544,18 @@ exporting before `dockerw`.
 | `RADIO_CLAIM_DIR` | Container path of the claims directory (default `/run/remote-radios/claims`) |
 | `RADIO_CLAIM_DIR_HOST` | Host path of that directory (bind-mount source, read-only in the container) |
 | `BACKBONE_IF` | Thread backbone interface (default: host default route) |
-| `ZIGBEE_CORE_IP` | Address or host name of ZigbeeCore, used when the `ZIGBEE_CORE_IP` system property is unset. `./dockerw -T` sets it to `remote-zigbee` when Zigbee is set up |
 | `REMOTE_RADIOS_THREAD_INTERFACE` | Your Thread interface, `wpan<uid>`. Passed to otbr-agent as `-I` and to Barton as `BARTON_THREAD_INTERFACE` |
+
+The reference app maps these variables, set in the barton container, onto Barton
+properties. Barton validates each value when it reads the property; an invalid
+value is logged and the default is used.
+
+| Variable | Property | Meaning |
+|---|---|---|
+| `BARTON_BLE_ADAPTER_ID` | `barton.ble.adapterId` | BlueZ HCI index for BLE (0-9999, default `0`). `./dockerw -T` sets it from `ble_adapter_id` |
+| `BARTON_THREAD_INTERFACE` | `barton.thread.interfaceName` | Thread interface, which selects the border router `io.openthread.BorderRouter.<name>` (default `wpan0`). Set from `REMOTE_RADIOS_THREAD_INTERFACE` |
+| `BARTON_THREAD_ATTACH_WAIT_SECONDS` | `barton.thread.attachWaitSeconds` | Longest wait for the border router to form a new network (1-600, default `25`; the remote-radios overlay sets `120`, because CPC-based radios can need 35 s or more to attach and longer to publish the dataset) |
+| `ZIGBEE_CORE_IP` | `barton.zigbee.address` | ZigbeeCore's IPv4 address, numeric only (default `127.0.0.1`). A stored `ZIGBEE_CORE_IP` system property takes precedence. `./dockerw -T` sets it when Zigbee is set up |
 
 ---
 
@@ -624,8 +645,9 @@ a workstation forwards them, whether that is the same one or another of yours.
 - **"no new HCI device appeared after usb-ip attach"** — confirm the dongle is
   bound on the workstation (`usbip list -l`) and that the `vhci-hcd`/`usbip`
   kernel modules are available on the dev server.
-- **BLE picks the wrong adapter** — check `ble_adapter_id`; set
-  `device.matter.bleAdapterId` explicitly if needed.
+- **BLE picks the wrong adapter** — check `ble_adapter_id`, and Barton's log
+  line naming the adapter it uses; set `BARTON_BLE_ADAPTER_ID` explicitly if
+  needed.
 - **The Silabs radio is connected but silent** — cpcd sends, nothing comes
   back. This is usually the wrong RTS/CTS mode: some USB-serial adapters do not
   drive the hardware flow-control lines, so requesting flow control leaves RTS

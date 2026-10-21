@@ -78,6 +78,7 @@ import glob
 import os
 import platform
 import re
+import shlex
 import signal
 import socket
 import subprocess
@@ -866,7 +867,7 @@ class SSHTunnel:
                     "ssh", "-o", "ConnectTimeout=5",
                     "-o", "ClearAllForwardings=yes",
                     self.ssh_target,
-                    f"rm -f {self.remote_socket}",
+                    f"rm -f {shlex.quote(self.remote_socket)}",
                 ],
                 capture_output=True, timeout=10,
             )
@@ -886,8 +887,9 @@ class SSHTunnel:
                     "ssh", "-o", "ConnectTimeout=10",
                     "-o", "ClearAllForwardings=yes",
                     self.ssh_target,
-                    f"mkdir -p {remote_dir} && chmod 700 {remote_dir} {parent_dir} && "
-                    f"rm -f {self.remote_socket}; echo done",
+                    f"mkdir -p {shlex.quote(remote_dir)} && "
+                    f"chmod 700 {shlex.quote(remote_dir)} {shlex.quote(parent_dir)} && "
+                    f"rm -f {shlex.quote(self.remote_socket)}; echo done",
                 ],
                 capture_output=True, text=True, timeout=15,
             )
@@ -902,7 +904,7 @@ class SSHTunnel:
                     "ssh", "-o", "ConnectTimeout=5",
                     "-o", "ClearAllForwardings=yes",
                     self.ssh_target,
-                    f"test -S {self.remote_socket} && echo BOUND || echo NOTBOUND",
+                    f"test -S {shlex.quote(self.remote_socket)} && echo BOUND || echo NOTBOUND",
                 ],
                 capture_output=True, text=True, timeout=10,
             )

@@ -235,7 +235,7 @@ fi
 
 silabsSocketValue="${SILABS_SOCKET:-${existingSilabsSocket:-/run/remote-radios/radios/silabs.sock}}"
 silabsSocketHostValue="${SILABS_SOCKET_HOST:-${existingSilabsSocketHost:-$silabsSocketValue}}"
-silabsDeviceValue="${SILABS_DEVICE:-$existingSilabsDevice}"
+silabsDeviceValue="${SILABS_DEVICE-$existingSilabsDevice}"
 backboneIfValue="${BACKBONE_IF:-${existingBackboneIf:-$detectedBackboneIf}}"
 btUsbipSocketValue="${BT_USBIP_SOCKET:-$existingBtUsbipSocket}"
 btUsbipSocketHostValue="${BT_USBIP_SOCKET_HOST:-$existingBtUsbipSocketHost}"
@@ -341,13 +341,14 @@ fi
 STATE_VOLUME_NAME="$USER-remote-radios-state"
 _engine=$(docker version --format '{{.Server.Version}}' 2>/dev/null)
 _compose=$(docker compose version --short 2>/dev/null)
-if [ ! -d "$HOME/.remote-radios" ]; then
-    :   # remote radios have never been set up for this user
+if [ "${REMOTE_RADIOS_REQUESTED:-false}" != true ] && [ ! -d "$HOME/.remote-radios" ]; then
+    :   # radios not requested (dockerw -T) and never set up for this user
 elif [ "${_engine%%.*}" -lt 26 ] 2>/dev/null || \
     [ "$(printf '%s\n2.23\n' "${_compose#v}" | sort -V | head -1)" != "2.23" ]; then
     # Only remote radios need subpath mounts, so this must not stop anyone else.
     echo "Note: remote radios (./dockerw -T) need Docker Engine 26+ and Compose 2.23+;" \
         "found Engine ${_engine:-?}, Compose ${_compose:-?}." >&2
+    [ "${REMOTE_RADIOS_REQUESTED:-false}" = true ] && exit 1
 else
     if ! docker volume ls --format '{{.Name}}' | grep -Fxq "$STATE_VOLUME_NAME"; then
         echo "Volume $STATE_VOLUME_NAME does not exist. Creating it..."

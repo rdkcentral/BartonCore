@@ -47,6 +47,13 @@ bcore_add_cmocka_test(
         INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+bcore_add_cmocka_test(
+        NAME testZhalAsyncReceiver
+        TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/zhalAsyncReceiverUnitTest.c
+        LINK_LIBRARIES zhal
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 # add our test to be part of the "make manualTest"
 add_subdirectory(test)
 

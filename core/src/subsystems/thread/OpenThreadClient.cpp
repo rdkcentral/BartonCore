@@ -38,16 +38,18 @@ Licensed under the BSD-3 License
 #include "otbr/dbus/client/thread_api_dbus.hpp"
 #include "otbr/dbus/common/dbus_message_helper.hpp"
 #include "otbr/dbus/common/error.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cinttypes>
 #include <cstdint>
-#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
 
 extern "C" {
+#include "barton-core-properties.h"
+#include "deviceServiceConfiguration.h"
 #include "glib.h"
 #include "icLog/logging.h"
 #include "threadSubsystem.h"
@@ -71,28 +73,38 @@ namespace
 {
     // Note: I've seen approx 7 seconds on a standard Ubuntu desktop environment for a new network, about 18 seconds for
     // creating and replacing an existing network. CPC-based radio hardware (e.g., EFR32 via serial/SPI) can take 35+
-    // seconds due to shared radio scheduling and slower transport. After the Attach callback fires, the OTBR may still
-    // need 30-40 seconds to form the network (detached → leader) before the dataset TLVs become available.
-    constexpr int ATTACH_WAIT_SECONDS_DEFAULT = 120;
+    // seconds due to shared radio scheduling and slower transport, so such configurations raise the wait with the
+    // barton.thread.attachWaitSeconds property. This should just "go away" if we implement a proper main loop.
+    constexpr uint32_t ATTACH_WAIT_SECONDS_DEFAULT = 25;
+    constexpr uint32_t ATTACH_WAIT_SECONDS_MAX = 600;
 
-    // The default ceiling is sized for the shared BLE/Thread radio.  Simulated/CI setups attach in seconds, so this
-    // env override lets those runs surface genuine attach failures quickly instead of waiting the full ceiling.
-    int GetAttachWaitSeconds()
+    // Upper bound on how long the D-Bus connection lock is held while waiting for the border router.
+    constexpr std::chrono::milliseconds DISPATCH_SLICE {250};
+    constexpr std::chrono::milliseconds DATASET_RETRY_INTERVAL {2000};
+
+    uint32_t GetAttachWaitSeconds()
     {
-        const char *override = std::getenv("BARTON_THREAD_ATTACH_WAIT_SECONDS");
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-        if (override != nullptr)
+        if (!b_core_property_provider_has_property(propertyProvider, B_CORE_BARTON_THREAD_ATTACH_WAIT_SECONDS))
         {
-            char *endPtr = nullptr;
-            long val = std::strtol(override, &endPtr, 10);
-
-            if (endPtr != override && *endPtr == '\0' && val > 0)
-            {
-                return static_cast<int>(val);
-            }
+            return ATTACH_WAIT_SECONDS_DEFAULT;
         }
 
-        return ATTACH_WAIT_SECONDS_DEFAULT;
+        // 0 is out of range, so it doubles as the parse-failure sentinel
+        uint32_t seconds = b_core_property_provider_get_property_as_uint32(
+            propertyProvider, B_CORE_BARTON_THREAD_ATTACH_WAIT_SECONDS, 0);
+
+        if (seconds == 0 || seconds > ATTACH_WAIT_SECONDS_MAX)
+        {
+            icWarn("Invalid %s (must be 1-%" PRIu32 "), using default %" PRIu32 "s",
+                   B_CORE_BARTON_THREAD_ATTACH_WAIT_SECONDS,
+                   ATTACH_WAIT_SECONDS_MAX,
+                   ATTACH_WAIT_SECONDS_DEFAULT);
+            return ATTACH_WAIT_SECONDS_DEFAULT;
+        }
+
+        return seconds;
     }
 } // namespace
 
@@ -114,111 +126,132 @@ namespace barton
             channel = 1 << desiredChannel;
         }
 
-        ClientError threadApiCallError = ClientError::ERROR_NONE;
-        ClientError threadApiAttachError = ClientError::ERROR_NONE;
-        std::atomic_bool threadApiAttachCallbackCalled(false);
-
-
-        std::lock_guard<std::mutex> lock(dbusConnectionGuard);
-        threadApiCallError = threadApiBus->Attach(
-            networkName,
-            UINT16_MAX,
-            UINT64_MAX,
-            {},
-            {},
-            channel,
-            [&threadApiAttachError, &threadApiAttachCallbackCalled, &networkName](ClientError error) {
-                if (error == ClientError::ERROR_NONE)
-                {
-                    icDebug("Successfully created network %s", networkName.c_str());
-                }
-                else
-                {
-                    icWarn("Failed to create network. Error = %d", (int) error);
-                }
-
-                threadApiAttachError = error;
-                threadApiAttachCallbackCalled = true;
-            });
-
-        if (threadApiCallError == ClientError::ERROR_NONE)
+        // The attach callback may run on the background dispatch thread, possibly after this call has timed out and
+        // returned, so its state must outlive this frame.
+        struct AttachState
         {
-            using namespace std::chrono;
+            std::atomic<ClientError> error {ClientError::ERROR_NONE};
+            std::atomic_bool callbackCalled {false};
+        };
 
-            auto totalTime = seconds(GetAttachWaitSeconds());
-            milliseconds timer = duration_cast<milliseconds>(totalTime);
-            auto current = steady_clock::now();
+        auto attachState = std::make_shared<AttachState>();
 
-            // Block on a reply until timeout.
-            // FIXME: This is jank, we really want some kinda main loop for this. Async responses and any property
-            // change signals will pile up until we do some kind of processing like below. Synchronous calls will not
-            // process the queue except for the specific reply they want. Note: Consequence of ThreadApiBus using async
-            // call (dbus_connection_send_with_reply_and_block). Most operations are synchronous (backed by
-            // dbus_connection_send_with_reply_and_block) and don't need this.
-            while (timer.count() > 0 && dbus_connection_read_write_dispatch(dbusConnection.get(), timer.count()) &&
-                   !threadApiAttachCallbackCalled)
-            {
-                // Processed an incoming message
-                auto next = steady_clock::now();
-                timer = timer - duration_cast<milliseconds>(next - current);
-                current = next;
-            }
+        ClientError threadApiCallError = ClientError::ERROR_NONE;
 
-            if (threadApiAttachCallbackCalled && threadApiAttachError == ClientError::ERROR_NONE)
-            {
-                // The Attach callback may fire before OTBR has finished applying the new dataset.
-                // Retry GetActiveDatasetTlvs while time remains, processing D-Bus messages in between
-                // so we receive the "Active dataset tlvs changed" signal.
-                int datasetRetryCount = 0;
-
-                while (true)
-                {
-                    threadApiCallError = threadApiBus->GetActiveDatasetTlvs(retVal);
-
-                    if (threadApiCallError == ClientError::ERROR_NONE && !retVal.empty())
+        {
+            std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+            threadApiCallError = threadApiBus->Attach(
+                networkName, UINT16_MAX, UINT64_MAX, {}, {}, channel, [attachState, networkName](ClientError error) {
+                    if (error == ClientError::ERROR_NONE)
                     {
-                        break;
+                        icDebug("Successfully created network %s", networkName.c_str());
+                    }
+                    else
+                    {
+                        icWarn("Failed to create network. Error = %d", (int) error);
                     }
 
-                    auto next = steady_clock::now();
-                    timer = timer - duration_cast<milliseconds>(next - current);
-                    current = next;
-
-                    if (timer.count() <= 0)
-                    {
-                        icError("Timed out waiting for active dataset tlvs after successful attach.");
-                        break;
-                    }
-
-                    if (datasetRetryCount == 0 || datasetRetryCount % 10 == 0)
-                    {
-                        icDebug("Active dataset not yet available (error=%d), retrying (%" PRId64 "ms remaining)...",
-                                (int) threadApiCallError, (int64_t) timer.count());
-                    }
-
-                    datasetRetryCount++;
-
-                    // Dispatch D-Bus messages for up to 2 seconds before retrying,
-                    // but never exceed the remaining timeout.
-                    auto dispatchMs = std::min(milliseconds(2000), timer);
-                    dbus_connection_read_write_dispatch(dbusConnection.get(), dispatchMs.count());
-                    next = steady_clock::now();
-                    timer = timer - duration_cast<milliseconds>(next - current);
-                    current = next;
-                }
-            }
-            else if (timer.count() <= 0)
-            {
-                icError("Timed out waiting for create network response.");
-            }
-            else
-            {
-                icError("Network create operation failed. Error=%d", (int) threadApiAttachError);
-            }
+                    attachState->error = error;
+                    attachState->callbackCalled = true;
+                });
         }
-        else
+
+        if (threadApiCallError != ClientError::ERROR_NONE)
         {
             icError("Failed to create network. Error = %d", (int) threadApiCallError);
+            return retVal;
+        }
+
+        using namespace std::chrono;
+
+        const uint32_t attachWaitSeconds = GetAttachWaitSeconds();
+        const auto deadline = steady_clock::now() + seconds(attachWaitSeconds);
+        auto remaining = [&deadline]() { return duration_cast<milliseconds>(deadline - steady_clock::now()); };
+
+        // Dispatch D-Bus messages for at most one slice, holding the connection lock only for that slice so other
+        // OpenThreadClient calls are not blocked for the whole attach wait.
+        // FIXME: This is jank, we really want some kinda main loop for this. Async responses and any property change
+        // signals will pile up until we do some kind of processing like below. Synchronous calls will not process the
+        // queue except for the specific reply they want. Note: Consequence of ThreadApiBus using async call
+        // (dbus_connection_send_with_reply_and_block). Most operations are synchronous (backed by
+        // dbus_connection_send_with_reply_and_block) and don't need this.
+        auto dispatchSlice = [this, &remaining](milliseconds maxSlice) {
+            auto slice = std::max(milliseconds(0), std::min(maxSlice, remaining()));
+            std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+            return dbus_connection_read_write_dispatch(dbusConnection.get(), (int) slice.count()) != FALSE;
+        };
+
+        while (!attachState->callbackCalled && remaining().count() > 0)
+        {
+            if (!dispatchSlice(DISPATCH_SLICE))
+            {
+                icError("D-Bus connection lost while waiting for create network response.");
+                return retVal;
+            }
+        }
+
+        if (!attachState->callbackCalled)
+        {
+            icError("Timed out after %" PRIu32 "s waiting for create network response.", attachWaitSeconds);
+            return retVal;
+        }
+
+        if (attachState->error != ClientError::ERROR_NONE)
+        {
+            icError("Network create operation failed. Error=%d", (int) attachState->error.load());
+            return retVal;
+        }
+
+        // The Attach callback may fire before OTBR has finished applying the new dataset. Retry GetActiveDatasetTlvs
+        // while time remains, processing D-Bus messages in between so we receive the "Active dataset tlvs changed"
+        // signal.
+        int datasetRetryCount = 0;
+
+        while (true)
+        {
+            {
+                std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+                threadApiCallError = threadApiBus->GetActiveDatasetTlvs(retVal);
+            }
+
+            if (threadApiCallError == ClientError::ERROR_NONE && !retVal.empty())
+            {
+                break;
+            }
+
+            if (remaining().count() <= 0)
+            {
+                icError("Timed out after %" PRIu32 "s waiting for active dataset tlvs after successful attach. "
+                        "Last error=%d",
+                        attachWaitSeconds,
+                        (int) threadApiCallError);
+                retVal.clear();
+                break;
+            }
+
+            if (datasetRetryCount == 0 || datasetRetryCount % 10 == 0)
+            {
+                icDebug("Active dataset not yet available (error=%d), retrying (%" PRId64 "ms remaining)...",
+                        (int) threadApiCallError,
+                        (int64_t) remaining().count());
+            }
+
+            datasetRetryCount++;
+
+            // Process D-Bus messages for up to 2 seconds before retrying, but never past the deadline.
+            auto retryAt = steady_clock::now() + DATASET_RETRY_INTERVAL;
+
+            while (steady_clock::now() < retryAt && remaining().count() > 0)
+            {
+                if (!dispatchSlice(
+                        std::min(DISPATCH_SLICE, duration_cast<milliseconds>(retryAt - steady_clock::now()))))
+                {
+                    icError("D-Bus connection lost while waiting for active dataset tlvs. Last error=%d",
+                            (int) threadApiCallError);
+                    retVal.clear();
+                    return retVal;
+                }
+            }
         }
 
         return retVal;

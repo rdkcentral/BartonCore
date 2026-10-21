@@ -14,7 +14,8 @@ Barton's API is based upon GObject (the GLib Object System) in native C as the p
 1. Configure Barton as appropriate through cmake options (see `config/cmake/options.cmake`)
 2. If using Matter, configure and build your Matter SDK as described in [MATTER_SUPPORT.md]().
 3. If using Zigbee, see [ZIGBEE_SUPPORT.md]().
-4. If using OpenThread's Border Router, see [REMOTE_RADIO_FOR_DEVELOPMENT.md]().
+4. If using OpenThread's Border Router, see [THREAD_BORDER_ROUTER_SUPPORT.md]().
+5. If developing against real Thread, Zigbee, or BLE radios (local or on a remote workstation), see [REMOTE_RADIO_FOR_DEVELOPMENT.md]().
 
 ### Interacting with Barton from your Code
 

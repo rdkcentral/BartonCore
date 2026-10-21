@@ -24,6 +24,7 @@
  * Created by Thomas Lea on 3/10/16.
  */
 
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -525,12 +526,29 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     // coverity[check_return] value is optional and has a default
     deviceServiceGetSystemProperty(ZIGBEE_CORE_PORT_PROPERTY_NAME, &port);
 
+    const char *ipSource = ZIGBEE_CORE_IP_PROPERTY_NAME " system property";
     if (ip == NULL)
     {
-        // Some development configurations run ZigbeeCore in a separate
-        // container and name it through the environment.
-        const char *envIp = getenv(ZIGBEE_CORE_IP_PROPERTY_NAME);
-        ip = strdup((envIp != NULL && *envIp != '\0') ? envIp : DEFAULT_ZIGBEE_CORE_IP);
+        // Some development configurations run ZigbeeCore in a separate container and configure its address here.
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        ip = b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_ZIGBEE_ADDRESS, NULL);
+        ipSource = B_CORE_BARTON_ZIGBEE_ADDRESS;
+    }
+
+    if (ip == NULL || *ip == '\0')
+    {
+        free(ip);
+        ip = strdup(DEFAULT_ZIGBEE_CORE_IP);
+        ipSource = "default";
+    }
+
+    // Only numeric addresses are accepted: events are trusted by comparing their source to this address, which must
+    // not depend on name resolution.
+    struct in_addr zigbeeCoreAddr;
+    if (inet_pton(AF_INET, ip, &zigbeeCoreAddr) != 1)
+    {
+        icLogError(LOG_TAG, "%s: ZigbeeCore address '%s' from %s is not an IPv4 address", __func__, ip, ipSource);
+        return false;
     }
 
     if (port == NULL)
@@ -559,6 +577,7 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     memset(&callbacks, 0, sizeof(callbacks));
     zigbeeEventHandlerInit(&callbacks);
 
+    icLogInfo(LOG_TAG, "%s: using ZigbeeCore at %s:%" PRIu16 " (address from %s)", __func__, ip, portNum, ipSource);
     zhalInit(ip, portNum, &callbacks, NULL, responseHandler);
 
     // wait here until ZigbeeCore is functional or we time out

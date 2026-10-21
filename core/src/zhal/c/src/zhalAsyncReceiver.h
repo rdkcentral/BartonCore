@@ -28,6 +28,8 @@
 #define FLEXCORE_ZHALASYNCRECEIVER_H
 
 #include <cjson/cJSON.h>
+#include <netinet/in.h>
+#include <stdbool.h>
 
 // These handlers should return non-zero values to indicate that they will handle the payload argument's lifecycle
 typedef int (*zhalIpcResponseHandler)(cJSON *response);
@@ -35,5 +37,15 @@ typedef int (*zhalEventHandler)(cJSON *event);
 
 int zhalAsyncReceiverStart(const char *host, zhalIpcResponseHandler ipcHandler, zhalEventHandler eventHandler);
 int zhalAsyncReceiverStop();
+
+/**
+ * Decide whether an async event or IPC response may be processed.  Events are trusted from loopback and from the
+ * event producer's own address; any other source might be destructive.
+ *
+ * @param source the address the packet came from
+ * @param producer the configured event producer (ZigbeeCore) address
+ * @return true if the packet should be processed
+ */
+bool zhalAsyncReceiverIsTrustedSource(const struct in_addr *source, const struct in_addr *producer);
 
 #endif // FLEXCORE_ZHALASYNCRECEIVER_H

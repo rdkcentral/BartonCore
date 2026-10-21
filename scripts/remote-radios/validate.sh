@@ -70,69 +70,59 @@ set -euo pipefail
 # container.  Run the validator from the host instead.
 ###############################################################################
 if [ ! -f /entrypoint.sh ] || ! grep -q "remote-radios" /entrypoint.sh 2>/dev/null; then
-    # Not inside the remote-radios container.  Try to find it and re-exec.
+    # Not inside the remote-radios container.  Find this user's own container
+    # and re-exec there.
     #
-    # Multiple users may share the same Docker host.  Each user's containers
-    # belong to a distinct Compose project whose name includes the username.
-    # We scope the search to our own project to avoid matching another user's
-    # remote-radios container.
+    # Multiple users share the same Docker host.  Each user's radios run in a
+    # Compose project named "<user>-remote-radios" (see dockerw).  Only that
+    # project is ever searched: there is deliberately no broader fallback, so
+    # this script can never exec into another developer's radio container.
+    QUIET=false
+    for arg in "$@"; do
+        [ "$arg" = "--json" ] && QUIET=true
+    done
+
+    RADIOS_USER="${BUILDER_USER:-${USER:-$(id -un 2>/dev/null || true)}}"
+    if [ -z "$RADIOS_USER" ]; then
+        echo "ERROR: Could not determine your username (set BUILDER_USER or USER)." >&2
+        exit 2
+    fi
+    RADIOS_PROJECT="${RADIOS_USER}-remote-radios"
     OTBR_CONTAINER=""
 
-    # Determine docker command (with or without sudo).
-    # The barton devcontainer does not have the Docker CLI installed but does
-    # bind-mount the Docker socket.  Fall back to the curl+API approach when
-    # the docker command is unavailable.
+    # Determine docker command (with or without sudo).  Fall back to the
+    # Docker Engine API over the socket when the CLI is unavailable.
     DOCKER_CMD=""
     USE_CURL_API=false
     if command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1; then
         DOCKER_CMD="docker"
-    elif command -v docker >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo docker ps >/dev/null 2>&1; then
-        DOCKER_CMD="sudo docker"
+    elif command -v docker >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n docker ps >/dev/null 2>&1; then
+        DOCKER_CMD="sudo -n docker"
     elif [ -S /var/run/docker.sock ]; then
         USE_CURL_API=true
     fi
 
     if [ "$USE_CURL_API" = true ]; then
-        # Use the Docker Engine API via curl to find the remote-radios container.
         _DOCKER_API="http://localhost/v1.45"
         _CURL="curl -s --unix-socket /var/run/docker.sock"
-        _SUDO=""
-        # Socket may require sudo for access.
         if ! $_CURL "$_DOCKER_API/_ping" >/dev/null 2>&1; then
-            _CURL="sudo curl -s --unix-socket /var/run/docker.sock"
+            _CURL="sudo -n curl -s --unix-socket /var/run/docker.sock"
         fi
 
-        # Get our own compose project from our hostname (container ID).
-        COMPOSE_PROJECT=$($_CURL "$_DOCKER_API/containers/$(hostname)/json" 2>/dev/null \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['Config']['Labels'].get('com.docker.compose.project',''))" 2>/dev/null) || true
-
-        if [ -n "$COMPOSE_PROJECT" ]; then
-            # The radios container runs in its own per-user project,
-            # "<user>-remote-radios" (see dockerw).
-            for _proj in "${BUILDER_USER:-${USER:-}}-remote-radios"; do
-                _filter=$(python3 -c "
+        _filter=$(python3 -c "
 import json, sys, urllib.parse
 print(urllib.parse.quote(json.dumps(
     {'label': ['com.docker.compose.project=' + sys.argv[1]],
      'name': ['remote-radios']})))
-" "$_proj")
-                OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=${_filter}" 2>/dev/null \
-                    | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
-                [ -n "$OTBR_CONTAINER" ] && break
-            done
-        fi
-
-        # Fallback: name only.  On a shared dev server this can match another
-        # developer's container, so it is deliberately last.
-        if [ -z "$OTBR_CONTAINER" ]; then
-            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22name%22%3A%5B%22remote-radios%22%5D%7D" 2>/dev/null \
-                | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
-        fi
+" "$RADIOS_PROJECT")
+        OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=${_filter}" 2>/dev/null \
+            | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
 
         if [ -n "$OTBR_CONTAINER" ]; then
-            echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
-            echo ""
-            # Use the Docker Engine API to exec into the container.
+            if ! $QUIET; then
+                echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
+                echo ""
+            fi
             # The script is base64-encoded and passed as a positional
             # parameter ($1) to avoid interpolating into the bash -c string.
             # Arguments are passed as additional positional params (${@:2})
@@ -164,60 +154,30 @@ while i + 8 <= len(buf):
     i += 8 + size
 sys.stdout.buffer.flush()
 "
-            # Get the exit code from the exec instance.
             _EXIT=$($_CURL "$_DOCKER_API/exec/${_EXEC_ID}/json" \
                 | python3 -c "import json,sys; print(json.load(sys.stdin).get('ExitCode',1))")
             exit "${_EXIT}"
         fi
     elif [ -n "$DOCKER_CMD" ]; then
-        # If we're inside a Compose-managed container, read the project label
-        # from our own container to scope the search.
-        COMPOSE_PROJECT=$($DOCKER_CMD inspect "$(hostname)" \
-            --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
-
-        if [ -n "$COMPOSE_PROJECT" ]; then
-            # The radios container runs in its own per-user project,
-            # "<user>-remote-radios", shared by all of the user's workspaces.
-            for _proj in "${BUILDER_USER:-${USER:-}}-remote-radios"; do
-                OTBR_CONTAINER=$($DOCKER_CMD ps \
-                    --filter "label=com.docker.compose.project=${_proj}" \
-                    --filter "name=remote-radios" \
-                    --format '{{.Names}}' 2>/dev/null | head -1) || true
-                [ -n "$OTBR_CONTAINER" ] && break
-            done
-        fi
-
-        # Outside any container (e.g. on the dev server host) there is no
-        # project to scope by, but the user's own radios project is known.
-        if [ -z "$OTBR_CONTAINER" ]; then
-            OTBR_CONTAINER=$($DOCKER_CMD ps \
-                --filter "label=com.docker.compose.project=${BUILDER_USER:-${USER:-}}-remote-radios" \
-                --filter "name=remote-radios" \
-                --format '{{.Names}}' 2>/dev/null | head -1) || true
-        fi
-
-        # Fallback: broad search if project detection failed (e.g. running
-        # from the host outside any container).  On a shared dev server this
-        # can match another developer's container, so it is deliberately last.
-        if [ -z "$OTBR_CONTAINER" ]; then
-            OTBR_CONTAINER=$($DOCKER_CMD ps \
-                --filter "name=remote-radios" \
-                --format '{{.Names}}' 2>/dev/null | head -1) || true
-        fi
+        OTBR_CONTAINER=$($DOCKER_CMD ps \
+            --filter "label=com.docker.compose.project=${RADIOS_PROJECT}" \
+            --filter "name=remote-radios" \
+            --format '{{.Names}}' 2>/dev/null | head -1) || true
     fi
 
     if [ -n "$OTBR_CONTAINER" ]; then
-        echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
-        echo ""
+        if ! $QUIET; then
+            echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
+            echo ""
+        fi
         # Pass the script via stdin and forward arguments.
         exec $DOCKER_CMD exec -i "$OTBR_CONTAINER" bash -s -- "$@" < "$0"
     else
-        echo "ERROR: Not inside the remote-radios container and could not find one running." >&2
-        echo "       Run this from the dev server host, where the container is" >&2
-        echo "       reachable, or inside the container itself:" >&2
+        echo "ERROR: Not inside the remote-radios container and could not find" >&2
+        echo "       your radio container (Compose project '${RADIOS_PROJECT}')." >&2
+        echo "       Start it with ./dockerw -T, then run this from the Docker host," >&2
+        echo "       or inside the container itself:" >&2
         echo "       docker exec -i <remote-radios-container> bash < $0" >&2
-        echo "       (The Barton devcontainer has no Docker socket, so the" >&2
-        echo "       validator cannot find the radio container from there.)" >&2
         exit 2
     fi
 fi
@@ -228,6 +188,8 @@ fi
 CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
 SILABS_SOCKET="${SILABS_SOCKET:-}"
 SILABS_DEVICE="${SILABS_DEVICE:-}"
+# Same precedence as the entrypoint: an explicit local device wins.
+[ -n "${SILABS_DEVICE}" ] && SILABS_SOCKET=""
 BT_USBIP_SOCKET="${BT_USBIP_SOCKET:-}"
 BT_USBIP_TCP_PORT="${BT_USBIP_TCP_PORT:-3240}"
 BT_USBIP_BUSID="${BT_USBIP_BUSID:-}"
@@ -864,7 +826,9 @@ check_known_pitfalls() {
     # Multiple HCI adapters
     local hci_count
     hci_count=$(nsenter --net="${HOST_NETNS}" ls /sys/class/bluetooth/ 2>/dev/null | wc -w) || hci_count=0
-    if [ "$hci_count" -gt 1 ]; then
+    if [ "$hci_count" -gt 1 ] && [ -z "${BT_USBIP_SOCKET}" ]; then
+        warn "Multiple HCI adapters" "${hci_count} adapters present and no dongle forwarded — set BARTON_BLE_ADAPTER_ID to choose one"
+    elif [ "$hci_count" -gt 1 ]; then
         local adapter_file="${DBUS_DIR}/ble_adapter_id"
         if [ -f "$adapter_file" ] && [ -n "$(cat "$adapter_file" 2>/dev/null)" ]; then
             warn "Multiple HCI adapters" "${hci_count} adapters present — ble_adapter_id is set, but bluetoothd may default to wrong one"

@@ -224,6 +224,9 @@ services:
             # Selects this developer's border router; ble_adapter_id likewise
             # selects their Bluetooth adapter.
             - BARTON_THREAD_INTERFACE=${REMOTE_RADIOS_THREAD_INTERFACE:-wpan0}
+            # CPC-based radios can take 35 s or more to attach, plus 30-40 s to
+            # publish the active dataset; Barton's default wait is 25 s.
+            - BARTON_THREAD_ATTACH_WAIT_SECONDS=${BARTON_THREAD_ATTACH_WAIT_SECONDS:-120}
 networks:
     workspace:
         name: $BUILDER_USER-$BARTON_WORKSPACE_ID

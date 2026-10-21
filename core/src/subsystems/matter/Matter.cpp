@@ -34,7 +34,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <regex>
 #include <vector>
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
@@ -114,8 +113,6 @@ extern "C" {
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
 
-#define BLE_CONTROLLER_ADAPTER_ID_DEFAULT       0
-#define BLE_CONTROLLER_ADAPTER_ID_FILE          "/var/run/remote-radios-dbus/ble_adapter_id"
 #define BLE_CONTROLLER_DEVICE_NAME              BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
 #define LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME      "localMatterNodeId"
@@ -348,11 +345,11 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     }
 
     chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName(BLE_CONTROLLER_DEVICE_NAME);
-    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(ResolveBleAdapterId(), true);
+    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(Subsystem::Matter::ResolveBleAdapterId(), true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
 
 #if CHIP_ENABLE_OPENTHREAD
-#ifdef CHIP_DEVICE_LAYER_LINUX_HAS_SET_THREAD_INTERFACE_NAME
+#if defined(CHIP_DEVICE_LAYER_LINUX_HAS_SET_THREAD_INTERFACE_NAME) && defined(BARTON_CONFIG_THREAD)
     if ((err = DeviceLayer::ThreadStackMgrImpl().SetThreadInterfaceName(threadSubsystemGetInterfaceName())) !=
         CHIP_NO_ERROR)
     {
@@ -371,59 +368,6 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
 #endif // CHIP_ENABLE_OPENTHREAD
 
     return result;
-}
-
-uint32_t Matter::ResolveBleAdapterId()
-{
-    uint32_t adapterId = BLE_CONTROLLER_ADAPTER_ID_DEFAULT;
-
-    // 1. Check the runtime property (set by the reference app from env/CLI)
-    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree gchar *propVal =
-        b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_BLE_HCI_INDEX, NULL);
-
-    if (propVal != nullptr)
-    {
-        char *endPtr = nullptr;
-        unsigned long val = strtoul(propVal, &endPtr, 10);
-
-        if (endPtr != propVal && *endPtr == '\0')
-        {
-            adapterId = static_cast<uint32_t>(val);
-            icInfo("Using BLE adapter hci%u from property %s", adapterId, B_CORE_BARTON_MATTER_BLE_HCI_INDEX);
-
-            return adapterId;
-        }
-
-        icWarn("Invalid %s value '%s', falling back to file detection", B_CORE_BARTON_MATTER_BLE_HCI_INDEX, propVal);
-    }
-
-    // 2. Fall back to the file written by the remote-radios entrypoint
-    FILE *f = fopen(BLE_CONTROLLER_ADAPTER_ID_FILE, "r");
-
-    if (f != nullptr)
-    {
-        char buf[16];
-
-        if (fgets(buf, sizeof(buf), f) != nullptr)
-        {
-            std::cmatch match;
-
-            if (std::regex_match(buf, match, std::regex(R"(^\s*(\d+)\s*$)")))
-            {
-                adapterId = static_cast<uint32_t>(std::stoul(match[1].str()));
-                icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_FILE);
-            }
-            else
-            {
-                icWarn("Invalid content in %s, using default hci%u", BLE_CONTROLLER_ADAPTER_ID_FILE, adapterId);
-            }
-        }
-
-        fclose(f);
-    }
-
-    return adapterId;
 }
 
 bool Matter::Start()
