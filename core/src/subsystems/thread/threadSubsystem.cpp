@@ -28,9 +28,12 @@
 #include "cjson/cJSON.h"
 #include "icConcurrent/delayedTask.h"
 #include "subsystemManagerCallbacks.h"
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <mutex>
+#include <thread>
 
 #include <libxml/parser.h>
 
@@ -67,8 +70,17 @@ static std::mutex lifecycleDataGuard;
 static subsystemInitializedFunc notifySubsystemInitialized;
 static subsystemDeInitializedFunc notifySubsystemDeInitialized;
 static uint32_t monitorTask = 0;
-static OpenThreadClient *otClient = nullptr;
+static std::shared_ptr<OpenThreadClient> otClient;
 static bool initialized = false;
+
+/**
+ * Callers use the returned reference, not the global, so shutdown can wait for them before destroying the client.
+ */
+static std::shared_ptr<OpenThreadClient> getClient(bool requireInitialized = true)
+{
+    std::lock_guard<std::mutex> lock(lifecycleDataGuard);
+    return (initialized || !requireInitialized) ? otClient : nullptr;
+}
 // The Thread network name must be 16 chars or less
 // Test value for development only; this value must be provided by the client otherwise
 static std::string bartonThreadNetworkName = "TestNetwork";
@@ -124,7 +136,7 @@ static void shutdown()
 
     uint32_t localMonitorTaskHandle;
     subsystemDeInitializedFunc localNotify;
-    OpenThreadClient *localClient;
+    std::shared_ptr<OpenThreadClient> localClient;
 
     {
         std::lock_guard<std::mutex> lock(lifecycleDataGuard);
@@ -136,19 +148,20 @@ static void shutdown()
         localNotify = notifySubsystemDeInitialized;
         notifySubsystemDeInitialized = nullptr;
 
-        localClient = otClient;
+        // No new caller can get the client from here on.
+        initialized = false;
+        localClient = std::move(otClient);
     }
 
     cancelRepeatingTask(localMonitorTaskHandle);
 
-    // Deleted without lifecycleDataGuard held: the client's destructor joins its callback thread, which can be
-    // waiting for that lock. Calls made while it is being destroyed fail without touching D-Bus.
-    delete localClient;
-
+    // Wait for calls already in progress to release the client, so it is destroyed here and never while in use.
+    // Calls are bounded by D-Bus timeouts. lifecycleDataGuard is not held: the client's callback thread can need it.
+    while (localClient && localClient.use_count() > 1)
     {
-        std::lock_guard<std::mutex> lock(lifecycleDataGuard);
-        otClient = nullptr;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    localClient.reset();
 
     localNotify(THREAD_SUBSYSTEM_NAME);
 }
@@ -208,27 +221,26 @@ bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info)
 
     g_return_val_if_fail(info, false);
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
     bool retVal = false;
 
     if (localInitialized)
     {
         // get all the data
-        uint16_t channel = otClient->GetChannel();
-        uint16_t panId = otClient->GetPanId();
-        uint64_t extendedPanId = otClient->GetExtPanId();
-        std::vector<uint8_t> networkKey = otClient->GetNetworkKey();
-        std::vector<uint8_t> activeTlvs = otClient->GetActiveDatasetTlvs();
-        std::vector<uint8_t> pendingTlvs = otClient->GetPendingDatasetTlvs();
-        std::string networkName = otClient->GetNetworkName();
-        OpenThreadClient::DeviceRole role = otClient->GetDeviceRole();
-        bool nat64Enabled = otClient->IsNat64Enabled();
-        std::vector<uint8_t> borderAgentId = otClient->GetBorderAgentId();
-        uint16_t threadVersion = otClient->GetThreadVersion();
-        bool interfaceUp = otClient->IsThreadInterfaceUp();
+        uint16_t channel = client->GetChannel();
+        uint16_t panId = client->GetPanId();
+        uint64_t extendedPanId = client->GetExtPanId();
+        std::vector<uint8_t> networkKey = client->GetNetworkKey();
+        std::vector<uint8_t> activeTlvs = client->GetActiveDatasetTlvs();
+        std::vector<uint8_t> pendingTlvs = client->GetPendingDatasetTlvs();
+        std::string networkName = client->GetNetworkName();
+        OpenThreadClient::DeviceRole role = client->GetDeviceRole();
+        bool nat64Enabled = client->IsNat64Enabled();
+        std::vector<uint8_t> borderAgentId = client->GetBorderAgentId();
+        uint16_t threadVersion = client->GetThreadVersion();
+        bool interfaceUp = client->IsThreadInterfaceUp();
 
         // validate what we can
         g_return_val_if_fail(channel != UINT16_MAX, false);
@@ -290,15 +302,14 @@ bool threadSubsystemGetBorderAgentId(GArray **borderAgentId)
 {
     icDebug();
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
     bool retVal = false;
 
     if (localInitialized)
     {
-        auto id = otClient->GetBorderAgentId();
+        auto id = client->GetBorderAgentId();
         if (!id.empty())
         {
             *borderAgentId = g_array_new(FALSE, FALSE, sizeof(uint8_t));
@@ -314,15 +325,14 @@ uint16_t threadSubsystemGetThreadVersion()
 {
     icDebug();
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
     uint16_t retVal = 0;
 
     if (localInitialized)
     {
-        retVal = otClient->GetThreadVersion();
+        retVal = client->GetThreadVersion();
     }
 
     return retVal;
@@ -332,15 +342,14 @@ bool threadSubsystemIsThreadInterfaceUp()
 {
     icDebug();
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
     bool retVal = false;
 
     if (localInitialized)
     {
-        retVal = otClient->IsThreadInterfaceUp();
+        retVal = client->IsThreadInterfaceUp();
     }
 
     return retVal;
@@ -350,15 +359,14 @@ bool threadSubsystemGetActiveDatasetTlvs(GArray **datasetTlvs)
 {
     icDebug();
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
     bool retVal = false;
 
     if (localInitialized)
     {
-        auto tlvs = otClient->GetActiveDatasetTlvs();
+        auto tlvs = client->GetActiveDatasetTlvs();
         if (!tlvs.empty())
         {
             *datasetTlvs = g_array_new(FALSE, FALSE, sizeof(uint8_t));
@@ -374,15 +382,14 @@ bool threadSubsystemGetPendingDatasetTlvs(GArray **datasetTlvs)
 {
     icDebug();
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
     bool retVal = false;
 
     if (localInitialized)
     {
-        auto tlvs = otClient->GetPendingDatasetTlvs();
+        auto tlvs = client->GetPendingDatasetTlvs();
         if (!tlvs.empty())
         {
             *datasetTlvs = g_array_new(FALSE, FALSE, sizeof(uint8_t));
@@ -398,13 +405,12 @@ bool threadSubsystemSetNat64Enabled(bool enable)
 {
     icDebug();
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
     if (localInitialized)
     {
-        return otClient->SetNat64Enabled(enable);
+        return client->SetNat64Enabled(enable);
     }
 
     return false;
@@ -416,11 +422,10 @@ char *threadSubsystemActivateEphemeralKeyMode(void)
 
     icDebug();
 
-    lifecycleDataGuard.lock();
-    bool localInitialized = initialized;
-    lifecycleDataGuard.unlock();
+    std::shared_ptr<OpenThreadClient> client = getClient();
+    bool localInitialized = client != nullptr;
 
-    if (localInitialized && otClient->ActivateEphemeralKeyMode(key))
+    if (localInitialized && client->ActivateEphemeralKeyMode(key))
     {
         return strdup(key.c_str());
     }
@@ -435,14 +440,18 @@ static bool initializeThreadStack(void)
 {
     icDebug();
 
+    std::shared_ptr<OpenThreadClient> client;
+
     {
         std::lock_guard<std::mutex> lock(lifecycleDataGuard);
 
         if (!otClient)
         {
-            otClient = new OpenThreadClient(
+            otClient = std::make_shared<OpenThreadClient>(
                 []() { sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonSubsystemStatus); });
         }
+
+        client = otClient;
     }
 
     bool result = false;
@@ -454,7 +463,7 @@ static bool initializeThreadStack(void)
     {
         icWarn("No network configuration loaded; a new network will be created");
 
-        std::vector<uint8_t> networkTlvs = otClient->CreateNetwork(bartonThreadNetworkName, THREAD_RADIO_CHANNEL);
+        std::vector<uint8_t> networkTlvs = client->CreateNetwork(bartonThreadNetworkName, THREAD_RADIO_CHANNEL);
         if (networkTlvs.size() > 0)
         {
             const uint8_t *networkData = networkTlvs.data();
@@ -486,7 +495,7 @@ static bool initializeThreadStack(void)
         if (decodedLen > 0)
         {
             std::vector<uint8_t> tlvsVect(decodedTlvs, decodedTlvs + decodedLen);
-            result = otClient->RestoreNetwork(tlvsVect);
+            result = client->RestoreNetwork(tlvsVect);
             if (result == false)
             {
                 icError("Failed to restore network configuration, trying again in %d seconds...",
@@ -535,7 +544,8 @@ static bool initTaskFunc(void *arg)
     else
     {
         // the network was initialized before and happy.  Check that it is still happy.
-        OpenThreadClient::DeviceRole role = otClient->GetDeviceRole();
+        std::shared_ptr<OpenThreadClient> client = getClient(false);
+        OpenThreadClient::DeviceRole role = client ? client->GetDeviceRole() : OpenThreadClient::DEVICE_ROLE_UNKNOWN;
         if (role == OpenThreadClient::DEVICE_ROLE_LEADER || role == OpenThreadClient::DEVICE_ROLE_ROUTER)
         {
             icDebug("thread network is already initialized and our role is %d", (int) role);
