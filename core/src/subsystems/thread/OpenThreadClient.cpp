@@ -116,8 +116,12 @@ namespace barton
 
         std::vector<uint8_t> retVal;
 
-        g_return_val_if_fail(ready, retVal);
         g_return_val_if_fail(networkName.size() <= 16, retVal);
+
+        if (!EnsureConnected())
+        {
+            return retVal;
+        }
 
         uint32_t channel = UINT32_MAX;
 
@@ -261,8 +265,12 @@ namespace barton
     {
         icDebug();
 
-        g_return_val_if_fail(ready, false);
         g_return_val_if_fail(!networkDataTlvs.empty(), false);
+
+        if (!EnsureConnected())
+        {
+            return false;
+        }
 
         bool retVal = false;
 
@@ -570,9 +578,46 @@ namespace barton
         return result;
     }
 
+    bool OpenThreadClient::EnsureConnected()
+    {
+        bool connected = false;
+
+        {
+            std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+            connected = ready && dbusConnection && dbus_connection_get_is_connected(dbusConnection.get());
+        }
+
+        if (!connected)
+        {
+            icInfo("Connecting to the system D-Bus for the Thread border router");
+            Connect();
+        }
+
+        std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+
+        if (!ready)
+        {
+            return false;
+        }
+
+        // otbr-agent may still be starting (or restarting). Wait for it to own its
+        // bus name rather than issuing calls against a half-started agent; the
+        // subsystem monitor retries.
+        std::string serviceName = OTBR_DBUS_SERVER_PREFIX + threadApiBus->GetInterfaceName();
+        if (!dbus_bus_name_has_owner(dbusConnection.get(), serviceName.c_str(), nullptr))
+        {
+            icWarn("Thread border router service %s is not available on D-Bus yet", serviceName.c_str());
+            return false;
+        }
+
+        return true;
+    }
+
     void OpenThreadClient::Connect()
     {
         icDebug();
+
+        std::lock_guard<std::mutex> lock(dbusConnectionGuard);
 
         std::unique_ptr<DBusError, std::function<void(DBusError *)>> dbusError(new DBusError(), [](DBusError *error) {
             dbus_error_free(error);
@@ -585,19 +630,24 @@ namespace barton
         // manages a dbusconnection to the system bus socket and I don't know what kind of issues it would cause if we
         // each had refs to the dbusconnection but different methods of processing data. Until that's investigated, this
         // at least gets us our own sandbox to play in.
-        dbusConnection = std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>>(
+        //
+        // On a reconnect the previous connection and ThreadApiDBus stay in place until the new ones are ready, so
+        // concurrent callers never see them disappear.
+        std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> newConnection(
             dbus_bus_get_private(DBUS_BUS_SYSTEM, dbusError.get()), ReleaseDBusConnection);
 
-        if (dbus_error_is_set(dbusError.get()))
+        if (dbus_error_is_set(dbusError.get()) || !newConnection)
         {
-            icError("DBus error creating connection: %s", dbusError->message);
+            icError("DBus error creating connection: %s", dbusError->message ? dbusError->message : "unknown");
             return;
         }
 
-        std::string matchRule = "type='signal',interface='" DBUS_INTERFACE_PROPERTIES "'";
-        ClientError ret = ClientError::ERROR_NONE;
+        // The bus may go away (e.g. the remote radio container restarts); reconnect later instead of exiting.
+        dbus_connection_set_exit_on_disconnect(newConnection.get(), FALSE);
 
-        dbus_bus_add_match(dbusConnection.get(), matchRule.c_str(), dbusError.get());
+        std::string matchRule = "type='signal',interface='" DBUS_INTERFACE_PROPERTIES "'";
+
+        dbus_bus_add_match(newConnection.get(), matchRule.c_str(), dbusError.get());
 
         if (dbus_error_is_set(dbusError.get()))
         {
@@ -605,22 +655,37 @@ namespace barton
             return;
         }
 
-        if (!dbus_connection_add_filter(dbusConnection.get(), DBusMessageFilterRedirector, this, nullptr))
+        if (!dbus_connection_add_filter(newConnection.get(), DBusMessageFilterRedirector, this, nullptr))
         {
             icError("Failed to add dbus message filter");
         }
 
-        std::thread([this]() {
+        std::unique_ptr<ThreadApiDBus> newThreadApiBus(
+            new ThreadApiDBus(newConnection.get(), threadSubsystemGetInterfaceName()));
+
+        // Any previous dispatch thread exits once it sees the generation change.
+        uint64_t generation = ++connectionGeneration;
+        threadApiBus = std::move(newThreadApiBus);
+        dbusConnection = std::move(newConnection);
+
+        std::thread([this, generation]() {
             while (true)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 std::unique_lock<std::mutex> lock(dbusConnectionGuard);
+                if (generation != connectionGeneration)
+                {
+                    break;
+                }
+
                 // dont block the dbus connection.  Just dispatch any messages that are already waiting.
                 dbus_bool_t ret = dbus_connection_read_write_dispatch(dbusConnection.get(), 0);
-                lock.unlock();
 
                 if (ret == FALSE)
                 {
+                    // The next CreateNetwork/RestoreNetwork reconnects.
+                    ready = false;
+                    lock.unlock();
                     icError("Failed to dispatch dbus connection");
                     break;
                 }
@@ -629,13 +694,7 @@ namespace barton
             icDebug("dbus dispatch thread terminated");
         }).detach();
 
-        threadApiBus = std::unique_ptr<ThreadApiDBus>(
-            new ThreadApiDBus(dbusConnection.get(), threadSubsystemGetInterfaceName()));
-
-        if (threadApiBus)
-        {
-            ready = true;
-        }
+        ready = true;
     }
 
     void OpenThreadClient::ReleaseDBusConnection(DBusConnection *connection)

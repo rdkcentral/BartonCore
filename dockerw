@@ -123,6 +123,31 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
         notice "Starting remote-radios container (cpcd + otbr-agent)..."
         docker compose -p "$RADIOS_PROJECT" "${COMPOSE_FILES[@]}" up -d --no-recreate remote-radios
         notice "remote-radios container started in the background."
+        radiosId="$(docker compose -p "$RADIOS_PROJECT" "${COMPOSE_FILES[@]}" ps -q remote-radios 2>/dev/null)"
+    fi
+
+    # `up -d` only waits for the container to run.  Give otbr-agent time to
+    # claim its bus name so Barton's first Thread attempt finds it; Barton
+    # also reconnects and retries on its own, so a timeout is not fatal.
+    radiosWait="${REMOTE_RADIOS_READY_WAIT_SECONDS:-60}"
+    radiosReady=false
+    for ((i = 0; i < radiosWait; i++)); do
+        if docker exec "$radiosId" sh -c \
+            'DBUS_SYSTEM_BUS_ADDRESS="unix:path=${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}" \
+             dbus-send --system --print-reply --dest=org.freedesktop.DBus / \
+             org.freedesktop.DBus.NameHasOwner \
+             string:"io.openthread.BorderRouter.${THREAD_INTERFACE:-wpan0}"' 2>/dev/null |
+            grep -q 'boolean true'; then
+            radiosReady=true
+            break
+        fi
+        [ "$i" -eq 0 ] && notice "Waiting up to ${radiosWait}s for otbr-agent on D-Bus..."
+        sleep 1
+    done
+    if [ "$radiosReady" = true ]; then
+        notice "otbr-agent is ready."
+    else
+        notice "otbr-agent is not on D-Bus yet; Barton will keep retrying. Check: docker logs $radiosId"
     fi
     EXTRA_ENV="${EXTRA_ENV} -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/host-dbus/system_bus_socket"
 

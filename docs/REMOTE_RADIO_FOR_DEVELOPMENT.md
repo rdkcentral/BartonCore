@@ -545,6 +545,7 @@ exporting before `dockerw`.
 | `RADIO_CLAIM_DIR_HOST` | Host path of that directory (bind-mount source, read-only in the container) |
 | `BACKBONE_IF` | Thread backbone interface (default: host default route) |
 | `REMOTE_RADIOS_THREAD_INTERFACE` | Your Thread interface, `wpan<uid>`. Passed to otbr-agent as `-I` and to Barton as `BARTON_THREAD_INTERFACE` |
+| `REMOTE_RADIOS_READY_WAIT_SECONDS` | How long `./dockerw -T` waits for otbr-agent to register `io.openthread.BorderRouter.<interface>` on D-Bus before opening the barton shell (default `60`). A timeout is not fatal: Barton reconnects and retries until the border router appears |
 
 The reference app maps these variables, set in the barton container, onto Barton
 properties. Barton validates each value when it reads the property; an invalid

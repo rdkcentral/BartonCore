@@ -182,8 +182,10 @@ namespace barton
         std::unique_ptr<otbr::DBus::ThreadApiDBus> threadApiBus;
         std::atomic_bool ready;
         std::function<void(void)>  configChangedCallback;
+        uint64_t connectionGeneration = 0; // guarded by dbusConnectionGuard
 
         void Connect();
+        bool EnsureConnected();
 
         static void ReleaseDBusConnection(DBusConnection *connection);
         static DeviceRole TranslateOTBRDeviceRole(otbr::DBus::DeviceRole role);
