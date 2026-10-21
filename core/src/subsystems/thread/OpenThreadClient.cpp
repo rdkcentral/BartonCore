@@ -622,6 +622,11 @@ namespace barton
 
     bool OpenThreadClient::EnsureConnected(bool requireService)
     {
+        if (stopping)
+        {
+            return false;
+        }
+
         bool connected = false;
 
         {
@@ -782,6 +787,13 @@ namespace barton
             ready = true;
         }
 
+        dispatchWake.notify_all();
+
+        if (dispatchThread.joinable())
+        {
+            dispatchThread.join();
+        }
+
         // ThreadApiDBus registers a message filter and pending-call callbacks with its own address and never
         // removes them, so close the old connection before destroying the old ThreadApiDBus; nothing can dispatch
         // those callbacks once the connection is closed.
@@ -793,31 +805,105 @@ namespace barton
             icInfo("Connected to the system D-Bus");
         }
 
-        std::thread([this, generation]() {
+        dispatchThread = std::thread([this, generation]() {
+            std::unique_lock<std::mutex> lock(dbusConnectionGuard);
+
             while (true)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                std::unique_lock<std::mutex> lock(dbusConnectionGuard);
+                dispatchWake.wait_for(lock, std::chrono::milliseconds(1000), [this, generation]() {
+                    return generation != connectionGeneration;
+                });
+
                 if (generation != connectionGeneration)
                 {
                     break;
                 }
 
                 // dont block the dbus connection.  Just dispatch any messages that are already waiting.
-                dbus_bool_t ret = dbus_connection_read_write_dispatch(dbusConnection.get(), 0);
-
-                if (ret == FALSE)
+                if (dbus_connection_read_write_dispatch(dbusConnection.get(), 0) == FALSE)
                 {
                     // The next OpenThreadClient call reconnects.
                     ready = false;
                     lock.unlock();
                     icError("Failed to dispatch dbus connection");
-                    break;
+                    return;
                 }
             }
 
+            lock.unlock();
             icDebug("dbus dispatch thread terminated");
-        }).detach();
+        });
+    }
+
+    OpenThreadClient::~OpenThreadClient()
+    {
+        stopping = true;
+
+        {
+            std::lock_guard<std::mutex> lock(callbackGuard);
+            callbackPending = false;
+        }
+        callbackWake.notify_all();
+
+        if (callbackThread.joinable())
+        {
+            callbackThread.join();
+        }
+
+        {
+            std::lock_guard<std::mutex> connectLock(connectGuard);
+
+            {
+                std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+                ++connectionGeneration;
+                ready = false;
+            }
+            dispatchWake.notify_all();
+
+            if (dispatchThread.joinable())
+            {
+                dispatchThread.join();
+            }
+        }
+
+        // Same order as a reconnect: close the connection before destroying the ThreadApiDBus bound to it.
+        dbusConnection.reset();
+        threadApiBus.reset();
+    }
+
+    void OpenThreadClient::StartCallbackWorker()
+    {
+        callbackThread = std::thread([this]() {
+            std::unique_lock<std::mutex> lock(callbackGuard);
+
+            while (true)
+            {
+                callbackWake.wait(lock, [this]() { return callbackPending || stopping; });
+
+                if (stopping)
+                {
+                    break;
+                }
+
+                callbackPending = false;
+
+                if (configChangedCallback)
+                {
+                    lock.unlock();
+                    configChangedCallback();
+                    lock.lock();
+                }
+            }
+        });
+    }
+
+    void OpenThreadClient::NotifyConfigChanged()
+    {
+        {
+            std::lock_guard<std::mutex> lock(callbackGuard);
+            callbackPending = true;
+        }
+        callbackWake.notify_one();
     }
 
     void OpenThreadClient::ReleaseDBusConnection(DBusConnection *connection)
@@ -936,9 +1022,9 @@ namespace barton
                 notifyCallback = false;
             }
 
-            if (notifyCallback && configChangedCallback != nullptr)
+            if (notifyCallback)
             {
-                std::thread([this]() { configChangedCallback(); }).detach();
+                NotifyConfigChanged();
             }
         }
 

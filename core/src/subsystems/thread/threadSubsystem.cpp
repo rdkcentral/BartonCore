@@ -124,6 +124,7 @@ static void shutdown()
 
     uint32_t localMonitorTaskHandle;
     subsystemDeInitializedFunc localNotify;
+    OpenThreadClient *localClient;
 
     {
         std::lock_guard<std::mutex> lock(lifecycleDataGuard);
@@ -135,11 +136,19 @@ static void shutdown()
         localNotify = notifySubsystemDeInitialized;
         notifySubsystemDeInitialized = nullptr;
 
-        delete otClient;
-        otClient = nullptr;
+        localClient = otClient;
     }
 
     cancelRepeatingTask(localMonitorTaskHandle);
+
+    // Deleted without lifecycleDataGuard held: the client's destructor joins its callback thread, which can be
+    // waiting for that lock. Calls made while it is being destroyed fail without touching D-Bus.
+    delete localClient;
+
+    {
+        std::lock_guard<std::mutex> lock(lifecycleDataGuard);
+        otClient = nullptr;
+    }
 
     localNotify(THREAD_SUBSYSTEM_NAME);
 }
