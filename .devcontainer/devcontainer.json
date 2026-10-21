@@ -5,12 +5,12 @@
 {
     "name": "Barton Ubuntu Development Environment",
     "initializeCommand": ".devcontainer/setupDevcontainerEnv.sh",
-    // The real-radio overlay (compose.otbr-radio.yaml) is intentionally NOT
-    // listed here. Adding it unconditionally forces every devcontainer user to
-    // build/start the privileged otbr-radio container and repoints barton's
-    // DBUS_SYSTEM_BUS_ADDRESS at a private socket that only exists when
-    // RADIO_DEVICE/RADIO_PORT is set — breaking simulated Thread/Zigbee D-Bus
-    // for everyone else. Opt into the real radio via `dockerw -T` instead.
+    // The remote-radios overlay (compose.remote-radios.yaml) is intentionally
+    // NOT listed here. Adding it unconditionally forces every devcontainer user
+    // to build/start the privileged remote-radios container and repoints
+    // barton's DBUS_SYSTEM_BUS_ADDRESS at a private socket that only exists when
+    // radios are configured — breaking simulated Thread/Zigbee D-Bus for
+    // everyone else. Opt into forwarded radios via `dockerw -T` instead.
     "dockerComposeFile": [
         "../docker/compose.yaml",
         "../docker/compose.devcontainer.yaml"
@@ -148,8 +148,8 @@
     // script for further VSC customization after the container is created
     "postCreateCommand": ".devcontainer/setup.sh",
 
-    // Set up IPv6 routes to Thread devices via the otbr-radio container.
+    // Set up IPv6 routes to Thread devices via the remote-radios container.
     // Runs on every container start (not just creation) so routes survive
-    // restarts.  Harmless no-op when otbr-radio is not running.
+    // restarts.  Harmless no-op when remote-radios is not running.
     "postStartCommand": "docker/setup-thread-routes.sh"
 }

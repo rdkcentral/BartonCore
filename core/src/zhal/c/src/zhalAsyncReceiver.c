@@ -32,6 +32,7 @@
 #include <icConcurrent/timedWait.h>
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <string.h>
@@ -194,6 +195,44 @@ static int setupAsyncSocket()
     return sockFD;
 }
 
+/*
+ * Events are trusted from loopback, and from the ZigbeeCore we send requests
+ * to when that is another host (as when it runs in another container).  The
+ * name is resolved on each check so that it follows ZigbeeCore if its address
+ * changes; any other source might be destructive and is only logged.
+ */
+static bool isTrustedEventSource(const struct in_addr *source)
+{
+    if (source->s_addr == htonl(INADDR_LOOPBACK))
+    {
+        return true;
+    }
+
+    if (eventProducerHostname == NULL || stringCompare("127.0.0.1", eventProducerHostname, false) == 0)
+    {
+        return false;
+    }
+
+    struct addrinfo hints;
+    struct addrinfo *result = NULL;
+    bool trusted = false;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    if (getaddrinfo(eventProducerHostname, NULL, &hints, &result) == 0)
+    {
+        for (struct addrinfo *ai = result; ai != NULL && trusted == false; ai = ai->ai_next)
+        {
+            trusted = ((struct sockaddr_in *) ai->ai_addr)->sin_addr.s_addr == source->s_addr;
+        }
+        freeaddrinfo(result);
+    }
+
+    return trusted;
+}
+
 static void *asyncReceiverThreadProc(void *arg)
 {
     icLogInfo(LOG_TAG, "asyncReceiverThreadProc starting");
@@ -246,11 +285,7 @@ static void *asyncReceiverThreadProc(void *arg)
 
         recvBuf[nbytes] = '\0'; // null terminate
 
-        /*
-         * Only handle packets sent from our local loopback. Any other
-         * packets might be destructive so audit log those packets.
-         */
-        if (remoteAddr.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+        if (isTrustedEventSource(&remoteAddr.sin_addr))
         {
             cJSON *asyncJson = cJSON_Parse(recvBuf);
             if (asyncJson == NULL)

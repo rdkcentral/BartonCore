@@ -1,422 +1,674 @@
-# Thread and BLE Support for Remote Development
+# Remote Radios for Development
 
-This document covers how Barton integrates with a **Thread Border Router** and
-**Bluetooth Low Energy (BLE)** for Matter device commissioning. Both capabilities
-are provided by the same physical radio — a Silicon Labs BRD2703 xG24 — and
-managed by the `otbr-radio` Docker container.
+This document explains how a developer working against a **remote dev server**
+can use the Zigbee/Thread and Bluetooth radios physically attached to their
+**local workstation** — so end-devices next to the developer can be
+commissioned even though the devcontainer runs on a distant server.
+
+> **No radios? Nothing to do.** Forwarding radios is an optional, opt-in
+> feature. If you do not configure it, the devcontainer runs with simulated
+> Thread/Zigbee and no Bluetooth, and no extra setup is required of you.
 
 ---
 
 ## Overview
 
-The BRD2703 xG24 is a multi-protocol radio that provides two wireless interfaces
-through a single USB connection:
+Two **independent** physical radios are forwarded from your workstation to the
+remote-radios container on the dev server:
 
-- **Thread 802.15.4** — used by `otbr-agent` for the Thread mesh network
-- **Bluetooth LE** — used by the Matter SDK for BLE-based device commissioning
-
-Both interfaces are multiplexed over the **CPC (Co-Processor Communication)**
-protocol. The `cpcd` daemon manages the USB serial link and exposes separate
-CPC endpoints for each protocol.
+| Radio | Purpose | Transport |
+|---|---|---|
+| Silicon Labs Zigbee/Thread radio (e.g. BRD2703 xG24) | Thread (otbr-agent) and Zigbee (zigbeed/ZigbeeCore) | serial-over-SSH tunnel to a per-user UNIX socket |
+| Dedicated Bluetooth USB dongle (e.g. TP-Link UB500) | BLE for Matter commissioning (Matter SDK ↔ BlueZ) | usb-ip, reverse-tunnelled over SSH |
 
 ```
-  BRD2703 USB Radio (/dev/ttyACM0)
-    │
-    ▼
-  cpcd                         (CPC daemon — multiplexes radio protocols)
-    ├── spinel+cpc://cpcd_0 ──▶ otbr-agent     (Thread 802.15.4)
-    │                            │  D-Bus: io.openthread.BorderRouter.wpan0
-    │                            ▼
-    │                          Barton           (Thread network management)
-    │
-    └── BLE CPC endpoint ────▶ bt_host_cpc_hci_bridge
-                                 │  creates virtual serial device (pts_hci)
-                                 ▼
-                               btattach         (creates HCI device, e.g. hci1)
-                                 │  host network namespace
-                                 ▼
-                               bluetoothd       (BlueZ daemon, private D-Bus)
-                                 │  D-Bus: org.bluez
-                                 ▼
-                               Barton / Matter SDK  (BLE scanning & commissioning)
+  WORKSTATION (your desk)                       DEV SERVER                       remote-radios container (privileged)
+  ─────────────────────                         ───────────────                  ───────────────────────────────────
+  Silabs radio ──serial──▶ remote-serial.py ──ssh -R──▶ ~/.remote-radios/radios/silabs.sock ──(bind mount)──▶ socat → /dev/ttyRadio → cpcd ─┬─▶ otbr-agent (Thread)
+                                                                                                                                       └─▶ remote-zigbee container: zigbeed → ZigbeeCore (Zigbee)
+  BT dongle ───usb-ip────▶ usbipd/usbip bind ─ssh -R─▶ ~/.remote-radios/usbip/usbipd.sock ──▶ usbip attach (host netns) ─▶ hciX ─▶ dev server's bluetoothd ─▶ org.bluez
 ```
 
-### Container Architecture
+Key properties:
+
+- **Your workstation's own Bluetooth is never touched.** Only a dedicated USB
+  dongle (not the adapter your desktop bluetoothd is using) is forwarded.
+- **One D-Bus: the dev server's own.** Your border router (`otbr-agent`) and
+  BlueZ (`org.bluez`) both live on the dev server's system bus, because Matter
+  requires both on the same bus. Your border router registers there under a
+  name unique to you, `io.openthread.BorderRouter.wpan<uid>`.
+- **Per-user isolation.** Your radio sockets are in your own `~/.remote-radios`
+  (mode `0700`), your Thread interface is named after your uid, and your radios
+  container sits on a Docker network that only your containers join. Developers
+  cannot collide with each other.
+
+### Container architecture
 
 | Container | Runs | Provides |
-|-----------|------|----------|
-| `otbr-radio` | cpcd, otbr-agent, bt_host_cpc_hci_bridge, btattach, bluetoothd | Thread + BLE via shared D-Bus and host network namespace |
-| `barton` (devcontainer) | Barton application code, Matter SDK | Consumes Thread D-Bus API and BLE via BlueZ |
+|---|---|---|
+| `remote-radios` (one per user) | cpcd, otbr-agent, mdnsd, socat, usbip attach | Thread + CPC, and your dongle attached as an HCI adapter |
+| `remote-zigbee` (one per user, from ZigbeeCore) | zigbeed, ZigbeeCore, socat | Zigbee, using the radios container's cpcd |
+| `barton` (devcontainer, one per workspace) | Barton application code, Matter SDK | Consumes Thread and BLE over the dev server's D-Bus, and Zigbee from `remote-zigbee` |
 
-A named Docker volume (`dbus-socket`) at `/var/run/otbr-dbus` shares a private
-D-Bus bus between the two containers. This is **not** the host's system D-Bus.
-
-The BLE stack requires the **host network namespace** because Linux
-`AF_BLUETOOTH` sockets only work in the initial (host) network namespace.
-`btattach` and `bluetoothd` run via `nsenter --net=/run/host-netns` inside the
-`otbr-radio` container.
-
-### How BLE Adapter Selection Works
-
-The `otbr-radio` entrypoint detects the HCI device index created by `btattach`
-(e.g. `hci1`) and writes it to `/var/run/otbr-dbus/ble_adapter_id`. Barton
-reads this file at startup to configure the Matter SDK's BLE adapter via
-`BLEMgrImpl().ConfigureBle(adapterId, true)`.
-
-The host machine may have its own built-in Bluetooth adapter (e.g. `hci0`).
-The radio's BLE adapter appears as a separate HCI device with a distinct index.
-A background monitor in the entrypoint watches `btattach` and automatically
-restarts it if the connection drops, updating the `ble_adapter_id` file
-accordingly.
-
-### BlueZ in the `otbr-radio` Container
-
-The BLE chain relies on the **`bluez`** package, which is installed in the
-`otbr-radio` image (`docker/Dockerfile.otbr-radio`). It is required here — not
-in the `barton` image — because every BlueZ process runs inside the
-`otbr-radio` container (via `nsenter --net=/run/host-netns`). It provides:
-
-| Binary | Role in the chain |
-|--------|-------------------|
-| `btattach` | Attaches the virtual HCI serial device created by `bt_host_cpc_hci_bridge` as an HCI controller (e.g. `hci1`). |
-| `bluetoothd` | The BlueZ daemon that manages the HCI adapter and exposes `org.bluez` on the private D-Bus for the Matter SDK. |
-| `bluetoothctl` | Interactive CLI used by `validate.sh` and for manual debugging (e.g. `nsenter --net=/run/host-netns bluetoothctl list`). |
-
-The `barton` container consumes BLE purely over D-Bus (`org.bluez`) and via the
-`ble_adapter_id` file, so it does **not** need the `bluez` binaries itself — the
-Matter SDK talks to `bluetoothd` through GDBus. BlueZ lives entirely on the
-`otbr-radio` side of the split.
-
----
-
-## Thread Modes
-
-| Mode | When to use | How to start |
-|------|-------------|-------------|
-| **Simulated** (default) | Unit/integration tests, no hardware needed | `scripts/start-simulated-otbr.sh` |
-| **Real USB radio** | Testing with real Thread + BLE devices | See below |
-
-> **Note**: Enable Thread and Border Router support in the Matter SDK
-> (`-DOT_THREAD_VERSION=1.4 -DOTBR_BORDER_ROUTING=ON`) if Matter is also enabled.
-
----
-
-## Hardware: BRD2703 xG24 Explorer Kit
-
-### Flashing RCP Firmware
-
-Before use, the BRD2703 must be flashed with a CPC-capable **RCP (Radio
-Co-Processor)** firmware image that includes the BLE HCI endpoint.
-
-If the board is new (out of the box), its debug adapter firmware must be updated
-first. Connect the board to **Simplicity Studio** and accept any firmware
-upgrade prompts before proceeding.
-
-Download the firmware image appropriate for the BRD2703 (EFR32MG24) in either
-`.s37` or `.hex` format, then flash it using
-[Simplicity Commander](https://www.silabs.com/developers/simplicity-studio).
-
----
-
-## Radio Connection Methods
-
-Two methods are supported for connecting the radio to the otbr-radio container:
-
-| Method | When to use | Environment variable |
-|--------|-------------|---------------------|
-| **Local USB** | Radio is plugged directly into the Docker host | `RADIO_DEVICE=/dev/ttyACM0` |
-| **Remote serial tunnel** | Radio is on your laptop, Docker runs on a remote server | `RADIO_PORT=21234` |
-
-### Local USB Radio
-
-If the radio is plugged directly into the machine running Docker:
+The radios stack belongs to **you**, not to a workspace: the radio sockets in
+`~/.remote-radios` are per user, so there is exactly one stack to share. It runs
+in the Compose project `<user>-remote-radios` on the network `<user>-remote-radios`.
+Every one of your BartonCore workspaces joins that network in addition to its
+own, and `./dockerw -T` in a second workspace reuses the running stack rather
+than starting another. `dockerw` never recreates a running radios stack, because
+another workspace may be using it; to pick up changes to its compose files or
+entrypoint, recreate it explicitly:
 
 ```bash
-RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T bash
+cd docker
+docker compose -p "$USER-remote-radios" -f compose.yaml -f compose.remote-radios.yaml \
+    up -d --force-recreate remote-radios
 ```
 
-### Remote Serial Tunnel
+Everything this creates on the dev server is named after you:
 
-If your devcontainer runs on a **remote server** (common with VS Code
-Remote-SSH) but the BRD2703 is plugged into your **local workstation**, use
-`remote-serial.py` to forward the serial port over an SSH tunnel.
+| Kind | Name | Scope |
+|---|---|---|
+| Container, image and Compose project | `<user>-remote-radios` | One per user |
+| Zigbee container and Compose project | `<user>-remote-zigbee` | One per user, started from ZigbeeCore |
+| Network | `<user>-remote-radios` | One per user, joined by each of your workspaces |
+| Volume | `<user>-remote-radios-state` | One per user |
+| Workspace network | `<user>-<workspace>` | One per BartonCore workspace |
 
+The volume is mounted in parts. Its `ble/` directory appears at
+`/var/run/remote-radios-dbus` and carries `ble_adapter_id` from the radios
+container to each of your barton containers. Its `cpcd/` directory appears at
+`/dev/shm/cpcd` and holds cpcd's sockets. These mounts need Docker Engine 26 and
+Compose 2.23 or later.
+
+### How Thread and Matter find your border router
+
+otbr-agent derives its D-Bus name from its Thread interface, and
+`docker/setupDockerEnv.sh` names that interface `wpan<uid>` (for example
+`wpan1000`), unique on the server. The remote-radios overlay passes the same
+name to Barton as `BARTON_THREAD_INTERFACE`, which Barton's Thread client and
+the Matter SDK both use to select the border router. Without the overlay it
+defaults to `wpan0`, so nothing changes for anyone not using remote radios.
+
+The Matter SDK hardcodes `wpan0` upstream. BartonCore carries a patch,
+`third_party/matter/barton-library/patches/0004-*`, that adds
+`ThreadStackManagerImpl::SetThreadInterfaceName()`.
+
+otbr-agent publishes its services with mDNSResponder (`mdnsd`) rather than
+avahi. Avahi is reached over D-Bus, and only one `org.freedesktop.Avahi` can
+exist on the shared bus; mDNSResponder uses a local socket instead.
+
+### How Matter discovery stays private
+
+Thread devices do not use mDNS on the mesh. They register their services with
+your border router over SRP, and otbr republishes them as mDNS on its backbone,
+the `<user>-remote-radios` Docker network. Matter's queries go out on that
+network and your `mdnsd` answers. mDNS is link-local multicast, which never
+leaves the network it was sent on, and Docker drops traffic between networks,
+so you never discover another developer's devices. Once a device is found,
+Matter talks to it by unicast IPv6: `./dockerw -T` installs a route for
+`fd00::/8` via your border router, which forwards onto your Thread mesh.
+
+This is why `./dockerw -T` refuses `-H` (host networking). On the host network
+your container would be on every developer's Docker networks at once.
+
+### How BLE adapter selection works
+
+The dev server runs a single `bluetoothd` for everyone. The kernel only allows
+Bluetooth sockets in the host's network namespace, and `bluetoothd` cannot be
+limited to one adapter, so a second daemon would fight the first over every
+dongle. One daemon managing many adapters is what BlueZ is designed for.
+
+The `remote-radios` entrypoint attaches your dongle over usb-ip, identifies the
+newly-created HCI index (e.g. `hci1`), and writes it to
+`/var/run/remote-radios-dbus/ble_adapter_id`. Barton reads this (or the
+`device.matter.bleAdapterId` property) to choose your adapter from the ones the
+shared daemon manages.
+
+### Sharing the radios with other projects
+
+One forwarder, and one `remote-radios` container, serve every project you work
+on. The container is the hub: it owns the physical radios and publishes them, so
+other stacks do not each attach the hardware themselves.
+
+| Consumer | Gets Thread/Zigbee via | Gets Bluetooth via |
+|---|---|---|
+| `barton` devcontainer | your otbr-agent, over the dev server's D-Bus | BlueZ, over the dev server's D-Bus |
+| ZigbeeCore (`remote-zigbee` container) | the radios container's cpcd, shared with Thread | BlueZ, over the dev server's D-Bus |
+| zilker | BartonCore's device service | BartonCore's device service |
+| HH4 (QEMU guest) | the Silabs socket directly, under a claim | attaches the dongle itself over usb-ip |
+
+Everything that runs on the dev server shares its kernel, so it can consume the
+radios container concurrently over sockets and D-Bus. A **VM guest cannot**: it has its own
+kernel and its own BlueZ, so it needs the devices themselves.
+
+Both radios are therefore exclusive, and consumers take turns rather than
+compete:
+
+- **Silabs radio** — the workstation relay serves one client at a time. A
+  consumer that wants it creates `~/.remote-radios/claims/silabs.claim`. The
+  container watches that file, stops cpcd and its socat bridge while it exists,
+  and reclaims the radio once it is removed. HH4's `hh4-run.sh` takes this
+  claim and releases it on exit, including on interrupt, so handover needs no
+  manual steps. Zigbee does not need it: it shares the radios container's cpcd.
+- **Bluetooth dongle** — a usb-ip device can be attached by one host only, and
+  the kernel grants exclusive access per `hciN` (a second stack binding it gets
+  `-EBUSY` or `-EUSERS`). When an HH4 guest attaches the dongle the container
+  loses it; the container's monitor re-attaches it when the guest shuts down.
+
+There is no supported way to share one Bluetooth controller between two stacks.
+If you need the container and a VM guest to have Bluetooth **at the same time**,
+use a second dongle — the forwarder exports both, and each consumer attaches its
+own.
+
+Claims are advisory and per-user. The claims directory lives inside your own
+`~/.remote-radios`, so it never affects another developer on the same server.
+
+---
+
+## One-time setup (on your workstation)
+
+### Linux workstations
+
+Run the setup on your **Ubuntu workstation** where the radios are plugged in.
+You do not need a BartonCore checkout there — the workstation is not where you
+do development, so the setup installs what it needs into
+`~/.config/remote-radios/bin/` and runs from there:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rdkcentral/BartonCore/main/scripts/remote-radios/remote-radios-setup.sh \
+  | bash -s -- <user>@<devserver>
 ```
-  Workstation                          Dev Server (Docker host)
-  ┌──────────────────┐                ┌───────────────────────────────┐
-  │ BRD2703 radio    │                │  otbr-radio container         │
-  │ /dev/ttyACM0     │                │  ┌─────────────────────────┐  │
-  │       │          │                │  │ socat (TCP→PTY bridge)  │  │
-  │       ▼          │                │  │   /dev/ttyRadio         │  │
-  │ remote-serial.py │   SSH tunnel   │  │       │                 │  │
-  │ (serial→TCP      │───────────────▶│  │       ▼                 │  │
-  │  relay + SSH -R) │  port 21234    │  │     cpcd                │  │
-  │                  │                │  │   (same as local USB)   │  │
-  └──────────────────┘                │  └─────────────────────────┘  │
-                                      └───────────────────────────────┘
+
+From a checkout it is the same command without the download:
+
+```bash
+scripts/remote-radios/remote-radios-setup.sh <user>@<devserver>
 ```
 
-The tunnel is self-healing — if the SSH connection drops, `remote-serial.py`
-automatically reconnects. The socat bridge inside the container also reconnects
-automatically.
+Either way it detects your radios, saves the choice under
+`~/.config/remote-radios/`, and installs a per-user systemd service that keeps
+both radios forwarded (one-time `sudo`).
 
-#### Prerequisites
+To install from a branch other than `main`, point it at that ref — the variable
+has to be set on `bash`, not on `curl`:
 
-1. **Python 3.10+** and **pyserial** on the workstation:
+```bash
+curl -fsSL https://raw.githubusercontent.com/rdkcentral/BartonCore/<ref>/scripts/remote-radios/remote-radios-setup.sh \
+  | REMOTE_RADIOS_REF=<ref> bash -s -- <user>@<devserver>
+```
+
+The script exits once the service is running — you do not leave it open in a
+terminal. Check on it with:
+
+```bash
+systemctl --user status remote-radios.service
+journalctl --user -u remote-radios.service -f
+```
+
+### Updating an existing workstation
+
+Re-run setup. It upgrades itself in place:
+
+```bash
+~/.config/remote-radios/bin/remote-radios-setup.sh
+```
+
+No arguments are needed — the dev server, the chosen radios and the dongle are
+read back from `~/.config/remote-radios/config`, so this is non-interactive.
+
+Each run refreshes `remote-radios-setup.sh` and `remote-serial.py` from the
+repository, and if the setup script itself changed it re-executes the new copy
+so the upgrade is carried out by the newer version rather than the one you
+started. The files are replaced by rename rather than overwritten in place,
+because a shell reads a script lazily as it runs and rewriting the file
+underneath a running one corrupts it.
+
+Only what actually changed is acted on: the service is restarted when the
+runtime, the root helpers or the unit changed, and left alone otherwise. If the
+workstation is offline, or the ref no longer exists, the run warns and keeps the
+installed copy instead of failing.
+
+The installed layout is versioned in `~/.config/remote-radios/version`, so a
+workstation set up by an older release is migrated rather than just overwritten
+— stopping and removing the superseded `remote-radios-usbip.service`, and
+deleting the old sudo helper that used to live under `$HOME`.
+
+The ref a workstation was installed from is remembered as `SETUP_REF` in
+`~/.config/remote-radios/config`, and re-runs track that same ref. A workstation
+installed from a branch or a commit therefore stays on it, instead of silently
+replacing itself with whatever is currently on `main`. Set `REMOTE_RADIOS_REF`
+explicitly to move it to a different ref.
+
+The `curl | bash` one-liner above also upgrades an existing install, so either
+entry point works.
+
+The script:
+
+1. **Installs its runtime** to `~/.config/remote-radios/bin/`
+   (`remote-radios-setup.sh` and `remote-serial.py`), copying from a checkout
+   when run from one and downloading them otherwise. The service always runs
+   the installed copy, so the workstation never needs a checkout and nothing
+   breaks if one is moved or deleted later. These run as you, never as root —
+   unlike the sudo helpers below, which is why they can live under `$HOME`.
+2. **Detects radios.** The Silabs serial radio is matched by USB VID:PID. A
+   dedicated Bluetooth dongle is auto-selected **unless** it is the adapter
+   your workstation's own bluetoothd is using. If there are multiple candidates
+   for either, you are prompted to choose.
+3. **Saves your choice** to `~/.config/remote-radios/config` (keyed by the
+   radio's stable USB serial / busid, plus the dev server) so the service can
+   run without arguments and later runs are non-interactive.
+4. **Verifies it can reach the dev server** over SSH before installing anything
+   that claims to maintain a connection to it.
+5. **Installs the privileged helpers.** A one-time `sudo` installs two
+   root-owned helpers under `/usr/local/lib/remote-radios/` and a narrow
+   sudoers rule granting the `remote-radios` group passwordless access to
+   **those two commands only**. See [Privileges](#privileges) below. This step
+   is skipped entirely if you have no Bluetooth dongle.
+6. **Installs and starts `remote-radios.service`.** One user unit owns the
+   whole workstation side: it runs `usbipd` and keeps the dongle exported
+   (re-binding it if anything hands it back to the kernel's own driver), runs
+   both SSH tunnels, and writes `~/.remote-radios/radios.env` on the dev server
+   for `docker/setupDockerEnv.sh` to source.
+
+The service is wanted by `default.target`, so it **starts at login and stops at
+logout**. Nothing is left running on the workstation when you are not logged
+in, and there is no separate step after a reboot — log in and the radios are
+forwarded.
+
+While it runs it self-heals: it restarts dropped tunnels, tears everything down
+cleanly when the dev server becomes unreachable and re-establishes when it
+returns, and picks up radios that are **plugged in after login** rather than
+requiring them to be present at start.
+
+> The service runs the copy in `~/.config/remote-radios/bin/`, so moving or
+> deleting a checkout does not break it. Re-run the setup to pick up an updated
+> version.
+
+Re-run the script any time to change the dev server, re-detect radios after a
+hardware change, or pick up an updated checkout; it restarts the service only
+when something actually changed.
+
+### More than one workstation
+
+You can set up several workstations, an office machine and a laptop say, but
+only one of them forwards at a time: they all forward to the same sockets in
+your `~/.remote-radios` on the dev server. Whichever is forwarding holds a
+lease, `~/.remote-radios/owner` on the dev server, and refreshes it every 30
+seconds. Your other workstations **stand by**: they open no tunnels, and their
+dongles stay with their own Bluetooth. Their journal says who has the radios:
+
+```text
+Radios for you@devserver are being forwarded from other-workstation (forwarding since …); standing by.
+```
+
+A standing-by workstation takes over by itself when the lease is released,
+because the forwarding workstation stopped its service or logged out, or when
+the lease goes stale, because that workstation vanished without stopping (a
+closed laptop, a lost VPN connection) and has not refreshed it for two minutes.
+
+To switch immediately instead, run this on the workstation you want to use:
+
+```bash
+~/.config/remote-radios/bin/remote-radios-setup.sh --take-over
+```
+
+It claims the lease, waits about 45 seconds for the other workstation to
+notice and stand down, then restarts the local service. The other workstation
+stops forwarding without touching the sockets on the dev server, and its
+dongle returns to its own Bluetooth. The radios container on the dev server
+switches to the new radios by itself.
+
+Isolation is per dev-server **user account**. Two developers with different
+accounts never contend; this lease only arbitrates between your own
+workstations.
+
+Every one of your workstations must run a version of the setup that includes
+the lease: an older one ignores it and will fight the others for the sockets.
+Re-run the setup on each to update it.
+
+### Windows workstations
+
+`remote-radios-setup.sh` is a Bash script and needs systemd and the in-tree
+usb-ip tools, so it does not run on Windows. Use `remote-serial.py` directly
+instead — it is the same forwarder core the setup script drives, and it is
+cross-platform:
+
+```powershell
+# Install the prerequisites once.
+pip install pyserial
+winget install usbipd
+
+# Share the Bluetooth dongle (admin shell, once per dongle).
+usbipd list                  # note the BUSID
+usbipd bind --busid 2-4
+
+# Forward both radios.
+python remote-serial.py <user>@<devserver> --usbip
+```
+
+Differences from the Linux path:
+
+- **Binding is explicit.** On Linux the setup script installs a privileged
+  helper that binds the dongle and re-binds it if the kernel takes it back. On
+  Windows `usbipd bind` is a one-time administrator action that persists, so
+  `remote-serial.py` performs it when needed and no helper is installed.
+- **No service is installed.** Keep the terminal open while you work; the
+  script tears the tunnels down when you stop it.
+- **Serial ports are named `COMn`.** Auto-detection handles this; override with
+  `--port COM3` if several radios are attached.
+
+`--usbip` on its own auto-selects the dongle; pass `--usbip <BUSID>` to choose
+explicitly, or `--no-serial` to forward only Bluetooth.
+
+### Prerequisites
+
+**Workstation:** Ubuntu, connected to the corporate VPN, with passwordless SSH
+(key auth) to the dev server. Required packages:
+
+```bash
+sudo apt-get install -y openssh-client usbip python3 socat
+pip install --user pyserial
+```
+
+(`usbip` is provided by the `usbip` or `linux-tools-generic` package.)
+
+**Dev server:** Docker with your user in the `docker` group. No `sudo` is
+needed on the dev server for usb-ip — the dongle is attached **inside** the
+privileged container. The dev server needs two things set up once, by an
+administrator, for all developers:
+
+1. **Its own Bluetooth daemon must be running.** Every developer's dongle is
+   handed to it:
 
    ```bash
-   pip install pyserial
+   sudo systemctl unmask bluetooth.service
+   sudo systemctl enable --now bluetooth.service
    ```
 
-2. **SSH key authentication** from your workstation to the dev server (no
-   password prompts).
+   (An older version of this guide said to mask `bluetooth.service`; unmask it.)
 
-3. **`GatewayPorts clientspecified`** in the dev server's sshd config:
+2. **A D-Bus policy for the border routers.** Each developer's otbr-agent
+   registers on the system bus as `io.openthread.BorderRouter.wpan<uid>`, and
+   the default system-bus policy denies it:
 
+   ```bash
+   sudo install -m 0644 docker/remote-radios-host-dbus.conf \
+       /etc/dbus-1/system.d/remote-radios.conf
    ```
-   # /etc/ssh/sshd_config on the dev server
-   GatewayPorts clientspecified
-   ```
 
-   Then restart sshd: `sudo systemctl restart sshd`
+   The policy only covers `io.openthread.BorderRouter.*` names: otbr-agent
+   (root in each container) may own them and local users may call them. Any
+   developer on the server can therefore call any border router, not only
+   their own. `dbus-daemon` picks the file up automatically.
 
-#### Quick Start
+### Privileges
 
-**Step 1 — On your workstation** (where the radio is plugged in):
+`usbipd` and `usbip bind` require root on the workstation. Rather than asking
+for a password on every run, the setup script installs, on first use:
+
+| What | Where | Ownership |
+|---|---|---|
+| `usbipd-bind.sh` | `/usr/local/lib/remote-radios/` | `root:root`, mode `0755` |
+| `usbipd-release.sh` | `/usr/local/lib/remote-radios/` | `root:root`, mode `0755` |
+| sudoers rule | `/etc/sudoers.d/remote-radios` | `root:root`, mode `0440` |
+
+```text
+%remote-radios ALL=(root) NOPASSWD: /usr/local/lib/remote-radios/usbipd-bind.sh, \
+                                    /usr/local/lib/remote-radios/usbipd-release.sh
+```
+
+The grant is deliberately given to a group rather than a named user, so one
+install serves every developer on a shared workstation. The helpers live
+outside `$HOME` because a root-executed script in a directory the invoking user
+can write to is equivalent to handing that user passwordless root — they can
+simply rewrite the script. Being root-owned and not group-writable is what
+keeps the grant as narrow as it looks. The helpers also validate their busid
+argument, since a sudoers entry listing a command with no argument list permits
+any arguments.
+
+Group membership is only applied to new login sessions. On first install the
+script adds you to `remote-radios` and then stops, asking you to log out and
+back in (or run `newgrp remote-radios`) before re-running it.
+
+To grant another developer access on the same workstation:
 
 ```bash
-python3 scripts/remote-radio/remote-serial.py <user>@<devserver>
+sudo usermod -aG remote-radios <user>
 ```
 
-The script auto-detects the radio, starts a TCP relay, and opens an SSH reverse
-tunnel. Leave this terminal open.
+### Command-line options
 
-Example output:
+`remote-radios-setup.sh <user>@<devserver>` is normally all you need. It stores
+state per-user and is idempotent. Delete `~/.config/remote-radios/config` to
+force re-detection.
 
-```
-[remote-serial] OK: Auto-detected radio: /dev/ttyACM0 (Silicon Labs CP210x)
-[remote-serial] OK: Remote UID: 1234
-[remote-serial] OK: Tunnel port: 21234
-[remote-serial] OK: TCP server listening on 127.0.0.1:21234
-
-=======================================
- REMOTE SERIAL TUNNEL ACTIVE
-=======================================
- Radio:       /dev/ttyACM0
- Local TCP:   127.0.0.1:21234
- Tunnel port: 21234 on remote (all interfaces)
-=======================================
-
-    RADIO_PORT=21234
-```
-
-**Step 2 — On the dev server** (or in your devcontainer):
+Under the hood it invokes `scripts/remote-radios/remote-serial.py`, which can
+also be run standalone:
 
 ```bash
-RADIO_PORT=21234 ./dockerw -T bash
-```
-
-Or add `RADIO_PORT=21234` to `docker/.env`.
-
-**Step 3 — Validate** (inside the Barton or otbr-radio container):
-
-```bash
-scripts/remote-radio/validate.sh
-```
-
-#### Port Isolation on Shared Servers
-
-The tunnel port is computed as `20000 + UID` on the remote server. Each
-developer on a shared server gets a unique port automatically:
-
-| UID | Port |
-|-----|------|
-| 1234 | 21234 |
-| 1235 | 21235 |
-| 1236 | 21236 |
-
-#### Command-Line Options
-
-```
-usage: remote-serial.py [-h] [--port PORT] [--baud BAUD] ssh_target
-
-positional arguments:
-  ssh_target            SSH target (e.g. user@hostname)
-
-options:
-  --port PORT           Serial port path (auto-detected if omitted)
-  --baud BAUD           Baud rate (default: 115200)
+python3 scripts/remote-radios/remote-serial.py <user>@<devserver> \
+    [--port /dev/ttyACM0] [--socket ~/.remote-radios/radios/silabs.sock]
 ```
 
 ---
 
-## Starting the Real-Radio Container
+## Starting the devcontainer with radios
+
+Once the workstation setup is running, start the radio overlay on the dev
+server. The radio parameters flow in automatically from
+`~/.remote-radios/radios.env`.
 
 ### CLI (`dockerw`)
 
-Use the `-T` flag to add `docker/compose.otbr-radio.yaml` to the compose stack:
-
 ```bash
-# Local USB radio:
-RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T bash
-
-# Remote serial tunnel:
-RADIO_PORT=21234 ./dockerw -T bash
+./dockerw -T bash
 ```
 
-To override the backbone interface:
+`-T` layers in `docker/compose.remote-radios.yaml` and starts the
+`remote-radios` container if it is not already running, then opens the Barton
+shell pointed at the dev server's D-Bus and your border router, with a route to
+your Thread network installed. `-T` cannot be combined with `-H`.
+
+### Zigbee
+
+Zigbee comes from ZigbeeCore's `remote-zigbee` container, which runs zigbeed and
+ZigbeeCore against the radios container's cpcd. The multi-PAN radio serves both
+networks at once: otbr-agent uses spinel interface 2 and zigbeed interface 1,
+on the same channel. Set it up once from a ZigbeeCore checkout (see "Remote
+radios" in its README):
 
 ```bash
-RADIO_DEVICE=/dev/ttyACM1 BACKBONE_IF=eth1 ./dockerw -T bash
+./dockerw ./build.sh             # in ZigbeeCore
+scripts/remote-zigbee.sh up      # zigbeed and ZigbeeCore
 ```
 
-This creates two containers: `barton` and `otbr-radio`.
+That records the checkout in `~/.remote-radios/zigbee.env`. From then on
+`./dockerw -T` starts the container whenever it is not running, and points
+Barton at it by setting `ZIGBEE_CORE_IP=remote-zigbee`. ZigbeeCore is reached
+over your private radios network, and sends its events back to the barton
+container at its alias `barton` there. If two of your workspaces run at once,
+both answer to that alias; only one can usefully use Zigbee anyway.
 
-To check the logs:
-
-```bash
-docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml logs -f otbr-radio
-```
-
-Expected log progression:
-
-1. `Using USB radio device: /dev/ttyACM0` (or `Remote serial mode: connecting to ...`)
-2. `Connected to Secondary` / `Secondary CPC v4.4.6`
-3. `Daemon startup was successful`
-4. `bt_host_cpc_hci_bridge ready`
-5. `Radio HCI device: hci1 (index 1)`
-6. `bluetoothd started`
-7. `Starting otbr-agent`
+Without it, `./dockerw -T` says so, and Barton must be run with Zigbee disabled
+(`-z` for the reference app); otherwise it waits for a ZigbeeCore that never
+answers.
 
 ### Devcontainer (VS Code)
 
-`compose.otbr-radio.yaml` is **not** part of the default devcontainer stack.
-Including it unconditionally would force every devcontainer user to build and
-start the privileged `otbr-radio` container and would repoint `barton`'s
-`DBUS_SYSTEM_BUS_ADDRESS` at a private socket that only exists when a radio is
-configured — breaking simulated Thread/Zigbee D-Bus for everyone else. So the
-real radio is opt-in, matching the `dockerw -T` CLI path.
-
-To use the real radio from a devcontainer, open a terminal inside the `barton`
-container and start the stack with the CLI wrapper:
-
-```bash
-# Local radio:
-RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T bash
-
-# Remote tunnel:
-RADIO_PORT=21234 ./dockerw -T bash
-```
-
-`dockerw -T` layers in `compose.otbr-radio.yaml`, starts the `otbr-radio`
-container, and injects `DBUS_SYSTEM_BUS_ADDRESS` automatically. The default
-devcontainer continues to use the standard system bus, so simulated OTBR and
-other D-Bus flows keep working untouched.
+The overlay is intentionally **not** in the default devcontainer stack (it
+would force every developer to build a privileged container and repoint D-Bus).
+Use the `dockerw -T` CLI path from within the devcontainer for forwarded
+radios.
 
 ---
 
-## Verifying the Full Stack
+## Local radio (radio on the dev server itself)
 
-Run the validation script from inside the Barton container:
-
-```bash
-scripts/remote-radio/validate.sh
-```
-
-This checks:
-
-- Container environment (privileged mode, required binaries)
-- D-Bus socket and daemon
-- Radio connection (local USB or remote serial tunnel)
-- CPC daemon and sockets
-- BLE chain (bridge → btattach → bluetoothd)
-- HCI adapter and transport health
-- BLE scanning capability
-- otbr-agent and Thread interface
-- Known pitfalls
-
-Options: `--json` for machine-readable output, `--fix` for auto-remediation.
-
-### Manual D-Bus Verification
-
-From inside either container, query the OTBR D-Bus interface:
+If a Silabs radio is physically attached to the dev server, set `SILABS_DEVICE`
+instead of using the tunnel:
 
 ```bash
-gdbus introspect \
-    --address unix:path=/var/run/otbr-dbus/system_bus_socket \
-    --dest io.openthread.BorderRouter.wpan0 \
-    --object-path /io/openthread/BorderRouter/wpan0
+SILABS_DEVICE=/dev/ttyACM0 ./dockerw -T bash
 ```
 
-Read the current Thread device role:
+A dev-server-attached Bluetooth dongle can likewise be bound with `usbip` on the
+dev server and pointed at via `BT_USBIP_SOCKET` (a bind-mounted usbipd socket).
+
+---
+
+## Environment variables
+
+These are populated automatically by `remote-radios-setup.sh` →
+`~/.remote-radios/radios.env` → `docker/setupDockerEnv.sh`. Override by
+exporting before `dockerw`.
+
+| Variable | Meaning |
+|---|---|
+| `SILABS_SOCKET` | Path of the Silabs tunnel socket **inside** the container (default `/run/remote-radios/radios/silabs.sock`) |
+| `SILABS_SOCKET_HOST` | Host path of that socket on the dev server (bind-mount source) |
+| `SILABS_DEVICE` | Host path of a locally-attached Silabs USB radio (alternative to the tunnel) |
+| `BT_USBIP_SOCKET` | Container path of the bind-mounted usbipd socket for the dongle (empty ⇒ no BLE) |
+| `BT_USBIP_BUSID` | Remote busid to attach (default: auto-detect) |
+| `RADIO_CLAIM_DIR` | Container path of the claims directory (default `/run/remote-radios/claims`) |
+| `RADIO_CLAIM_DIR_HOST` | Host path of that directory (bind-mount source, read-only in the container) |
+| `BACKBONE_IF` | Thread backbone interface (default: host default route) |
+| `ZIGBEE_CORE_IP` | Address or host name of ZigbeeCore, used when the `ZIGBEE_CORE_IP` system property is unset. `./dockerw -T` sets it to `remote-zigbee` when Zigbee is set up |
+| `REMOTE_RADIOS_THREAD_INTERFACE` | Your Thread interface, `wpan<uid>`. Passed to otbr-agent as `-I` and to Barton as `BARTON_THREAD_INTERFACE` |
+
+---
+
+## Verifying the full stack
+
+Run the validator from the dev server host, where it finds the `remote-radios`
+container and re-execs into it automatically:
 
 ```bash
-gdbus call \
-    --address unix:path=/var/run/otbr-dbus/system_bus_socket \
-    --dest io.openthread.BorderRouter.wpan0 \
-    --object-path /io/openthread/BorderRouter/wpan0 \
-    --method org.freedesktop.DBus.Properties.Get \
-    io.openthread.BorderRouter DeviceRole
+scripts/remote-radios/validate.sh          # human-readable
+scripts/remote-radios/validate.sh --json   # machine-readable
 ```
 
-### D-Bus Configuration
+It also runs directly inside the `remote-radios` container. It does **not** run
+from the Barton devcontainer: that container has neither the Docker CLI nor the
+Docker socket, so it cannot reach the radio container to re-exec into it.
 
-The `dbus-socket` volume shares `/var/run/otbr-dbus` between containers. To
-reach the private D-Bus daemon, `DBUS_SYSTEM_BUS_ADDRESS` must point to it:
+It checks the dev server's D-Bus, the Silabs socket/socat/`/dev/ttyRadio`/cpcd
+chain, otbr-agent and its registration on the shared bus, `mdnsd` and the
+border router's MeshCoP advertisement, and (when a dongle is configured) usb-ip
+reachability, the imported device, the dongle's HCI adapter, the dev server's
+`bluetoothd`, `ble_adapter_id`, and a BLE scan that must see at least one
+device. When the `remote-zigbee` container is running it also checks that
+zigbeed is attached to the radio and that otbr-agent is on the other spinel
+interface.
 
-- **`dockerw -T`**: Injected automatically.
-- **Devcontainer**: Set in `docker/.env` or export before rebuilding:
-
-  ```bash
-  export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/otbr-dbus/system_bus_socket
-  ```
-
-### BLE Verification
-
-The BlueZ CLIs (`hciconfig`, `bluetoothctl`) ship only in the `otbr-radio`
-container — the `barton` container talks to BlueZ over D-Bus and does not
-install the `bluez` package. Read the adapter ID file from either container,
-but run the BLE-adapter checks inside `otbr-radio`:
+### Manual BLE verification
 
 ```bash
-# Verify the adapter ID file (either container)
-cat /var/run/otbr-dbus/ble_adapter_id
-
-# Check HCI devices and controllers from the otbr-radio container
-docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml \
-    exec otbr-radio nsenter --net=/run/host-netns hciconfig
-docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml \
-    exec otbr-radio nsenter --net=/run/host-netns bluetoothctl list
+# From the remote-radios container:
+cat /var/run/remote-radios-dbus/ble_adapter_id
+nsenter --net=/run/host-netns hciconfig
+nsenter --net=/run/host-netns bluetoothctl list
 ```
-
-Expected: two HCI devices — the host's built-in adapter (e.g. `hci0`) and the
-radio's BLE adapter (e.g. `hci1`). The `ble_adapter_id` file should contain
-the index of the radio's adapter.
 
 ---
 
 ## Teardown
 
-### Stopping the otbr-radio container
+- **Workstation:** `systemctl --user stop remote-radios.service`. That releases
+  the lease, removes the remote sockets and env hint, stops both tunnels, and
+  returns the dongle to the normal kernel driver so your workstation's own
+  Bluetooth can use it again. To stop it coming back at the next login, add
+  `systemctl --user disable remote-radios.service`.
+- **Dev server:** stop your radios container with
 
-```bash
-docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml rm -sf otbr-radio
-```
+  ```bash
+  cd docker
+  docker compose -p "$USER-remote-radios" -f compose.yaml -f compose.remote-radios.yaml down
+  ```
 
-### Stopping the remote serial tunnel
+Teardown also happens automatically when the dev server becomes unreachable,
+and the service stops at logout.
 
-Press `Ctrl-C` in the terminal running `remote-serial.py` on your workstation.
+The radios container does **not** need stopping when your workstation goes
+away. It keeps running without the radios, and connects them again as soon as
+a workstation forwards them, whether that is the same one or another of yours.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `InitCommissioner` fails with `CHIP_ERROR_INCORRECT_STATE` | Default `CertifierOperationalCredentialsIssuer` requires an auth token | Build with dev platform: `cmake -C config/cmake/platforms/dev/linux.cmake ..` to use `SelfSignedCertifierOperationalCredentialsIssuer` |
-| Only `hci0` visible, no `hci1` | `btattach` failed or radio disconnected | Run `scripts/remote-radio/validate.sh` to diagnose; the entrypoint's BLE monitor should auto-restart `btattach` |
-| `ble_adapter_id` contains `0` | Radio BLE bridge didn't create a new HCI device | Check otbr-radio logs for `bt_host_cpc_hci_bridge` errors |
-| OpenSSL link errors during build | Stale OpenSSL 1.1.1 in `/usr/local/openssl/` | Remove it: `sudo rm -rf /usr/local/openssl /usr/local/lib/libcurl*` and reconfigure |
-| `DBUS_SYSTEM_BUS_ADDRESS` not set | Barton connects to system D-Bus instead of otbr-radio's private bus | Export it or use `dockerw -T` which injects it automatically |
-| Remote tunnel not reachable | SSH tunnel not binding or IPv6/IPv4 mismatch | Check `remote-serial.py` output; ensure `GatewayPorts clientspecified` in sshd_config |
-| socat/ttyRadio not created | Remote serial tunnel not yet running | Start `remote-serial.py` on workstation before starting containers |
+- **Nothing is forwarded after logging in** — check the service first:
+  `systemctl --user status remote-radios.service`, then
+  `journalctl --user -u remote-radios.service -b`. If the unit does not exist,
+  the setup script has not been run on this workstation.
+- **The service exits with "No radios configured"** — the saved config is
+  missing or empty. Re-run `remote-radios-setup.sh <user>@<devserver>`.
+- **The service logs `sudo: a password is required`** — your login session does
+  not have the `remote-radios` group yet. Log out and back in; the service
+  picks it up on the next login.
+- **A radio plugged in after login is not picked up** — it should be within
+  ~10 seconds; the service polls for it. Check the journal for
+  `Silabs radio appeared` or `Bluetooth dongle ... appeared`. If the radio is a
+  different unit than the one saved, re-run the setup script to re-detect.
+- **The container logs "Silabs tunnel socket … is not present yet — starting
+  without it"** — no workstation is forwarding the radio. Check that
+  `remote-radios.service` is active on the workstation you are using and that
+  your VPN is up. The container connects the radio by itself once it arrives;
+  it does not need restarting.
+- **Your workstation's journal says it is "standing by"** — another of your
+  workstations holds the radios. Stop the service there, or run
+  `remote-radios-setup.sh --take-over` here; see
+  [More than one workstation](#more-than-one-workstation).
+- **"usb-ip service not reachable"** — the reverse tunnel or `usbipd` on the
+  workstation is down; check the service journal, or re-run the setup script.
+- **"no new HCI device appeared after usb-ip attach"** — confirm the dongle is
+  bound on the workstation (`usbip list -l`) and that the `vhci-hcd`/`usbip`
+  kernel modules are available on the dev server.
+- **BLE picks the wrong adapter** — check `ble_adapter_id`; set
+  `device.matter.bleAdapterId` explicitly if needed.
+- **The Silabs radio is connected but silent** — cpcd sends, nothing comes
+  back. This is usually the wrong RTS/CTS mode: some USB-serial adapters do not
+  drive the hardware flow-control lines, so requesting flow control leaves RTS
+  deasserted and the radio never transmits. `remote-serial.py` detects the
+  signature (bytes flowing one way only) and flips the mode once automatically,
+  logging `flipping RTS/CTS flow control`. To skip the six-second detection
+  window, pass `--rtscts` or `--no-rtscts` explicitly.
+- **cpcd keeps stopping, or the log says "Silabs radio claimed via ..."** — this
+  is the claim protocol working. An `hh4-run.sh` guest is using the radio, so
+  the container released it
+  and is waiting. It reclaims the radio automatically once that run exits. If a
+  stale claim is left behind after a crash, delete
+  `~/.remote-radios/claims/silabs.claim`.
+- **The reference app stops after "Using defaults" and prints nothing more** —
+  Barton is waiting for ZigbeeCore. Set up the `remote-zigbee` container (see
+  "Zigbee" above), or disable Zigbee (`-z`). If the container is running, check
+  `docker logs $USER-remote-zigbee` and the validator's Zigbee section.
+- **The validator reports "org.bluez absent" or "Controller hciN not
+  available to the dev server's bluetoothd"** — the dev server's
+  `bluetooth.service` is not running, or is masked. See the dev server
+  prerequisites above.
+- **"Border router on shared bus … not registered", or Matter logs
+  `ServiceUnknown: The name io.openthread.BorderRouter.wpan<uid> was not
+  provided`** — the dev server is missing the D-Bus policy
+  (`/etc/dbus-1/system.d/remote-radios.conf`; see the prerequisites), or
+  otbr-agent is still starting. otbr-agent registers about a minute after the
+  container starts.
+- **Matter finds a Thread device but cannot reach it** — check for the route
+  with `ip -6 route show fd00::/8` in the Barton container. `./dockerw -T` and
+  the devcontainer install it automatically; run
+  `docker/setup-thread-routes.sh` to add it by hand.
+- **BLE scan finds zero devices** — treated as a failure, not a warning: an
+  adapter that is present but deaf is indistinguishable from a working one by
+  any other check. Confirm the dongle's antenna and placement. Remember it
+  scans what is near *the workstation forwarding the dongle*, not near you.
+- **BLE stops working while an HH4 guest is running** — expected. A usb-ip
+  dongle can be attached by one host at a time, so the guest took it. The
+  container's monitor re-attaches it when the guest shuts down. For simultaneous
+  use, add a second dongle.
+- **`sudo: a password is required` when the usb-ip service starts** — you are
+  not yet in the `remote-radios` group in this session. Log out and back in (or
+  `newgrp remote-radios`) and re-run the setup script.
+- **Stopping the service does not release the dongle** — verify the unit has an
+  `ExecStopPost=` line invoking `usbipd-release.sh`. A user systemd manager
+  cannot signal the root-owned bind helper directly, so the release helper is
+  what actually reclaims the device.

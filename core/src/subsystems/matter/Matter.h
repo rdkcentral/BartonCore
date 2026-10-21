@@ -296,7 +296,7 @@ namespace barton
          * Selection order:
          *   1. The device.matter.bleAdapterId runtime property (set by the reference
          *      app from the BARTON_BLE_ADAPTER_ID environment variable or CLI argument).
-         *   2. The adapter index file written at /var/run/otbr-dbus/ble_adapter_id.
+         *   2. The adapter index file written at /var/run/remote-radios-dbus/ble_adapter_id.
          *   3. Falls back to hci0.
          *
          * @return the HCI adapter index to pass to BLEMgrImpl::ConfigureBle()

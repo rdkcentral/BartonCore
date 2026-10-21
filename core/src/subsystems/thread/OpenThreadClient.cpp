@@ -50,6 +50,7 @@ Licensed under the BSD-3 License
 extern "C" {
 #include "glib.h"
 #include "icLog/logging.h"
+#include "threadSubsystem.h"
 }
 
 #include "OpenThreadClient.hpp"
@@ -595,7 +596,8 @@ namespace barton
             icDebug("dbus dispatch thread terminated");
         }).detach();
 
-        threadApiBus = std::unique_ptr<ThreadApiDBus>(new ThreadApiDBus(dbusConnection.get()));
+        threadApiBus = std::unique_ptr<ThreadApiDBus>(
+            new ThreadApiDBus(dbusConnection.get(), threadSubsystemGetInterfaceName()));
 
         if (threadApiBus)
         {
