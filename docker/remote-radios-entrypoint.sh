@@ -380,10 +380,12 @@ bt_usbip_attach() {
         modprobe btusb 2>/dev/null || true
     fi
 
-    # Clear a stale port left by a previous unclean session of THIS user's
-    # container — usb-ip can otherwise reject a fresh attach with "Device in
-    # error state".  Other users' imported ports are never touched.
-    bt_usbip_detach
+    # A record left by an earlier, unclean run cannot prove the port is still
+    # ours: the vhci controller is shared, and another developer may since have
+    # attached a device with the same id on that port.  Drop it without
+    # detaching; our old usb-ip connection died with that run, which frees its
+    # port.
+    rm -f "${BT_USBIP_PORT_FILE}"
 
     # The workstation's usbipd is reverse-tunnelled to a bind-mounted UNIX
     # socket (BT_USBIP_SOCKET).  usbip speaks TCP, so bridge the socket to a
@@ -529,17 +531,16 @@ bt_usbip_record_port() {
     echo "[remote-radios] Bluetooth dongle attached on vhci port ${port}"
 }
 
-# bt_usbip_detach [this-session] — detach only the usb-ip port this user's
-# container attached.  A port in the error state no longer reports its devid,
-# so it is detached only with "this-session", i.e. when this container attached
-# it during this run.  A record left by an earlier, unclean run may name a port
-# that was since reused by another developer, so then only a devid match counts.
+# bt_usbip_detach — detach the usb-ip port this container attached during this
+# run (teardown only; a record from an earlier run is discarded at startup).
+# The port must still carry our device, or be in the error state, where its
+# devid is no longer reported.
 bt_usbip_detach() {
     [ -r "${BT_USBIP_PORT_FILE}" ] || return 0
     local port devid
     read -r port devid < "${BT_USBIP_PORT_FILE}" || true
     if [ -n "${port}" ] && { vhci_used_ports | grep -qx "${port} ${devid}" \
-        || { [ "${1:-}" = this-session ] && vhci_ports_in_state 007 | grep -q "^${port} "; }; }; then
+        || vhci_ports_in_state 007 | grep -q "^${port} "; }; then
         echo "[remote-radios] Detaching Bluetooth dongle from vhci port ${port}"
         usbip detach -p "${port}" 2>/dev/null || true
     fi
@@ -635,7 +636,7 @@ teardown_bluetooth_chain() {
     if [ -n "${BT_HCI_INDEX:-}" ]; then
         nsenter --net="${HOST_NETNS}" hciconfig "hci${BT_HCI_INDEX}" down 2>/dev/null || true
     fi
-    bt_usbip_detach this-session
+    bt_usbip_detach
     # Stop the usbip socat bridge so a restart re-establishes it cleanly.
     [ -n "${BT_SOCAT_PID:-}" ] && kill "${BT_SOCAT_PID}" 2>/dev/null || true
     sleep 1

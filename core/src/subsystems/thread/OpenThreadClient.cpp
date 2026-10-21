@@ -571,6 +571,9 @@ namespace barton
 
         dbus_error_init(&error);
 
+        // Held from here on: a reconnect on another thread replaces threadApiBus and dbusConnection.
+        std::lock_guard<std::mutex> lock(dbusConnectionGuard);
+
         message = dbus_message_new_method_call((OTBR_DBUS_SERVER_PREFIX + threadApiBus->GetInterfaceName()).c_str(),
                                                (OTBR_DBUS_OBJECT_PREFIX + threadApiBus->GetInterfaceName()).c_str(),
                                                OTBR_DBUS_THREAD_INTERFACE,
@@ -584,7 +587,6 @@ namespace barton
 
         dbus_message_append_args(message, DBUS_TYPE_UINT32, &lifetime, DBUS_TYPE_INVALID);
 
-        std::lock_guard<std::mutex> lock(dbusConnectionGuard);
         reply =
             dbus_connection_send_with_reply_and_block(dbusConnection.get(), message, DBUS_TIMEOUT_USE_DEFAULT, &error);
 
