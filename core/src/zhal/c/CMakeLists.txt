@@ -33,7 +33,7 @@
 file(GLOB SOURCES "src/*.c")
 
 add_library(zhal STATIC ${SOURCES})
-target_link_libraries(zhal BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil BartonCommon::xhConcurrent cjson BartonCommon::xhJsonHelper m ${CONFIG_LDFLAG})
+target_link_libraries(zhal BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil BartonCommon::xhConcurrent BartonCommon::xhTime cjson BartonCommon::xhJsonHelper m ${CONFIG_LDFLAG})
 
 # export our 'public' folder so others can include our headers
 target_include_directories(zhal PUBLIC public)
