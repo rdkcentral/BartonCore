@@ -126,6 +126,18 @@ newly-created HCI index (e.g. `hci1`), and writes it to
 to Barton as the `barton.ble.adapterId` property, which chooses your adapter from
 the ones the shared daemon manages. Barton itself does not read the file.
 
+Barton never falls back to another adapter in remote mode, since on a shared dev
+server it may be someone else's. If the file is missing (the dongle is not
+attached yet), `./dockerw -T` prints an error and passes `none`, and Matter
+refuses to start; an invalid `barton.ble.adapterId` does the same. Restart the
+`./dockerw -T` session once the dongle is attached.
+
+If your dongle drops while Barton runs, the radios container logs a boxed
+warning. Barton keeps the old number, and the Matter SDK re-adopts any adapter
+that later gets it, which may be another developer's. Restart Barton once the
+dongle is back. The radios container only touches (powers down, health-checks)
+an adapter while it is still on its own usb-ip port.
+
 ### Sharing the radios with other projects
 
 One forwarder, and one `remote-radios` container, serve every project you work
@@ -307,6 +319,11 @@ A standing-by workstation takes over by itself when the lease is released,
 because the forwarding workstation stopped its service or logged out, or when
 the lease goes stale, because that workstation vanished without stopping (a
 closed laptop, a lost VPN connection) and has not refreshed it for two minutes.
+A workstation that is still running keeps the lease, so when you move to
+another machine, stop the service on the old one or use `--take-over`. Each
+refresh also checks that the forwarding workstation's sockets still exist on
+the dev server, and restarts a tunnel whose socket has gone, so a lease is
+never held by a workstation that forwards nothing.
 
 To switch immediately instead, run this on the workstation you want to use:
 
@@ -553,7 +570,7 @@ value is logged and the default is used.
 
 | Variable | Property | Meaning |
 |---|---|---|
-| `BARTON_BLE_ADAPTER_ID` | `barton.ble.adapterId` | BlueZ HCI index for BLE (0-9999, default `0`). `./dockerw -T` sets it from `ble_adapter_id` |
+| `BARTON_BLE_ADAPTER_ID` | `barton.ble.adapterId` | BlueZ HCI index for BLE (0-9999, default `0`; invalid fails Matter init). `./dockerw -T` sets it from `ble_adapter_id`, or `none` when missing |
 | `BARTON_THREAD_INTERFACE` | `barton.thread.interfaceName` | Thread interface, which selects the border router `io.openthread.BorderRouter.<name>` (default `wpan0`). Set from `REMOTE_RADIOS_THREAD_INTERFACE` |
 | `BARTON_THREAD_ATTACH_WAIT_SECONDS` | `barton.thread.attachWaitSeconds` | Longest wait for the border router to form a new network (1-600, default `25`; the remote-radios overlay sets `120`, because CPC-based radios can need 35 s or more to attach and longer to publish the dataset) |
 | `ZIGBEE_CORE_IP` | `barton.zigbee.address` | ZigbeeCore's IPv4 address, numeric only (default `127.0.0.1`). A stored `ZIGBEE_CORE_IP` system property takes precedence. `./dockerw -T` sets it when Zigbee is set up |
@@ -649,6 +666,10 @@ a workstation forwards them, whether that is the same one or another of yours.
 - **BLE picks the wrong adapter** — check `ble_adapter_id`, and Barton's log
   line naming the adapter it uses; set `BARTON_BLE_ADAPTER_ID` explicitly if
   needed.
+- **Matter refuses to start: invalid `barton.ble.adapterId`** — the radios
+  container has not published your adapter (`dockerw` printed an error).
+  Check the workstation tunnel and `docker logs <user>-remote-radios`, then
+  restart the `./dockerw -T` session.
 - **The Silabs radio is connected but silent** — cpcd sends, nothing comes
   back. This is usually the wrong RTS/CTS mode: some USB-serial adapters do not
   drive the hardware flow-control lines, so requesting flow control leaves RTS

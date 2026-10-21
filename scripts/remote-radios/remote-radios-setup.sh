@@ -1042,7 +1042,8 @@ HOST_LABEL="$(hostname -s 2>/dev/null | tr -cd 'A-Za-z0-9._-')"
 [ -n "$HOST_LABEL" ] || HOST_LABEL="$MACHINE_ID"
 
 # Runs on the dev server.  Args: mode id host stale [paths to remove on release]
-#   acquire  take or refresh the lease unless another live workstation holds it
+#   acquire  take or refresh the lease unless another live workstation holds it;
+#            then print MISSING <path> for each given path that is not a socket
 #   force    take it regardless (--take-over)
 #   release  give it up, and remove the given paths, only if we hold it
 # Prints OK / TOOK <prev-host> / HELD <host> <since> <age> / RELEASED.
@@ -1078,6 +1079,9 @@ since=$cur_since
 printf "machine_id=%s\nhost=%s\nsince=%s\nheartbeat=%s\n" "$id" "$host" "$since" "$now" > "$f.tmp.$$"
 mv -f "$f.tmp.$$" "$f"
 if [ -n "$cur_id" ] && [ "$cur_id" != "$id" ]; then echo "TOOK ${cur_host:-unknown}"; else echo OK; fi
+if [ "$mode" = acquire ]; then
+    for p in "$@"; do [ -S "$p" ] || echo "MISSING $p"; done
+fi
 '
 
 # lease_op <mode> [remote paths...] — run the lease script on the dev server.
@@ -1187,6 +1191,38 @@ teardown() {
     ok "Teardown complete."
 }
 
+# check_remote_sockets — after a renewal, restart any tunnel whose socket on
+# the dev server is gone.  Two misses in a row are required, so a tunnel that
+# is still connecting is left alone.
+SILABS_SOCK_MISSES=0
+BT_SOCK_MISSES=0
+check_remote_sockets() {
+    if [ -n "${SILABS_TUNNEL_PID:-}" ] && grep -qxF "MISSING ${SILABS_SOCK_REMOTE}" <<< "$LEASE_REPLY"; then
+        SILABS_SOCK_MISSES=$((SILABS_SOCK_MISSES + 1))
+        if [ "$SILABS_SOCK_MISSES" -ge 2 ]; then
+            warn "Silabs socket ${SILABS_SOCK_REMOTE} is gone from ${SSH_TARGET} — restarting its tunnel."
+            kill "$SILABS_TUNNEL_PID" 2>/dev/null || true
+            wait "$SILABS_TUNNEL_PID" 2>/dev/null || true
+            SILABS_SOCK_MISSES=0
+            start_silabs_tunnel
+        fi
+    else
+        SILABS_SOCK_MISSES=0
+    fi
+    if [ -n "${BT_TUNNEL_PID:-}" ] && grep -qxF "MISSING ${BT_USBIP_SOCK_REMOTE}" <<< "$LEASE_REPLY"; then
+        BT_SOCK_MISSES=$((BT_SOCK_MISSES + 1))
+        if [ "$BT_SOCK_MISSES" -ge 2 ]; then
+            warn "usb-ip socket ${BT_USBIP_SOCK_REMOTE} is gone from ${SSH_TARGET} — restarting its tunnel."
+            kill "$BT_TUNNEL_PID" 2>/dev/null || true
+            wait "$BT_TUNNEL_PID" 2>/dev/null || true
+            BT_SOCK_MISSES=0
+            start_bt_tunnel
+        fi
+    else
+        BT_SOCK_MISSES=0
+    fi
+}
+
 monitor_loop() {
     info "Supervising radios and tunnels. Tears down on VPN drop or stop."
     trap 'teardown; exit 0' INT TERM
@@ -1212,14 +1248,23 @@ monitor_loop() {
         # Keep the lease fresh, and give way if another workstation has taken
         # it (`--take-over`, or this one was away long enough for it to go
         # stale).  An unreachable dev server is left to the VPN check above.
+        # The renewal also checks that our sockets still exist there: if
+        # something removed one while its ssh stays connected, nothing would
+        # otherwise notice, and this workstation would keep the lease while
+        # forwarding nothing.
         if [ $((SECONDS - LEASE_RENEWED_AT)) -ge "$LEASE_RENEW_SECS" ]; then
             local rc=0
-            lease_op acquire || rc=$?
+            lease_op acquire \
+                ${SILABS_TUNNEL_PID:+${SILABS_SOCK_REMOTE:+"$SILABS_SOCK_REMOTE"}} \
+                ${BT_TUNNEL_PID:+${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"}} || rc=$?
             if [ "$rc" -eq 2 ]; then
                 stand_down
                 wait_for_lease
                 start_forwarding
                 continue
+            fi
+            if [ "$rc" -eq 0 ]; then
+                check_remote_sockets
             fi
         fi
 
