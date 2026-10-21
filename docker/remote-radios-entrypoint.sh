@@ -441,15 +441,20 @@ bt_usbip_attach() {
 
     echo "[remote-radios] Attaching Bluetooth dongle via usb-ip (busid ${busid})..."
     local attach_out attach_rc
-    local portsBefore
-    portsBefore=$(vhci_used_ports)
+    # usbip records each port it attaches in this container's own
+    # /var/run/vhci_hcd, which identifies our port without looking at other
+    # developers' attaches on the shared controller.
+    local attachMarker
+    attachMarker=$(mktemp)
     attach_out=$(usbip --tcp-port "${BT_USBIP_TCP_PORT}" attach -r 127.0.0.1 -b "${busid}" 2>&1)
     attach_rc=$?
     if [ ${attach_rc} -ne 0 ]; then
         echo "[remote-radios] usbip attach failed for busid ${busid}: ${attach_out}" >&2
+        rm -f "${attachMarker}"
         return 1
     fi
-    bt_usbip_record_port "${portsBefore}"
+    bt_usbip_record_port "${attachMarker}" "${busid}"
+    rm -f "${attachMarker}"
 
     # Record which busid we attached (informational; teardown uses BT_USBIP_PORT_FILE).
     BT_USBIP_ATTACHED_BUSID="${busid}"
@@ -481,24 +486,47 @@ vhci_used_ports() {
     vhci_ports_in_state 006
 }
 
-# bt_usbip_record_port <ports-before> — record the port our attach created.
+# vhci_local_busid <port> — print the local USB busid (e.g. 7-1) of a vhci port.
+vhci_local_busid() {
+    local f
+    for f in /sys/devices/platform/vhci_hcd.*/status*; do
+        [ -r "${f}" ] || continue
+        awk -v port="$1" '$3 == "006" && ($2 + 0) == port { print $7 }' "${f}"
+    done | head -1
+}
+
+# bt_usbip_record_port <marker> <busid> — record the port our attach created.
+# usbip writes /var/run/vhci_hcd/port<N> ("<host> <tcp-port> <busid>") in this
+# container for each port it attaches; only one written after <marker> for our
+# busid counts.
 bt_usbip_record_port() {
-    local before="$1" after newPorts tries=0
-    while :; do
-        after=$(vhci_used_ports)
-        newPorts=$(comm -13 <(printf '%s\n' "${before}" | sort) <(printf '%s\n' "${after}" | sort) | sed '/^$/d')
-        [ -n "${newPorts}" ] || [ ${tries} -ge 20 ] && break
+    local marker="$1" busid="$2" f port="" devid="" tries=0
+    for f in $(find /var/run/vhci_hcd -maxdepth 1 -name 'port*' -newer "${marker}" 2>/dev/null); do
+        if [ "$(awk '{print $3}' "${f}")" = "${busid}" ]; then
+            [ -z "${port}" ] || { port=""; break; }   # ambiguous; refuse to guess
+            port="${f##*/port}"
+        fi
+    done
+    rm -f "${BT_USBIP_PORT_FILE}"
+    if [ -z "${port}" ]; then
+        echo "[remote-radios] WARNING: could not identify the vhci port for this attach;" >&2
+        echo "[remote-radios]          it will not be detached automatically." >&2
+        return 0
+    fi
+    # The port reads 005 until the device enumerates, then 006 with its devid.
+    while [ ${tries} -lt 20 ]; do
+        devid=$(vhci_used_ports | awk -v port="${port}" '$1 == port { print $2 }')
+        [ -n "${devid}" ] && break
         tries=$((tries + 1))
         sleep 0.5
     done
-    if [ "$(printf '%s\n' "${newPorts}" | sed '/^$/d' | wc -l)" -ne 1 ]; then
-        echo "[remote-radios] WARNING: could not identify the vhci port for this attach;" >&2
+    if [ -z "${devid}" ]; then
+        echo "[remote-radios] WARNING: vhci port ${port} did not finish enumerating;" >&2
         echo "[remote-radios]          it will not be detached automatically." >&2
-        rm -f "${BT_USBIP_PORT_FILE}"
         return 0
     fi
-    printf '%s\n' "${newPorts}" > "${BT_USBIP_PORT_FILE}"
-    echo "[remote-radios] Bluetooth dongle attached on vhci port ${newPorts%% *}"
+    printf '%s %s\n' "${port}" "${devid}" > "${BT_USBIP_PORT_FILE}"
+    echo "[remote-radios] Bluetooth dongle attached on vhci port ${port}"
 }
 
 # bt_usbip_detach [this-session] — detach only the usb-ip port this user's
@@ -529,37 +557,34 @@ bt_usbip_detach() {
 start_bluetooth_chain() {
     echo "[remote-radios] Starting Bluetooth chain (usb-ip attach -> bluetoothd)..."
 
-    # Snapshot existing HCI devices (e.g. any host built-in adapter) before we
-    # attach the dongle so we can identify the newly-created one.
-    local hciBefore
-    hciBefore=$(nsenter --net="${HOST_NETNS}" ls /sys/class/bluetooth/ 2>/dev/null | sort)
-
     if ! bt_usbip_attach; then
         echo "[remote-radios] Bluetooth usb-ip attach failed." >&2
         return 1
     fi
 
-    # Wait up to 15s for a new HCI device to appear in the host netns.  btusb
-    # probing an imported device over the tunnel can take a few seconds.
-    local waited=0 radioHci=""
+    # Find the HCI device under the USB device behind our own vhci port, never
+    # by diffing the adapter list, which other developers' dongles also join.
+    local port="" localBusid="" waited=0 radioHci="" hciPath
+    [ -r "${BT_USBIP_PORT_FILE}" ] && read -r port _ < "${BT_USBIP_PORT_FILE}"
+    if [ -z "${port}" ]; then
+        echo "[remote-radios] WARNING: the attached vhci port is unknown, so its HCI device cannot be identified." >&2
+        return 1
+    fi
+    # btusb probing an imported device over the tunnel can take a few seconds.
     while [ ${waited} -lt 15 ]; do
+        localBusid=$(vhci_local_busid "${port}")
+        if [ -n "${localBusid}" ]; then
+            for hciPath in /sys/bus/usb/devices/"${localBusid}"/"${localBusid}":*/bluetooth/hci*; do
+                [ -e "${hciPath}" ] && radioHci="${hciPath##*/}" && break
+            done
+        fi
+        [ -n "${radioHci}" ] && break
         sleep 1
         waited=$((waited + 1))
-
-        local hciAfter
-        hciAfter=$(nsenter --net="${HOST_NETNS}" ls /sys/class/bluetooth/ 2>/dev/null | sort)
-
-        for hci in ${hciAfter}; do
-            if ! echo "${hciBefore}" | grep -qw "${hci}"; then
-                radioHci="${hci}"
-                break
-            fi
-        done
-        [ -n "${radioHci}" ] && break
     done
 
     if [ -z "${radioHci}" ]; then
-        echo "[remote-radios] WARNING: no new HCI device appeared after usb-ip attach within 15s." >&2
+        echo "[remote-radios] WARNING: no HCI device appeared on vhci port ${port} within 15s." >&2
         return 1
     fi
 

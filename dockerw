@@ -130,18 +130,24 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
     # claim its bus name so Barton's first Thread attempt finds it; Barton
     # also reconnects and retries on its own, so a timeout is not fatal.
     radiosWait="${REMOTE_RADIOS_READY_WAIT_SECONDS:-60}"
+    [[ "$radiosWait" =~ ^[0-9]+$ ]] || radiosWait=60
     radiosReady=false
-    for ((i = 0; i < radiosWait; i++)); do
-        if docker exec "$radiosId" sh -c \
+    radiosDeadline=$((SECONDS + radiosWait))
+    radiosWaitNoticed=false
+    while [ "$SECONDS" -lt "$radiosDeadline" ]; do
+        if timeout 5 docker exec "$radiosId" sh -c \
             'DBUS_SYSTEM_BUS_ADDRESS="unix:path=${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}" \
-             dbus-send --system --print-reply --dest=org.freedesktop.DBus / \
+             dbus-send --system --reply-timeout=2000 --print-reply --dest=org.freedesktop.DBus / \
              org.freedesktop.DBus.NameHasOwner \
              string:"io.openthread.BorderRouter.${THREAD_INTERFACE:-wpan0}"' 2>/dev/null |
             grep -q 'boolean true'; then
             radiosReady=true
             break
         fi
-        [ "$i" -eq 0 ] && notice "Waiting up to ${radiosWait}s for otbr-agent on D-Bus..."
+        if [ "$radiosWaitNoticed" = false ]; then
+            notice "Waiting up to ${radiosWait}s for otbr-agent on D-Bus..."
+            radiosWaitNoticed=true
+        fi
         sleep 1
     done
     if [ "$radiosReady" = true ]; then
