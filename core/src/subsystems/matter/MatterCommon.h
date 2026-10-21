@@ -91,11 +91,13 @@ namespace barton
              */
             /**
              * Determine which BlueZ HCI adapter index to use for BLE operations, from the barton.ble.adapterId
-             * property. Falls back to hci0 when the property is not set or is outside 0-9999.
+             * property. Uses hci0 when the property is not set. A value that is set but malformed or outside
+             * 0-9999 is a configuration error: it never falls back, since another adapter may belong to someone else.
              *
-             * @return the HCI adapter index to pass to BLEMgrImpl::ConfigureBle()
+             * @param[out] adapterId the HCI adapter index to pass to BLEMgrImpl::ConfigureBle()
+             * @return false if the property is set but invalid
              */
-            uint32_t ResolveBleAdapterId();
+            bool ResolveBleAdapterId(uint32_t &adapterId);
 
             uint8_t calculateLinkScore(int8_t rssi);
 

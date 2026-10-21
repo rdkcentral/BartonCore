@@ -339,6 +339,12 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
 
     chip::DeviceLayer::ConfigurationMgr().LogDeviceConfig();
 
+    uint32_t bleAdapterId = 0;
+    if (!Subsystem::Matter::ResolveBleAdapterId(bleAdapterId))
+    {
+        return false;
+    }
+
     if ((err = DeviceLayer::PlatformMgrImpl().AddEventHandler(EventHandler, 0)) != CHIP_NO_ERROR)
     {
         icError("AddEventHandler failed: %s", err.AsString());
@@ -346,7 +352,7 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     }
 
     chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName(BLE_CONTROLLER_DEVICE_NAME);
-    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(Subsystem::Matter::ResolveBleAdapterId(), true);
+    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(bleAdapterId, true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
 
 #if CHIP_ENABLE_OPENTHREAD

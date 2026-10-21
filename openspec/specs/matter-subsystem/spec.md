@@ -134,7 +134,7 @@ The Matter subsystem SHALL support opening an Enhanced Commissioning Window on c
 - **THEN** the Matter subsystem SHALL open an Enhanced Commissioning Window and return `BCoreCommissioningInfo` with manual code and QR code
 
 ### Requirement: BLE adapter selection
-The Matter subsystem SHALL configure BLE commissioning on the BlueZ HCI adapter given by the `barton.ble.adapterId` property (`B_CORE_BARTON_BLE_ADAPTER_ID`, uint32). The value SHALL be from 0 to 9999 (the Linux HCI id limit); when the property is unset, or out of range or not a number, the Matter subsystem SHALL use `hci0` and log which adapter it chose and why. The Matter subsystem SHALL NOT read the adapter from files or environment variables. The Matter SDK SHALL accept LE-only adapters (Matter patch 0003, `fix-ble-support-LE-only-adapters-in-BluezObjectManag`).
+The Matter subsystem SHALL configure BLE commissioning on the BlueZ HCI adapter given by the `barton.ble.adapterId` property (`B_CORE_BARTON_BLE_ADAPTER_ID`, uint32). The value SHALL be from 0 to 9999 (the Linux HCI id limit); when the property is unset, the Matter subsystem SHALL use `hci0`; when it is set but out of range or not a number, Matter initialization SHALL fail rather than fall back to another adapter. The Matter subsystem SHALL log which adapter it chose, or why it refused. The Matter subsystem SHALL NOT read the adapter from files or environment variables. The Matter SDK SHALL accept LE-only adapters (Matter patch 0003, `fix-ble-support-LE-only-adapters-in-BluezObjectManag`).
 
 #### Scenario: Adapter not configured
 - **WHEN** `barton.ble.adapterId` is not set
@@ -146,7 +146,7 @@ The Matter subsystem SHALL configure BLE commissioning on the BlueZ HCI adapter 
 
 #### Scenario: Invalid adapter
 - **WHEN** `barton.ble.adapterId` is `-1`, `10000`, or `abc`
-- **THEN** a warning SHALL be logged and BLE SHALL be configured on `hci0`
+- **THEN** an error SHALL be logged and Matter initialization SHALL fail without configuring any adapter
 
 ### Requirement: Configurable Thread border router interface in the Matter SDK
 The Matter SDK SHALL be patched (patch 0004, `linux-make-the-OpenThread-border-router-interface-configurable`) so that its Linux Thread stack manager addresses `io.openthread.BorderRouter.<interface>` for a configurable interface. The Matter subsystem SHALL set the interface from the Thread subsystem's interface name before `InitThreadStack()`, and SHALL fail Matter initialization if setting it fails. When built against a Matter SDK without the patch, the Matter subsystem SHALL fail initialization if the Thread interface name is not the default `wpan0`.

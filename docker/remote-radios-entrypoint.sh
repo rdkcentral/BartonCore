@@ -497,6 +497,22 @@ vhci_local_busid() {
     done | head -1
 }
 
+# bt_hci_is_ours <index> — succeed only if hci<index> is still the adapter on
+# the vhci port this container attached.  Adapter numbers are reused, so after
+# our dongle drops, the same number may name another developer's adapter.
+bt_hci_is_ours() {
+    local idx="$1" port devid localBusid hciPath
+    [ -n "${idx}" ] && [ -r "${BT_USBIP_PORT_FILE}" ] || return 1
+    read -r port devid < "${BT_USBIP_PORT_FILE}" || return 1
+    vhci_used_ports | grep -qx "${port} ${devid}" || return 1
+    localBusid=$(vhci_local_busid "${port}")
+    [ -n "${localBusid}" ] || return 1
+    for hciPath in /sys/bus/usb/devices/"${localBusid}"/"${localBusid}":*/bluetooth/hci"${idx}"; do
+        [ -e "${hciPath}" ] && return 0
+    done
+    return 1
+}
+
 # bt_usbip_record_port <marker> <busid> — record the port our attach created.
 # usbip writes /var/run/vhci_hcd/port<N> ("<host> <tcp-port> <busid>") in this
 # container for each port it attaches; only one written after <marker> for our
@@ -557,6 +573,7 @@ bt_usbip_detach() {
 # wait for the dev server's bluetoothd to register it.
 start_bluetooth_chain() {
     echo "[remote-radios] Starting Bluetooth chain (usb-ip attach -> bluetoothd)..."
+    rm -f "${DBUS_DIR}/ble_adapter_id"
 
     if ! bt_usbip_attach; then
         echo "[remote-radios] Bluetooth usb-ip attach failed." >&2
@@ -591,7 +608,8 @@ start_bluetooth_chain() {
 
     BT_HCI_INDEX="${radioHci#hci}"
     echo "[remote-radios] Bluetooth dongle HCI device: ${radioHci} (index ${BT_HCI_INDEX})"
-    echo "${BT_HCI_INDEX}" > "${DBUS_DIR}/ble_adapter_id"
+    echo "${BT_HCI_INDEX}" > "${DBUS_DIR}/ble_adapter_id.tmp"
+    mv -f "${DBUS_DIR}/ble_adapter_id.tmp" "${DBUS_DIR}/ble_adapter_id"
     echo "[remote-radios] Wrote BLE adapter index ${BT_HCI_INDEX} to ${DBUS_DIR}/ble_adapter_id"
 
     # Note any other adapters (e.g. a host built-in) without disturbing them —
@@ -633,13 +651,28 @@ start_bluetooth_chain() {
 teardown_bluetooth_chain() {
     # bluetoothd belongs to the dev server and is shared with other developers,
     # so it is never stopped from here.
-    if [ -n "${BT_HCI_INDEX:-}" ]; then
+    if bt_hci_is_ours "${BT_HCI_INDEX:-}"; then
         nsenter --net="${HOST_NETNS}" hciconfig "hci${BT_HCI_INDEX}" down 2>/dev/null || true
     fi
+    rm -f "${DBUS_DIR}/ble_adapter_id"
     bt_usbip_detach
     # Stop the usbip socat bridge so a restart re-establishes it cleanly.
     [ -n "${BT_SOCAT_PID:-}" ] && kill "${BT_SOCAT_PID}" 2>/dev/null || true
     sleep 1
+}
+
+# warn_ble_adapter_lost — a running Barton still uses the old index, and Matter
+# re-adopts any adapter that later takes that number, which on a shared dev
+# server may be another developer's dongle.
+warn_ble_adapter_lost() {
+    cat >&2 <<EOF
+[remote-radios] ************************************************************
+[remote-radios] WARNING: your Bluetooth dongle (was hci${1}) went away.
+[remote-radios] A Barton already running still points at hci${1}; that number
+[remote-radios] may now belong to ANOTHER developer's adapter.  Restart Barton
+[remote-radios] (and your ./dockerw -T session) once the dongle is back.
+[remote-radios] ************************************************************
+EOF
 }
 
 # bt_controller_registered — verify bluetoothd actually exposes the adapter.
@@ -662,8 +695,9 @@ bt_controller_registered() {
 bt_transport_healthy() {
     local idx="${BT_HCI_INDEX:-}"
     [ -n "$idx" ] || return 1
-    # The dongle must still be present in sysfs (usb-ip session alive).
-    nsenter --net="${HOST_NETNS}" test -e "/sys/class/bluetooth/hci${idx}" 2>/dev/null || return 1
+    # The dongle must still be present on our vhci port (usb-ip session alive);
+    # the same number on any other adapter is not ours.
+    bt_hci_is_ours "${idx}" || return 1
     timeout 5 nsenter --net="${HOST_NETNS}" hciconfig "hci${idx}" version >/dev/null 2>&1 || return 1
     # ...and bluetoothd must still own it.  A daemon crash, or another bluetoothd
     # stealing the adapter, leaves the kernel checks above passing while BLE is
@@ -789,7 +823,12 @@ service_monitor() {
 
         # ── Execute Bluetooth restart ───────────────────────────────────────
         if [ -n "${restartBt}" ]; then
+            lostHci="${BT_HCI_INDEX:-}"
             teardown_bluetooth_chain
+            if [ -n "${lostHci}" ]; then
+                warn_ble_adapter_lost "${lostHci}"
+                BT_HCI_INDEX=""
+            fi
             if ! start_bluetooth_chain; then
                 backoff=$((backoff * 2 < 60 ? backoff * 2 : 60))
                 echo "[monitor] Bluetooth chain restart failed; retrying in ${backoff}s..." >&2
@@ -813,6 +852,10 @@ service_monitor() {
 ###############################################################################
 mkdir -p "${DBUS_DIR}"
 rm -f "${DBUS_DIR}/system_bus_socket"
+# The volume persists across runs, so an adapter index left by an earlier run
+# may now name another user's or the host's adapter.  It is rewritten only
+# after this run attaches the dongle and identifies its HCI device.
+rm -f "${DBUS_DIR}/ble_adapter_id"
 
 ###############################################################################
 # 2. Establish the Silabs serial link and start CPC

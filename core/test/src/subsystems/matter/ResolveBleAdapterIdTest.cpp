@@ -51,24 +51,32 @@ namespace
 
     TEST_F(ResolveBleAdapterIdTest, DefaultsToZeroWhenUnset)
     {
-        EXPECT_EQ(ResolveBleAdapterId(), 0u);
+        uint32_t adapterId = 42;
+        EXPECT_TRUE(ResolveBleAdapterId(adapterId));
+        EXPECT_EQ(adapterId, 0u);
     }
 
     TEST_F(ResolveBleAdapterIdTest, UsesValidValue)
     {
+        uint32_t adapterId = 0;
+
         SetAdapterId("1");
-        EXPECT_EQ(ResolveBleAdapterId(), 1u);
+        EXPECT_TRUE(ResolveBleAdapterId(adapterId));
+        EXPECT_EQ(adapterId, 1u);
 
         SetAdapterId("9999");
-        EXPECT_EQ(ResolveBleAdapterId(), 9999u);
+        EXPECT_TRUE(ResolveBleAdapterId(adapterId));
+        EXPECT_EQ(adapterId, 9999u);
     }
 
     TEST_F(ResolveBleAdapterIdTest, RejectsOutOfRangeAndMalformedValues)
     {
-        for (const char *value : {"-1", "10000", "4294967295", "4294967296", "abc", ""})
+        for (const char *value : {"-1", "10000", "4294967295", "4294967296", "abc", "", "none"})
         {
+            uint32_t adapterId = 42;
             SetAdapterId(value);
-            EXPECT_EQ(ResolveBleAdapterId(), 0u) << "value: '" << value << "'";
+            EXPECT_FALSE(ResolveBleAdapterId(adapterId)) << "value: '" << value << "'";
+            EXPECT_EQ(adapterId, 42u) << "value: '" << value << "'";
         }
     }
 } // namespace

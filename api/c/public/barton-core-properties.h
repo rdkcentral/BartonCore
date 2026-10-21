@@ -246,7 +246,7 @@ G_BEGIN_DECLS
  * BLE_ADAPTER_ID: (value "barton.ble.adapterId")
  *
  * The BlueZ HCI adapter index used for BLE operations (e.g. 0 for hci0, 1 for hci1).
- * Defaults to 0 if not set.
+ * Defaults to 0 if not set. A value outside 0-9999 or not a number makes Matter initialization fail.
  * Property Value Type: uint32
  */
 #define B_CORE_BARTON_BLE_ADAPTER_ID B_CORE_BARTON_PREFIX B_CORE_BLE_PREFIX "adapterId"

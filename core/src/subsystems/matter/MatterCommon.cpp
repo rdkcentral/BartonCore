@@ -48,7 +48,7 @@ namespace barton
     {
         namespace Matter
         {
-            uint32_t ResolveBleAdapterId()
+            bool ResolveBleAdapterId(uint32_t &adapterId)
             {
                 g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
@@ -57,25 +57,26 @@ namespace barton
                     icInfo("%s not set, using default BLE adapter hci%u",
                            B_CORE_BARTON_BLE_ADAPTER_ID,
                            (unsigned) BLE_CONTROLLER_ADAPTER_ID_DEFAULT);
-                    return BLE_CONTROLLER_ADAPTER_ID_DEFAULT;
+                    adapterId = BLE_CONTROLLER_ADAPTER_ID_DEFAULT;
+                    return true;
                 }
 
                 // Use an out-of-range sentinel so parse failures are distinguishable from a valid value
-                uint32_t adapterId = b_core_property_provider_get_property_as_uint32(
+                uint32_t value = b_core_property_provider_get_property_as_uint32(
                     propertyProvider, B_CORE_BARTON_BLE_ADAPTER_ID, BLE_CONTROLLER_ADAPTER_ID_MAX + 1);
 
-                if (adapterId > BLE_CONTROLLER_ADAPTER_ID_MAX)
+                if (value > BLE_CONTROLLER_ADAPTER_ID_MAX)
                 {
-                    icWarn("Invalid %s (must be 0-%u), using default BLE adapter hci%u",
-                           B_CORE_BARTON_BLE_ADAPTER_ID,
-                           (unsigned) BLE_CONTROLLER_ADAPTER_ID_MAX,
-                           (unsigned) BLE_CONTROLLER_ADAPTER_ID_DEFAULT);
-                    return BLE_CONTROLLER_ADAPTER_ID_DEFAULT;
+                    icError("Invalid %s (must be 0-%u); refusing to pick a BLE adapter",
+                            B_CORE_BARTON_BLE_ADAPTER_ID,
+                            (unsigned) BLE_CONTROLLER_ADAPTER_ID_MAX);
+                    return false;
                 }
 
-                icInfo("Using BLE adapter hci%u from %s", adapterId, B_CORE_BARTON_BLE_ADAPTER_ID);
+                icInfo("Using BLE adapter hci%u from %s", value, B_CORE_BARTON_BLE_ADAPTER_ID);
 
-                return adapterId;
+                adapterId = value;
+                return true;
             }
 
             uint8_t calculateLinkScore(int8_t rssi)

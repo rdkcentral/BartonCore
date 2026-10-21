@@ -212,8 +212,17 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
     # developer's; hand it to Barton unless the caller chose one.
     RUN_CMD=(bash -c 'docker/setup-thread-routes.sh >&2 || true
         f=/var/run/remote-radios-dbus/ble_adapter_id
-        if [ -z "${BARTON_BLE_ADAPTER_ID:-}" ] && [ -r "$f" ]; then
-            BARTON_BLE_ADAPTER_ID="$(tr -d "[:space:]" < "$f")"
+        if [ -z "${BARTON_BLE_ADAPTER_ID:-}" ]; then
+            [ -r "$f" ] && BARTON_BLE_ADAPTER_ID="$(tr -d "[:space:]" < "$f")"
+            if [ -z "${BARTON_BLE_ADAPTER_ID:-}" ]; then
+                # Never let Barton fall back to hci0 here: on a shared dev
+                # server it may be another developer'"'"'s adapter.  Barton
+                # rejects "none", so Matter refuses to start instead.
+                echo "dockerw: ERROR: the radios container has not published your Bluetooth adapter ($f)." >&2
+                echo "dockerw: Matter will refuse to start.  Check your workstation tunnel and the logs of" >&2
+                echo "dockerw: your <user>-remote-radios container, then restart this ./dockerw -T session." >&2
+                BARTON_BLE_ADAPTER_ID=none
+            fi
             export BARTON_BLE_ADAPTER_ID
         fi
         exec "$@"' dockerw "${RUN_CMD[@]}")
