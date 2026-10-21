@@ -267,9 +267,10 @@ gint64 b_core_property_provider_get_property_as_int64(BCorePropertyProvider *sel
     gint64 retVal = g_ascii_strtoll(property_value, &endptr, 10);
     if (errno > 0 || endptr == property_value || *endptr != '\0')
     {
-        icWarn("Error converting property value \"%s\" to int64: %s",
+        icWarn("Invalid value \"%s\" for property '%s': %s",
                property_value,
-               errno > 0 ? g_strerror(errno) : "Not a whole number");
+               stringCoalesce(property_name),
+               errno > 0 ? g_strerror(errno) : "not a whole number");
         return default_value;
     }
 
@@ -350,9 +351,10 @@ guint64 b_core_property_provider_get_property_as_uint64(BCorePropertyProvider *s
     guint64 retVal = g_ascii_strtoull(property_value, &endptr, 0);
     if (errno > 0 || endptr == property_value || *endptr != '\0')
     {
-        icWarn("Error converting property value \"%s\" to uint64: %s",
+        icWarn("Invalid value \"%s\" for property '%s': %s",
                property_value,
-               errno > 0 ? g_strerror(errno) : "Not a whole number");
+               stringCoalesce(property_name),
+               errno > 0 ? g_strerror(errno) : "not a whole number");
         return default_value;
     }
 
