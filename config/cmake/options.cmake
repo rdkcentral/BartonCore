@@ -177,6 +177,10 @@ bcore_option(NAME BCORE_MATTER_VALIDATE_SCHEMAS
            DEFINITION BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS
            DESCRIPTION "Enable validation of SBMD schemas"
            ENABLE)
+bcore_option(NAME BCORE_MATTER_ENABLE_EXPERIMENTAL_SBMD_SPECS
+             DEFINITION BARTON_CONFIG_MATTER_ENABLE_EXPERIMENTAL_SBMD_SPECS
+             DESCRIPTION "Include experimental SBMD specs in validation and installation"
+             OFF)
 bcore_option(NAME BCORE_SBMD_METRICS
            DEFINITION BARTON_CONFIG_SBMD_METRICS
            DESCRIPTION "Enable SBMD runtime observability metrics (heap sampling, mutex wait timing, handler and deferred operation tracking)"
@@ -265,7 +269,7 @@ bcore_string_option(NAME BCORE_MATTER_SBMD_JS_ENGINE
 
 bcore_string_option(NAME BCORE_MATTER_SBMD_SPECS_DIR
                     DEFINITION BARTON_CONFIG_MATTER_SBMD_SPECS_DIR
-                    DESCRIPTION "Default semicolon-delimited list of directories containing SBMD spec files at runtime."
+                    DESCRIPTION "Directory where Barton installs its bundled SBMD specs and looks for them by default at runtime. Clients can override that default using sbmd-dirs with a semicolon-delimited list of directories."
                     VALUE "${CMAKE_INSTALL_PREFIX}/sbmd-specs")
 
 bcore_string_option(NAME BCORE_LINK_LIBRARIES

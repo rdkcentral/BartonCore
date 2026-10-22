@@ -78,9 +78,17 @@ if (BCORE_ZIGBEE)
 
 endif() #BARTON_CONFIG_ZIGBEE
 
-set(SBMD_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
+set(SBMD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd")
+set(SBMD_SPECS_DIR "${SBMD_DIR}/specs")
 
 if (BCORE_MATTER)
+
+    file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
+    if (BCORE_MATTER_ENABLE_EXPERIMENTAL_SBMD_SPECS)
+        file(GLOB EXPERIMENTAL_SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/experimental/*.sbmd.js")
+        list(APPEND SBMD_SPEC_FILES ${EXPERIMENTAL_SBMD_SPEC_FILES})
+    endif()
+
     include(BCoreMatterHelper)
 
     # Check for jsoncpp here rather than in DependencyVersions.cmake because the
@@ -165,7 +173,7 @@ if (BCORE_MATTER)
     endif()
 
     # Embed SBMD bundle (assembled from individual source files)
-    set(SBMD_SCRIPT_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon")
+    set(SBMD_SCRIPT_COMMON_DIR "${SBMD_DIR}/scriptCommon")
     set(SBMD_BUNDLE_SOURCES
         "${SBMD_SCRIPT_COMMON_DIR}/sbmd-namespace.js"
         "${SBMD_SCRIPT_COMMON_DIR}/sbmd-utf8.js"
@@ -216,14 +224,13 @@ if (BCORE_MATTER)
 
     # SBMD specification validation
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
-        set(SBMD_SCHEMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/schema")
+        set(SBMD_SCHEMA_DIR "${SBMD_DIR}/schema")
         set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
         set(SBMD_EXTRACTOR "${CMAKE_SOURCE_DIR}/scripts/ci/sbmd_extract_registration.js")
 
         find_package(Python3 COMPONENTS Interpreter REQUIRED)
         find_program(NODE_EXECUTABLE node REQUIRED)
 
-        file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
         file(GLOB SBMD_SCHEMA_FILES CONFIGURE_DEPENDS "${SBMD_SCHEMA_DIR}/*.json")
 
         if (SBMD_SPEC_FILES)
@@ -339,10 +346,8 @@ install(TARGETS BartonCore DESTINATION lib)
 
 # Install SBMD driver specification files.
 if (BCORE_MATTER)
-    file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
-
-    if (ALL_SBMD_FILES)
-        install(FILES ${ALL_SBMD_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
+    if (SBMD_SPEC_FILES)
+        install(FILES ${SBMD_SPEC_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
     endif()
 endif()
 
