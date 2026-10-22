@@ -128,8 +128,8 @@ the ones the shared daemon manages. Barton itself does not read the file.
 
 Barton never falls back to another adapter in remote mode, since on a shared dev
 server it may be someone else's. If the file is missing (the dongle is not
-attached yet), `./dockerw -T` prints an error and passes `none`, and Matter
-refuses to start; an invalid `barton.ble.adapterId` does the same. Restart the
+attached yet), `./dockerw -T` does not start Barton at all (see below); an
+invalid `barton.ble.adapterId` makes Matter refuse to start. Restart the
 `./dockerw -T` session once the dongle is attached.
 
 If your dongle drops while Barton runs, the radios container logs a boxed
@@ -277,7 +277,8 @@ The script:
    root-owned helpers under `/usr/local/lib/remote-radios/` and a narrow
    sudoers rule granting the `remote-radios` group passwordless access to
    **those two commands only**. See [Privileges](#privileges) below. This step
-   is skipped entirely if you have no Bluetooth dongle.
+   is skipped entirely if you have no Bluetooth dongle, but note that
+   `./dockerw -T` requires one.
 6. **Installs and starts `remote-radios.service`.** One user unit owns the
    whole workstation side: it runs `usbipd` and keeps the dongle exported
    (re-binding it if anything hands it back to the kernel's own driver), runs
@@ -488,6 +489,14 @@ server. The radio parameters flow in automatically from
 shell pointed at the dev server's D-Bus and your border router, with a route to
 your Thread network installed. `-T` cannot be combined with `-H`.
 
+**`-T` fails early.** Remote radios mean Thread, Zigbee and Bluetooth together,
+so `./dockerw -T` refuses to start Barton unless they all work: it exits with an
+error if no Bluetooth dongle is forwarded, and otherwise runs
+`scripts/remote-radios/validate.sh --quick` (well under a second), waiting up to
+`REMOTE_RADIOS_READY_WAIT_SECONDS` for a freshly started stack to come up. If
+the checks still fail, it prints the failed checks and exits without starting
+Barton. Run the full validator for more detail.
+
 ### Zigbee
 
 Zigbee comes from ZigbeeCore's `remote-zigbee` container, which runs zigbeed and
@@ -562,7 +571,7 @@ exporting before `dockerw`.
 | `RADIO_CLAIM_DIR_HOST` | Host path of that directory (bind-mount source, read-only in the container) |
 | `BACKBONE_IF` | Thread backbone interface (default: host default route) |
 | `REMOTE_RADIOS_THREAD_INTERFACE` | Your Thread interface, `wpan<uid>`. Passed to otbr-agent as `-I` and to Barton as `BARTON_THREAD_INTERFACE` |
-| `REMOTE_RADIOS_READY_WAIT_SECONDS` | How long `./dockerw -T` waits for otbr-agent to register `io.openthread.BorderRouter.<interface>` on D-Bus before opening the barton shell (default `60`). A timeout is not fatal: Barton reconnects and retries until the border router appears |
+| `REMOTE_RADIOS_READY_WAIT_SECONDS` | How long `./dockerw -T` waits for the remote radios to pass `validate.sh --quick` before giving up and not starting Barton (default `120`) |
 
 The reference app maps these variables, set in the barton container, onto Barton
 properties. Barton validates each value when it reads the property; an invalid
@@ -585,6 +594,7 @@ container and re-execs into it automatically:
 ```bash
 scripts/remote-radios/validate.sh          # human-readable
 scripts/remote-radios/validate.sh --json   # machine-readable
+scripts/remote-radios/validate.sh --quick  # skip the BLE scan and MeshCoP lookup
 ```
 
 It also runs directly inside the `remote-radios` container. It does **not** run
@@ -666,10 +676,13 @@ a workstation forwards them, whether that is the same one or another of yours.
 - **BLE picks the wrong adapter** — check `ble_adapter_id`, and Barton's log
   line naming the adapter it uses; set `BARTON_BLE_ADAPTER_ID` explicitly if
   needed.
-- **Matter refuses to start: invalid `barton.ble.adapterId`** — the radios
-  container has not published your adapter (`dockerw` printed an error).
-  Check the workstation tunnel and `docker logs <user>-remote-radios`, then
-  restart the `./dockerw -T` session.
+- **`./dockerw -T` says the remote radios are not working** — it lists the
+  failed checks. Most often the workstation is not forwarding (check
+  `systemctl --user status remote-radios.service` there) or the stack is still
+  starting; raise `REMOTE_RADIOS_READY_WAIT_SECONDS` in the latter case.
+- **`./dockerw -T` says no Bluetooth dongle is forwarded** — remote radios
+  require one. Plug it in on the workstation and re-run
+  `remote-radios-setup.sh` there.
 - **The Silabs radio is connected but silent** — cpcd sends, nothing comes
   back. This is usually the wrong RTS/CTS mode: some USB-serial adapters do not
   drive the hardware flow-control lines, so requesting flow control leaves RTS

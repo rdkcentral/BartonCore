@@ -49,6 +49,7 @@
 # Usage:
 #   ./validate.sh              # Run all checks
 #   ./validate.sh --json       # Output results as JSON (for automation)
+#   ./validate.sh --quick      # Skip the slow checks (BLE scan, MeshCoP lookup)
 #
 # Exit codes:
 #   0  All checks passed
@@ -204,9 +205,13 @@ HOST_NETNS="/run/host-netns"
 VIRTUAL_TTY="/dev/ttyRadio"
 
 JSON_MODE=false
+# --quick skips the slow checks (the BLE scan and the MeshCoP lookup).  It is
+# what ./dockerw -T runs before starting Barton.
+QUICK_MODE=false
 for arg in "$@"; do
     case "$arg" in
         --json) JSON_MODE=true ;;
+        --quick) QUICK_MODE=true ;;
     esac
 done
 
@@ -752,7 +757,9 @@ check_otbr() {
 
     # The border router advertises itself as _meshcop._udp once it is up;
     # commissioners (including Matter) find it this way.
-    if command -v dns-sd >/dev/null 2>&1; then
+    if [ "$QUICK_MODE" = true ]; then
+        skip "MeshCoP advertisement" "Skipped (--quick)"
+    elif command -v dns-sd >/dev/null 2>&1; then
         local meshcop
         meshcop=$(timeout 4 dns-sd -B _meshcop._udp local. 2>/dev/null \
             | awk '/ Add /{ $1=$2=$3=$4=$5=$6=""; sub(/^ +/, ""); print; exit }') || true
@@ -940,7 +947,12 @@ check_dbus
 check_radio
 check_ble_chain
 check_hci
-check_ble_scan
+if [ "$QUICK_MODE" = true ]; then
+    section "BLE Scanning"
+    skip "BLE LE scan" "Skipped (--quick)"
+else
+    check_ble_scan
+fi
 check_otbr
 check_zigbee
 check_known_pitfalls

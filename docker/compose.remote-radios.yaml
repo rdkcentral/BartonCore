@@ -172,7 +172,8 @@ services:
             # validates and exits with a clear error if neither is usable.
             - SILABS_SOCKET=${SILABS_SOCKET:-/run/remote-radios/radios/silabs.sock}
             - SILABS_DEVICE=${SILABS_DEVICE:-}
-            # Bluetooth dongle over usb-ip (optional — Thread works without it).
+            # Bluetooth dongle over usb-ip.  The container runs without one, but
+            # ./dockerw -T requires it.
             - BT_USBIP_SOCKET=${BT_USBIP_SOCKET:-}
             - BT_USBIP_TCP_PORT=${BT_USBIP_TCP_PORT:-3240}
             - BT_USBIP_BUSID=${BT_USBIP_BUSID:-}
