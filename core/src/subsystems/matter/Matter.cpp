@@ -32,6 +32,9 @@
 #include "system/SystemClock.h"
 #include "zap-generated/gen_config.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <vector>
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
@@ -40,16 +43,18 @@
 #include <libxml/parser.h>
 
 extern "C" {
+#include "barton-core-properties.h"
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProperties.h"
+#include "deviceServiceProps.h"
 #include "icUtil/fileUtils.h"
+#include "matterSubsystem.h"
 #include "provider/barton-core-property-provider.h"
 #include "provider/barton-core-token-provider.h"
 #include <deviceServicePrivate.h>
 #include <icLog/logging.h>
 #include <icTypes/sbrm.h>
 #include <icUtil/base64.h>
-#include "matterSubsystem.h"
 
 #ifdef BARTON_CONFIG_THREAD
 #include <subsystems/thread/threadSubsystem.h>
@@ -109,7 +114,6 @@ extern "C" {
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
 
-#define BLE_CONTROLLER_ADAPTER_ID               0
 #define BLE_CONTROLLER_DEVICE_NAME              BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
 #define LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME      "localMatterNodeId"
@@ -192,7 +196,8 @@ Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric
     if (!SbmdFactory::Instance().RegisterDrivers())
     {
         icError("FATAL: Failed to register SBMD drivers. Matter subsystem cannot continue.");
-        throw std::runtime_error("Failed to register SBMD drivers. Check logs for details on duplicate names or other registration errors.");
+        throw std::runtime_error(
+            "Failed to register SBMD drivers. Check logs for details on duplicate names or other registration errors.");
     }
 
     commissionerController = std::make_shared<chip::Controller::DeviceCommissioner>();
@@ -324,8 +329,7 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     b_core_property_provider_set_property_uint32(
         propertyProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, DEVELOPMENT_PASSCODE);
 
-    b_core_property_provider_set_property_string(
-        propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, DEVELOPMENT_SALT);
+    b_core_property_provider_set_property_string(propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, DEVELOPMENT_SALT);
 
     b_core_property_provider_set_property_string(
         propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, DEVELOPMENT_VERIFIER);
@@ -335,6 +339,12 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
 
     chip::DeviceLayer::ConfigurationMgr().LogDeviceConfig();
 
+    uint32_t bleAdapterId = 0;
+    if (!Subsystem::Matter::ResolveBleAdapterId(bleAdapterId))
+    {
+        return false;
+    }
+
     if ((err = DeviceLayer::PlatformMgrImpl().AddEventHandler(EventHandler, 0)) != CHIP_NO_ERROR)
     {
         icError("AddEventHandler failed: %s", err.AsString());
@@ -342,10 +352,30 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     }
 
     chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName(BLE_CONTROLLER_DEVICE_NAME);
-    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(BLE_CONTROLLER_ADAPTER_ID, true);
+    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(bleAdapterId, true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
 
 #if CHIP_ENABLE_OPENTHREAD
+#if defined(CHIP_DEVICE_LAYER_LINUX_HAS_SET_THREAD_INTERFACE_NAME) && defined(BARTON_CONFIG_THREAD)
+    if ((err = DeviceLayer::ThreadStackMgrImpl().SetThreadInterfaceName(threadSubsystemGetInterfaceName())) !=
+        CHIP_NO_ERROR)
+    {
+        icError("SetThreadInterfaceName(%s) failed: %s", threadSubsystemGetInterfaceName(), err.AsString());
+        return false;
+    }
+#elif defined(BARTON_CONFIG_THREAD)
+    // Without the SDK patch Matter always uses the default interface, so it would silently talk to a different border
+    // router than the Thread subsystem.
+    if (strcmp(threadSubsystemGetInterfaceName(), THREAD_INTERFACE_NAME_DEFAULT) != 0)
+    {
+        icError("Thread interface %s is configured, but this Matter SDK only supports %s "
+                "(the SetThreadInterfaceName patch is missing)",
+                threadSubsystemGetInterfaceName(),
+                THREAD_INTERFACE_NAME_DEFAULT);
+        return false;
+    }
+#endif
+
     if ((err = DeviceLayer::ThreadStackMgrImpl().InitThreadStack()) != CHIP_NO_ERROR)
     {
         icError("InitThreadStack failed: %s", err.AsString());
@@ -426,10 +456,9 @@ bool Matter::Start()
 
     stackThread = new std::thread(&Matter::StackThreadProc, this);
 
-    //TODO this should also be called if/when the local wifi network is changed
+    // TODO this should also be called if/when the local wifi network is changed
     g_autoptr(GError) error = NULL;
-    g_autoptr(BCoreNetworkCredentialsProvider) provider =
-        deviceServiceConfigurationGetNetworkCredentialsProvider();
+    g_autoptr(BCoreNetworkCredentialsProvider) provider = deviceServiceConfigurationGetNetworkCredentialsProvider();
     g_autoptr(BCoreWifiNetworkCredentials) wifiCredentials =
         b_core_network_credentials_provider_get_wifi_network_credentials(provider, &error);
 
@@ -438,11 +467,9 @@ bool Matter::Start()
         g_autofree gchar *ssid = NULL;
         g_autofree gchar *psk = NULL;
         g_object_get(wifiCredentials,
-                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES[B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
                      &ssid,
-                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES[B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
                      &psk,
                      NULL);
 
@@ -545,9 +572,9 @@ CHIP_ERROR Matter::InitCommissioner()
 
     params.operationalCredentialsDelegate = operationalCredentialsIssuer.get();
     uint16_t controllerVendorId = 0;
-    if(DeviceLayer::GetDeviceInstanceInfoProvider()->GetVendorId(controllerVendorId) == CHIP_NO_ERROR)
+    if (DeviceLayer::GetDeviceInstanceInfoProvider()->GetVendorId(controllerVendorId) == CHIP_NO_ERROR)
     {
-        params.controllerVendorId = (VendorId)controllerVendorId;
+        params.controllerVendorId = (VendorId) controllerVendorId;
     }
     params.permitMultiControllerFabrics = false;
 
@@ -685,8 +712,8 @@ CHIP_ERROR Matter::SetIPKOnce()
     // TODO: add and use getSensitiveProperty
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    scoped_generic char *base64Ipk = b_core_property_provider_get_property_as_string(
-        propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
+    scoped_generic char *base64Ipk =
+        b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
     uint8_t compressedFabricId[sizeof(uint64_t)] = {0};
     chip::MutableByteSpan compressedFabricIdSpan(compressedFabricId);
     ReturnErrorOnFailure(commissionerController->GetCompressedFabricIdBytes(compressedFabricIdSpan));
@@ -782,9 +809,9 @@ CHIP_ERROR Matter::SetIPKOnce()
     VerifyOrReturnError(base64Ipk != NULL, CHIP_ERROR_INTERNAL);
 
     // TODO: add and use setSensitiveProperty
-    VerifyOrReturnError(b_core_property_provider_set_property_string(
-                            propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, base64Ipk),
-                        CHIP_ERROR_INTERNAL);
+    VerifyOrReturnError(
+        b_core_property_provider_set_property_string(propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, base64Ipk),
+        CHIP_ERROR_INTERNAL);
 
     return CHIP_NO_ERROR;
 }
@@ -793,8 +820,8 @@ std::unique_ptr<chip::Crypto::IdentityProtectionKey> Matter::GetCurrentIPK()
 {
     chip::FabricIndex fabricIndex = commissionerController->GetFabricIndex();
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    scoped_generic char *base64Ipk = b_core_property_provider_get_property_as_string(
-        propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
+    scoped_generic char *base64Ipk =
+        b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
 
     if (base64Ipk == NULL)
     {
@@ -864,8 +891,7 @@ CHIP_ERROR Matter::GetCommissioningParams(chip::Controller::CommissioningParamet
 #endif
 
     g_autoptr(GError) error = NULL;
-    g_autoptr(BCoreNetworkCredentialsProvider) provider =
-        deviceServiceConfigurationGetNetworkCredentialsProvider();
+    g_autoptr(BCoreNetworkCredentialsProvider) provider = deviceServiceConfigurationGetNetworkCredentialsProvider();
     g_autoptr(BCoreWifiNetworkCredentials) wifiCredentials =
         b_core_network_credentials_provider_get_wifi_network_credentials(provider, &error);
 
@@ -874,11 +900,9 @@ CHIP_ERROR Matter::GetCommissioningParams(chip::Controller::CommissioningParamet
         free(wifiSsid);
         free(wifiPass);
         g_object_get(wifiCredentials,
-                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES[B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
                      &wifiSsid,
-                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES[B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
                      &wifiPass,
                      NULL);
 
@@ -1390,7 +1414,7 @@ bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeo
                                                                              iterations,
                                                                              pbkdfSalt,
                                                                              myFabricIndex,
-                                                                             (VendorId)vendorId);
+                                                                             (VendorId) vendorId);
     }
 
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
@@ -1483,10 +1507,10 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
         // provides no source for it (it is not part of the DNS-SD TXT record and has no provider/config hook).
         // Default to standard when the property is unset or invalid.
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        uint8_t commissioningFlowValue = b_core_property_provider_get_property_as_uint8(
-            propertyProvider,
-            B_CORE_BARTON_MATTER_COMMISSIONING_FLOW,
-            static_cast<uint8_t>(CommissioningFlow::kStandard));
+        uint8_t commissioningFlowValue =
+            b_core_property_provider_get_property_as_uint8(propertyProvider,
+                                                           B_CORE_BARTON_MATTER_COMMISSIONING_FLOW,
+                                                           static_cast<uint8_t>(CommissioningFlow::kStandard));
 
         switch (static_cast<CommissioningFlow>(commissioningFlowValue))
         {
@@ -1547,7 +1571,8 @@ bool Matter::SetAccessRestrictionList()
 #if CHIP_CONFIG_USE_ACCESS_RESTRICTIONS && ENABLE_ARLS_FOR_TESTING
     bool success = false;
 
-    //TODO make these real.  The restrictions now are just for certification testing and only block some attribute that wont cause cert issue
+    // TODO make these real.  The restrictions now are just for certification testing and only block some attribute that
+    // wont cause cert issue
     icWarn("Setting Access Restrictions");
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
@@ -1560,13 +1585,16 @@ bool Matter::SetAccessRestrictionList()
     restriction.id.SetValue(app::Clusters::WiFiNetworkManagement::Attributes::Ssid::Id);
     locationEntry.restrictions.push_back(restriction);
 
-    success = (CHIP_NO_ERROR == accessRestrictionProvider.SetCommissioningEntries(std::vector<Access::AccessRestrictionProvider::Entry>({locationEntry})));
+    success = (CHIP_NO_ERROR == accessRestrictionProvider.SetCommissioningEntries(
+                                    std::vector<Access::AccessRestrictionProvider::Entry>({locationEntry})));
 
-    //TODO proactively set for fabrics.  This should instead be done at commissioning time.
-    for (FabricIndex fabric = 1; fabric <=10; fabric++)
+    // TODO proactively set for fabrics.  This should instead be done at commissioning time.
+    for (FabricIndex fabric = 1; fabric <= 10; fabric++)
     {
         locationEntry.fabricIndex = fabric;
-        success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetEntries(fabric, std::vector<Access::AccessRestrictionProvider::Entry>({locationEntry})));
+        success &=
+            (CHIP_NO_ERROR == accessRestrictionProvider.SetEntries(
+                                  fabric, std::vector<Access::AccessRestrictionProvider::Entry>({locationEntry})));
     }
 
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
@@ -1586,14 +1614,17 @@ bool Matter::ClearAccessRestrictionList()
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
 
-    success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetCommissioningEntries(std::vector<Access::AccessRestrictionProvider::Entry>()));
+    success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetCommissioningEntries(
+                                     std::vector<Access::AccessRestrictionProvider::Entry>()));
 
-    //FabricTable *fabricTable = &Server::GetInstance().GetFabricTable();
-    //for (const auto & iterFabricInfo : *fabricTable)
-    //TODO clear our proactively configured fabric indices. Once the hard-coded fabric id range is deprecated from above, work with actual fabrics
-    for (FabricIndex fabric = 1; fabric <=10; fabric++)
+    // FabricTable *fabricTable = &Server::GetInstance().GetFabricTable();
+    // for (const auto & iterFabricInfo : *fabricTable)
+    // TODO clear our proactively configured fabric indices. Once the hard-coded fabric id range is deprecated from
+    // above, work with actual fabrics
+    for (FabricIndex fabric = 1; fabric <= 10; fabric++)
     {
-        success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetEntries(fabric, std::vector<Access::AccessRestrictionProvider::Entry>()));
+        success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetEntries(
+                                         fabric, std::vector<Access::AccessRestrictionProvider::Entry>()));
     }
 
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
@@ -1616,7 +1647,7 @@ void Matter::RunOnMatterStack(std::function<void()> work)
         {
             work();
         }
-        catch (const std::exception & e)
+        catch (const std::exception &e)
         {
             icError("RunOnMatterStack: work() threw exception: %s", e.what());
         }
@@ -1652,7 +1683,7 @@ void Matter::RunOnMatterStack(std::function<void()> work)
         {
             future.get();
         }
-        catch (const std::exception & e)
+        catch (const std::exception &e)
         {
             icError("RunOnMatterStack: work() threw exception: %s", e.what());
         }
@@ -1708,9 +1739,9 @@ void emberAfThreadBorderRouterManagementClusterInitCallback(EndpointId endpoint)
     }
     else
     {
-        threadBorderRouterManagementServer.emplace(endpoint,
-                                                   otbrDelegate.get(),
-                                                   Server::GetInstance().GetFailSafeContext()).Init();
+        threadBorderRouterManagementServer
+            .emplace(endpoint, otbrDelegate.get(), Server::GetInstance().GetFailSafeContext())
+            .Init();
         threadBorderRouterManagementServerEndpointId = endpoint;
     }
 }

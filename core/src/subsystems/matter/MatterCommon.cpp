@@ -25,8 +25,19 @@
 // Created by nkhan599 on 3/29/24.
 //
 
+#define logFmt(fmt) "(%s): " fmt, __func__
 #include "MatterCommon.h"
 #include <iostream>
+
+extern "C" {
+#include "barton-core-properties.h"
+#include "deviceServiceConfiguration.h"
+#include "icLog/logging.h"
+}
+
+#define BLE_CONTROLLER_ADAPTER_ID_DEFAULT    0
+// Linux allocates HCI device ids below HCI_MAX_ID (10000)
+#define BLE_CONTROLLER_ADAPTER_ID_MAX        9999
 
 #define MATTER_LINK_QUALITY_GOOD_THRESHOLD   46
 #define MATTER_LINK_QUALITY_FAIR_THRESHOLD   30
@@ -37,6 +48,37 @@ namespace barton
     {
         namespace Matter
         {
+            bool ResolveBleAdapterId(uint32_t &adapterId)
+            {
+                g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
+                if (!b_core_property_provider_has_property(propertyProvider, B_CORE_BARTON_BLE_ADAPTER_ID))
+                {
+                    icInfo("%s not set, using default BLE adapter hci%u",
+                           B_CORE_BARTON_BLE_ADAPTER_ID,
+                           (unsigned) BLE_CONTROLLER_ADAPTER_ID_DEFAULT);
+                    adapterId = BLE_CONTROLLER_ADAPTER_ID_DEFAULT;
+                    return true;
+                }
+
+                // Use an out-of-range sentinel so parse failures are distinguishable from a valid value
+                uint32_t value = b_core_property_provider_get_property_as_uint32(
+                    propertyProvider, B_CORE_BARTON_BLE_ADAPTER_ID, BLE_CONTROLLER_ADAPTER_ID_MAX + 1);
+
+                if (value > BLE_CONTROLLER_ADAPTER_ID_MAX)
+                {
+                    icError("Invalid %s (must be 0-%u); refusing to pick a BLE adapter",
+                            B_CORE_BARTON_BLE_ADAPTER_ID,
+                            (unsigned) BLE_CONTROLLER_ADAPTER_ID_MAX);
+                    return false;
+                }
+
+                icInfo("Using BLE adapter hci%u from %s", value, B_CORE_BARTON_BLE_ADAPTER_ID);
+
+                adapterId = value;
+                return true;
+            }
+
             uint8_t calculateLinkScore(int8_t rssi)
             {
                 static double DBM_FLOOR = -90.0;

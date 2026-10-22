@@ -78,8 +78,20 @@ fi
 HIGHEST_BUILDER_TAG=$(cat "$VERSION_FILE")
 IMAGE_TAG=$HIGHEST_BUILDER_TAG
 BUILDER_TAG_CHANGED=false
+existingSilabsDevice=""
+existingBackboneIf=""
+existingSilabsSocket=""
+existingSilabsSocketHost=""
+existingBtUsbipSocket=""
+existingBtUsbipSocketHost=""
 
 if [ -f "$OUTFILE" ]; then
+    existingSilabsDevice=$(grep '^SILABS_DEVICE=' "$OUTFILE" | sed 's/^SILABS_DEVICE=//' || true)
+    existingBackboneIf=$(grep '^BACKBONE_IF=' "$OUTFILE" | sed 's/^BACKBONE_IF=//' || true)
+    existingSilabsSocket=$(grep '^SILABS_SOCKET=' "$OUTFILE" | sed 's/^SILABS_SOCKET=//' || true)
+    existingSilabsSocketHost=$(grep '^SILABS_SOCKET_HOST=' "$OUTFILE" | sed 's/^SILABS_SOCKET_HOST=//' || true)
+    existingBtUsbipSocket=$(grep '^BT_USBIP_SOCKET=' "$OUTFILE" | sed 's/^BT_USBIP_SOCKET=//' || true)
+    existingBtUsbipSocketHost=$(grep '^BT_USBIP_SOCKET_HOST=' "$OUTFILE" | sed 's/^BT_USBIP_SOCKET_HOST=//' || true)
 
     CURRENT_BUILDER_TAG=$(grep "CURRENT_BUILDER_TAG=" "$OUTFILE" | sed 's/CURRENT_BUILDER_TAG=//')
 
@@ -182,15 +194,135 @@ echo "BARTON_PYTHONPATH=/usr/local/lib/python3.x/dist-packages:/usr/lib/python3/
 echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 ##############################################################################
 
-# Ensure the container network exists
-NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID-barton-ip6net"
-_SUBNET_HASH=$(echo "$USER-$BARTON_WORKSPACE_ID" | sha256sum | cut -c1-8)
+##############################################################################
+# Optional remote-radio variables (used by docker/compose.remote-radios.yaml).
+#
+# These are populated automatically from the developer's radio config written
+# by scripts/remote-radios/remote-radios-setup.sh, which drops a file at
+# ~/.remote-radios/radios.env on the dev server.  If that file is absent (the
+# developer has no forwarded radios), all values stay empty and the overlay is
+# simply not used — the environment behaves exactly as before.
+#
+# SILABS_SOCKET_HOST: host path of the bind-mounted Silabs serial tunnel socket.
+# SILABS_SOCKET:      path of that socket INSIDE the container.
+# SILABS_DEVICE:      host path of a locally-attached Silabs USB radio (instead
+#                     of the remote tunnel socket).
+# BACKBONE_IF:        network interface used by otbr-agent for Thread backbone
+#                     routing.  Defaults to the host default-route interface.
+# BT_USBIP_SOCKET_HOST: host path of the bind-mounted usbipd UNIX socket.
+# BT_USBIP_SOCKET:      path of that socket INSIDE the container.
+#
+# Existing values in docker/.env are preserved unless overridden by exporting
+# the variable, or by a fresher ~/.remote-radios/radios.env.
+##############################################################################
+
+# Source the developer's radios.env (written by remote-radios-setup.sh) so the
+# radio parameters flow through automatically without any manual export.
+RADIOS_ENV="${REMOTE_RADIOS_ENV:-$HOME/.remote-radios/radios.env}"
+if [ -f "$RADIOS_ENV" ]; then
+    echo "Using remote-radios config from $RADIOS_ENV"
+    # shellcheck disable=SC1090
+    . "$RADIOS_ENV"
+fi
+
+# Auto-detect the default-route network interface for the Thread backbone.
+# The entrypoint will also re-detect at runtime, so this is only used when
+# BACKBONE_IF is not already set in the environment.
+detectedBackboneIf=""
+if command -v ip >/dev/null 2>&1; then
+    detectedBackboneIf=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+fi
+
+silabsSocketValue="${SILABS_SOCKET:-${existingSilabsSocket:-/run/remote-radios/radios/silabs.sock}}"
+silabsSocketHostValue="${SILABS_SOCKET_HOST:-${existingSilabsSocketHost:-$silabsSocketValue}}"
+silabsDeviceValue="${SILABS_DEVICE-$existingSilabsDevice}"
+backboneIfValue="${BACKBONE_IF:-${existingBackboneIf:-$detectedBackboneIf}}"
+btUsbipSocketValue="${BT_USBIP_SOCKET:-$existingBtUsbipSocket}"
+btUsbipSocketHostValue="${BT_USBIP_SOCKET_HOST:-$existingBtUsbipSocketHost}"
+
+# The compose overlay bind-mounts the socket's parent DIRECTORY (not the file)
+# to avoid Docker auto-creating a bogus directory when the tunnel is not up.
+silabsSocketDirValue=$(dirname "$silabsSocketValue")
+silabsSocketDirHostValue=$(dirname "$silabsSocketHostValue")
+# Ensure the host-side socket directory exists so the bind-mount source is a
+# real directory (Docker would otherwise create it as root-owned).
+mkdir -p "$silabsSocketDirHostValue" 2>/dev/null || true
+
+echo "SILABS_SOCKET=$silabsSocketValue" >> $OUTFILE
+echo "SILABS_SOCKET_HOST=$silabsSocketHostValue" >> $OUTFILE
+echo "SILABS_SOCKET_DIR=$silabsSocketDirValue" >> $OUTFILE
+echo "SILABS_SOCKET_DIR_HOST=$silabsSocketDirHostValue" >> $OUTFILE
+# Claim directory — a sibling of radios/ in the same ~/.remote-radios tree.  A
+# consumer that cannot share the radio (an hh4 QEMU guest runs its own cpcd and
+# needs the raw CPC byte stream) drops a file here, and the remote-radios
+# container releases the Silabs radio until it is removed.
+radioClaimDirValue="$(dirname "$silabsSocketDirValue")/claims"
+radioClaimDirHostValue="$(dirname "$silabsSocketDirHostValue")/claims"
+mkdir -p "$radioClaimDirHostValue" 2>/dev/null || true
+echo "RADIO_CLAIM_DIR=$radioClaimDirValue" >> $OUTFILE
+echo "RADIO_CLAIM_DIR_HOST=$radioClaimDirHostValue" >> $OUTFILE
+echo "SILABS_DEVICE=$silabsDeviceValue" >> $OUTFILE
+echo "BACKBONE_IF=$backboneIfValue" >> $OUTFILE
+
+# Each developer's border router registers on the dev server's shared D-Bus as
+# io.openthread.BorderRouter.<interface>, so the interface name must be unique
+# on the server.  The uid is; "wpan" is kept as the prefix because the Matter
+# SDK recognises Thread interfaces by it.  Deliberately not named
+# BARTON_THREAD_INTERFACE: every barton container reads this file, and only
+# the remote-radios overlay should change which border router Barton uses.
+echo "REMOTE_RADIOS_THREAD_INTERFACE=wpan$(id -u)" >> $OUTFILE
+echo "BT_USBIP_SOCKET=$btUsbipSocketValue" >> $OUTFILE
+echo "BT_USBIP_SOCKET_HOST=$btUsbipSocketHostValue" >> $OUTFILE
+# Bind-mount the usbip socket's parent DIRECTORY (not the file), same rationale
+# as the Silabs socket above.
+if [ -n "$btUsbipSocketValue" ]; then
+    btUsbipSocketDirValue=$(dirname "$btUsbipSocketValue")
+    btUsbipSocketDirHostValue=$(dirname "$btUsbipSocketHostValue")
+    mkdir -p "$btUsbipSocketDirHostValue" 2>/dev/null || true
+    echo "BT_USBIP_SOCKET_DIR=$btUsbipSocketDirValue" >> $OUTFILE
+    echo "BT_USBIP_SOCKET_DIR_HOST=$btUsbipSocketDirHostValue" >> $OUTFILE
+fi
+##############################################################################
+
+# Ensure the workspace network exists.
+NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID"
+# The subnet is derived from the name.  The "-ip6" suffix in the hash input
+# keeps it clear of the subnet used by this network's previous name,
+# "<user>-<workspace>-barton-ip6net", which Docker would otherwise reject as an
+# overlap while the old network still exists.
+_SUBNET_HASH=$(echo "$USER-$BARTON_WORKSPACE_ID-ip6" | sha256sum | cut -c1-8)
 IPV6_SUBNET="fd00:${_SUBNET_HASH:0:4}:${_SUBNET_HASH:4:4}::/64"
 unset _SUBNET_HASH
 
 if ! docker network ls --format '{{.Name}}' | grep -Fxq "$NETWORK_NAME"; then
     echo "Network $NETWORK_NAME does not exist. Creating it..."
     docker network create --ipv6 --subnet $IPV6_SUBNET $NETWORK_NAME
+fi
+
+# Retire the network under its previous name once nothing uses it.  Removal
+# fails harmlessly while a container (an open devcontainer, say) is attached.
+OLD_NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID-barton-ip6net"
+if docker network ls --format '{{.Name}}' | grep -Fxq "$OLD_NETWORK_NAME"; then
+    docker network rm "$OLD_NETWORK_NAME" >/dev/null 2>&1 \
+        && echo "Removed network $OLD_NETWORK_NAME (renamed to $NETWORK_NAME)."
+fi
+
+# Ensure the per-user remote-radios network exists.  The radios stack is per
+# user rather than per workspace — the radio sockets in ~/.remote-radios are per
+# user — so all of a user's workspaces share it.  It belongs to no single
+# Compose project (the radios containers and each workspace's barton container
+# run in separate ones), so it is created here and declared `external`.
+# Only for users who asked for radios (dockerw -T) or have set them up, so a
+# plain dockerw never depends on this extra network.
+RADIOS_NETWORK_NAME="$USER-remote-radios"
+if { [ "${REMOTE_RADIOS_REQUESTED:-false}" = true ] || [ -d "$HOME/.remote-radios" ]; } && \
+    ! docker network ls --format '{{.Name}}' | grep -Fxq "$RADIOS_NETWORK_NAME"; then
+    _SUBNET_HASH=$(echo "$USER-remote-radios-ip6" | sha256sum | cut -c1-8)
+    echo "Network $RADIOS_NETWORK_NAME does not exist. Creating it..."
+    docker network create --ipv6 \
+        --subnet "fd00:${_SUBNET_HASH:0:4}:${_SUBNET_HASH:4:4}::/64" \
+        "$RADIOS_NETWORK_NAME" >/dev/null
+    unset _SUBNET_HASH
 fi
 
 # Build the image if it doesn't exist
@@ -202,3 +334,34 @@ else
     echo "Image $IMAGE not found, building..."
     $DIR/build.sh
 fi
+
+# Ensure the per-user remote-radios state volume exists.  Containers mount
+# parts of it by subpath:
+#   ble/   ble_adapter_id, published by the radios container to Barton
+#   cpcd/  cpcd's sockets, shared by the radios and zigbee containers
+# A subpath mount fails if the directory does not exist, so create both.  This
+# needs Docker Engine 26 and Compose 2.23 or later.
+STATE_VOLUME_NAME="$USER-remote-radios-state"
+_engine=$(docker version --format '{{.Server.Version}}' 2>/dev/null)
+_compose=$(docker compose version --short 2>/dev/null)
+if [ "${REMOTE_RADIOS_REQUESTED:-false}" != true ] && [ ! -d "$HOME/.remote-radios" ]; then
+    :   # radios not requested (dockerw -T) and never set up for this user
+elif [ "${_engine%%.*}" -lt 26 ] 2>/dev/null || \
+    [ "$(printf '%s\n2.23\n' "${_compose#v}" | sort -V | head -1)" != "2.23" ]; then
+    # Only remote radios need subpath mounts, so this must not stop anyone else.
+    echo "Note: remote radios (./dockerw -T) need Docker Engine 26+ and Compose 2.23+;" \
+        "found Engine ${_engine:-?}, Compose ${_compose:-?}." >&2
+    [ "${REMOTE_RADIOS_REQUESTED:-false}" = true ] && exit 1
+else
+    if ! docker volume ls --format '{{.Name}}' | grep -Fxq "$STATE_VOLUME_NAME"; then
+        echo "Volume $STATE_VOLUME_NAME does not exist. Creating it..."
+        docker volume create "$STATE_VOLUME_NAME" >/dev/null
+        _init_state=true
+    fi
+    # Also on every -T run, so an existing or partially created volume is repaired.
+    if [ "${_init_state:-false}" = true ] || [ "${REMOTE_RADIOS_REQUESTED:-false}" = true ]; then
+        docker run --rm -v "$STATE_VOLUME_NAME:/state" --entrypoint sh "$IMAGE" \
+            -c 'mkdir -p /state/ble /state/cpcd' >/dev/null
+    fi
+fi
+unset _engine _compose _init_state

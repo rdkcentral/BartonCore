@@ -40,6 +40,8 @@
  */
 
 #include "barton-core-reference-io.h"
+#include <errno.h>
+#include <fcntl.h>
 #include <gio/gio.h>
 #include <gio/gunixinputstream.h>
 #include <glib.h>
@@ -105,6 +107,16 @@ static void ioSetup(void)
         {
             outputReceivePipe = fds[0];
             outputSendPipe = fds[1];
+
+            // Set write end to non-blocking so log writes never block when the
+            // pipe buffer is full.  This prevents a deadlock when subsystem
+            // initialization (e.g. Zigbee) blocks the main thread before the
+            // GLib main loop starts draining the pipe.
+            int flags = fcntl(outputSendPipe, F_GETFL);
+            if (flags != -1)
+            {
+                fcntl(outputSendPipe, F_SETFL, flags | O_NONBLOCK);
+            }
         }
         atexit(ioShutdown);
     }
@@ -448,7 +460,25 @@ static void emitToPipe(int fd, const gchar *str)
 {
     if (fd > 0)
     {
-        write(fd, str, strlen(str));
+        // The pipe is non-blocking: write what fits and drop the rest if the reader falls behind.
+        size_t remaining = strlen(str);
+        while (remaining > 0)
+        {
+            ssize_t written = write(fd, str, remaining);
+            if (written > 0)
+            {
+                str += written;
+                remaining -= (size_t) written;
+            }
+            else if (written < 0 && errno == EINTR)
+            {
+                continue;
+            }
+            else
+            {
+                break;
+            }
+        }
     }
 }
 
