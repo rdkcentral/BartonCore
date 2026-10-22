@@ -28,7 +28,7 @@
 
 - [ ] 4.1 Add `RESOURCE_NOT_FOUND`, `METADATA_NOT_FOUND`, `BCoreSystemPropertyError` enums (1h)
 - [ ] 4.2 `b_core_client_read_resource`/`read_metadata` set not-found errors (2h) + tests (2h)
-- [ ] 4.3 `b_core_client_read_system_property`, `delete_system_property`, `delete_metadata`; allow NULL in `write_resource`/`write_metadata`/`set_system_property` (3h) + tests (3h)
+- [ ] 4.3 `b_core_client_get_system_property` gains `GError **err` (signature change; update `barton-core-client-test.c:1477-1500` and all callers); add `delete_system_property`, `delete_metadata`; allow NULL in `write_resource`/`write_metadata`/`set_system_property` (3h) + tests (3h)
 - [ ] 4.4 `(nullable)` annotations on value getters/properties/event props; regenerate GIR and verify (2h)
 - [ ] 4.5 Reference app prints `<unknown>` (`reference/src/coreCategory.c:305,350`) (1h)
 

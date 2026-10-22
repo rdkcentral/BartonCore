@@ -31,11 +31,11 @@ The device service SHALL pass a client `NULL` resource write to the owning drive
 
 #### Scenario: Unknown system property
 - **WHEN** a system property is set to `NULL`
-- **THEN** `b_core_client_read_system_property` SHALL return `NULL` without error
+- **THEN** `b_core_client_get_system_property` SHALL return `NULL` without error
 
 #### Scenario: Deleted system property
 - **WHEN** a system property is deleted
-- **THEN** `b_core_client_read_system_property` SHALL set `SYSTEM_PROPERTY_NOT_FOUND`
+- **THEN** `b_core_client_get_system_property` SHALL set `SYSTEM_PROPERTY_NOT_FOUND`
 
 ### Requirement: NULL survives persistence
 Resources, metadata, and system properties with `NULL` values SHALL be written as JSON `null` and reloaded as `NULL`. A missing value key in existing files SHALL load as `NULL`.

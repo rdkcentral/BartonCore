@@ -9,7 +9,7 @@ This change defines `NULL` as a first-class value meaning **"value unknown"** fo
 - **Contract**: `NULL` value = "the item exists but its value is unknown". It is distinct from "not found" (reported via `GError`/return code) and from `""` (a known empty value).
 - **Public API (api/c)**:
   - Add `RESOURCE_NOT_FOUND` (2) to `BCoreReadResourceError` and `METADATA_NOT_FOUND` (201) to `BCoreReadMetadataError`; set them on not-found instead of returning bare `NULL`.
-  - Add `BCoreSystemPropertyError` (300-399) and `b_core_client_read_system_property(self, key, GError **)`; keep `b_core_client_get_system_property` (documented as unable to distinguish unknown from not-found).
+  - Add `BCoreSystemPropertyError` (300-399); **change the signature** of `b_core_client_get_system_property` to `(self, key, GError **err)`.
   - Allow `NULL` in `b_core_client_write_metadata` and `b_core_client_set_system_property`; add explicit delete functions so `NULL` no longer doubles as "remove".
   - `b_core_client_write_resource` accepts `NULL` ("set to unknown") and passes it to the driver; each driver accepts it or rejects with `FALSE`, and every driver `writeResource` must NULL-guard.
   - Add `(nullable)` GIR annotations to all value getters, properties, and event value properties.
@@ -22,7 +22,7 @@ This change defines `NULL` as a first-class value meaning **"value unknown"** fo
 - **Drivers**: every `writeResource` and `getMetadata`/`resource->value` consumer null-checks; Philips Hue and Zigbee common fixed; Matter driver stops collapsing Matter `null` to `0`.
 - **SBMD (mquickjs)**: results carry `std::optional<std::string>`; JS `null` → `NULL` (unknown), JS `undefined`/missing → handler error. Document `value: null` in `docs/SBMD.md`.
 - **BartonCommon**: document `simpleProtectConfigData`/`simpleUnprotectConfigData` `NULL` semantics; add a status-returning variant so callers can distinguish "input was NULL" from "encryption failed". Zilker carries a duplicate of this file and the running binary links Zilker's copy, so parity is tracked separately (XHCPE ticket).
-- **BREAKING (behavioral, major bump 4.4.0 → 5.0.0)**: `b_core_client_read_resource` / `read_metadata` now set a `GError` for not-found (GI bindings raise). Callers that treated "NULL, no error" as "not found" must switch to checking the error. No C signature/ABI change. `b_core_client_get_system_property` is behaviorally unchanged.
+- **BREAKING (major bump 4.4.0 → 5.0.0)**: `b_core_client_read_resource` / `read_metadata` now set a `GError` for not-found (GI bindings raise); callers that treated "NULL, no error" as "not found" must check the error (behavioral only, no signature change). `b_core_client_get_system_property` gains a `GError **err` parameter (source/ABI break).
 
 ### Non-goals
 

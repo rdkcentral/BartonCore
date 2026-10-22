@@ -176,11 +176,14 @@ typedef enum
 } BCoreSystemPropertyError;
 
 /**
- * b_core_client_read_system_property:
+ * b_core_client_get_system_property:
+ * @err: (nullable): return location for a #GError
  * Returns: (nullable) (transfer full): the value; NULL with @err unset means "value unknown",
  *          NULL with @err set to SYSTEM_PROPERTY_NOT_FOUND means not found.
+ *
+ * Since: 5.0.0 — @err added (signature change).
  */
-gchar *b_core_client_read_system_property(BCoreClient *self, const gchar *key, GError **err);
+gchar *b_core_client_get_system_property(BCoreClient *self, const gchar *key, GError **err);
 ```
 
 ```c
@@ -204,7 +207,7 @@ gchar *b_core_client_read_resource(BCoreClient *self, const gchar *uri, GError *
     return g_strdup(resource->value);
 }
 
-gchar *b_core_client_read_system_property(BCoreClient *self, const gchar *key, GError **err)
+gchar *b_core_client_get_system_property(BCoreClient *self, const gchar *key, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(key != NULL, NULL);
@@ -218,11 +221,20 @@ gchar *b_core_client_read_system_property(BCoreClient *self, const gchar *key, G
 }
 ```
 
-`b_core_client_get_system_property` keeps its signature and its observable behavior. It already returns `NULL` for both missing and unknown properties; before this change an unknown property could not be stored through the public API. It is documented as unable to tell the two apart, and callers that need to are pointed to `b_core_client_read_system_property`.
+`b_core_client_get_system_property` gains a `GError **err` parameter in place. Because 5.0.0 is already a breaking release, we change the existing function rather than adding a parallel `read_system_property`. That keeps a single getter and matches `read_resource`/`read_metadata`. This is a **source and ABI break**: every C caller must add the argument, and in GI bindings the call now raises on not-found. Known callers that must update:
 
-The **internal** contract does change: `deviceServiceGetSystemProperty` now returns `true` with `*value == NULL` for a stored unknown property. Callers in `deviceDescriptorHandler.c:664,672`, `deviceService.c:2213`, `zigbeeTelemetry.c:331,569`, and `Matter.cpp:980` are already NULL-safe. `Matter.cpp:1006,1030,1055` (RCA/ICA/NOC) call `strlen()` on the value whenever the getter returns `true`, so each must add `&& b64X != NULL` and treat `NULL` the same as not found. Zilker does not call the internal getter.
+- `api/c/test/barton-core-client-test.c:1477-1500`
+- the reference app, if it is used there
+- Zilker `services/device/core/src/ipc/deviceServiceIpcHandler.c:858`
+- any Python tests that call `get_system_property`; they will raise on missing keys
 
-**Alternative considered:** Add `GError **` to `b_core_client_get_system_property`. Rejected: ABI/API break.
+The **internal** contract also changes: `deviceServiceGetSystemProperty` now returns `true` with `*value == NULL` for a stored unknown property.
+
+- These callers are already NULL-safe: `deviceDescriptorHandler.c:664,672`, `deviceService.c:2213`, `zigbeeTelemetry.c:331,569`, `Matter.cpp:980`.
+- `Matter.cpp:1006,1030,1055` (RCA/ICA/NOC) call `strlen()` whenever the getter returns `true`. Each must add `&& b64X != NULL` and treat `NULL` the same as not found.
+- Zilker does not call the internal getter.
+
+**Alternative considered:** Keep the old signature and add `b_core_client_read_system_property`. Rejected: the release is already breaking, and two getters with different semantics would cause confusion.
 
 ---
 
@@ -395,8 +407,7 @@ System properties file: `{ "propA": "1", "propB": null }`.
 | `b_core_client_read_metadata` | Sets `METADATA_NOT_FOUND`; `NULL` without error = unknown |
 | `b_core_client_write_metadata` | Accepts `NULL` |
 | `b_core_client_delete_metadata` | New |
-| `b_core_client_read_system_property` | New, GError variant |
-| `b_core_client_get_system_property` | Unchanged; doc notes ambiguity |
+| `b_core_client_get_system_property` | **Signature change**: adds `GError **err`; sets `SYSTEM_PROPERTY_NOT_FOUND` |
 | `b_core_client_set_system_property` | Accepts `NULL` |
 | `b_core_client_delete_system_property` | New |
 | `BCoreResource:value`, resource/metadata updated event `value` props | `(nullable)` annotations |
@@ -473,7 +484,7 @@ Note that sensitive resource persistence fails closed on encryption errors. No `
 
 **Risk:** Existing clients treat "`NULL`, no error" from `read_resource`/`read_metadata` as not-found and will now also see a `GError`. In GObject Introspection bindings (Python/JS) the call now raises instead of returning `None`. Zilker is directly affected: `troubleState.c:1485` and Java `DeviceServiceDevice.java:441` stop being able to create first-time metadata (see Zilker regressions).
 
-**Mitigation:** This is an accepted, intentional **breaking behavioral change**. No C signatures or ABI change. Ship it as a **major version bump (4.4.0 → 5.0.0)** with a BREAKING CHANGE footer and CHANGELOG entry. Consumers (Zilker, XHCPE-2742) must adopt the new not-found/unknown semantics before taking 5.0.0. The legacy error-enum rename TODO in `barton-core-client.h` could be bundled into the same major release, but it is out of scope here.
+**Mitigation:** This is an accepted, intentional **breaking change**. Read and write for resources and metadata keep their C signatures; the change there is behavioral only. `b_core_client_get_system_property` changes signature, adding `GError **err`, so it breaks both source and ABI. Ship it as a **major version bump (4.4.0 → 5.0.0)** with a BREAKING CHANGE footer and a CHANGELOG entry. Consumers (Zilker, XHCPE-2742) must adopt the new not-found/unknown semantics and the new system-property signature before taking 5.0.0. The legacy error-enum rename TODO in `barton-core-client.h` could be bundled into the same major release, but it is out of scope here.
 
 ### Zilker regressions
 
