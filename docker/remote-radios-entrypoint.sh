@@ -448,8 +448,10 @@ bt_usbip_attach() {
     # developers' attaches on the shared controller.
     local attachMarker
     attachMarker=$(mktemp)
-    attach_out=$(usbip --tcp-port "${BT_USBIP_TCP_PORT}" attach -r 127.0.0.1 -b "${busid}" 2>&1)
-    attach_rc=$?
+    # Capture the status explicitly: under `set -e` a failing assignment would
+    # otherwise end the script if this were ever called outside a condition.
+    attach_rc=0
+    attach_out=$(usbip --tcp-port "${BT_USBIP_TCP_PORT}" attach -r 127.0.0.1 -b "${busid}" 2>&1) || attach_rc=$?
     if [ ${attach_rc} -ne 0 ]; then
         echo "[remote-radios] usbip attach failed for busid ${busid}: ${attach_out}" >&2
         rm -f "${attachMarker}"
