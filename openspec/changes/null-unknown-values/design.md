@@ -38,7 +38,7 @@ The encryption helpers live in BartonCommon (`libs/config/c/src/simpleProtectCon
 **Non-Goals:**
 
 - Typed values or a schema change beyond explicit JSON `null`.
-- Clients writing `NULL` to resources.
+- Per-resource "nullable" mode bit (drivers reject `NULL` writes individually instead).
 - Renaming the legacy unprefixed error enums.
 - Fixing Zilker (tracked in XHCPE).
 
@@ -54,34 +54,65 @@ The encryption helpers live in BartonCommon (`libs/config/c/src/simpleProtectCon
 
 ---
 
-### D2: Clients cannot write `NULL` to resources; drivers can
+### D2: Clients may write `NULL` to resources; drivers decide whether it is meaningful
 
-**Decision:** Unknown resource state is reported by devices, not commanded by clients. `deviceServiceWriteResourceNoPattern` rejects `NULL` once, centrally, so no driver `writeResource` sees a `NULL` `newValue` from a client. Drivers still update resources to `NULL` via `updateResource()`.
+**Decision:** A client may write `NULL` to a writable resource to mean "set this value to unknown" (for example, clearing a cached label or credential). The public API and core pass `NULL` through to the driver unchanged. Each driver's `writeResource` SHALL either accept `NULL` (and call `updateResource(..., NULL, ...)`) or reject it by returning `false`; it SHALL never dereference `newValue` or `previousValue` without a check. The device service owns the contract, so a missing driver guard is a driver bug, not a client bug.
 
 ```c
-// core/src/deviceService.c — deviceServiceWriteResourceNoPattern()
-if (value == NULL)
-{
-    icLogWarn(LOG_TAG, "%s: refusing NULL write to %s", __func__, uri);
-    return false;
-}
+// api/c/public/barton-core-client.h
+/**
+ * b_core_client_write_resource:
+ * @uri: the resource URI
+ * @resourceValue: (nullable): the new value, or NULL to set the value to "unknown"
+ *
+ * Returns: TRUE if the driver accepted the write. Drivers MAY reject NULL for resources
+ *          where "unknown" is not meaningful.
+ */
+gboolean b_core_client_write_resource(BCoreClient *self, const gchar *uri, const gchar *resourceValue);
 ```
 
 ```c
-// api/c/src/barton-core-client.c
+// api/c/src/barton-core-client.c — unchanged; no NULL guard on resourceValue
 gboolean b_core_client_write_resource(BCoreClient *self, const gchar *uri, const gchar *resourceValue)
 {
     g_return_val_if_fail(self != NULL, FALSE);
     g_return_val_if_fail(uri != NULL, FALSE);
-    g_return_val_if_fail(resourceValue != NULL, FALSE);
 
     return deviceServiceWriteResource(uri, resourceValue) ? TRUE : FALSE;
 }
 ```
 
-**Alternative considered:** Let drivers decide per resource. Rejected: already inconsistent today (Light/LightController/DoorLock reject; `zigbeeDriverCommon.c:2122` and `philipsHueDeviceDriver.c:345` crash or misbehave).
+```c
+// core/src/deviceService.c — deviceServiceWriteResourceNoPattern() (existing structure kept;
+// only the logging around the driver call changes). Drivers without writeResource still fail.
+    else
+    {
+        // The device driver's contract states that they will call us back at updateResource if successful
+        //  we save the change there. value MAY be NULL ("set to unknown").
+        result = driver->writeResource(driver->callbackContext, resource, resource->value, value);
+        if (!result && value == NULL)
+        {
+            icLogDebug(LOG_TAG, "Driver %s rejected NULL (unknown) write to %s", driver->driverName, uri);
+        }
+    }
+```
 
-**Trade-offs:** If a future resource needs "reset to unknown" from the client, a dedicated execute resource is needed.
+```c
+// Driver pattern — e.g. core/deviceDrivers/zigbee/zigbeeLightDeviceDriver.c writeResource()
+if (newValue == NULL)
+{
+    // "unknown" is not a commandable state for on/off/level; reject.
+    return false;
+}
+```
+
+Required driver work: Zigbee Light/LightController/DoorLock already reject (keep, document); `zigbeeDriverCommon.c:2122` and `philipsHueDeviceDriver.c:345` must add guards; Onvif (`OnvifDeviceDriver.cpp`, user/password at :418/:429 already guarded), `MatterDeviceDriver.cpp`, and `SpecBasedMatterDeviceDriver.cpp` must be audited. SBMD write mappers receive `null` as the script input value: today `SbmdHandlerInvoker.cpp:148-157` omits `input` when `std::nullopt` (JS sees `undefined`), so a NULL write must set `args.resource.input = null` explicitly to distinguish "unknown" from "no input" (execute without args). Scripts may throw/return an error to reject.
+
+**Alternative considered:** Reject `NULL` centrally in `deviceServiceWriteResourceNoPattern`. Rejected by product decision on BARTON-389: clients need to be able to set a resource to unknown.
+
+**Alternative considered:** Reject centrally and add an opt-in per-resource flag (`RESOURCE_MODE_NULLABLE`). Deferred: adds a mode bit and migration for every driver; can be layered on later if driver-level rejection proves inconsistent.
+
+**Trade-offs:** Every driver becomes responsible for a `NULL` guard; a missed guard is a crash. Mitigated by a core unit test that writes `NULL` to every writable resource of every reference device class (task 3.1).
 
 ---
 
@@ -358,7 +389,7 @@ System properties file: `{ "propA": "1", "propB": null }`.
 | Function | Change |
 |---|---|
 | `b_core_client_read_resource` | Sets `RESOURCE_NOT_FOUND`; returns `(nullable)` unknown with no error |
-| `b_core_client_write_resource` | Rejects `NULL` |
+| `b_core_client_write_resource` | Accepts `NULL` (documented `(nullable)`); driver may reject → `FALSE` |
 | `b_core_client_read_metadata` | Sets `METADATA_NOT_FOUND`; `NULL` without error = unknown |
 | `b_core_client_write_metadata` | Accepts `NULL` |
 | `b_core_client_delete_metadata` | New |
@@ -400,7 +431,7 @@ Fix `__wrap_simpleProtectConfigData` in `core/test/src/database/jsonDatabaseTest
 
 ### Public API
 
-Unit tests for not-found vs unknown vs not-readable on resource, metadata, and system-property reads; `NULL` write rejected for resources and accepted for metadata/system properties; delete functions. Re-enable/port the disabled `deviceServiceTest.c:308-312` case.
+Unit tests for not-found vs unknown vs not-readable on resource, metadata, and system-property reads; `NULL` write accepted for resources (passed to driver; rejecting drivers return `FALSE`), metadata, and system properties; delete functions. Re-enable/port the disabled `deviceServiceTest.c:308-312` case.
 
 ### SBMD
 
@@ -444,9 +475,50 @@ Note that sensitive resource persistence fails closed on encryption errors. No `
 
 ### Zilker regressions
 
-**Risk:** Zilker dereferences resource values without NULL checks: `services/comm/core/src/userver/event/cameraCrudEventMessage.c:872` (`strdup`) and `services/device/core/src/clusters/zigbee/legacySecurityCluster.c:1793` (`strtoul`). Zilker's IPC handler maps a `NULL` system property to `IPC_GENERAL_ERROR` (`deviceServiceIpcHandler.c:858-870`) and passes `NULL` metadata/resource values to IPC clients (`deviceServiceIpcHelper.c:52-108`, `deviceHelper.c:294-434`). About 50 IPC client files were not audited for pass-through.
+**Risk:** A full audit of Zilker device-service internals and IPC clients (`/home/cleith065/src/core/source`) found the following. All paths are relative to `source/`.
 
-**Mitigation:** Track in XHCPE; fix the two crashes before consuming this Barton version. Today these paths are reachable only if a driver already sets `NULL` (resources), so the crash risk exists now and grows with D7.
+*Crashes on a `NULL` value:*
+
+- `services/device/core/src/clusters/zigbee/legacySecurityCluster.c:1793`: `strtoul(resource->value)`
+- `libs/device/helper/c/src/sensorHelper.c:99`: `strcmp("true", NULL)` in `isEndpointFaulted`, reached from `services/security/core/src/zone/securityZone.c:2171`. A zone with an unknown `faulted` crashes the security service.
+- `services/comm/core/src/userver/userverEventListener.c:1662`: `strcmp(value, "false")` on a `bypassed` event
+- `services/comm/core/src/userver/event/cameraCrudEventMessage.c:872`: `strdup`
+- `services/comm/core/src/aws/deviceHelper/awsDeviceThingHelper.c:544`: `strdup` in the CIE color path (via `:1178`)
+- `integrations/xbb/libxbb/src/xbb.c:318,328`: `strncpy`
+- `integrations/xbb/libxbb/src/xbb.c:338,348`: `sscanf`
+
+*Behavior regressions caused by not-found now returning an error:*
+
+- `services/security/src/trouble/troubleState.c:1485-1513`: the first device trouble metadata is never written. The helper needs a three-way result (value / unknown / not-found).
+- Java `DeviceServiceDevice.java:441`: the first user property can never be set.
+- Java `DeviceServiceSecurityController:82`, `DeviceServiceBridge.java:361`, `CameraManagerFactory.java:1400`: these now throw.
+- About 102 Java `readEndpointResource`/`readDeviceResource` call sites throw on optional missing resources.
+- `services/automation/src/actions/devices.c:106`: now returns a JSON-RPC error.
+
+*Behavior regressions caused by `NULL` meaning unknown:*
+
+- `stringToBool(NULL)` returns `false`, so unknown is reported upstream as false:
+  - AWS encoders: `deviceMessageEncodeCommon.c:562` (reports `connected=true`), `lightMessageEncode.c:262`, `zoneMessageEncode.c:853`, `chimeMessageEncode.c:315`, `doorLockMessageEncode.c:255`, `awsRtspCameraThingHandler.c:194,200`
+  - `xbb.c:217,228,250`
+  - `userverEventListener.c:1628` (sends a false camera-motion restore)
+- `put_metadataValue_in_*` (generated pojo) drops `NULL` map entries, so `QUERY_METADATA` disagrees with `READ_METADATA`.
+- Java pojos use `optString()`, so `NULL` arrives as `""`.
+- `deviceServiceIpcHandler.c:858-869` reports a `NULL` system property as an error.
+- `services/automation/src/actions/devices.c:156`: a non-string JSON value now performs a successful `NULL` write that clears the resource.
+- deviceUtil `wm <uri>` and `writeSystemProperty <key>` with no value used to delete and now write `NULL`. These are the only callers that depended on "`NULL` write means delete".
+- `"(null)"` is printed into server payloads: `cameraAccessEventMessage.c:114,141,145`, `zoneCrudEventMessage.c:1389,1394`, `troubleEventMessage.c:926,931`.
+
+About 70 call sites were found safe. These bugs exist independently of this change: a double `free` at `troubleState.c:1497/1517`, and the wrong variable parsed at `DeviceServiceDevice.java:445`.
+
+**Mitigation:** Track all of the above in XHCPE-2742. Zilker needs:
+
+- NULL guards at the crash sites
+- a policy for unknown upstream (omit, last-known, or explicit unknown)
+- a three-way C helper result
+- `DELETE_METADATA` / `DELETE_SYSTEM_PROPERTY` IPC calls
+- explicit-null support in the Java pojos
+
+Zilker must not consume a Barton version with this change until the crash sites and the not-found handling are fixed. Several crash sites can already be reached today if a driver sets `NULL`.
 
 ### Divergent `simpleProtectConfig` copies
 

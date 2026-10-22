@@ -15,12 +15,16 @@ A resource, metadata entry, or system property whose value is `NULL` SHALL be in
 - **WHEN** a value of `""` is stored and reloaded
 - **THEN** it SHALL be returned as `""`, not `NULL`
 
-### Requirement: Clients cannot write NULL to resources
-The device service SHALL reject a `NULL` resource write from a client before invoking any driver `writeResource`.
+### Requirement: Clients may write NULL to resources
+The device service SHALL pass a client `NULL` resource write to the owning driver. A driver SHALL either apply it (updating the resource to `NULL`) or reject it by returning failure, and SHALL NOT dereference a `NULL` `newValue` or `previousValue`.
 
-#### Scenario: NULL resource write rejected
-- **WHEN** `b_core_client_write_resource` is called with a `NULL` value
-- **THEN** it SHALL return `FALSE` and no driver SHALL be invoked
+#### Scenario: NULL resource write accepted
+- **WHEN** `b_core_client_write_resource` is called with a `NULL` value on a resource whose driver supports unknown
+- **THEN** it SHALL return `TRUE`, the resource value SHALL become `NULL`, and a resource-updated event SHALL be emitted
+
+#### Scenario: NULL resource write rejected by driver
+- **WHEN** `b_core_client_write_resource` is called with a `NULL` value on a resource whose driver does not support unknown
+- **THEN** it SHALL return `FALSE` and the resource value SHALL be unchanged
 
 ### Requirement: Clients may record unknown metadata and system properties
 `b_core_client_write_metadata` and `b_core_client_set_system_property` SHALL accept `NULL`. Removal SHALL use `b_core_client_delete_metadata` / `b_core_client_delete_system_property`.

@@ -11,7 +11,7 @@ This change defines `NULL` as a first-class value meaning **"value unknown"** fo
   - Add `RESOURCE_NOT_FOUND` (2) to `BCoreReadResourceError` and `METADATA_NOT_FOUND` (201) to `BCoreReadMetadataError`; set them on not-found instead of returning bare `NULL`.
   - Add `BCoreSystemPropertyError` (300-399) and `b_core_client_read_system_property(self, key, GError **)`; keep `b_core_client_get_system_property` (documented as unable to distinguish unknown from not-found).
   - Allow `NULL` in `b_core_client_write_metadata` and `b_core_client_set_system_property`; add explicit delete functions so `NULL` no longer doubles as "remove".
-  - `b_core_client_write_resource` rejects `NULL` from clients (unknown is device-reported state, not a command).
+  - `b_core_client_write_resource` accepts `NULL` ("set to unknown") and passes it to the driver; each driver accepts it or rejects with `FALSE`, and every driver `writeResource` must NULL-guard.
   - Add `(nullable)` GIR annotations to all value getters, properties, and event value properties.
 - **Core (core/src)**:
   - Storage writes explicit JSON `null` (`cJSON_AddNullToObject`) for resources, metadata, and system properties; load treats explicit `null` and a missing key as `NULL` (backward compatible).
@@ -27,7 +27,7 @@ This change defines `NULL` as a first-class value meaning **"value unknown"** fo
 ### Non-goals
 
 - Changing the string-serialized value model or adding typed values.
-- Allowing clients to write `NULL` to resources.
+- A per-resource "nullable" mode bit; drivers decide per resource whether a `NULL` write is meaningful.
 - Renaming the existing unprefixed error enum values (tracked by the TODO in `barton-core-client.h`).
 - Fixing Zilker code. This proposal only identifies Zilker regression risks; Zilker work is tracked in XHCPE.
 - Auditing every IPC client in Zilker for pass-through of `NULL` values.

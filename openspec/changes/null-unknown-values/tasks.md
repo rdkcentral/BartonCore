@@ -16,7 +16,7 @@
 
 ## 3. Core semantics
 
-- [ ] 3.1 `deviceServiceWriteResourceNoPattern` rejects NULL (1h) + test (1h)
+- [ ] 3.1 `deviceServiceWriteResourceNoPattern` passes NULL through to drivers and logs driver rejection (1h) + core test that writes NULL to every writable resource of each reference device class and asserts no crash (3h)
 - [ ] 3.2 `setMetadata` accept NULL (`stringCompare`, `strdupOpt`); `jsonDatabaseSaveMetadata` `strdupOpt`; `deviceServiceSetMetadata` return real result; add delete (4h)
 - [ ] 3.3 Tests for 3.2 including metadata-updated event on value↔NULL (3h)
 - [ ] 3.4 `deviceServiceGetDevicesByMetadata` existence matches NULL-valued entries (1h) + test (1h)
@@ -27,7 +27,7 @@
 
 - [ ] 4.1 Add `RESOURCE_NOT_FOUND`, `METADATA_NOT_FOUND`, `BCoreSystemPropertyError` enums (1h)
 - [ ] 4.2 `b_core_client_read_resource`/`read_metadata` set not-found errors (2h) + tests (2h)
-- [ ] 4.3 `b_core_client_read_system_property`, `delete_system_property`, `delete_metadata`; allow NULL in `write_metadata`/`set_system_property`; reject NULL in `write_resource` (3h) + tests (3h)
+- [ ] 4.3 `b_core_client_read_system_property`, `delete_system_property`, `delete_metadata`; allow NULL in `write_resource`/`write_metadata`/`set_system_property` (3h) + tests (3h)
 - [ ] 4.4 `(nullable)` annotations on value getters/properties/event props; regenerate GIR and verify (2h)
 - [ ] 4.5 Reference app prints `<unknown>` (`reference/src/coreCategory.c:305,350`) (1h)
 
@@ -35,7 +35,8 @@
 
 - [ ] 5.1 Philips Hue NULL guards (`philipsHueDeviceDriver.c:142,345,382,387,463`) (2h) + tests (2h)
 - [ ] 5.2 `zigbeeDriverCommon.c:2122` NULL guard (1h) + test (1h)
-- [ ] 5.3 Audit Onvif/Matter/SBMD `writeResource` for NULL `previousValue` (2h) + tests (2h)
+- [ ] 5.3 Audit Onvif/Matter/SBMD `writeResource` for NULL `newValue` and `previousValue`; decide accept vs reject per resource (3h) + tests (2h)
+- [ ] 5.5 SBMD write path: pass explicit JS `null` as `args.resource.input` for NULL writes (`SbmdHandlerInvoker.cpp:148-157` currently omits it) (2h) + tests (2h)
 - [ ] 5.4 `MatterDeviceDriver.cpp:1545` and other `IsNull()` collapses → NULL (3h) + tests (2h)
 
 ## 6. SBMD (BCORE_MATTER)
