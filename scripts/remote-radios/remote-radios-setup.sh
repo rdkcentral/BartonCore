@@ -78,6 +78,11 @@ set -euo pipefail
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/remote-radios"
 CONFIG_FILE="${CONFIG_DIR}/config"
 STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/remote-radios-$(id -u)"
+# Written by --take-over just before it restarts the service.  The restart
+# stops the old instance, whose teardown would otherwise release the lease it
+# just took, and the other workstation, waiting for exactly that, would take it
+# straight back before the new instance starts.
+TAKEOVER_MARKER="${STATE_DIR}/take-over"
 SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 
 # Root-executed helpers live outside $HOME on purpose.  They are invoked via
@@ -1186,8 +1191,12 @@ teardown() {
     [ -n "${BT_TUNNEL_PID:-}" ] && kill "$BT_TUNNEL_PID" 2>/dev/null || true
     # Give up the lease, removing the remote sockets and env hint — but only if
     # this workstation still holds it; otherwise they belong to the new owner.
-    lease_op release ${SILABS_SOCK_REMOTE:+"$SILABS_SOCK_REMOTE"} \
-        ${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"} || true
+    if takeover_pending; then
+        info "Keeping the lease for the take-over restart."
+    else
+        lease_op release ${SILABS_SOCK_REMOTE:+"$SILABS_SOCK_REMOTE"} \
+            ${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"} || true
+    fi
     ok "Teardown complete."
 }
 
@@ -1345,6 +1354,13 @@ EOF
 
 # take_over — make this workstation the one forwarding the radios now, rather
 # than waiting for the current owner to stop or go stale.
+# takeover_pending — a --take-over restart is in progress.  Only a recent marker
+# counts, so one left behind by an interrupted take-over cannot keep this
+# workstation from ever releasing the lease.
+takeover_pending() {
+    [ -f "$TAKEOVER_MARKER" ] && [ -n "$(find "$TAKEOVER_MARKER" -mmin -5 2>/dev/null)" ]
+}
+
 take_over() {
     load_config
     SSH_TARGET="${1:-${SSH_TARGET:-}}"
@@ -1366,6 +1382,8 @@ take_over() {
         *) ok "This workstation already holds the radios for ${SSH_TARGET}." ;;
     esac
 
+    mkdir -p "$STATE_DIR"; chmod 700 "$STATE_DIR"
+    : > "$TAKEOVER_MARKER"
     systemctl --user restart "$SERVICE_NAME"
     ok "remote-radios.service restarted; it forwards from this workstation."
 }
@@ -1392,7 +1410,14 @@ run_as_service() {
     resolve_remote_params
     # Only one of the developer's workstations forwards at a time; until this
     # one holds the lease it leaves the dongle alone and opens no tunnels.
-    wait_for_lease
+    if takeover_pending; then
+        # Reassert the lease --take-over just took, rather than queue behind a
+        # workstation that may have grabbed it during the restart.
+        rm -f "$TAKEOVER_MARKER"
+        lease_op force || wait_for_lease
+    else
+        wait_for_lease
+    fi
     start_forwarding
     ok "Remote radios are forwarded to ${SSH_TARGET}."
     monitor_loop

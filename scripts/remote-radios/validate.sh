@@ -122,6 +122,10 @@ print(urllib.parse.quote(json.dumps(
         if [ -n "$OTBR_CONTAINER" ]; then
             if ! $QUIET; then
                 echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
+                # The container cannot see the lease; say which workstation is forwarding,
+                # since the radios checked below are that workstation's.
+                _owner="$(sed -n 's/^host=//p' "${HOME}/.remote-radios/owner" 2>/dev/null)"
+                [ -n "$_owner" ] && echo "Radios are forwarded from: ${_owner}"
                 echo ""
             fi
             # The script is base64-encoded and passed as a positional
@@ -169,6 +173,10 @@ sys.stdout.buffer.flush()
     if [ -n "$OTBR_CONTAINER" ]; then
         if ! $QUIET; then
             echo "Not in remote-radios container — re-executing inside ${OTBR_CONTAINER}..."
+            # The container cannot see the lease; say which workstation is forwarding,
+            # since the radios checked below are that workstation's.
+            _owner="$(sed -n 's/^host=//p' "${HOME}/.remote-radios/owner" 2>/dev/null)"
+            [ -n "$_owner" ] && echo "Radios are forwarded from: ${_owner}"
             echo ""
         fi
         # Pass the script via stdin and forward arguments.

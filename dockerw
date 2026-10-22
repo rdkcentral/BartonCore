@@ -201,7 +201,10 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
         fi
         sleep 3
     done
-    notice "Remote radios are ready."
+    # Say which workstation is forwarding: with more than one, the radios in use
+    # may not be the ones next to you.
+    radiosHost="$(sed -n 's/^host=//p' "${HOME}/.remote-radios/owner" 2>/dev/null)"
+    notice "Remote radios are ready${radiosHost:+ (forwarded from ${radiosHost})}."
 fi
 
 # create a unique container name prefixed with the user id, useful when on a shared machine
