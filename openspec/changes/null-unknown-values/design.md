@@ -218,7 +218,9 @@ gchar *b_core_client_read_system_property(BCoreClient *self, const gchar *key, G
 }
 ```
 
-`b_core_client_get_system_property` is kept unchanged and documented as unable to distinguish unknown from not-found.
+`b_core_client_get_system_property` keeps its signature and its observable behavior. It already returns `NULL` for both missing and unknown properties; before this change an unknown property could not be stored through the public API. It is documented as unable to tell the two apart, and callers that need to are pointed to `b_core_client_read_system_property`.
+
+The **internal** contract does change: `deviceServiceGetSystemProperty` now returns `true` with `*value == NULL` for a stored unknown property. Callers in `deviceDescriptorHandler.c:664,672`, `deviceService.c:2213`, `zigbeeTelemetry.c:331,569`, and `Matter.cpp:980` are already NULL-safe. `Matter.cpp:1006,1030,1055` (RCA/ICA/NOC) call `strlen()` on the value whenever the getter returns `true`, so each must add `&& b64X != NULL` and treat `NULL` the same as not found. Zilker does not call the internal getter.
 
 **Alternative considered:** Add `GError **` to `b_core_client_get_system_property`. Rejected: ABI/API break.
 
@@ -469,9 +471,9 @@ Note that sensitive resource persistence fails closed on encryption errors. No `
 
 ### Breaking behavior for not-found reads
 
-**Risk:** Existing clients treat "`NULL`, no error" from `read_resource`/`read_metadata` as not-found and will now also see a `GError`; some may treat any error as fatal.
+**Risk:** Existing clients treat "`NULL`, no error" from `read_resource`/`read_metadata` as not-found and will now also see a `GError`. In GObject Introspection bindings (Python/JS) the call now raises instead of returning `None`. Zilker is directly affected: `troubleState.c:1485` and Java `DeviceServiceDevice.java:441` stop being able to create first-time metadata (see Zilker regressions).
 
-**Mitigation:** Call out in CHANGELOG as breaking; ship in a minor bump with release notes. Zilker's `deviceServiceIpcHandler.c` already keys success off `err`, so it improves.
+**Mitigation:** This is an accepted, intentional **breaking behavioral change**. No C signatures or ABI change. Ship it as a **major version bump (4.4.0 → 5.0.0)** with a BREAKING CHANGE footer and CHANGELOG entry. Consumers (Zilker, XHCPE-2742) must adopt the new not-found/unknown semantics before taking 5.0.0. The legacy error-enum rename TODO in `barton-core-client.h` could be bundled into the same major release, but it is out of scope here.
 
 ### Zilker regressions
 

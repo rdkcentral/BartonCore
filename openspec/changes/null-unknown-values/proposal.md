@@ -22,7 +22,7 @@ This change defines `NULL` as a first-class value meaning **"value unknown"** fo
 - **Drivers**: every `writeResource` and `getMetadata`/`resource->value` consumer null-checks; Philips Hue and Zigbee common fixed; Matter driver stops collapsing Matter `null` to `0`.
 - **SBMD (mquickjs)**: results carry `std::optional<std::string>`; JS `null` → `NULL` (unknown), JS `undefined`/missing → handler error. Document `value: null` in `docs/SBMD.md`.
 - **BartonCommon**: document `simpleProtectConfigData`/`simpleUnprotectConfigData` `NULL` semantics; add a status-returning variant so callers can distinguish "input was NULL" from "encryption failed". Zilker carries a duplicate of this file and the running binary links Zilker's copy, so parity is tracked separately (XHCPE ticket).
-- **BREAKING (behavioral)**: `b_core_client_read_resource` / `read_metadata` now set a `GError` for not-found. Callers that treated "NULL, no error" as "not found" must switch to checking the error.
+- **BREAKING (behavioral, major bump 4.4.0 → 5.0.0)**: `b_core_client_read_resource` / `read_metadata` now set a `GError` for not-found (GI bindings raise). Callers that treated "NULL, no error" as "not found" must switch to checking the error. No C signature/ABI change. `b_core_client_get_system_property` is behaviorally unchanged.
 
 ### Non-goals
 

@@ -13,6 +13,7 @@
 - [ ] 2.5 Tests for metadata round trip including legacy files (2h)
 - [ ] 2.6 System properties: `stringHashMapToJson` explicit `null`; `loadSystemProperties` accept `null`; Get uses `stringHashMapContains`; GetAll consistent (3h)
 - [ ] 2.7 Tests for system-property round trip; port disabled `deviceServiceTest.c:308-312` case (2h)
+- [ ] 2.8 NULL-guard internal system-property readers `Matter.cpp:1006,1030,1055` (strlen on RCA/ICA/NOC) (1h) + tests (1h)
 
 ## 3. Core semantics
 
@@ -52,4 +53,4 @@
 - [ ] 7.1 `docs/USING_BARTON_GUIDE.md` "Value unknown" section (2h)
 - [ ] 7.2 `docs/SBMD.md` `value: null` contract (1h)
 - [ ] 7.3 Architecture doc: encryption fail-closed (1h)
-- [ ] 7.4 CHANGELOG breaking-behavior note for not-found errors (1h)
+- [ ] 7.4 CHANGELOG + `BREAKING CHANGE:` commit footer for not-found errors; release as 5.0.0 (1h)
