@@ -30,12 +30,13 @@
 
 SbmdDriver({
     schemaVersion: '5.0',
-    driverVersion: 1,
+    driverVersion: 2,
     name: 'Contact Sensor',
 
     constants: {
         CL_BOOLEAN_STATE: 0x0045,
         ATTR_STATE_VALUE: 0x0000,
+        EVT_STATE_CHANGE: 0x0000,
         RES_FAULTED: 'faulted'
     },
 
@@ -59,6 +60,10 @@ SbmdDriver({
             clusterId: CL_BOOLEAN_STATE,
             attributeId: ATTR_STATE_VALUE,
             type: 'bool'
+        },
+        stateChange: {
+            clusterId: CL_BOOLEAN_STATE,
+            eventId: EVT_STATE_CHANGE
         }
     },
 
@@ -70,7 +75,36 @@ SbmdDriver({
                 faulted: {
                     type: 'com.icontrol.boolean',
                     modes: ['read'],
-                    prerequisites: [CL_BOOLEAN_STATE]
+                    prerequisites: [CL_BOOLEAN_STATE],
+                    seed: {
+                        supplements: {
+                            attributes: ['stateValue'],
+                            resources: ['1/faulted']
+                        },
+                        handler: function (args) {
+                            var tlvBase64 = args.supplements.attributes.stateValue;
+                            var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
+                            var faulted;
+
+                            if (value === true) {
+                                faulted = 'false'; // closed = not faulted
+                            } else if (value === false) {
+                                faulted = 'true'; // open = faulted
+                            } else {
+                                // StateValue unavailable: preserve an existing value so a reconnect
+                                // with a cold cache cannot clobber a healthy sensor; fail safe to
+                                // faulted only at commission (no value yet) so an unknown open
+                                // contact / intrusion is not missed.
+                                var existing = args.supplements.resources['1/faulted'];
+                                faulted =
+                                    existing !== null && existing !== undefined ? existing : 'true';
+                            }
+
+                            return Sbmd.result()
+                                .dataModel.updateResource(args.endpointId, RES_FAULTED, faulted)
+                                .success();
+                        }
+                    }
                 }
             }
         }
@@ -92,6 +126,28 @@ SbmdDriver({
                         args.endpointId,
                         RES_FAULTED,
                         value === true ? 'false' : 'true'
+                    )
+                    .success();
+            }
+        }
+    },
+
+    eventHandlers: {
+        handleStateChange: {
+            aliases: ['stateChange'],
+            handler: function (args) {
+                var fields = Sbmd.Tlv.decode(args.event.tlvBase64);
+
+                if (fields === null) {
+                    return Sbmd.result().error('TLV decode failed for StateChange');
+                }
+
+                // StateValue=true means closed (not faulted)
+                return Sbmd.result()
+                    .dataModel.updateResource(
+                        args.endpointId,
+                        RES_FAULTED,
+                        fields[0] === true ? 'false' : 'true'
                     )
                     .success();
             }
