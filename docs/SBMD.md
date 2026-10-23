@@ -56,8 +56,12 @@ core/deviceDrivers/matter/sbmd/specs/
   door-lock.sbmd.js
   thermostat.sbmd.js
   contact-sensor.sbmd.js
+  experimental/
+    aqara-m100-occupancy-demo.sbmd.js
   ...
 ```
+
+Without a preset, `BCORE_MATTER_ENABLE_EXPERIMENTAL_SBMD_SPECS` defaults to `OFF`, excluding specs in `experimental/` from build-time validation and installation. Set it to `ON` to include them in both; they install into the same `BCORE_MATTER_SBMD_SPECS_DIR` as regular specs. The development preset used by `./build.sh` enables this option. The option controls which specs the current build validates and installs; it does not remove previously installed specs. Builders should manage those files through their packaging or upgrade process.
 
 Each file is evaluated by the C runtime's embedded JavaScript engine (e.g., MQuickJS).
 The runtime provides `SbmdDriver()`, `Sbmd`, and injected constants as globals
