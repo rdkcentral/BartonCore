@@ -58,10 +58,12 @@ namespace barton
         ~SbmdFactory() = default;
 
         /**
-         * Load and register SBMD drivers (.sbmd.js) from a single directory.
-         * Drivers are activated immediately and stored in drivers for lifetime management.
+         * Load and register SBMD drivers (.sbmd.js) from a single directory, resolved to an absolute
+         * path once before it is read. Drivers are registered inactive, reduced to their claim
+         * metadata, and stored in drivers for lifetime management; each activates when a device
+         * first binds to it.
          */
-        void RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+        void RegisterDriversFromDirectory(const std::string &configuredDir, bool &allRegistered);
 
         /**
          * Owned driver instances. These must outlive the SpecBasedMatterDeviceDriver

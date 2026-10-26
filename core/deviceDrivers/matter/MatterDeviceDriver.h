@@ -310,6 +310,19 @@ namespace barton
         virtual std::vector<uint16_t> GetSupportedDeviceTypes() = 0;
 
         /**
+         * @brief Hook invoked after the driver's last bound device is removed.
+         *        Runs on the Matter event loop thread, holding the CHIP stack lock (it is called from
+         *        DeviceRemoved's RunOnMatterSync block) but none of this driver's own locks.
+         *        Default is a no-op.
+         *
+         * @warning Implementations MUST NOT re-enter the loop (no nested RunOnMatterSync/
+         *          ConnectAndExecute, or anything that blocks on the Matter thread) or take the
+         *          stack lock again; either self-deadlocks. Matter::RunWithStackLock() is safe here,
+         *          since it runs work directly on the event loop thread.
+         */
+        virtual void OnLastDeviceRemoved() {}
+
+        /**
          * @brief Get a server cluster on a given endpoint
          *
          * @param deviceUuid
@@ -521,6 +534,18 @@ namespace barton
                 return it->second;
             }
             return nullptr;
+        }
+
+        /**
+         * @brief Return the number of devices currently bound to this driver.
+         *
+         * Reads the live device map under devicesMutex so callers can confirm an earlier
+         * observation has not since gone stale (e.g. a concurrent bind).
+         */
+        size_t GetDeviceCount()
+        {
+            std::lock_guard<std::mutex> lock(devicesMutex);
+            return devices.size();
         }
 
     private:

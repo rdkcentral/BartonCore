@@ -18,6 +18,8 @@ __pycache__/
 .worktrees/
 
 # Node.js
-node_modules/
+# No trailing slash, so this also matches a symlinked node_modules (e.g. one shared from another
+# checkout), not just a directory.
+node_modules
 package-lock.json
 !testing/mocks/devices/matterjs/package-lock.json

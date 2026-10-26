@@ -187,7 +187,41 @@ namespace barton
          */
         inline chip::FabricIndex GetFabricIndex() { return myFabricIndex; }
 
+        /**
+         * Reads the live instance state; callers must already hold (or be willing to construct) the
+         * singleton. Leaf paths that may run before construction should prefer IsEventLoopRunning().
+         */
         inline bool IsRunning() { return state == State::running; }
+
+        /**
+         * Non-constructing check for whether the Matter event loop thread exists: true from Start()
+         * until Stop() has joined that thread. While it returns false, no Matter-thread callback can
+         * be running. Unlike GetInstance(), this never instantiates the singleton, so a leaf path
+         * (e.g. driver teardown) can test it before the subsystem has been constructed.
+         */
+        static bool IsEventLoopRunning();
+
+        /**
+         * Non-constructing check for whether the calling thread is the Matter event loop thread,
+         * which holds the CHIP stack lock whenever it runs callbacks. Unlike
+         * PlatformMgr().IsChipStackLockedByCurrentThread(), this does not report true for every
+         * thread once the event loop has stopped.
+         */
+        static bool IsEventLoopThread();
+
+        /**
+         * Run work while excluding every Matter event loop callback (attribute reports, events,
+         * incoming commands, scheduled work), all of which run with the CHIP stack lock held. Takes
+         * that lock around work, or runs work directly on the event loop thread itself or when that
+         * thread does not exist (IsEventLoopRunning() is false). Unlike RunOnMatterStack(), it never
+         * waits for the loop to run anything, so it cannot hang while the stack is stopping.
+         * Non-constructing.
+         *
+         * The caller must not hold a lock that a Matter-thread callback can block on, and work must
+         * not wait on the Matter thread. A thread other than the event loop thread must not call this
+         * while it already holds the stack lock (via LockChipStack()); the lock is not recursive.
+         */
+        static void RunWithStackLock(const std::function<void()> &work);
 
         /**
          * Execute work on the Matter stack. If already on the Matter stack, executes
@@ -197,6 +231,8 @@ namespace barton
 
     private:
         static Matter *instance;
+        static std::atomic<bool> eventLoopRunning;
+        static std::atomic<std::thread::id> eventLoopThreadId;
         IcLogger logger;
 
         Matter();
