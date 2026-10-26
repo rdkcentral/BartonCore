@@ -179,17 +179,19 @@ namespace barton
 
     /**
      * Complete registration extracted from a SbmdDriver({...}) call.
-     * Metadata fields are always populated. Handler JSValues are only valid
-     * when the driver is activated (their references are held alive).
+     * A freshly loaded or activated registration has every field populated. While its driver is
+     * inactive it is reduced to the claim metadata (name, filePath, barton.deviceClass, and
+     * matter.deviceTypes/vendorId/productId); see SbmdDriver::GetRegistration(). Handler JSValues
+     * are only valid when the driver is activated (their references are held alive).
      */
     struct SbmdRegistration
     {
-        // Metadata — always available
+        // Metadata (only the claim fields are kept while the driver is inactive)
         std::string schemaVersion;
         uint32_t driverVersion = 0;
         std::string name; // Human-readable name from JS registration (e.g., "Door Lock")
 
-        std::string filePath; // Source file path for diagnostics
+        std::string filePath; // Absolute path to the spec file; activation re-reads the spec from here
 
         SbmdBartonMeta barton;
         SbmdMatterMeta matter;

@@ -35,6 +35,7 @@
 #include <platform/CHIPDeviceLayer.h>
 
 #include "MatterDevice.h"
+#include "subsystems/matter/Matter.h"
 
 extern "C" {
 #include <device/icDeviceResource.h>
@@ -60,12 +61,19 @@ MatterDevice::MatterDevice(std::string deviceId, std::shared_ptr<DeviceDataCache
 MatterDevice::~MatterDevice()
 {
     icDebug("Destroying MatterDevice %s", deviceId.c_str());
-    UnregisterIncomingCommandHandlers();
 
-    if (deviceDataCache)
-    {
-        deviceDataCache->SetCallback(nullptr);
-    }
+    // The cache invokes this object's callback, and CHIP invokes its command handlers, on the Matter
+    // event loop with the stack lock held. Detach under that lock so none of them can be running into
+    // this object as it is destroyed. The members (including the cache, whose destructor may wait on
+    // the Matter thread) are released after the lock is dropped.
+    Matter::RunWithStackLock([this] {
+        UnregisterIncomingCommandHandlers();
+
+        if (deviceDataCache)
+        {
+            deviceDataCache->SetCallback(nullptr);
+        }
+    });
 }
 
 void MatterDevice::CacheCallback::OnReportBegin()

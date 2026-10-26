@@ -1091,7 +1091,10 @@ bool MatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 
     {
         std::lock_guard<std::mutex> lock(devicesMutex);
-        auto deviceResult = devices.emplace(deviceId, std::move(device));
+        // try_emplace leaves device untouched when the id is already present, so a rejected device is
+        // destroyed after devicesMutex is released (~MatterDevice takes the Matter stack lock, and
+        // Matter-thread dispatch takes devicesMutex while holding it).
+        auto deviceResult = devices.try_emplace(deviceId, std::move(device));
         result = deviceResult.second;
     }
 

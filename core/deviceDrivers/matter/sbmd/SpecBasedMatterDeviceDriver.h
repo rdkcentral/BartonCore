@@ -101,13 +101,6 @@ namespace barton
 
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
-        /**
-         * Publish the true count of currently-activated SBMD drivers to the active-driver gauge.
-         * Called by the factory after startup registration so the gauge reflects actual driver
-         * state (0 when all drivers are loaded inactive), not just runtime activation deltas.
-         */
-        static void SyncActiveDriverCount(int64_t activeCount);
-
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
@@ -152,23 +145,18 @@ namespace barton
     private:
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
-        // Raw barton.deviceClassVersion captured from the spec at construction, used to detect a
-        // version change on a later disk re-read (GetDeviceClassVersion() adds a model-version
-        // offset, so it cannot be compared against the raw spec value directly).
-        uint32_t constructedDeviceClassVersion = 0;
-
-        // Claim-identity metadata captured at construction from the then-full registration. Activation
-        // rejects any re-read spec whose claim identity changed, so these never go stale; reading them
-        // keeps the claim-time accessors off the registration object that Activate()/Deactivate() swap,
-        // which claim-time callers read without the JS mutex.
-        const std::vector<uint16_t> supportedDeviceTypes;
-        const std::optional<uint16_t> claimVendorId;
-        const std::optional<uint16_t> claimProductId;
-
         static SpecBasedMatterDeviceDriverMetrics metrics;
 
         // Process-wide count of currently-activated SBMD drivers, for observability.
         static std::atomic<int64_t> activeDriverCount;
+
+        /**
+         * Publish the true count of currently-activated SBMD drivers to the active-driver gauge,
+         * replacing the live count. Only SbmdFactory calls this, once after startup registration and
+         * before any bind can run, so the gauge reflects actual driver state (0 when all drivers
+         * are loaded inactive), not just runtime activation deltas.
+         */
+        static void SyncActiveDriverCount(int64_t activeCount);
 
         // Number of binds currently executing in AddDevice. A bind activates the driver before it
         // inserts into the device map, so OnLastDeviceRemoved must not deactivate while this is
@@ -176,12 +164,15 @@ namespace barton
         std::atomic<int> bindsInProgress {0};
 
         /**
-         * After an on-demand activation, verify the re-read spec still carries the device-class
-         * version and endpoint profile versions the base driver cached at construction. A change
-         * would leave commissioning/reconfiguration publishing stale versions while handlers run
-         * the new spec, so activation is rejected on mismatch.
+         * Activate the driver if it is not already active. Reads the spec file without holding any lock,
+         * evaluates and validates it (SbmdDriver::LoadForActivation()) under the JS mutex alone, then
+         * commits it under Matter::RunWithStackLock(), so report dispatch (which runs with the
+         * CHIP stack lock held and reads the registration and dispatch tables without the JS mutex) is
+         * excluded only for the swap itself; its handler calls still wait on the JS mutex while the spec
+         * evaluates. Records the activation metrics. The caller must not hold the JS mutex. Returns true if
+         * the driver is active on return.
          */
-        bool ActivatedSpecMatchesCachedVersions();
+        bool EnsureActivated(const std::string &deviceId);
 
         /**
          * Deactivate the driver and shed its runtime state iff it is idle: still activated, no bind
@@ -189,17 +180,15 @@ namespace barton
          * serialized teardown point shared by the last-device-removed hook and a failed or
          * last-exiting bind, so a stale empty-map observation, a rolled-back bind, or a device
          * removed mid-bind can neither strand the driver active nor shed state a concurrent bind
-         * still relies on. The caller must hold the JS mutex.
+         * still relies on. The caller must hold the JS mutex and be serialized with report dispatch
+         * (on the Matter thread, or inside Matter::RunWithStackLock()).
          */
         void DeactivateIfIdle();
 
         /**
          * Tear the driver down if it is idle, from a bind's exit path. Deactivation clears the
-         * dispatch tables, which report dispatch (HandleAttributeReport/Event/Command) reads on the
-         * Matter thread; this marshals the teardown onto the Matter thread so the two cannot race.
-         * When the Matter stack is not running there are no subscriptions delivering reports, so it
-         * runs directly. The running check is non-constructing, so this never instantiates the
-         * Matter singleton.
+         * dispatch tables that report dispatch reads, so this runs DeactivateIfIdle under
+         * Matter::RunWithStackLock().
          */
         void TeardownIfIdle();
 
@@ -468,5 +457,6 @@ namespace barton
         uint64_t nextPendingId = 1;
 
         friend class TestableSpecBasedMatterDeviceDriver;
+        friend class SbmdFactory;
     };
 } // namespace barton

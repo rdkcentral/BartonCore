@@ -103,9 +103,21 @@ bool SbmdFactory::RegisterDrivers()
     return allRegistered;
 }
 
-void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered)
+void SbmdFactory::RegisterDriversFromDirectory(const std::string &configuredDir, bool &allRegistered)
 {
     std::error_code ec;
+
+    // Resolve the directory once, so every spec path read below (and re-read at activation) names
+    // the same directory even if the process's working directory changes during startup.
+    std::string dirPath = std::filesystem::absolute(configuredDir, ec).string();
+
+    if (ec)
+    {
+        icWarn(
+            "Could not resolve SBMD directory %s to an absolute path: %s", configuredDir.c_str(), ec.message().c_str());
+        dirPath = configuredDir;
+        ec.clear();
+    }
 
     bool exists = std::filesystem::exists(dirPath, ec);
 
@@ -189,32 +201,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
             {
                 icDebug("Loading SBMD driver: %s", entry.path().c_str());
 
-                // Read file contents
-                std::ifstream file(entry.path(), std::ios::binary | std::ios::ate);
+                std::string source;
 
-                if (!file.is_open())
-                {
-                    icError("Failed to open SBMD driver: %s", entry.path().c_str());
-                    metrics.RecordDriverLoadFailure(driverStem.c_str(), "file_read");
-                    allRegistered = false;
-                    continue;
-                }
-
-                auto fileSize = file.tellg();
-
-                if (fileSize < 0)
-                {
-                    icError("Failed to determine size of SBMD driver: %s", entry.path().c_str());
-                    metrics.RecordDriverLoadFailure(driverStem.c_str(), "file_read");
-                    allRegistered = false;
-                    continue;
-                }
-
-                file.seekg(0, std::ios::beg);
-                std::string source(static_cast<size_t>(fileSize), '\0');
-                file.read(source.data(), static_cast<std::streamsize>(fileSize));
-
-                if (!file)
+                if (!SbmdDriver::ReadSpecFile(entry.path().string(), source))
                 {
                     icError("Failed to read SBMD driver: %s", entry.path().c_str());
                     metrics.RecordDriverLoadFailure(driverStem.c_str(), "file_read");
@@ -226,12 +215,24 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 auto loadStart = std::chrono::steady_clock::now();
                 std::optional<JSMemoryUsage> usageBefore;
                 std::unique_ptr<SbmdRegistration> registration;
+                SbmdLoadFailure loadFailure = SbmdLoadFailure::None;
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
                     auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
                     usageBefore = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
                     registration =
-                        SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
+                        SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size(), &loadFailure);
+                }
+
+                if (!registration && loadFailure == SbmdLoadFailure::InvalidField)
+                {
+                    // Skip only this driver. Before schema 5.1 such a value was silently truncated
+                    // and the spec loaded, so an upgrade must not fail the whole Matter subsystem.
+                    icError("Not registering SBMD driver %s: a numeric claim/version field is not an "
+                            "integer within its range",
+                            entry.path().c_str());
+                    metrics.RecordDriverLoadFailure(driverStem.c_str(), "invalid_field");
+                    continue;
                 }
 
                 if (!registration)
@@ -246,8 +247,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 // first binds to it, not at startup.
                 auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
 
-                // Create the SpecBasedMatterDeviceDriver wrapper while the full registration is
-                // still resident — its constructor reads endpoint profile versions.
+                // Create the SpecBasedMatterDeviceDriver wrapper. Its constructor reads the driver's
+                // name and device class from the registration, and its versions from the spec
+                // snapshot.
                 auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(sbmdDriver.get());
 
                 if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))

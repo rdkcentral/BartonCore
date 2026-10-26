@@ -12,7 +12,7 @@ The SBMD runtime SHALL record, for each successfully loaded driver: the wall-clo
 - **THEN** `sbmd.driver.load.heap_bytes` contains one observation reflecting the resident heap consumed
 
 ### Requirement: Driver load failure tracking
-The SBMD runtime SHALL count driver load failures using a counter named `sbmd.driver.load.failure` with attributes `"driver"` (filename stem) and `"reason"`. Valid reason values are: `"file_read"` (file could not be opened or read) and `"eval_failed"` (JS evaluation or registration extraction failed). Activation no longer occurs at load, so `reason="activation_failed"` SHALL NOT be emitted here; runtime activation failures are tracked by the activation-failure counter (see Driver activation lifecycle tracking).
+The SBMD runtime SHALL count driver load failures using a counter named `sbmd.driver.load.failure` with attributes `"driver"` (filename stem) and `"reason"`. Valid reason values are: `"file_read"` (file could not be opened or read), `"eval_failed"` (JS evaluation or registration extraction failed), and `"invalid_field"` (a numeric claim/version field is not an integer within its range; the driver is skipped). Activation no longer occurs at load, so `reason="activation_failed"` SHALL NOT be emitted here; runtime activation failures are tracked by the activation-failure counter (see Driver activation lifecycle tracking).
 
 #### Scenario: Evaluation failure counted
 - **WHEN** `SbmdLoader::LoadDriver` fails due to a JS evaluation or registration-extraction error
@@ -22,6 +22,10 @@ The SBMD runtime SHALL count driver load failures using a counter named `sbmd.dr
 - **WHEN** a `.sbmd.js` file cannot be opened or read during load
 - **THEN** `sbmd.driver.load.failure` counter for `reason="file_read"` increments for that driver
 
+#### Scenario: Invalid numeric field counted
+- **WHEN** a `.sbmd.js` file is rejected at load because a numeric claim/version field is not an integer within its range
+- **THEN** `sbmd.driver.load.failure` counter for `reason="invalid_field"` increments for that driver
+
 ## ADDED Requirements
 
 ### Requirement: Driver activation lifecycle tracking
@@ -30,7 +34,13 @@ Because drivers are loaded inactive and activated on demand when a device first 
 - a counter `sbmd.driver.deactivation` with attribute `"driver"`, incremented on each deactivation;
 - a gauge `sbmd.driver.active.count` set to the live number of activated drivers on each activation/deactivation transition (and published once after startup registration);
 - a histogram `sbmd.driver.activation.duration_ms` with attribute `"driver"`, recording the time to activate a driver on demand;
-- a counter `sbmd.driver.activation.failure` with attributes `"driver"` and `"reason"`, incremented when a bind-time activation fails. Valid reason values are `"activate_failed"` (spec unreadable/unparseable or claim-identity mismatch) and `"version_mismatch"` (the re-read device-class or endpoint profile version/set no longer matches the values cached at construction).
+- a counter `sbmd.driver.activation.failure` with attributes `"driver"` and `"reason"`, incremented when a bind-time activation fails. Valid reason values are:
+  - `"read_failed"`: the spec file could not be read;
+  - `"invalid_field"`: a numeric claim/version field in the re-read spec is not an integer within its range;
+  - `"load_failed"`: the re-read spec could not be evaluated or its registration extracted;
+  - `"claim_mismatch"`: the re-read spec's claim identity no longer matches the claim metadata;
+  - `"version_mismatch"`: the re-read device-class or endpoint profile version/set no longer matches the values cached at construction;
+  - `"runtime_unavailable"`: the JS runtime has been shut down.
 
 #### Scenario: Activation recorded on first bind
 - **WHEN** a device first binds to an inactive driver and activation succeeds
@@ -41,9 +51,9 @@ Because drivers are loaded inactive and activated on demand when a device first 
 - **THEN** `sbmd.driver.deactivation` increments for that driver and `sbmd.driver.active.count` reflects the reduced active total
 
 #### Scenario: Activation failure counted with reason
-- **WHEN** a bind-time activation fails because the re-read spec cannot be read or parsed or its claim identity changed
-- **THEN** `sbmd.driver.activation.failure` increments for that driver with `reason="activate_failed"`
+- **WHEN** a bind-time activation fails because the re-read spec cannot be read, contains an invalid numeric field, cannot be evaluated, or no longer matches the claim metadata
+- **THEN** `sbmd.driver.activation.failure` increments for that driver with `reason` set to `"read_failed"`, `"invalid_field"`, `"load_failed"`, or `"claim_mismatch"` respectively
 
 #### Scenario: Version-mismatch activation failure counted
-- **WHEN** a bind-time activation is rolled back because the re-read device-class or profile version/set no longer matches the cached values
+- **WHEN** a bind-time activation is rejected because the re-read device-class or profile version/set no longer matches the cached values
 - **THEN** `sbmd.driver.activation.failure` increments for that driver with `reason="version_mismatch"`

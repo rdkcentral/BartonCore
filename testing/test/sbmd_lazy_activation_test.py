@@ -35,11 +35,15 @@ through the activation observability metrics:
 
 import contextlib
 import json
+import shutil
 import threading
 import time
 from pathlib import Path
 
 import pytest
+from testing.environment.default_environment_orchestrator import (
+    DefaultEnvironmentOrchestrator,
+)
 from testing.mocks.devices.matter.matter_temperature_sensor import (
     MatterTemperatureSensor,
 )
@@ -50,13 +54,19 @@ pytestmark = [
 ]
 
 
-def _gauge_sum(metrics, name):
+def _counter_total(metrics, name):
+    """Sum every data point of a counter (or gauge) across all attribute sets. Returns None when
+    the metric is absent."""
     metric = metrics.get(name)
 
     if metric is None:
         return None
 
     return sum(dp["value"] for dp in metric.get("dataPoints", []))
+
+
+# Gauges are read the same way; the alias keeps call sites self-describing.
+_gauge_sum = _counter_total
 
 
 def _counter_sum(metrics, name, **attrs):
@@ -126,7 +136,7 @@ def test_commissioning_activates_driver(
     telemetry = json.loads(client.get_telemetry())
     metrics = telemetry.get("metrics", {})
 
-    activation = _gauge_sum(metrics, "sbmd.driver.activation")
+    activation = _counter_total(metrics, "sbmd.driver.activation")
     assert activation is not None and activation >= 1, (
         "sbmd.driver.activation counter should be >= 1 after commissioning"
     )
@@ -176,7 +186,7 @@ def test_removal_deactivates_driver(
     while time.time() < deadline:
         metrics = _metrics(client)
         active = _gauge_sum(metrics, "sbmd.driver.active.count")
-        deactivation = _gauge_sum(metrics, "sbmd.driver.deactivation")
+        deactivation = _counter_total(metrics, "sbmd.driver.deactivation")
 
         if (deactivation or 0) >= 1 and (active or 0) == 0:
             break
@@ -222,7 +232,7 @@ def test_driver_stays_active_until_last_device_removed(
         # One driver, two devices: exactly one active driver.
         assert (_gauge_sum(_metrics(client), "sbmd.driver.active.count") or 0) == 1
         deactivations_before = (
-            _gauge_sum(_metrics(client), "sbmd.driver.deactivation") or 0
+            _counter_total(_metrics(client), "sbmd.driver.deactivation") or 0
         )
 
         # Remove the first device; the driver must stay active (second still bound).
@@ -231,7 +241,7 @@ def test_driver_stays_active_until_last_device_removed(
         # Allow any (incorrect) deactivation time to occur, then confirm it did not.
         time.sleep(4)
         metrics = _metrics(client)
-        assert (_gauge_sum(metrics, "sbmd.driver.deactivation") or 0) == deactivations_before, (
+        assert (_counter_total(metrics, "sbmd.driver.deactivation") or 0) == deactivations_before, (
             "driver deactivated while a second device was still bound"
         )
         assert (_gauge_sum(metrics, "sbmd.driver.active.count") or 0) == 1, (
@@ -248,7 +258,7 @@ def test_driver_stays_active_until_last_device_removed(
         while time.time() < deadline:
             metrics = _metrics(client)
             active = _gauge_sum(metrics, "sbmd.driver.active.count")
-            deactivation = _gauge_sum(metrics, "sbmd.driver.deactivation")
+            deactivation = _counter_total(metrics, "sbmd.driver.deactivation")
 
             if (deactivation or 0) > deactivations_before and (active or 0) == 0:
                 break
@@ -280,7 +290,7 @@ def test_deferred_op_settled_when_last_device_removed(
     uuid = device.props.uuid
 
     assert (_gauge_sum(_metrics(client), "sbmd.driver.active.count") or 0) >= 1
-    deactivations_before = _gauge_sum(_metrics(client), "sbmd.driver.deactivation") or 0
+    deactivations_before = _counter_total(_metrics(client), "sbmd.driver.deactivation") or 0
 
     # Withhold the device's Toggle response so the deferred op stays pending.
     matter_deferred_cmd_test_device.sideband.send("armToggleHang")
@@ -337,7 +347,7 @@ def test_deferred_op_settled_when_last_device_removed(
     while time.time() < deadline:
         metrics = _metrics(client)
         active = _gauge_sum(metrics, "sbmd.driver.active.count")
-        deactivation = _gauge_sum(metrics, "sbmd.driver.deactivation")
+        deactivation = _counter_total(metrics, "sbmd.driver.deactivation")
 
         if (deactivation or 0) > deactivations_before and (active or 0) == 0:
             break
@@ -387,25 +397,39 @@ def _patched_spec(spec_path, old, new):
         spec_path.write_text(original)
 
 
-def _assert_bind_rejected_on_version_change(environment, device, old, new):
-    """With Barton already running (drivers constructed from the original spec), change a
-    version in the spec on disk and verify commissioning is rejected: the on-demand activation
-    re-reads the changed spec, the version no longer matches the cached value, and the bind
-    fails so the device is never added and the activation is rolled back.
+@contextlib.contextmanager
+def _removed_spec(spec_path):
+    """Move the given spec file aside, restoring it afterward even on failure."""
+    spec_path = Path(spec_path)
+    moved = spec_path.with_name(spec_path.name + ".removed")
+    spec_path.rename(moved)
 
-    The spec is patched in the environment's isolated per-test specs copy, never the checked-in
+    try:
+        yield
+    finally:
+        moved.rename(spec_path)
+
+
+def _assert_bind_rejected(environment, device, change_spec, reason):
+    """With Barton already running (drivers constructed from the original spec), change the
+    deferred-command-test spec on disk with change_spec(spec_path) (a context manager) and verify
+    commissioning is rejected: the on-demand activation re-reads the spec, fails, and the bind
+    fails, so the device is never added, the driver is never activated, and the failure is counted
+    with the given reason.
+
+    The spec is changed in the environment's isolated per-test specs copy, never the checked-in
     resources, so this test leaves no working-tree changes even if interrupted."""
 
     client = environment.get_client()
-    # Ensure Barton is up and drivers were constructed from the original spec before patching.
+    # Ensure Barton is up and drivers were constructed from the original spec before changing it.
     client.get_telemetry()
 
-    # Baseline the version-mismatch failure counter so we can assert this rejection increments it.
+    # Baseline the failure counter so we can assert this rejection increments it.
     failures_before = _counter_sum(
         _metrics(client),
         "sbmd.driver.activation.failure",
         driver="deferred-command-test",
-        reason="version_mismatch",
+        reason=reason,
     )
 
     spec_path = (
@@ -413,19 +437,19 @@ def _assert_bind_rejected_on_version_change(environment, device, old, new):
     )
     appeared = False
 
-    with _patched_spec(spec_path, old, new):
+    with change_spec(spec_path):
         # commission_device reports only whether the detached commissioning attempt started;
         # the bind (and its rejection) happens later on that thread. Assert the request started
         # so a failure to even begin can't masquerade as a rejection via the no-event timeout.
         # Use a short per-attempt timeout so both commissioning phases finish inside the resolve
-        # window and the bind is always evaluated against the patched (not the restored) spec.
+        # window and the bind is always evaluated against the changed (not the restored) spec.
         started = client.commission_device(
             device.get_commissioning_code(), _COMMISSION_ATTEMPT_TIMEOUT
         )
         assert started, "commissioning request should start successfully"
 
         # Commissioning runs on a detached background thread, so the bind can be attempted
-        # well after commission_device() returns. Keep the mismatched spec on disk until the
+        # well after commission_device() returns. Keep the changed spec on disk until the
         # attempt has definitively resolved so the bind is always evaluated against it: a
         # successful bind would fire device-added (returns immediately), while a rejected bind
         # never does and the wait times out. Restoring only happens on leaving this block.
@@ -438,21 +462,32 @@ def _assert_bind_rejected_on_version_change(environment, device, old, new):
 
     assert (
         not appeared
-    ), "device must not be commissioned when the re-read spec version no longer matches"
-    # A rejected bind rolls the activation back, so no driver is left active.
+    ), f"device must not be commissioned when activation fails with {reason}"
+    # The changed spec is rejected before it is committed, so no driver is left active.
     assert (
         _gauge_sum(_metrics(client), "sbmd.driver.active.count") or 0
-    ) == 0, "a rejected bind must roll the activation back (no active driver)"
-    # The rejected re-read activation is recorded as a version-mismatch failure.
+    ) == 0, "a rejected bind must not leave the driver active"
+    # The rejected re-read activation is recorded with its reason.
     failures_after = _counter_sum(
         _metrics(client),
         "sbmd.driver.activation.failure",
         driver="deferred-command-test",
-        reason="version_mismatch",
+        reason=reason,
     )
     assert failures_after >= failures_before + 1, (
-        "a version-mismatch rejection must increment "
-        "sbmd.driver.activation.failure{reason=version_mismatch}"
+        "the rejection must increment "
+        f"sbmd.driver.activation.failure{{reason={reason}}}"
+    )
+
+
+def _assert_bind_rejected_on_version_change(environment, device, old, new):
+    """Replace old with new in the spec on disk and verify the bind is rejected as a version
+    mismatch."""
+    _assert_bind_rejected(
+        environment,
+        device,
+        lambda spec_path: _patched_spec(spec_path, old, new),
+        "version_mismatch",
     )
 
 
@@ -478,6 +513,33 @@ def test_bind_rejected_when_profile_version_changes(
     )
 
 
+def test_bind_rejected_when_spec_removed(
+    isolated_sbmd_default_environment, matter_deferred_cmd_test_device
+):
+    """A spec file removed after startup cannot be re-read, so the first bind fails."""
+    _assert_bind_rejected(
+        isolated_sbmd_default_environment,
+        matter_deferred_cmd_test_device,
+        _removed_spec,
+        "read_failed",
+    )
+
+
+def test_bind_rejected_when_claim_identity_changes(
+    isolated_sbmd_default_environment, matter_deferred_cmd_test_device
+):
+    """The device is still claimed with the startup metadata, but the re-read spec has another
+    name, so activation refuses it."""
+    _assert_bind_rejected(
+        isolated_sbmd_default_environment,
+        matter_deferred_cmd_test_device,
+        lambda spec_path: _patched_spec(
+            spec_path, "name: 'Deferred Command Test'", "name: 'Renamed Test'"
+        ),
+        "claim_mismatch",
+    )
+
+
 def test_bind_rejected_when_profile_set_changes(
     isolated_sbmd_default_environment, matter_deferred_cmd_test_device
 ):
@@ -491,3 +553,109 @@ def test_bind_rejected_when_profile_set_changes(
         "profile: 'deferredCmdTest'",
         "profile: 'deferredCmdTestRenamed'",
     )
+
+
+# A spec whose endpoint profileVersion is fractional: before schema 5.1 the loader truncated it to 1
+# and registered the driver; it must now be rejected. Its device type is not used by any test device.
+_INVALID_FIELD_SPEC = """
+SbmdDriver({
+    schemaVersion: '5.1',
+    driverVersion: 1,
+    name: 'InvalidFieldTest',
+    constants: {},
+    barton: { deviceClass: 'invalidFieldTest', deviceClassVersion: 1 },
+    matter: { deviceTypes: [0xFFF0] },
+    endpoints: { '1': { profile: 'invalidFieldTest', profileVersion: 1.5, resources: {} } },
+});
+"""
+
+
+@pytest.fixture
+def invalid_spec_environment(tmp_path):
+    """Default environment whose SBMD test specs include one spec with an invalid numeric field."""
+    source_specs = (
+        Path(__file__).parent.parent / "resources" / "sbmd-specs"
+    )
+    temp_specs = tmp_path / "sbmd-specs"
+    shutil.copytree(source_specs, temp_specs)
+    (temp_specs / "invalid-field-test.sbmd.js").write_text(_INVALID_FIELD_SPEC)
+
+    env = DefaultEnvironmentOrchestrator(sbmd_test_specs_dir=temp_specs)
+    env.start_client()
+    env.wait_for_client_to_be_ready()
+
+    try:
+        yield env
+    finally:
+        env._cleanup()
+
+
+def test_invalid_spec_skipped_without_stopping_matter(
+    invalid_spec_environment, matter_temperature_sensor
+):
+    """
+    A spec rejected only for an invalid numeric claim/version field is skipped at startup: its
+    load failure is counted with reason=invalid_field, and the Matter subsystem still starts, so
+    devices of other types commission normally.
+    """
+    client = invalid_spec_environment.get_client()
+
+    failures = _counter_sum(
+        _metrics(client),
+        "sbmd.driver.load.failure",
+        driver="invalid-field-test",
+        reason="invalid_field",
+    )
+    assert failures == 1, (
+        "the invalid spec must be counted once as sbmd.driver.load.failure{reason=invalid_field}"
+    )
+
+    commission_device(
+        invalid_spec_environment,
+        matter_temperature_sensor,
+        "environmentalSensor",
+    )
+
+
+@pytest.fixture
+def relative_sbmd_dir_environment(tmp_path, monkeypatch):
+    """Default environment whose SBMD test-specs directory is configured as a relative path. The
+    working directory changes after startup, so a bind only succeeds if the factory resolved the
+    directory once, at startup."""
+    source_specs = Path(__file__).parent.parent / "resources" / "sbmd-specs"
+    shutil.copytree(source_specs, tmp_path / "sbmd-specs")
+    (tmp_path / "elsewhere").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+    env = DefaultEnvironmentOrchestrator(sbmd_test_specs_dir="sbmd-specs")
+    env.start_client()
+    env.wait_for_client_to_be_ready()
+    monkeypatch.chdir(tmp_path / "elsewhere")
+
+    try:
+        yield env
+    finally:
+        env._cleanup()
+
+
+def test_relative_sbmd_dir_resolved_at_startup(
+    matter_deferred_cmd_test_device, relative_sbmd_dir_environment
+):
+    """
+    A driver loaded from a relative sbmd_dirs entry activates after the working directory has
+    changed: its spec is re-read from the directory as resolved at startup.
+    """
+    client = relative_sbmd_dir_environment.get_client()
+    assert _counter_sum(
+        _metrics(client), "sbmd.driver.load.failure", driver="deferred-command-test"
+    ) == 0, "the spec in the relative directory must load at startup"
+
+    commission_device(
+        relative_sbmd_dir_environment,
+        matter_deferred_cmd_test_device,
+        "deferredCmdTest",
+    )
+
+    assert _counter_sum(
+        _metrics(client), "sbmd.driver.activation", driver="deferred-command-test"
+    ) >= 1, "the driver must activate from the directory resolved at startup"

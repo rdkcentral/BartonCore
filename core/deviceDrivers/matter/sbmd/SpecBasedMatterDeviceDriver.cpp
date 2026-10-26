@@ -41,7 +41,6 @@
 #include <lib/core/TLVReader.h>
 #include <lib/core/TLVWriter.h>
 #include <memory>
-#include <set>
 #include <vector>
 
 extern "C" {
@@ -94,6 +93,31 @@ namespace
         decodedTlv.resize(decoded);
 
         return decodedTlv;
+    }
+
+    /*
+     * Map an SbmdDriver activation failure to its sbmd.driver.activation.failure reason attribute.
+     */
+    const char *ActivationFailureReason(SbmdDriver::ActivationFailure failure)
+    {
+        switch (failure)
+        {
+            case SbmdDriver::ActivationFailure::RuntimeUnavailable:
+                return "runtime_unavailable";
+            case SbmdDriver::ActivationFailure::ReadFailed:
+                return "read_failed";
+            case SbmdDriver::ActivationFailure::InvalidField:
+                return "invalid_field";
+            case SbmdDriver::ActivationFailure::ClaimMismatch:
+                return "claim_mismatch";
+            case SbmdDriver::ActivationFailure::VersionMismatch:
+                return "version_mismatch";
+            case SbmdDriver::ActivationFailure::LoadFailed:
+            case SbmdDriver::ActivationFailure::None:
+                break;
+        }
+
+        return "load_failed";
     }
 
     /*
@@ -210,54 +234,59 @@ void SpecBasedMatterDeviceDriver::SyncActiveDriverCount(int64_t activeCount)
 SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
                        driver->GetRegistration().barton.deviceClass.c_str(),
-                       driver->GetRegistration().barton.deviceClassVersion),
-    driver(driver), supportedDeviceTypes(driver->GetRegistration().matter.deviceTypes),
-    claimVendorId(driver->GetRegistration().matter.vendorId), claimProductId(driver->GetRegistration().matter.productId)
+                       driver->GetSpecSnapshot().deviceClassVersion),
+    driver(driver)
 {
     icDebug("Created SBMD driver for: %s", driver->GetName().c_str());
 
-    // Capture the spec's raw device-class version so a later disk re-read can be checked for change.
-    constructedDeviceClassVersion = driver->GetRegistration().barton.deviceClassVersion;
-
-    // Register endpoint profile versions so deviceServiceDeviceNeedsReconfiguring()
-    // can detect profile version changes and trigger reconfiguration.
+    // Register endpoint profile versions so deviceServiceDeviceNeedsReconfiguring() can detect
+    // profile version changes and trigger reconfiguration. These come from the spec snapshot, which
+    // activation checks every re-read spec against, so what is published here cannot go stale.
     DeviceDriver *dd = GetDriver();
-    const auto &endpoints = driver->GetRegistration().endpoints;
 
-    for (const auto &endpoint : endpoints)
+    for (const auto &[profile, profileVersion] : driver->GetSpecSnapshot().profileVersions)
     {
         if (dd->endpointProfileVersions == nullptr)
         {
             dd->endpointProfileVersions = hashMapCreate();
         }
 
+        // The loader rejects a profileVersion above 255, so this does not narrow.
         auto *version = static_cast<uint8_t *>(malloc(sizeof(uint8_t)));
-        *version = static_cast<uint8_t>(endpoint.profileVersion);
-        hashMapPut(dd->endpointProfileVersions,
-                   strdup(endpoint.profile.c_str()),
-                   static_cast<uint16_t>(endpoint.profile.length() + 1),
-                   version);
+        *version = static_cast<uint8_t>(profileVersion);
+        char *profileKey = strdup(profile.c_str());
+
+        // hashMapPut does not take ownership of a rejected key/value.
+        if (!hashMapPut(dd->endpointProfileVersions, profileKey, static_cast<uint16_t>(profile.length() + 1), version))
+        {
+            free(profileKey);
+            free(version);
+        }
     }
 }
 
+// The claim-time accessors read the spec snapshot, not the registration: claim-time callers do not
+// hold the JS mutex, and activation and deactivation replace the registration object.
 uint16_t SpecBasedMatterDeviceDriver::GetSupportedVendorId() const
 {
-    return claimVendorId.value_or(0);
+    return driver->GetSpecSnapshot().vendorId.value_or(0);
 }
 
 uint16_t SpecBasedMatterDeviceDriver::GetSupportedProductId() const
 {
-    return claimProductId.value_or(0);
+    return driver->GetSpecSnapshot().productId.value_or(0);
 }
 
 bool SpecBasedMatterDeviceDriver::IsVendorSpecificDriver() const
 {
-    return claimVendorId.has_value() && claimProductId.has_value();
+    const auto &snapshot = driver->GetSpecSnapshot();
+
+    return snapshot.vendorId.has_value() && snapshot.productId.has_value();
 }
 
 std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 {
-    return supportedDeviceTypes;
+    return driver->GetSpecSnapshot().deviceTypes;
 }
 
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
@@ -295,45 +324,13 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         }
     } inFlightBind {this};
 
-    // Activate the driver on first bind and validate the re-read spec under the same JS-mutex hold,
-    // so activation and its cached-version check are one serialized transition: any concurrent bind
-    // that later observes IsActivated() == true sees an already-validated registration rather than one
-    // this thread might still reject. Both fresh commissioning and post-restart re-synchronization
-    // funnel through here, and the dispatch access below needs a live driver.
+    const std::string deviceId = device->GetDeviceId();
+
+    // Activate the driver on first bind; both fresh commissioning and post-restart re-synchronization
+    // funnel through here.
+    if (!EnsureActivated(deviceId))
     {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-
-        if (!driver->IsActivated())
-        {
-            auto activateStart = std::chrono::steady_clock::now();
-
-            if (!driver->Activate(MQuickJsRuntime::Instance().GetSharedContext()))
-            {
-                icError("Failed to activate SBMD driver '%s' for device %s",
-                        driver->GetName().c_str(),
-                        device->GetDeviceId().c_str());
-                metrics.RecordDriverActivationFailed(driver->GetDriverStem().c_str(), "activate_failed");
-                return false;
-            }
-
-            // A re-read spec must not change the versions the base driver cached at construction;
-            // otherwise commissioning/reconfiguration would publish/compare stale versions while
-            // handlers run the new spec. Roll the just-done activation back under this same lock
-            // before recording it, so no concurrent binder ever adopts an unvalidated registration.
-            if (!ActivatedSpecMatchesCachedVersions())
-            {
-                driver->Deactivate(MQuickJsRuntime::Instance().GetSharedContext());
-                metrics.RecordDriverActivationFailed(driver->GetDriverStem().c_str(), "version_mismatch");
-
-                return false;
-            }
-
-            double activationDurationMs =
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - activateStart).count();
-
-            metrics.RecordDriverActivated(
-                driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1, activationDurationMs);
-        }
+        return false;
     }
 
     // The dispatch tables on the driver handle everything.
@@ -341,8 +338,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
 
     if (!device->ResolveEndpointMap(driver->GetRegistration().matter.deviceTypes))
     {
-        icError("Failed to resolve endpoint map for device %s, no matching device types found",
-                device->GetDeviceId().c_str());
+        icError("Failed to resolve endpoint map for device %s, no matching device types found", deviceId.c_str());
         return false;
     }
 
@@ -351,55 +347,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     // never cached. Populate them now that featureClusters are set and the cache is primed.
     device->UpdateCachedFeatureMaps();
 
-    // Set the attribute callback so CacheCallback delegates to our dispatch tables
-    device->SetAttributeCallback([this](const std::string &deviceId,
-                                        chip::EndpointId endpointId,
-                                        chip::ClusterId clusterId,
-                                        chip::AttributeId attributeId,
-                                        chip::TLV::TLVReader &reader) {
-        HandleAttributeReport(deviceId, endpointId, clusterId, attributeId, reader);
-    });
-
-    // Set the event callback so CacheCallback delegates to our dispatch tables
-    device->SetEventCallback(
-        [this](const std::string &deviceId,
-               chip::EndpointId endpointId,
-               chip::ClusterId clusterId,
-               chip::EventId eventId,
-               chip::TLV::TLVReader &reader) { HandleEvent(deviceId, endpointId, clusterId, eventId, reader); });
-
-    // Set the command callback for incoming (server-side) commands
-    device->SetCommandCallback([this](const std::string &deviceId,
-                                      chip::EndpointId endpointId,
-                                      chip::ClusterId clusterId,
-                                      chip::CommandId commandId,
-                                      chip::TLV::TLVReader &reader) {
-        // Encode the incoming command's TLV payload as base64 for HandleCommand. The helper grows
-        // its scratch buffer on demand, so multi-KB command payloads are handled without dropping.
-        auto tlvBase64 = EncodeTlvElementToBase64(reader);
-
-        if (!tlvBase64.has_value())
-        {
-            // Drop the command rather than delivering it with an empty payload, which JS handlers
-            // would mis-read as a command with no arguments.
-            icError("Failed to encode command TLV for cluster 0x%x command 0x%x on device %s; dropping command",
-                    clusterId,
-                    commandId,
-                    deviceId.c_str());
-
-            return;
-        }
-
-        HandleCommand(deviceId, endpointId, clusterId, commandId, *tlvBase64);
-    });
-
-    // Register incoming command handlers for clusters in the command dispatch table
-    for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
-    {
-        device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
-    }
-
-    // Check prerequisites for resources
+    // Check prerequisites for resources before wiring the device to this driver, so a device whose
+    // bind is rejected never has callbacks or incoming command handlers that dispatch into it.
     const auto &reg = driver->GetRegistration();
 
     for (const auto &endpoint : reg.endpoints)
@@ -412,7 +361,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 {
                     icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
                     std::string key = endpoint.id + ":" + resource.id;
-                    skippedOptionalResources[device->GetDeviceId()].insert(key);
+                    skippedOptionalResources[deviceId].insert(key);
                     continue;
                 }
 
@@ -422,6 +371,58 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             }
         }
     }
+
+    // Wire the device to this driver. Its cache delivers callbacks on the Matter event loop with the
+    // stack lock held, and registering CHIP command handlers requires that lock, so do it under it.
+    Matter::RunWithStackLock([this, &device] {
+        // Set the attribute callback so CacheCallback delegates to our dispatch tables
+        device->SetAttributeCallback([this](const std::string &deviceId,
+                                            chip::EndpointId endpointId,
+                                            chip::ClusterId clusterId,
+                                            chip::AttributeId attributeId,
+                                            chip::TLV::TLVReader &reader) {
+            HandleAttributeReport(deviceId, endpointId, clusterId, attributeId, reader);
+        });
+
+        // Set the event callback so CacheCallback delegates to our dispatch tables
+        device->SetEventCallback(
+            [this](const std::string &deviceId,
+                   chip::EndpointId endpointId,
+                   chip::ClusterId clusterId,
+                   chip::EventId eventId,
+                   chip::TLV::TLVReader &reader) { HandleEvent(deviceId, endpointId, clusterId, eventId, reader); });
+
+        // Set the command callback for incoming (server-side) commands
+        device->SetCommandCallback([this](const std::string &deviceId,
+                                          chip::EndpointId endpointId,
+                                          chip::ClusterId clusterId,
+                                          chip::CommandId commandId,
+                                          chip::TLV::TLVReader &reader) {
+            // Encode the incoming command's TLV payload as base64 for HandleCommand. The helper grows
+            // its scratch buffer on demand, so multi-KB command payloads are handled without dropping.
+            auto tlvBase64 = EncodeTlvElementToBase64(reader);
+
+            if (!tlvBase64.has_value())
+            {
+                // Drop the command rather than delivering it with an empty payload, which JS handlers
+                // would mis-read as a command with no arguments.
+                icError("Failed to encode command TLV for cluster 0x%x command 0x%x on device %s; dropping command",
+                        clusterId,
+                        commandId,
+                        deviceId.c_str());
+
+                return;
+            }
+
+            HandleCommand(deviceId, endpointId, clusterId, commandId, *tlvBase64);
+        });
+
+        // Register incoming command handlers for clusters in the command dispatch table
+        for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+        {
+            device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+        }
+    });
 
     if (!MatterDeviceDriver::AddDevice(std::move(device)))
     {
@@ -433,72 +434,86 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     return true;
 }
 
-bool SpecBasedMatterDeviceDriver::ActivatedSpecMatchesCachedVersions()
+bool SpecBasedMatterDeviceDriver::EnsureActivated(const std::string &deviceId)
 {
-    const auto &reg = driver->GetRegistration();
+    auto activateStart = std::chrono::steady_clock::now();
+    std::unique_ptr<SbmdRegistration> freshReg;
+    JSContext *loadCtx = nullptr;
 
-    if (reg.barton.deviceClassVersion != constructedDeviceClassVersion)
     {
-        icError("SBMD driver '%s' device-class version changed on activation (loaded %u, spec %u); refusing bind",
-                driver->GetName().c_str(),
-                constructedDeviceClassVersion,
-                reg.barton.deviceClassVersion);
-        return false;
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+        if (driver->IsActivated())
+        {
+            return true;
+        }
     }
 
-    DeviceDriver *dd = GetDriver();
+    // Read the spec file before taking the JS mutex: report dispatch for every SBMD driver waits on
+    // that mutex, so slow storage must not hold it. A failed read is not retried under the mutex; it
+    // is reported as read_failed below.
+    std::string specText;
+    const bool specRead = SbmdDriver::ReadSpecFile(driver->GetSpecPath(), specText);
 
-    std::set<std::string> freshProfiles;
-
-    for (const auto &endpoint : reg.endpoints)
+    // Load and validate the re-read spec without holding the Matter stack lock: JS evaluation is the
+    // slow part, and it does not touch the driver's state. Report dispatch for SBMD drivers still
+    // waits on the JS mutex while the spec evaluates (bounded by the script deadline).
     {
-        freshProfiles.insert(endpoint.profile);
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
-        // Defense in depth: the loader already rejects a spec whose profileVersion exceeds uint8 at
-        // parse time, so this should be unreachable; keep it so a future loader change cannot let a
-        // wider value narrow and alias onto the cached version here.
-        if (endpoint.profileVersion > UINT8_MAX)
+        // A concurrent bind may have activated the driver while the file was being read.
+        if (driver->IsActivated())
         {
-            icError("SBMD driver '%s' endpoint '%s' profile version %" PRIu32 " is out of range; refusing bind",
-                    driver->GetName().c_str(),
-                    endpoint.id.c_str(),
-                    endpoint.profileVersion);
-            return false;
+            return true;
         }
 
-        void *cached = dd->endpointProfileVersions != nullptr
-                           ? hashMapGet(dd->endpointProfileVersions,
-                                        const_cast<char *>(endpoint.profile.c_str()),
-                                        static_cast<uint16_t>(endpoint.profile.length() + 1))
-                           : nullptr;
+        loadCtx = MQuickJsRuntime::Instance().GetSharedContext();
+        SbmdDriver::ActivationFailure failure = SbmdDriver::ActivationFailure::None;
+        freshReg = driver->LoadForActivation(loadCtx, specRead ? &specText : nullptr, &failure);
 
-        if (cached == nullptr || *static_cast<uint8_t *>(cached) != static_cast<uint8_t>(endpoint.profileVersion))
+        if (!freshReg)
         {
-            icError("SBMD driver '%s' endpoint '%s' profile version changed on activation; refusing bind",
-                    driver->GetName().c_str(),
-                    endpoint.id.c_str());
+            icError("Failed to activate SBMD driver '%s' for device %s", driver->GetName().c_str(), deviceId.c_str());
+            metrics.RecordDriverActivationFailed(driver->GetDriverStem().c_str(), ActivationFailureReason(failure));
             return false;
         }
     }
 
-    // The loop above only checks profiles the re-read spec still declares. A profile deleted from the
-    // spec would otherwise pass while endpointProfileVersions keeps advertising its startup version to
-    // the device-service layer. Every cached profile matched a fresh entry above, so equal distinct
-    // counts prove the cached and fresh profile sets are identical; a mismatch means a profile was
-    // added or removed, so reject the bind.
-    uint16_t cachedProfileCount =
-        dd->endpointProfileVersions != nullptr ? hashMapCount(dd->endpointProfileVersions) : 0;
+    // Commit while excluding report dispatch, which reads the registration and dispatch tables that
+    // the commit replaces. A concurrent bind may have committed in between; then this one is unused.
+    bool activated = false;
 
-    if (freshProfiles.size() != cachedProfileCount)
-    {
-        icError("SBMD driver '%s' endpoint profile set changed on activation (loaded %u, spec %zu); refusing bind",
-                driver->GetName().c_str(),
-                cachedProfileCount,
-                freshProfiles.size());
-        return false;
-    }
+    Matter::RunWithStackLock([this, &freshReg, &activated, loadCtx, activateStart] {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
-    return true;
+        // The runtime shut down (and freed loadCtx) since loading: the fresh roots point into freed
+        // memory, so detach them and fail.
+        if (ctx != loadCtx)
+        {
+            SbmdDriver::DiscardRegistration(std::move(freshReg), nullptr);
+            metrics.RecordDriverActivationFailed(driver->GetDriverStem().c_str(), "runtime_unavailable");
+            return;
+        }
+
+        if (driver->IsActivated())
+        {
+            SbmdDriver::DiscardRegistration(std::move(freshReg), ctx);
+            activated = true;
+            return;
+        }
+
+        driver->CommitActivation(std::move(freshReg), ctx);
+        activated = true;
+
+        double activationDurationMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - activateStart).count();
+
+        metrics.RecordDriverActivated(
+            driver->GetDriverStem().c_str(), activeDriverCount.fetch_add(1) + 1, activationDurationMs);
+    });
+
+    return activated;
 }
 
 void SpecBasedMatterDeviceDriver::DeactivateIfIdle()
@@ -524,23 +539,10 @@ void SpecBasedMatterDeviceDriver::TeardownIfIdle()
         return;
     }
 
-    auto teardown = [this] {
+    Matter::RunWithStackLock([this] {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
         DeactivateIfIdle();
-    };
-
-    // Serialize with report dispatch, which runs on the Matter thread. A live loop means a
-    // subscription could be delivering reports into the dispatch tables Deactivate() frees, so run
-    // the teardown there; with no loop there are no reports and running directly is safe. The
-    // running check is non-constructing so this never instantiates the Matter singleton.
-    if (Matter::IsStackRunning())
-    {
-        RunOnMatterSync(teardown);
-    }
-    else
-    {
-        teardown();
-    }
+    });
 }
 
 void SpecBasedMatterDeviceDriver::OnLastDeviceRemoved()
@@ -1441,6 +1443,9 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     PendingOperation pending;
     pending.id = pendingId;
     pending.parkingPromise = &parkingPromise;
+    // The promise lives in ConnectAndExecute's list, which is freed if it stops waiting; associating it
+    // lets ConnectAndExecute invalidate it so a later completion never writes to a freed promise.
+    AssociateStoredContext(&parkingPromise);
     pending.handlerContext = hctx;
     pending.device = GetDevice(device.GetDeviceId());
     pending.exchangeMgr = &exchangeMgr;
@@ -2140,17 +2145,20 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
                                    resourceAttr,
                                    static_cast<int64_t>(pendingOperations.size()) - 1);
 
-    // Resolve the parking promise
+    // Resolve the parking promise, but only while ConnectAndExecute still owns it (see
+    // AssociateStoredContext in ExecuteRequestCommand).
     if (pending.parkingPromise != nullptr)
     {
-        try
-        {
-            pending.parkingPromise->set_value(success);
-        }
-        catch (const std::future_error &e)
-        {
-            icDebug("Parking promise already satisfied for operation %" PRIu64, pendingId);
-        }
+        FinalizeStoredContext(pending.parkingPromise, [success, pendingId](void *context) {
+            try
+            {
+                static_cast<std::promise<bool> *>(context)->set_value(success);
+            }
+            catch (const std::future_error &e)
+            {
+                icDebug("Parking promise already satisfied for operation %" PRIu64, pendingId);
+            }
+        });
     }
 
     // Release held handler references
@@ -2374,7 +2382,7 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
 {
     for (const auto *entry : matches)
     {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
+        if (entry->handler == nullptr)
         {
             continue;
         }
@@ -2394,22 +2402,35 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
 
         std::optional<ParsedResult> result;
         ScopedResultRelease resultRelease {result};
+        bool hasFunction = false;
 
         {
             auto startTime = std::chrono::steady_clock::now();
             auto lock = MQuickJsRuntime::Instance().AcquireMutex();
             auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
-            // args keeps its value alive for its whole lifetime, so it survives the allocations in
-            // AddSupplements and the handler call without a separate guard.
-            SafeJSValue args = buildArgs(ctx);
-            SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
+            // Read the handler only under the JS mutex: a garbage collection running JS on another
+            // thread may be relocating the rooted function and rewriting this slot.
+            hasFunction = !JS_IsUndefined(entry->handler->Fn());
 
-            OperationContext opCtx;
-            opCtx.driverStem = driver ? driver->GetDriverStem() : "";
-            opCtx.opType = elementNoun;
-            opCtx.startTime = startTime;
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args, &opCtx);
+            if (hasFunction)
+            {
+                // args keeps its value alive for its whole lifetime, so it survives the allocations in
+                // AddSupplements and the handler call without a separate guard.
+                SafeJSValue args = buildArgs(ctx);
+                SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
+
+                OperationContext opCtx;
+                opCtx.driverStem = driver ? driver->GetDriverStem() : "";
+                opCtx.opType = elementNoun;
+                opCtx.startTime = startTime;
+                result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args, &opCtx);
+            }
+        }
+
+        if (!hasFunction)
+        {
+            continue;
         }
 
         if (!result.has_value())

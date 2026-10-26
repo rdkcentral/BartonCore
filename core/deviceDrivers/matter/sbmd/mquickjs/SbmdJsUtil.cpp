@@ -25,6 +25,8 @@
 #include "MQuickJsRuntime.h"
 #include "matter/sbmd/SafeJSValue.h"
 
+#include <chrono>
+#include <cmath>
 #include <cstring>
 
 namespace barton
@@ -92,30 +94,42 @@ namespace barton
 
         bool ToBoundedUint(JSContext *ctx, JSValue val, uint32_t maxValue, uint32_t &out)
         {
-            // Saturating conversion: values >= 2^31 clamp to INT32_MAX (never wrap), and anything
-            // above maxValue or negative is rejected rather than narrowed into an aliasing value.
-            int sat = 0;
-
-            if (JS_ToInt32Sat(ctx, &sat, val) < 0)
+            // Only a JS number is accepted: strings, booleans, null and objects would otherwise be
+            // coerced by ToNumber ("7" -> 7, true -> 1, null -> 0) into an aliasing value.
+            if (!JS_IsNumber(ctx, val))
             {
                 return false;
             }
 
-            if (sat < 0 || static_cast<uint32_t>(sat) > maxValue)
+            double number = 0;
+
+            if (JS_ToNumber(ctx, &number, val) < 0)
             {
                 return false;
             }
 
-            out = static_cast<uint32_t>(sat);
+            // Reject NaN/Inf and any fractional part rather than truncating (2.5 must not become 2).
+            if (!std::isfinite(number) || number != std::trunc(number) || number < 0 ||
+                number > static_cast<double>(maxValue))
+            {
+                return false;
+            }
+
+            out = static_cast<uint32_t>(number);
 
             return true;
         }
 
-        bool ReadOptBoundedUint16Prop(JSContext *ctx, JSValue obj, const char *name, std::optional<uint16_t> &out)
+        bool ReadOptBoundedUintProp(JSContext *ctx,
+                                    JSValue obj,
+                                    const char *name,
+                                    uint32_t maxValue,
+                                    std::optional<uint32_t> &out)
         {
             SafeJSValue val(ctx, JS_GetPropertyStr(ctx, obj, name));
 
-            if (JS_IsUndefined(val.Get()) || JS_IsNull(val.Get()))
+            // Only an absent property means "not set"; an explicit null is a non-integer value.
+            if (JS_IsUndefined(val.Get()))
             {
                 out = std::nullopt;
 
@@ -124,12 +138,26 @@ namespace barton
 
             uint32_t value = 0;
 
-            if (!ToBoundedUint(ctx, val.Get(), UINT16_MAX, value))
+            if (!ToBoundedUint(ctx, val.Get(), maxValue, value))
             {
                 return false;
             }
 
-            out = static_cast<uint16_t>(value);
+            out = value;
+
+            return true;
+        }
+
+        bool ReadOptBoundedUint16Prop(JSContext *ctx, JSValue obj, const char *name, std::optional<uint16_t> &out)
+        {
+            std::optional<uint32_t> value;
+
+            if (!ReadOptBoundedUintProp(ctx, obj, name, UINT16_MAX, value))
+            {
+                return false;
+            }
+
+            out = value.has_value() ? std::optional<uint16_t>(static_cast<uint16_t>(*value)) : std::nullopt;
 
             return true;
         }
@@ -149,6 +177,14 @@ namespace barton
             return len;
         }
 
+        bool ScriptTimedOut()
+        {
+            // The fired flag persists until the next SetDeadline(), so only trust it while a deadline
+            // is active; a load without a deadline must not see a stale timeout from an earlier call.
+            return MQuickJsRuntime::Instance().GetDeadline() != std::chrono::steady_clock::time_point {} &&
+                   MQuickJsRuntime::Instance().WasTimedOut();
+        }
+
         bool HasProperty(JSContext *ctx, JSValue obj, const char *name)
         {
             JSValue val = JS_GetPropertyStr(ctx, obj, name);
@@ -164,6 +200,11 @@ namespace barton
 
             for (uint32_t i = 0; i < len; i++)
             {
+                if (ScriptTimedOut())
+                {
+                    break;
+                }
+
                 SafeJSValue elem(ctx, JS_GetPropertyUint32(ctx, rootedArray.Get(), i));
                 JSCStringBuf buf;
                 const char *str = JS_ToCString(ctx, elem.Get(), &buf);
@@ -185,6 +226,11 @@ namespace barton
 
             for (uint32_t i = 0; i < len; i++)
             {
+                if (ScriptTimedOut())
+                {
+                    break;
+                }
+
                 SafeJSValue elem(ctx, JS_GetPropertyUint32(ctx, rootedArray.Get(), i));
                 uint32_t val = 0;
                 JS_ToUint32(ctx, &val, elem.Get());

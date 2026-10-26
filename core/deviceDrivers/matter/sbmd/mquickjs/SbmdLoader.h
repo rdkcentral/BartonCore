@@ -49,6 +49,18 @@ extern "C" {
 
 namespace barton
 {
+    /**
+     * Why SbmdLoader::LoadDriver() returned no registration.
+     */
+    enum class SbmdLoadFailure
+    {
+        None,
+        // A numeric claim/version field is not an integer within its storage range.
+        InvalidField,
+        // Any other failure: bad arguments, evaluation error, or a missing/malformed registration.
+        Other,
+    };
+
     class SbmdLoader
     {
     public:
@@ -70,17 +82,22 @@ namespace barton
          *   2. Wrap in IIFE with constants preamble and evaluate
          *   3. Read __sbmd_registration and extract metadata + handlers
          *
-         * Handler JSValues are NOT GC-rooted by this function. The caller must
-         * call ActivateHandlers() to root them when the driver has paired devices.
+         * Handler JSValues are GC-rooted (SbmdHandler::heldFn) as they are extracted, so the
+         * returned registration owns those roots until they are released.
          *
          * @param ctx The mquickjs context (caller must hold the mutex)
-         * @param filePath Path to the .sbmd.js file (for diagnostics)
+         * @param filePath Path to the .sbmd.js file; stored in the registration (SbmdDriver later
+         *                 re-reads the spec from it) and used in diagnostics
          * @param source The file contents
          * @param sourceLen Length of the file contents
+         * @param failure If non-null, set to why loading failed (SbmdLoadFailure::None on success)
          * @return The extracted registration, or nullptr on failure
          */
-        static std::unique_ptr<SbmdRegistration>
-        LoadDriver(JSContext *ctx, const std::string &filePath, const char *source, size_t sourceLen);
+        static std::unique_ptr<SbmdRegistration> LoadDriver(JSContext *ctx,
+                                                            const std::string &filePath,
+                                                            const char *source,
+                                                            size_t sourceLen,
+                                                            SbmdLoadFailure *failure = nullptr);
 
         /**
          * Extract the constants block from a .sbmd.js source text.
@@ -117,14 +134,17 @@ namespace barton
         /**
          * Extract the registration object from the JS context after evaluation.
          * Reads __sbmd_registration, resets it to null, and walks the JSValue
-         * to populate a SbmdRegistration struct.
+         * to populate a SbmdRegistration struct. Sets invalidField when extraction failed because a
+         * numeric claim/version field is not an integer within its storage range.
          */
-        static std::unique_ptr<SbmdRegistration> ExtractRegistration(JSContext *ctx, const std::string &filePath);
+        static std::unique_ptr<SbmdRegistration>
+        ExtractRegistration(JSContext *ctx, const std::string &filePath, bool &invalidField);
 
         /**
-         * Walk a JSValue registration object and populate metadata fields.
+         * Walk a JSValue registration object and populate metadata fields. Sets invalidField when a
+         * numeric claim/version field is rejected.
          */
-        static bool ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out);
+        static bool ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out, bool &invalidField);
 
         /**
          * Walk the aliases object and populate the aliases map.
@@ -132,9 +152,10 @@ namespace barton
         static bool ExtractAliases(JSContext *ctx, JSValue aliasesObj, SbmdRegistration &out);
 
         /**
-         * Walk the endpoints object and populate endpoint/resource structures.
+         * Walk the endpoints object and populate endpoint/resource structures. Sets invalidField when
+         * an endpoint profileVersion is rejected.
          */
-        static bool ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdRegistration &out);
+        static bool ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdRegistration &out, bool &invalidField);
 
         /**
          * Walk a resource handler declaration (simple function or {supplements, handler} object).

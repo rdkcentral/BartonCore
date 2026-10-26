@@ -77,23 +77,40 @@ best-matching driver. At runtime, the driver's handler functions translate
 between Barton resource operations and Matter attribute/command interactions.
 
 > **Operational note — specs are re-read from disk at runtime.** At startup each
-> driver is loaded only far enough to extract its claim metadata, then reduced to
-> that metadata to save memory; its spec source and parsed registration are
-> released. A driver is **activated on demand** by re-reading its `.sbmd.js` file
-> from its configured directory the first time a device binds to it, and is
+> driver is loaded only far enough to extract its claim metadata, then reduced
+> to that metadata to save memory; its spec source and parsed registration are
+> released. A driver is **activated on demand** by re-reading its `.sbmd.js`
+> file from its configured directory the first time a device binds to it, and is
 > deactivated again when its last device is removed. Consequently the configured
 > SBMD spec directories and their `.sbmd.js` files **must remain present and
-> readable for the lifetime of the process**. Editing a spec on disk without
-> restarting is not a supported live-reload: if an edit changes a claim-identity
-> field (device class, device types, vendor/product IDs) or a version field
-> (device-class version, endpoint profile version, or the set of endpoint
-> profiles), subsequent binds to that driver are **rejected** until the process
-> restarts. Numeric claim/version fields are also range-checked when a spec is
-> read: `deviceTypes`, `vendorId`, and `productId` must fit `uint16`, and
-> `deviceClassVersion` and endpoint `profileVersion` must fit `uint8`. An
-> out-of-range value makes the spec **fail to load** — at startup the driver is
-> not registered at all, and an out-of-range edit discovered on re-read fails
-> activation so the bind is rejected.
+> readable for the lifetime of the process**. Reads must not stall: the first
+> bind of a driver reads its spec on the commissioning or configuration thread,
+> and a read that never returns blocks that operation indefinitely. Stalled
+> reads can also use up device service's shared device-synchronization threads,
+> so that no other device is synchronized, and they make device-service shutdown
+> hang. A relative directory is resolved once, at startup, so later
+> working-directory changes in the host process do not affect it. Editing a spec
+> on disk without restarting is not a supported live-reload: if an edit changes
+> a claim-identity field (device class, device types, vendor/product IDs) or a
+> version field (device-class version, endpoint profile version, or the set of
+> endpoint profiles), subsequent binds to that driver are **rejected** until the
+> process restarts. Other edits (handler code, aliases, resources) are not
+> rejected: they take effect the next time that driver activates, while a driver
+> that is already active keeps the version it loaded. Restart after changing
+> specs rather than relying on this. Numeric claim/version fields are also
+> validated when a spec is read: `deviceTypes`, `vendorId`, and `productId` must
+> be integers in 0–`0xFFFF`, and `deviceClassVersion` and endpoint
+> `profileVersion` must be integers in 0–255. Anything else — a value out of
+> range, a fractional value, `NaN`, or a non-number such as a string, boolean,
+> or `null` — makes the spec **fail to load**. (An optional field is omitted by
+> leaving it out, not by setting it to `null`.) At startup only that driver is
+> skipped (it is not registered, the error is logged, and
+> `sbmd.driver.load.failure{reason="invalid_field"}` is counted); the other
+> drivers and the Matter subsystem start normally. An invalid edit discovered on
+> re-read fails activation, so the bind is rejected. Activation also rejects a
+> spec path that is not a regular file, and a re-read spec whose script does not
+> finish loading within the SBMD script time limit
+> (`BCORE_SBMD_SCRIPT_TIMEOUT_MS`).
 
 ```mermaid
 flowchart TB
@@ -317,7 +334,7 @@ barton: {
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `deviceClass` | string | yes | Barton device class identifier. |
-| `deviceClassVersion` | number | yes | Version of the device class schema. Must fit `uint8` (0–255); a larger value fails to load. |
+| `deviceClassVersion` | integer | yes | Version of the device class schema. Must be an integer in 0–255; any other value fails to load. |
 
 ### 4.5 Matter
 
@@ -332,10 +349,10 @@ matter: {
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `deviceTypes` | number[] | yes | Matter device type IDs this driver handles. Each must fit `uint16` (0–`0xFFFF`); a spec with a larger value fails to load. |
+| `deviceTypes` | integer[] | yes | Matter device type IDs this driver handles. Each must be an integer in 0–`0xFFFF`; any other value fails to load. |
 | `revision` | number | no | Minimum Matter device type revision required. |
-| `vendorId` | number | no | Matter vendor ID for vendor-specific matching. Must fit `uint16` (0–`0xFFFF`); a larger value fails to load. |
-| `productId` | number | no | Matter product ID for vendor-specific matching. Requires `vendorId`. Must fit `uint16` (0–`0xFFFF`); a larger value fails to load. |
+| `vendorId` | integer | no | Matter vendor ID for vendor-specific matching. Must be an integer in 0–`0xFFFF`; any other value fails to load. |
+| `productId` | integer | no | Matter product ID for vendor-specific matching. Requires `vendorId`. Must be an integer in 0–`0xFFFF`; any other value fails to load. |
 | `featureClusters` | number[] | no | Cluster IDs whose feature maps should be cached and made available to handlers via `args.clusterFeatureMaps`. |
 | `defaultTimeoutMs` | number | no | Default timeout in milliseconds for deferred operations (`requestCommand`, `readAttribute`). Overrides the system default. Can be overridden per-operation via `timeoutMs`. |
 
@@ -446,7 +463,7 @@ endpoints: {
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `profile` | string | yes | Barton resource profile name. |
-| `profileVersion` | number | yes | Profile version. Must fit `uint8` (0–255); a larger value fails to load. |
+| `profileVersion` | integer | yes | Profile version. Must be an integer in 0–255; any other value fails to load. |
 | `resources` | object | yes | Resource declarations (keyed by resource name). |
 
 #### 4.8.1 Resource Declaration

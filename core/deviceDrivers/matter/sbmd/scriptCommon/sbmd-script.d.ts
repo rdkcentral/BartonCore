@@ -80,18 +80,18 @@ interface SbmdAlias {
 
 interface SbmdBarton {
     deviceClass: string;
-    /** Version of the device class schema. Must fit uint8 (0-255); a larger value fails to load. */
+    /** Version of the device class schema. Must be an integer in 0-255; any other value fails to load. */
     deviceClassVersion: number;
 }
 
 interface SbmdMatter {
-    /** Matter device type IDs this driver handles. Each must fit uint16 (0-65535); a larger value fails to load. */
+    /** Matter device type IDs this driver handles. Each must be an integer in 0-65535; any other value fails to load. */
     deviceTypes: number[];
     /** Minimum Matter device type revision required. */
     revision?: number;
-    /** Matter vendor ID for vendor-specific matching. Must fit uint16 (0-65535); a larger value fails to load. */
+    /** Matter vendor ID for vendor-specific matching. Must be an integer in 0-65535; any other value fails to load. */
     vendorId?: number;
-    /** Matter product ID for vendor-specific matching. Requires vendorId. Must fit uint16 (0-65535); a larger value fails to load. */
+    /** Matter product ID for vendor-specific matching. Requires vendorId. Must be an integer in 0-65535; any other value fails to load. */
     productId?: number;
     /** Cluster IDs whose feature maps should be cached. */
     featureClusters?: number[];
@@ -109,7 +109,7 @@ interface SbmdReporting {
 interface SbmdEndpoint {
     /** Barton resource profile name. */
     profile: string;
-    /** Profile version. Must fit uint8 (0-255); a larger value fails to load. */
+    /** Profile version. Must be an integer in 0-255; any other value fails to load. */
     profileVersion: number;
     /** Resource declarations keyed by resource name. */
     resources: Record<string, SbmdResource>;

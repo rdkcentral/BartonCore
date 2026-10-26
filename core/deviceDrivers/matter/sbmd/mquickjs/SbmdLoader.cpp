@@ -343,6 +343,11 @@ namespace barton
 
         for (const auto &key : keys)
         {
+            if (ScriptTimedOut())
+            {
+                return std::nullopt;
+            }
+
             if (!isValidIdentifier(key))
             {
                 icError("Constants block key '%s' is not a valid JavaScript identifier", key.c_str());
@@ -439,9 +444,16 @@ namespace barton
         return static_cast<int>(std::count(preamble.begin(), preamble.end(), '\n'));
     }
 
-    std::unique_ptr<SbmdRegistration>
-    SbmdLoader::LoadDriver(JSContext *ctx, const std::string &filePath, const char *source, size_t sourceLen)
+    std::unique_ptr<SbmdRegistration> SbmdLoader::LoadDriver(JSContext *ctx,
+                                                             const std::string &filePath,
+                                                             const char *source,
+                                                             size_t sourceLen,
+                                                             SbmdLoadFailure *failure)
     {
+        SbmdLoadFailure unusedFailure = SbmdLoadFailure::None;
+        SbmdLoadFailure &loadFailure = failure != nullptr ? *failure : unusedFailure;
+        loadFailure = SbmdLoadFailure::Other;
+
         if (!ctx || !source || sourceLen == 0)
         {
             icError("Invalid arguments to LoadDriver");
@@ -495,13 +507,22 @@ namespace barton
         }
 
         // Extract registration
-        auto reg = ExtractRegistration(ctx, filePath);
+        bool invalidField = false;
+        auto reg = ExtractRegistration(ctx, filePath, invalidField);
 
         if (!reg)
         {
             icError("Failed to extract registration from %s", filePath.c_str());
+
+            if (invalidField)
+            {
+                loadFailure = SbmdLoadFailure::InvalidField;
+            }
+
             return nullptr;
         }
+
+        loadFailure = SbmdLoadFailure::None;
 
         icInfo("Loaded driver '%s' from %s (schema %s, driver %" PRIu32 ")",
                reg->name.c_str(),
@@ -512,7 +533,8 @@ namespace barton
         return reg;
     }
 
-    std::unique_ptr<SbmdRegistration> SbmdLoader::ExtractRegistration(JSContext *ctx, const std::string &filePath)
+    std::unique_ptr<SbmdRegistration>
+    SbmdLoader::ExtractRegistration(JSContext *ctx, const std::string &filePath, bool &invalidField)
     {
         SafeJSValue global(ctx, JS_GetGlobalObject(ctx));
         SafeJSValue regVal(ctx, JS_GetPropertyStr(ctx, global.Get(), "__sbmd_registration"));
@@ -535,7 +557,7 @@ namespace barton
         auto reg = std::make_unique<SbmdRegistration>();
         reg->filePath = filePath;
 
-        if (!ExtractMetadata(ctx, regVal.Get(), *reg))
+        if (!ExtractMetadata(ctx, regVal.Get(), *reg, invalidField))
         {
             icError("Failed to extract metadata from %s", filePath.c_str());
             return nullptr;
@@ -558,7 +580,7 @@ namespace barton
 
         if (!JS_IsUndefined(endpointsVal.Get()) && !JS_IsNull(endpointsVal.Get()))
         {
-            if (!ExtractEndpoints(ctx, endpointsVal.Get(), *reg))
+            if (!ExtractEndpoints(ctx, endpointsVal.Get(), *reg, invalidField))
             {
                 icError("Failed to extract endpoints from %s", filePath.c_str());
                 return nullptr;
@@ -611,7 +633,7 @@ namespace barton
         return reg;
     }
 
-    bool SbmdLoader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out)
+    bool SbmdLoader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out, bool &invalidField)
     {
         SafeJSValue regObj(ctx, reg);
 
@@ -639,18 +661,18 @@ namespace barton
             out.barton.deviceClass = GetStringProp(ctx, bartonVal.Get(), "deviceClass");
 
             // deviceClassVersion is a version field tracked as uint8 downstream and compared on re-read;
-            // a value outside [0, 255] would wrap/narrow into an aliasing version, so reject the spec here.
-            SafeJSValue deviceClassVersionVal(ctx, JS_GetPropertyStr(ctx, bartonVal.Get(), "deviceClassVersion"));
-            uint32_t deviceClassVersion = 0;
+            // anything other than an integer in [0, 255] would alias another version, so reject the spec.
+            std::optional<uint32_t> deviceClassVersion;
 
-            if ((!JS_IsUndefined(deviceClassVersionVal.Get()) && !JS_IsNull(deviceClassVersionVal.Get())) &&
-                !ToBoundedUint(ctx, deviceClassVersionVal.Get(), UINT8_MAX, deviceClassVersion))
+            if (!ReadOptBoundedUintProp(ctx, bartonVal.Get(), "deviceClassVersion", UINT8_MAX, deviceClassVersion))
             {
-                icError("Registration '%s' has a barton deviceClassVersion outside the uint8 range", out.name.c_str());
+                icError("Registration '%s' has a barton deviceClassVersion that is not an integer in [0, 255]",
+                        out.name.c_str());
+                invalidField = true;
                 return false;
             }
 
-            out.barton.deviceClassVersion = deviceClassVersion;
+            out.barton.deviceClassVersion = deviceClassVersion.value_or(0);
         }
 
         // Matter metadata
@@ -660,21 +682,35 @@ namespace barton
         {
             SafeJSValue deviceTypes(ctx, JS_GetPropertyStr(ctx, matterVal.Get(), "deviceTypes"));
 
-            if (!JS_IsUndefined(deviceTypes.Get()) && !JS_IsNull(deviceTypes.Get()))
+            if (!JS_IsUndefined(deviceTypes.Get()))
             {
-                // Claim-identity field: a device type that does not fit uint16 would wrap/narrow into
-                // an aliasing value on re-read, so reject the spec rather than accept a changed id.
+                if (!JS_IsArray(ctx, deviceTypes.Get()))
+                {
+                    icError("Registration '%s' has a matter.deviceTypes that is not an array", out.name.c_str());
+                    invalidField = true;
+                    return false;
+                }
+
+                // Claim-identity field: anything other than an integer in the uint16 range would alias
+                // another device type on re-read, so reject the spec rather than accept a changed id.
                 uint32_t typeCount = GetArrayLength(ctx, deviceTypes.Get());
 
                 for (uint32_t i = 0; i < typeCount; i++)
                 {
+                    if (ScriptTimedOut())
+                    {
+                        return false;
+                    }
+
                     SafeJSValue elem(ctx, JS_GetPropertyUint32(ctx, deviceTypes.Get(), i));
                     uint32_t deviceType = 0;
 
                     if (!ToBoundedUint(ctx, elem.Get(), UINT16_MAX, deviceType))
                     {
-                        icError("Registration '%s' has a matter.deviceTypes entry outside the uint16 range",
-                                out.name.c_str());
+                        icError(
+                            "Registration '%s' has a matter.deviceTypes entry that is not an integer in [0, 0xFFFF]",
+                            out.name.c_str());
+                        invalidField = true;
                         return false;
                     }
 
@@ -684,16 +720,20 @@ namespace barton
 
             out.matter.revision = GetOptUint32Prop(ctx, matterVal.Get(), "revision");
 
-            // vendorId/productId are also claim-identity fields; reject out-of-range edits (see above).
+            // vendorId/productId are also claim-identity fields; reject invalid edits (see above).
             if (!ReadOptBoundedUint16Prop(ctx, matterVal.Get(), "vendorId", out.matter.vendorId))
             {
-                icError("Registration '%s' has a matter vendorId outside the uint16 range", out.name.c_str());
+                icError("Registration '%s' has a matter vendorId that is not an integer in [0, 0xFFFF]",
+                        out.name.c_str());
+                invalidField = true;
                 return false;
             }
 
             if (!ReadOptBoundedUint16Prop(ctx, matterVal.Get(), "productId", out.matter.productId))
             {
-                icError("Registration '%s' has a matter productId outside the uint16 range", out.name.c_str());
+                icError("Registration '%s' has a matter productId that is not an integer in [0, 0xFFFF]",
+                        out.name.c_str());
+                invalidField = true;
                 return false;
             }
 
@@ -729,6 +769,11 @@ namespace barton
 
         for (const auto &name : keys)
         {
+            if (ScriptTimedOut())
+            {
+                return false;
+            }
+
             SafeJSValue aliasVal(ctx, JS_GetPropertyStr(ctx, rootedAliases.Get(), name.c_str()));
 
             if (JS_IsUndefined(aliasVal.Get()) || JS_IsNull(aliasVal.Get()))
@@ -750,7 +795,7 @@ namespace barton
         return true;
     }
 
-    bool SbmdLoader::ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdRegistration &out)
+    bool SbmdLoader::ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdRegistration &out, bool &invalidField)
     {
         // Root the incoming object and every intermediate handle so they survive the GC
         // relocations triggered by the many allocating property reads below.
@@ -759,6 +804,11 @@ namespace barton
 
         for (const auto &epId : endpointIds)
         {
+            if (ScriptTimedOut())
+            {
+                return false;
+            }
+
             SafeJSValue epVal(ctx, JS_GetPropertyStr(ctx, rootedEndpoints.Get(), epId.c_str()));
 
             if (JS_IsUndefined(epVal.Get()) || JS_IsNull(epVal.Get()))
@@ -770,19 +820,18 @@ namespace barton
             endpoint.id = epId;
             endpoint.profile = GetStringProp(ctx, epVal.Get(), "profile");
 
-            // profileVersion is tracked as uint8 downstream and compared on re-read; a value outside
-            // [0, 255] would wrap/narrow into an aliasing version, so reject the spec here.
-            SafeJSValue profileVersionVal(ctx, JS_GetPropertyStr(ctx, epVal.Get(), "profileVersion"));
-            uint32_t profileVersion = 0;
+            // profileVersion is tracked as uint8 downstream and compared on re-read; anything other than
+            // an integer in [0, 255] would alias another version, so reject the spec here.
+            std::optional<uint32_t> profileVersion;
 
-            if ((!JS_IsUndefined(profileVersionVal.Get()) && !JS_IsNull(profileVersionVal.Get())) &&
-                !ToBoundedUint(ctx, profileVersionVal.Get(), UINT8_MAX, profileVersion))
+            if (!ReadOptBoundedUintProp(ctx, epVal.Get(), "profileVersion", UINT8_MAX, profileVersion))
             {
-                icError("Endpoint '%s' has a profileVersion outside the uint8 range", epId.c_str());
+                icError("Endpoint '%s' has a profileVersion that is not an integer in [0, 255]", epId.c_str());
+                invalidField = true;
                 return false;
             }
 
-            endpoint.profileVersion = profileVersion;
+            endpoint.profileVersion = profileVersion.value_or(0);
 
             // Extract resources
             SafeJSValue resourcesVal(ctx, JS_GetPropertyStr(ctx, epVal.Get(), "resources"));
@@ -793,6 +842,11 @@ namespace barton
 
                 for (const auto &resId : resourceIds)
                 {
+                    if (ScriptTimedOut())
+                    {
+                        return false;
+                    }
+
                     SafeJSValue resVal(ctx, JS_GetPropertyStr(ctx, resourcesVal.Get(), resId.c_str()));
 
                     if (JS_IsUndefined(resVal.Get()) || JS_IsNull(resVal.Get()))
@@ -913,6 +967,11 @@ namespace barton
 
         for (const auto &name : handlerNames)
         {
+            if (ScriptTimedOut())
+            {
+                return false;
+            }
+
             SafeJSValue handlerObj(ctx, JS_GetPropertyStr(ctx, rootedHandlers.Get(), name.c_str()));
 
             if (JS_IsUndefined(handlerObj.Get()) || JS_IsNull(handlerObj.Get()))

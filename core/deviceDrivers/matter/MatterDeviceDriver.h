@@ -311,12 +311,14 @@ namespace barton
 
         /**
          * @brief Hook invoked after the driver's last bound device is removed.
-         *        Runs on the Matter thread with no locks held. Default is a no-op.
+         *        Runs on the Matter event loop thread, holding the CHIP stack lock (it is called from
+         *        DeviceRemoved's RunOnMatterSync block) but none of this driver's own locks.
+         *        Default is a no-op.
          *
-         * @warning This is invoked from within DeviceRemoved's RunOnMatterSync block — i.e. already
-         *          on the Matter event loop. Implementations MUST NOT re-enter the loop (no nested
-         *          RunOnMatterSync/ConnectAndExecute, or anything that blocks on the Matter thread)
-         *          or they will self-deadlock.
+         * @warning Implementations MUST NOT re-enter the loop (no nested RunOnMatterSync/
+         *          ConnectAndExecute, or anything that blocks on the Matter thread) or take the
+         *          stack lock again; either self-deadlocks. Matter::RunWithStackLock() is safe here,
+         *          since it runs work directly on the event loop thread.
          */
         virtual void OnLastDeviceRemoved() {}
 

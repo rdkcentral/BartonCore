@@ -179,11 +179,29 @@ namespace
 #endif
 } // namespace
 
-std::atomic<bool> Matter::stackRunning {false};
+std::atomic<bool> Matter::eventLoopRunning {false};
+std::atomic<std::thread::id> Matter::eventLoopThreadId {};
 
-bool Matter::IsStackRunning()
+bool Matter::IsEventLoopRunning()
 {
-    return stackRunning.load();
+    return eventLoopRunning.load();
+}
+
+bool Matter::IsEventLoopThread()
+{
+    return std::this_thread::get_id() == eventLoopThreadId.load();
+}
+
+void Matter::RunWithStackLock(const std::function<void()> &work)
+{
+    if (!IsEventLoopRunning() || IsEventLoopThread())
+    {
+        work();
+        return;
+    }
+
+    chip::DeviceLayer::StackLock stackLock;
+    work();
 }
 
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
@@ -428,7 +446,7 @@ bool Matter::Start()
     }
 
     state.store(State::running);
-    stackRunning.store(true);
+    eventLoopRunning.store(true);
 
     SetAccessRestrictionList();
 
@@ -481,6 +499,8 @@ void Matter::StackThreadProc()
 {
     icDebug();
 
+    eventLoopThreadId.store(std::this_thread::get_id());
+
     // This blocks until Stop
     chip::DeviceLayer::PlatformMgr().RunEventLoop();
 
@@ -506,7 +526,6 @@ bool Matter::Stop()
     icDebug();
 
     state.store(State::stopping);
-    stackRunning.store(false);
 
     chip::DeviceLayer::PlatformMgr().StopEventLoopTask();
 
@@ -514,6 +533,11 @@ bool Matter::Stop()
     {
         stackThread->join();
     }
+
+    // Only now can no Matter-thread callback be running, so a caller that sees the stack stopped
+    // may touch state that dispatch reads.
+    eventLoopThreadId.store(std::thread::id {});
+    eventLoopRunning.store(false);
 
     // If/when Matter starts up again, we want to guarantee that this is uninitialized
     chip::Access::AccessControl &accessControl = chip::Access::GetAccessControl();

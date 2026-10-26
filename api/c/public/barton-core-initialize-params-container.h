@@ -230,6 +230,17 @@ void b_core_initialize_params_container_set_matter_attestation_trust_store_dir(
  * b_core_initialize_params_container_set_sbmd_dirs
  * @self: BCoreInitializeParamsContainer*
  * @sbmdDirs: (nullable): A semicolon-delimited list of directories containing SBMD specification files.
+ *
+ * Relative directories are resolved against the working directory when device service starts. A
+ * driver re-reads its specification file whenever it activates (when the first device of its type
+ * binds), so these directories and their `.sbmd.js` files must stay present and unchanged, and
+ * readable without stalling, while device service runs. A read that never returns blocks the
+ * commissioning or device operation that triggered it, can use up the threads that synchronize all
+ * devices, and makes device-service shutdown hang. Removing or renaming a file, or changing it so
+ * that it no longer loads or its claim identity (name, device class, device types, vendor/product
+ * IDs), device-class version, endpoint profile versions, or set of endpoint profiles differ, makes
+ * later binds to that driver fail until device service is restarted; other edits take effect the
+ * next time that driver activates.
  */
 void b_core_initialize_params_container_set_sbmd_dirs(BCoreInitializeParamsContainer *self, const gchar *sbmdDirs);
 
