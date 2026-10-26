@@ -178,12 +178,9 @@ void deviceCommunicationWatchdogMonitorDevice(const char *uuid, const uint32_t c
         info->inCommFail = inCommFail;
         setMillisUntilCommFail(info, commFailTimeoutSeconds * 1000);
 
-        // Defensive in case for some reason the device already exists(can happen for device recovery)
-        if (g_hash_table_insert(monitoredDevices, g_strdup(info->uuid), info) == false)
-        {
-            monitoredDevicesEntryDestroy(info);
-            info = NULL;
-        }
+        // The device may already be monitored (e.g., device recovery). g_hash_table_replace takes ownership
+        // of info and frees any previous entry via the value destroy func, so info must not be freed here.
+        g_hash_table_replace(monitoredDevices, g_strdup(info->uuid), info);
     }
     else
     {
