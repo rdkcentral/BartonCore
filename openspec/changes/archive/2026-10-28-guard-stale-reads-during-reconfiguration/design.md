@@ -150,7 +150,10 @@ Readiness is split into two flags under `subsystemsAreReadyMutex`:
   pending without waiting for the synchronization, and drivers that don't implement
   `synchronizeDevice()` are skipped as they are on every other synchronization path. If the thread
   pool won't take the task (its queue is full), the fallback runs the synchronization inline rather
-  than drop it, since a dropped fallback would leave the device serving pre-restart data.
+  than drop it, since a dropped fallback would leave the device serving pre-restart data. The
+  fallback is skipped for a device that is being removed (the removal may be what stopped its
+  reconfiguration), so the synchronization can't run while the removal deletes the device and tells
+  its driver. The removal registers before it stops the reconfiguration, so the check always sees it.
 - `deviceOperationsReady` (published): what `deviceServiceIsReadyForDeviceOperation()` returns, and
   therefore the client gate, the status's `isReadyForDeviceOperation`/`isReadyForPairing`, and
   discovery's driver filtering.
@@ -196,7 +199,7 @@ device pending for another reason (for example after a firmware upgrade) isn't s
 that reconfiguration. The skip is recorded in the same locked step that checks the pending state; if
 that reconfiguration then fails, the device is synchronized as the pass would have done (a startup
 reconfiguration already falls back through its own completion callback, so it isn't synchronized
-twice).
+twice; neither falls back for a device being removed).
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
@@ -378,7 +381,8 @@ clears it:
   reconfiguration is scheduled until it finishes: this includes post-OTA scheduling delays (60s) and,
   for sleepy Zigbee devices, waiting up to `RECONFIGURATION_TIMEOUT_SEC` (30 min) for a poll
   check-in. For that whole period the gated reads and `write_metadata` return
-  `B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING`; list getters still include the device (D4),
+  `B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING`; list getters still include the device (D4,
+  except in the instant the swap replaces its record),
   commands and resource writes still work (D5), and the D7 event tells clients when to retry.
 - [Event handlers that use the gated getters] → A signal handler that looks a device up through a
   gated getter to enrich an event will now get an error for a pending device, or before readiness, and
@@ -444,7 +448,8 @@ clears it:
   a source on that context could be dispatched by the application's loop first). A stop made on the
   event thread itself (from a callback that loop dispatched) quits once and detaches the thread
   instead, since that loop can't return until the stop does; each start's loop has its own "exited"
-  flag so a detached thread can't mark a later loop as exited.
+  flag so a detached thread can't mark a later loop as exited. Stopping again, or stopping after the
+  event thread failed to start, finds no loop and returns at once.
   What it cannot show: a real driver's reconfiguration completing (the integration harness can't restart
   Barton in-process, and running one to completion crashes in the Matter SBMD driver for reasons
   unrelated to this change), and the condition-variable clock fix, whose only observable effect is that

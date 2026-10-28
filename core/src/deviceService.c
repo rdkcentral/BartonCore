@@ -214,6 +214,8 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
 
 static void FallBackToSynchronization(const char *deviceUuid);
 
+static bool IsDeviceBeingRemoved(const char *deviceUuid);
+
 static void BeginDeviceRemoval(const char *deviceUuid);
 
 static void EndDeviceRemoval(const char *deviceUuid, bool removed);
@@ -1894,9 +1896,8 @@ static void EventLoopRunRelease(EventLoopRun *run)
     g_atomic_rc_box_release_full(run, (GDestroyNotify) EventLoopRunClear);
 }
 
-/*
- * MT unsafe: access on main()'s thread only
- */
+// MT unsafe: accessed only by the thread starting or stopping the service, which may be the event thread itself (a
+// callback on it that stops the service). NULL when no event loop is running.
 static EventLoopRun *eventLoopRun;
 static pthread_t eventThread;
 
@@ -1942,19 +1943,37 @@ static void *glibEventRunner(EventLoopRun *run)
  */
 static void startMainLoop(void)
 {
-    eventLoopRun = g_atomic_rc_box_new0(EventLoopRun);
-    eventLoopRun->loop = g_main_loop_new(NULL, FALSE);
-    createThread(&eventThread, (taskFunc) glibEventRunner, g_atomic_rc_box_acquire(eventLoopRun), "glibEvt");
+    EventLoopRun *run = g_atomic_rc_box_new0(EventLoopRun);
+    run->loop = g_main_loop_new(NULL, FALSE);
+
+    if (createThread(&eventThread, (taskFunc) glibEventRunner, g_atomic_rc_box_acquire(run), "glibEvt") == false)
+    {
+        // Leaves eventLoopRun NULL, so stopping doesn't wait for a loop that never ran.
+        icLogError(LOG_TAG, "%s: could not start the event loop thread", __FUNCTION__);
+        EventLoopRunRelease(run); // the reference the thread would have owned
+        EventLoopRunRelease(run);
+
+        return;
+    }
+
+    eventLoopRun = run;
 }
 
 static void stopMainLoop(void)
 {
     EventLoopRun *run = g_steal_pointer(&eventLoopRun);
 
+    // Already stopped (the service can be stopped more than once), or the loop never started.
+    if (run == NULL)
+    {
+        return;
+    }
+
     // Stopped from the event thread itself (a callback dispatched on it): its loop is running, so a single quit takes
     // effect once that callback returns. It can't be waited for or joined from here, so let it clean up on its own.
     if (pthread_equal(eventThread, pthread_self()) != 0)
     {
+        icLogDebug(LOG_TAG, "%s: stopped from the event thread; detaching it", __FUNCTION__);
         g_main_loop_quit(run->loop);
         pthread_detach(eventThread);
         EventLoopRunRelease(run);
@@ -4191,6 +4210,18 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
 // dropping it would leave the device serving the stale data the reconfiguration was meant to replace.
 static void FallBackToSynchronization(const char *deviceUuid)
 {
+    // Not for a device being removed (the removal may be what stopped its reconfiguration): the synchronization could
+    // run while the removal deletes the device and tells its driver, leaving the driver tracking it again. The removal
+    // registers before it stops the reconfiguration, so this sees it.
+    if (IsDeviceBeingRemoved(deviceUuid) == true)
+    {
+        icLogDebug(LOG_TAG, "%s: %s is being removed; not synchronizing it", __FUNCTION__, deviceUuid);
+
+        return;
+    }
+
+    icLogDebug(LOG_TAG, "%s: reconfiguration of %s failed; synchronizing it instead", __FUNCTION__, deviceUuid);
+
     if (SubsystemsAreReadyForDevices() == true && QueueDeviceSynchronization(deviceUuid) == false)
     {
         icLogWarn(LOG_TAG, "%s: could not queue synchronization of %s; running it now", __FUNCTION__, deviceUuid);
@@ -4215,7 +4246,7 @@ static bool QueueDeviceSynchronization(const char *deviceUuid)
     return result;
 }
 
-// Also the fallback for a failed startup reconfiguration (reconfigurationCompletedCallback()).
+// Also the fallback when a reconfiguration covering a device's synchronization fails (FallBackToSynchronization()).
 static void DeviceSynchronizationTask(void *arg)
 {
     char *uuid = (char *) arg;
@@ -5376,6 +5407,7 @@ static bool SkipForPendingReconfiguration(const char *deviceUuid)
     if (pendingReconfiguration != NULL &&
         hashMapGet(pendingReconfiguration, (void *) deviceUuid, (uint16_t) (strlen(deviceUuid) + 1)) != NULL)
     {
+        icLogDebug(LOG_TAG, "%s: %s has a reconfiguration pending; not synchronizing it now", __FUNCTION__, deviceUuid);
         pending = true;
 
         if (devicesAwaitingStartupSync != NULL)
@@ -5460,6 +5492,15 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
  * device restarting after a firmware upgrade), a completion callback if any was given, and as-soon-as-possible if any
  * asked. Caller holds reconfigurationControlMutex.
  */
+static bool IsDeviceBeingRemoved(const char *deviceUuid)
+{
+    mutexLock(&reconfigurationControlMutex);
+    bool beingRemoved = devicesBeingRemoved != NULL && g_hash_table_contains(devicesBeingRemoved, deviceUuid);
+    mutexUnlock(&reconfigurationControlMutex);
+
+    return beingRemoved;
+}
+
 static bool DeferIfBeingRemovedLocked(const char *deviceUuid,
                                       uint32_t delaySeconds,
                                       reconfigurationCompleteCallback reconfigurationCompleted,

@@ -1101,6 +1101,23 @@ static void test_stopFromEventLoopCallbackReturns(void **state)
     assert_true(returned);
 }
 
+// Stopping again after the client was stopped from its event loop (as a host might at exit) is harmless.
+static void test_stopAgainAfterStopFromEventLoop(void **state)
+{
+    Fixture *fixture = *state;
+
+    g_idle_add(StopClientFromEventLoop, NULL);
+
+    g_mutex_lock(&fakeLock);
+    bool returned = WaitLocked(IsStopReturnedFromHandler, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    fixture->stopped = stopCalledFromHandler;
+    g_mutex_unlock(&fakeLock);
+
+    assert_true(returned);
+
+    b_core_client_stop(fixture->client);
+}
+
 // Shutdown beginning mid-pass stops scheduling and withholds readiness.
 static void test_shutdownDuringStartupPassWithholdsReadiness(void **state)
 {
@@ -1230,7 +1247,8 @@ static void test_removalCancelsNotYetStartedReconfiguration(void **state)
 }
 
 // A reconfiguration that already started can't be cancelled; removal blocks until it finishes, then proceeds
-// promptly rather than at its 60 second timeout.
+// promptly rather than at its 60 second timeout. The failed startup reconfiguration doesn't fall back to synchronizing
+// the device being removed.
 static void test_removalWaitsForRunningReconfiguration(void **state)
 {
     (void) state;
@@ -1254,6 +1272,28 @@ static void test_removalWaitsForRunningReconfiguration(void **state)
     assert_int_equal(finishedEventsWhenRemoved, 1);
     assert_false(deviceServiceIsReconfigurationPending("stale"));
     assert_null(jsonDatabaseGetDeviceById("stale"));
+    assert_int_equal(GetSyncCount("stale"), 0);
+}
+
+// Nor does a failed reconfiguration a startup pass skipped the device for, when a removal is what it was waiting on.
+static void test_skippedDeviceNotSynchronizedWhileBeingRemoved(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    deviceServiceReconfigureDevice("current", 60, NULL, false);
+    readyForDevices();
+    cancelSucceeds = false;
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_true(deviceServiceRemoveDevice("current"));
+    g_thread_join(taskThread);
+
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(finishedEventSucceeded);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(GetSyncCount("current"), 0);
 }
 
 // A removal that starts while the completion event is being sent (after the device stopped being reported as
@@ -1773,11 +1813,14 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(
             test_stopFromReadyEventHandlerDoesNotWaitForItself, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_stopFromEventLoopCallbackReturns, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_stopAgainAfterStopFromEventLoop, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_reconfigurationFinishUnpendsBeforeNotifying, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_schedulingFailureLeavesDeviceNotPending, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalCancelsNotYetStartedReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalWaitsForRunningReconfiguration, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_skippedDeviceNotSynchronizedWhileBeingRemoved, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalDuringCompletionEventWaitsForIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_removalFromCompletionHandlerDoesNotWaitForItself, SetupService, TeardownService),

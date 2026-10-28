@@ -59,10 +59,10 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 - **WHEN** the startup pass runs again and a device it saw as needing reconfiguration was already reconfigured by an earlier pass
 - **THEN** that device SHALL NOT be reconfigured again
 
-#### Scenario: Repeated startup pass while a reconfiguration is running
-- **WHEN** the startup pass runs again and a device has a reconfiguration pending, whether from an earlier pass or requested for another reason
+#### Scenario: Startup pass while a reconfiguration is pending
+- **WHEN** a startup pass (the first or a repeated one) finds a device with a reconfiguration pending, whether from an earlier pass or requested for another reason
 - **THEN** that device SHALL be neither reconfigured again nor synchronized by this pass, whatever its stored class and profile versions
-- **AND** if that pending reconfiguration then fails, the device SHALL be synchronized as the pass would otherwise have done
+- **AND** if that pending reconfiguration then fails, the device SHALL be synchronized as the pass would otherwise have done, unless the device is being removed
 
 ### Requirement: Pending reconfiguration metric
 The device service SHALL record a `device.reconfiguration.pending` gauge (unit `1`, no attributes) through the observability metrics API, holding the number of devices with a pending or in-progress reconfiguration. It SHALL be recorded as 0 when the service starts and updated whenever a reconfiguration becomes or stops being pending.
