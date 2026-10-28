@@ -130,6 +130,11 @@ static bool shutdownBegan;
 static bool commFailShutdownCalled; // shutdown got past waiting for reconfigurations
 static bool passReachedDevice;
 static bool passReleased;
+static bool readyEventReached;
+static bool syncReached;
+static void (*syncHook)(void);
+static bool readyDuringStart; // deliver readiness from within start, as the subsystem manager can
+static int commFailShutdownCount;
 static void (*readyEventHook)(void);
 
 static bool probeShutdownWait;
@@ -207,6 +212,21 @@ static bool IsDeviceRemovedEventSent(void)
     return removedEventCount > 0;
 }
 
+static bool IsFinishedEventSent(void)
+{
+    return finishedEventCount > 0;
+}
+
+static bool IsReadyEventReached(void)
+{
+    return readyEventReached;
+}
+
+static bool IsSyncReached(void)
+{
+    return syncReached;
+}
+
 static bool IsRequestReturned(void)
 {
     return requestReturned;
@@ -250,6 +270,16 @@ static void FakeSynchronizeDevice(void *ctx, icDevice *device)
     (void) ctx;
 
     g_mutex_lock(&fakeLock);
+    void (*hook)(void) = syncHook;
+    syncHook = NULL;
+    g_mutex_unlock(&fakeLock);
+
+    if (hook != NULL)
+    {
+        hook();
+    }
+
+    g_mutex_lock(&fakeLock);
     gpointer count = g_hash_table_lookup(syncCounts, device->uuid);
     g_hash_table_insert(syncCounts, g_strdup(device->uuid), GINT_TO_POINTER(GPOINTER_TO_INT(count) + 1));
     g_cond_broadcast(&fakeCond);
@@ -265,7 +295,13 @@ void __wrap_subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc ready
     readyForDevices = readyForDevicesCallback;
 }
 
-void __wrap_subsystemManagerAllDriversStarted(void) {}
+void __wrap_subsystemManagerAllDriversStarted(void)
+{
+    if (readyDuringStart == true && readyForDevices != NULL)
+    {
+        readyForDevices();
+    }
+}
 
 void __wrap_subsystemManagerShutdown(void) {}
 
@@ -305,6 +341,7 @@ void __wrap_deviceServiceCommFailShutdown(void)
 {
     g_mutex_lock(&fakeLock);
     commFailShutdownCalled = true;
+    commFailShutdownCount++;
     g_cond_broadcast(&fakeCond);
     g_mutex_unlock(&fakeLock);
 }
@@ -514,6 +551,7 @@ void __wrap_sendDeviceReconfigurationFinishedEvent(const char *deviceClass, cons
     g_free(finishedEventUuid);
     finishedEventUuid = g_strdup(uuid);
     void (*hook)(const char *) = finishedEventHook;
+    g_cond_broadcast(&fakeCond);
     g_mutex_unlock(&fakeLock);
 
     // Runs as a client's signal handler would: on the reconfiguration task's thread, while the event is being sent.
@@ -897,6 +935,11 @@ static void ResetFakes(void)
     commFailShutdownCalled = false;
     passReachedDevice = false;
     passReleased = false;
+    readyEventReached = false;
+    syncReached = false;
+    syncHook = NULL;
+    readyDuringStart = false;
+    commFailShutdownCount = 0;
     readyEventHook = NULL;
     stopCalledFromHandler = false;
     stopReturnedFromHandler = false;
@@ -919,7 +962,7 @@ static void ResetFakes(void)
     mergedCallbackCalled = false;
 }
 
-static int SetupService(void **state)
+static int SetupClient(void **state, bool start)
 {
     ResetFakes();
 
@@ -937,12 +980,27 @@ static int SetupService(void **state)
 
     fixture->client = b_core_client_new(params);
     testClient = fixture->client;
-    assert_true(b_core_client_start(fixture->client));
-    assert_non_null(readyForDevices);
+
+    if (start == true)
+    {
+        assert_true(b_core_client_start(fixture->client));
+        assert_non_null(readyForDevices);
+    }
 
     *state = fixture;
 
     return 0;
+}
+
+static int SetupService(void **state)
+{
+    return SetupClient(state, true);
+}
+
+// The client is created but not started; the test starts it.
+static int SetupServiceUnstarted(void **state)
+{
+    return SetupClient(state, false);
 }
 
 static int TeardownService(void **state)
@@ -1116,6 +1174,223 @@ static void test_stopAgainAfterStopFromEventLoop(void **state)
     assert_true(returned);
 
     b_core_client_stop(fixture->client);
+}
+
+// Ready-event hook: holds the readiness notification until the test releases it.
+static void HoldReadyEventUntilReleased(void)
+{
+    g_mutex_lock(&fakeLock);
+    readyEventReached = true;
+    g_cond_broadcast(&fakeCond);
+    WaitLocked(IsPassReleased, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+}
+
+// Synchronization hook: holds the driver's synchronization until the test releases it.
+static void HoldSyncUntilReleased(void)
+{
+    g_mutex_lock(&fakeLock);
+    syncReached = true;
+    g_cond_broadcast(&fakeCond);
+    WaitLocked(IsPassReleased, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+}
+
+// Class version hook: a reconfiguration of the device is requested after the pass checked it for a pending one.
+static void RequestReconfigurationOfCurrent(void)
+{
+    deviceServiceReconfigureDevice("current", 60, NULL, false);
+}
+
+static gpointer RunFirstScheduledTask(gpointer data)
+{
+    (void) data;
+
+    RunScheduledTask(0);
+
+    return NULL;
+}
+
+static void ReleasePass(void)
+{
+    g_mutex_lock(&fakeLock);
+    passReleased = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
+}
+
+// Stopping a stopped client does nothing: teardown isn't repeated.
+static void test_secondStopDoesNothing(void **state)
+{
+    Fixture *fixture = *state;
+
+    b_core_client_stop(fixture->client);
+    fixture->stopped = true;
+    b_core_client_stop(fixture->client);
+
+    assert_int_equal(commFailShutdownCount, 1);
+}
+
+// A ready-event handler may stop the client while readiness is delivered from within start; start then reports failure
+// rather than carrying on with a stopped service.
+static void test_stopFromReadyHandlerDuringStart(void **state)
+{
+    Fixture *fixture = *state;
+
+    readyDuringStart = true;
+    readyEventHook = StopClientFromReadyHandler;
+
+    gboolean started = b_core_client_start(fixture->client);
+    fixture->stopped = stopCalledFromHandler;
+
+    assert_true(stopReturnedFromHandler);
+    assert_false(started);
+    assert_int_equal(readyEventCount, 1);
+}
+
+// Shutdown lets a readiness notification in progress finish before it begins, so the ready event is never sent after
+// shutdown has begun.
+static void test_shutdownWaitsForReadinessNotificationInProgress(void **state)
+{
+    Fixture *fixture = *state;
+
+    readyEventHook = HoldReadyEventUntilReleased;
+    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
+
+    g_mutex_lock(&fakeLock);
+    bool reached = WaitLocked(IsReadyEventReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+
+    GThread *stopThread = g_thread_new("stop", StopClient, fixture->client);
+
+    g_mutex_lock(&fakeLock);
+    bool begunDuringEvent = WaitLocked(IsShutdownBegun, BLOCKED_PROBE_USECS);
+    g_mutex_unlock(&fakeLock);
+
+    ReleasePass();
+    g_thread_join(passThread);
+    g_thread_join(stopThread);
+    fixture->stopped = true;
+
+    assert_true(reached);
+    assert_false(begunDuringEvent);
+    assert_int_equal(readyEventCount, 1);
+}
+
+// A removal waits for a synchronization of the device already running before removing it.
+static void test_removalWaitsForRunningSynchronization(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    syncHook = HoldSyncUntilReleased;
+    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
+
+    g_mutex_lock(&fakeLock);
+    bool reached = WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+
+    GThread *removeThread = g_thread_new("remove", RemoveDevice, "current");
+
+    g_mutex_lock(&fakeLock);
+    bool removedDuringSync = WaitLocked(IsDeviceRemovedEventSent, BLOCKED_PROBE_USECS);
+    g_mutex_unlock(&fakeLock);
+
+    ReleasePass();
+    g_thread_join(passThread);
+    g_thread_join(removeThread);
+
+    assert_true(reached);
+    assert_false(removedDuringSync);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(GetSyncCount("current"), 1);
+}
+
+// A reconfiguration waits for a synchronization of the device already running before rebuilding it.
+static void test_reconfigurationWaitsForRunningSynchronization(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    syncHook = HoldSyncUntilReleased;
+    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
+
+    g_mutex_lock(&fakeLock);
+    bool reached = WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+
+    deviceServiceReconfigureDevice("current", 0, NULL, false);
+    assert_int_equal(GetScheduledCount(), 1);
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTask, NULL);
+
+    g_mutex_lock(&fakeLock);
+    bool finishedDuringSync = WaitLocked(IsFinishedEventSent, BLOCKED_PROBE_USECS);
+    g_mutex_unlock(&fakeLock);
+
+    ReleasePass();
+    g_thread_join(passThread);
+    g_thread_join(taskThread);
+
+    assert_true(reached);
+    assert_false(finishedDuringSync);
+    assert_int_equal(finishedEventCount, 1);
+}
+
+// A synchronization whose device became pending reconfiguration after it was queued is left to that reconfiguration,
+// and runs when it fails.
+static void test_synchronizationDeferredToReconfigurationRequestedMeanwhile(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    classVersionHook = RequestReconfigurationOfCurrent;
+
+    readyForDevices();
+
+    assert_true(deviceServiceIsReconfigurationPending("current"));
+    assert_int_equal(GetSyncCount("current"), 0);
+
+    RunScheduledTask(0);
+
+    assert_false(finishedEventSucceeded);
+    assert_int_equal(GetSyncCount("current"), 1);
+}
+
+// A synchronization owed by a reconfiguration that a removal cancels before it starts (a startup reconfiguration, or
+// one a startup pass left a synchronization to) runs if the removal fails.
+static void test_cancelledReconfigurationSynchronizesAfterFailedRemoval(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    deviceServiceReconfigureDevice("current", 60, NULL, false);
+    readyForDevices();
+    assert_int_equal(GetScheduledCount(), 2);
+    failDeviceRemoval = true;
+
+    assert_false(deviceServiceRemoveDevice("stale"));
+    assert_false(deviceServiceRemoveDevice("current"));
+
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+    assert_false(deviceServiceIsReconfigurationPending("current"));
+    assert_int_equal(GetSyncCount("stale"), 1);
+    assert_int_equal(GetSyncCount("current"), 1);
+}
+
+// A startup reconfiguration that can't be scheduled falls back to synchronization, without a configuration event.
+static void test_unscheduledStartupReconfigurationSynchronizes(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    failScheduling = true;
+
+    readyForDevices();
+
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+    assert_int_equal(GetSyncCount("stale"), 1);
+    assert_int_equal(finishedEventCount, 0);
 }
 
 // Shutdown beginning mid-pass stops scheduling and withholds readiness.
@@ -1863,6 +2138,19 @@ int main(int argc, const char **argv)
             test_stopFromReadyEventHandlerDoesNotWaitForItself, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_stopFromEventLoopCallbackReturns, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_stopAgainAfterStopFromEventLoop, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_secondStopDoesNothing, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_stopFromReadyHandlerDuringStart, SetupServiceUnstarted, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_shutdownWaitsForReadinessNotificationInProgress, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_removalWaitsForRunningSynchronization, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationWaitsForRunningSynchronization, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_synchronizationDeferredToReconfigurationRequestedMeanwhile, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_cancelledReconfigurationSynchronizesAfterFailedRemoval, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_unscheduledStartupReconfigurationSynchronizes, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_reconfigurationFinishUnpendsBeforeNotifying, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_schedulingFailureLeavesDeviceNotPending, SetupService, TeardownService),

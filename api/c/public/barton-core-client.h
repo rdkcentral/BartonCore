@@ -226,6 +226,9 @@ BCoreInitializeParamsContainer *b_core_client_get_initialize_params(BCoreClient 
  *
  * Call @see b_core_client_stop() to stop the service.
  *
+ * Readiness can be reported from within this call. If a handler of that status-changed event stops the client, this
+ * call returns FALSE.
+ *
  * Returns: gboolean - TRUE if the service was started successfully.
  */
 gboolean b_core_client_start(BCoreClient *self);
@@ -238,8 +241,9 @@ gboolean b_core_client_start(BCoreClient *self);
  *
  * Reconfigurations that have not started are cancelled. One that is already running is asked to stop, and this call
  * then waits up to 120 seconds for it to finish (including delivery of its completion event) before stopping drivers
- * and subsystems. It likewise waits, up to 120 seconds, for a startup pass that is in progress. These waits are in
- * addition to the time the drivers and subsystems themselves take to stop.
+ * and subsystems. It likewise waits, up to 120 seconds, for a startup pass that is in progress, including delivery of
+ * its readiness event. These waits are in addition to the time the drivers and subsystems themselves take to stop.
+ * Calling this again, or while another call is in progress, returns at once without stopping anything further.
  *
  * A host that ends the process before this call returns does not lose the device being reconfigured: its
  * reconfiguration is retried the next time the service starts. The exception is the brief moment in which the

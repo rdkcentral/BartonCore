@@ -118,7 +118,11 @@ static void PublishReadinessForDevices(void);
 
 static pthread_cond_t *ReadyCallbacksCond(void);
 
-static void WaitForReadyCallbacksLocked(void);
+static void WaitForReadinessLocked(const struct timespec *start, bool (*busy)(void), const char *what);
+
+static bool IsReadyCallbackRunningElsewhereLocked(void);
+
+static bool IsNotifyingReadinessElsewhereLocked(void);
 
 static void deviceDescriptorsReadyForPairingCallback(void);
 
@@ -214,7 +218,17 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
 
 static void FallBackToSynchronization(const char *deviceUuid, bool runInlineIfQueueFull);
 
-static bool DeferSynchronizationIfBeingRemoved(const char *deviceUuid);
+static bool TakeSynchronizationOwedLocked(ReconfigureDeviceContext *ctx);
+
+static bool WithdrawReconfiguration(ReconfigureDeviceContext *ctx);
+
+static bool BeginSynchronization(const char *deviceUuid);
+
+static void EndSynchronization(const char *deviceUuid);
+
+static bool IsSynchronizingElsewhereLocked(const char *deviceUuid);
+
+static void WaitForSynchronization(const char *deviceUuid);
 
 static void BeginDeviceRemoval(const char *deviceUuid);
 
@@ -343,9 +357,15 @@ typedef struct
 static GHashTable *devicesBeingRemoved = NULL;
 
 // Devices whose synchronization was left to a pending reconfiguration of them (set of uuids): skipped by a startup
-// pass, or by a removal that then failed (see EndDeviceRemoval()). If that reconfiguration fails, the device still gets
-// the synchronization.
-static GHashTable *devicesAwaitingStartupSync = NULL;
+// pass, or deferred when it was about to run (see BeginSynchronization()). If that reconfiguration doesn't succeed, the
+// device still gets the synchronization.
+static GHashTable *devicesAwaitingSynchronization = NULL;
+
+// Synchronizations calling into a driver, per device (uuid -> count). A removal or reconfiguration of the device waits
+// for them, and none starts while either is in progress (see BeginSynchronization()).
+static GHashTable *activeSynchronizations = NULL;
+// The device this thread is synchronizing, if any, so a removal it makes doesn't wait for itself.
+static __thread const char *synchronizingDevice = NULL;
 static ObservabilityGauge *pendingReconfigurationGauge = NULL;
 static uint16_t discoveryTimeoutSeconds = 0;
 
@@ -371,6 +391,11 @@ static bool deviceOperationsReady = false;
 // stops the service), which readyCallbackDepth counts.
 static int readyCallbacksInFlight = 0;
 static __thread int readyCallbackDepth = 0;
+// Readiness notifications (to drivers and the ready event) being sent, under subsystemsAreReadyMutex. Shutdown lets
+// them finish before it begins, so READY_FOR_DEVICE_OPERATION is never sent after it has begun; except one on its own
+// thread.
+static int readinessNotificationsInFlight = 0;
+static __thread int readinessNotificationDepth = 0;
 // Only access through ReadyCallbacksCond(): timed waits need the monotonic clock initTimedWaitCond() sets.
 static pthread_cond_t readyCallbacksCond;
 
@@ -401,6 +426,8 @@ static icThreadPool *deviceInitializerThreadPool = NULL;
 static void startDeviceInitialization(void);
 
 static void DeviceSynchronizationTask(void *arg);
+
+static void SynchronizeDevice(const char *uuid);
 
 static bool QueueDeviceSynchronization(const char *deviceUuid);
 
@@ -1903,6 +1930,9 @@ static void EventLoopRunRelease(EventLoopRun *run)
 // callback on it that stops the service). NULL when no event loop is running.
 static EventLoopRun *eventLoopRun;
 static pthread_t eventThread;
+// On the event thread, the run it is executing; set before it can dispatch anything, so a stop from a callback on it is
+// recognized even while startMainLoop() is still returning.
+static __thread EventLoopRun *eventThreadRun = NULL;
 
 /**
  * This is run by startMainLoop as the glib global default thread context
@@ -1913,6 +1943,7 @@ static void *glibEventRunner(EventLoopRun *run)
 
     g_info("eventLoop start");
 
+    eventThreadRun = run;
     g_main_loop_run(run->loop);
     g_info("eventLoop quit");
     g_atomic_int_set(&run->exited, TRUE);
@@ -1949,17 +1980,18 @@ static void startMainLoop(void)
     EventLoopRun *run = g_atomic_rc_box_new0(EventLoopRun);
     run->loop = g_main_loop_new(NULL, FALSE);
 
+    // Published before the thread starts: it may dispatch a callback that stops the service before createThread()
+    // returns.
+    eventLoopRun = run;
+
     if (createThread(&eventThread, (taskFunc) glibEventRunner, g_atomic_rc_box_acquire(run), "glibEvt") == false)
     {
-        // Leaves eventLoopRun NULL, so stopping doesn't wait for a loop that never ran.
+        // No loop to stop, so stopping doesn't wait for one that never ran.
         icLogError(LOG_TAG, "%s: could not start the event loop thread", __FUNCTION__);
+        eventLoopRun = NULL;
         EventLoopRunRelease(run); // the reference the thread would have owned
         EventLoopRunRelease(run);
-
-        return;
     }
-
-    eventLoopRun = run;
 }
 
 static void stopMainLoop(void)
@@ -1974,11 +2006,11 @@ static void stopMainLoop(void)
 
     // Stopped from the event thread itself (a callback dispatched on it): its loop is running, so a single quit takes
     // effect once that callback returns. It can't be waited for or joined from here, so let it clean up on its own.
-    if (pthread_equal(eventThread, pthread_self()) != 0)
+    if (eventThreadRun == run)
     {
         icLogDebug(LOG_TAG, "%s: stopped from the event thread; detaching it", __FUNCTION__);
         g_main_loop_quit(run->loop);
-        pthread_detach(eventThread);
+        pthread_detach(pthread_self());
         EventLoopRunRelease(run);
 
         return;
@@ -2151,7 +2183,8 @@ bool deviceServiceStart(void)
     pendingReconfiguration = hashMapCreate();
     finishingReconfigurations = g_ptr_array_new_with_free_func((GDestroyNotify) releaseReconfigureDeviceContext);
     devicesBeingRemoved = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-    devicesAwaitingStartupSync = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    devicesAwaitingSynchronization = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    activeSynchronizations = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     pendingReconfigurationGauge = observabilityGaugeCreate(
         "device.reconfiguration.pending", "Devices with a pending or in-progress reconfiguration", "1");
     observabilityGaugeRecord(pendingReconfigurationGauge, 0);
@@ -2180,6 +2213,14 @@ bool deviceServiceStart(void)
 
     subsystemManagerAllDriversStarted();
 
+    // The call above can publish readiness on this thread, and a handler of the ready event may stop the service.
+    if (deviceServiceIsShuttingDown() == true)
+    {
+        icLogWarn(LOG_TAG, "%s: stopped while starting", __FUNCTION__);
+
+        return false;
+    }
+
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     deviceServiceCommFailSetTimeoutSecs(
         b_core_property_provider_get_property_as_uint32(
@@ -2192,7 +2233,24 @@ void deviceServiceShutdown()
 {
     icLogDebug(LOG_TAG, "%s: shutting down", __FUNCTION__);
 
-    g_atomic_int_set(&shuttingDown, TRUE);
+    // The startup pass and readiness waits below share one budget.
+    struct timespec readinessWaitStart;
+    getCurrentTime(&readinessWaitStart, supportMonotonic());
+
+    // A readiness notification in progress on another thread finishes first, so the ready event is never sent once
+    // shutdown has begun (one on this thread, from a ready-event handler stopping the service, isn't waited for). Then
+    // shutdown is claimed once: stopping again, or while another stop is in progress, does nothing.
+    mutexLock(&subsystemsAreReadyMutex);
+    WaitForReadinessLocked(&readinessWaitStart, IsNotifyingReadinessElsewhereLocked, "Readiness notification");
+    bool claimed = g_atomic_int_compare_and_exchange(&shuttingDown, FALSE, TRUE);
+    mutexUnlock(&subsystemsAreReadyMutex);
+
+    if (claimed == false)
+    {
+        icLogDebug(LOG_TAG, "%s: already stopped or stopping", __FUNCTION__);
+
+        return;
+    }
 
     deviceEventHandlerShutdown();
 
@@ -2206,7 +2264,7 @@ void deviceServiceShutdown()
 
     // A startup pass in progress uses drivers and the thread pool; it stops at its next device now that shutdown has
     // begun, so let it finish before tearing those down.
-    WaitForReadyCallbacksLocked();
+    WaitForReadinessLocked(&readinessWaitStart, IsReadyCallbackRunningElsewhereLocked, "Startup pass");
     mutexUnlock(&subsystemsAreReadyMutex);
 
     mutexLock(&deviceDescriptorsListLatestMutex);
@@ -2223,7 +2281,8 @@ void deviceServiceShutdown()
     pendingReconfiguration = NULL;
     g_clear_pointer(&finishingReconfigurations, g_ptr_array_unref);
     g_clear_pointer(&devicesBeingRemoved, g_hash_table_unref);
-    g_clear_pointer(&devicesAwaitingStartupSync, g_hash_table_unref);
+    g_clear_pointer(&devicesAwaitingSynchronization, g_hash_table_unref);
+    g_clear_pointer(&activeSynchronizations, g_hash_table_unref);
     g_clear_pointer(&pendingReconfigurationGauge, observabilityGaugeRelease);
     mutexUnlock(&reconfigurationControlMutex);
 
@@ -3540,13 +3599,16 @@ static void PublishReadinessForDevices(void)
     // device service status, drivers and the ready event), so no device is readable while awaiting replacement.
     startDeviceInitialization();
 
-    // Shutdown sets its flag before clearing readiness under this mutex, so readiness is never re-published after it.
+    // Shutdown sets its flag under this mutex, once no notification counted here is in progress, and only then clears
+    // readiness; so readiness is never re-published, nor the ready event sent, after it has begun.
     pthread_mutex_lock(&subsystemsAreReadyMutex);
     bool publishReadiness = deviceServiceIsShuttingDown() == false;
 
     if (publishReadiness == true)
     {
         deviceOperationsReady = true;
+        readinessNotificationsInFlight++;
+        readinessNotificationDepth++;
     }
 
     pthread_mutex_unlock(&subsystemsAreReadyMutex);
@@ -3560,6 +3622,12 @@ static void PublishReadinessForDevices(void)
 
     notifyDriversForServiceStatusChange();
     sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonReadyForDeviceOperation);
+
+    pthread_mutex_lock(&subsystemsAreReadyMutex);
+    readinessNotificationsInFlight--;
+    readinessNotificationDepth--;
+    pthread_cond_broadcast(ReadyCallbacksCond());
+    pthread_mutex_unlock(&subsystemsAreReadyMutex);
 }
 
 static void InitReadyCallbacksCond(void)
@@ -3576,29 +3644,39 @@ static pthread_cond_t *ReadyCallbacksCond(void)
     return &readyCallbacksCond;
 }
 
-// Caller holds subsystemsAreReadyMutex and has begun shutting down. Bounded like the wait for running reconfigurations.
-static void WaitForReadyCallbacksLocked(void)
+// Caller holds subsystemsAreReadyMutex and is shutting down. Waits while busy() (checked under that mutex) holds, for
+// up to SHUTDOWN_RECONFIGURATION_WAIT_SEC from start, like the wait for running reconfigurations.
+static void WaitForReadinessLocked(const struct timespec *start, bool (*busy)(void), const char *what)
 {
-    struct timespec start, now;
+    struct timespec now;
 
-    getCurrentTime(&start, supportMonotonic());
-
-    while (readyCallbacksInFlight - readyCallbackDepth > 0)
+    while (busy() == true)
     {
         getCurrentTime(&now, supportMonotonic());
 
-        long elapsedSecs = now.tv_sec - start.tv_sec;
+        long elapsedSecs = now.tv_sec - start->tv_sec;
 
         if (elapsedSecs >= SHUTDOWN_RECONFIGURATION_WAIT_SEC)
         {
-            icWarn("Startup pass still running after %d seconds; continuing shutdown",
-                   SHUTDOWN_RECONFIGURATION_WAIT_SEC);
+            icWarn("%s still running after %d seconds; continuing shutdown", what, SHUTDOWN_RECONFIGURATION_WAIT_SEC);
             break;
         }
 
         incrementalCondTimedWait(
             ReadyCallbacksCond(), &subsystemsAreReadyMutex, (int) (SHUTDOWN_RECONFIGURATION_WAIT_SEC - elapsedSecs));
     }
+}
+
+// Caller holds subsystemsAreReadyMutex.
+static bool IsReadyCallbackRunningElsewhereLocked(void)
+{
+    return readyCallbacksInFlight - readyCallbackDepth > 0;
+}
+
+// Caller holds subsystemsAreReadyMutex.
+static bool IsNotifyingReadinessElsewhereLocked(void)
+{
+    return readinessNotificationsInFlight - readinessNotificationDepth > 0;
 }
 
 // the time zone changed... notify any devices that have the well-known timezone resource
@@ -3959,6 +4037,10 @@ static void reconfigureDeviceTask(void *arg)
     mutexLock(&ctx->mtx);
     scoped_generic char *deviceUuid = strdup(ctx->deviceUuid);
     mutexUnlock(&ctx->mtx);
+
+    // None starts while this is pending; let one already running finish rather than rebuild the device under it.
+    WaitForSynchronization(deviceUuid);
+
     // set the metadata if not already set
     setMetadata(deviceUuid, NULL, COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED, "true");
 
@@ -4100,10 +4182,8 @@ FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, con
         ctx->reconfigurationCompleted(result, ctx->deviceUuid);
     }
 
-    // This device's synchronization was left to this reconfiguration (by a startup pass or a failed removal), and it
-    // failed. (A startup reconfiguration's own callback already falls back.)
-    if (BeginFinishingReconfiguration(ctx) == true && result == false &&
-        ctx->reconfigurationCompleted != reconfigurationCompletedCallback)
+    // A startup reconfiguration, or one this device's synchronization was left to, failed.
+    if (BeginFinishingReconfiguration(ctx) == true && result == false)
     {
         FallBackToSynchronization(deviceUuid, true);
     }
@@ -4200,13 +4280,13 @@ static bool DeviceNeedsReconfiguring(const icDevice *device)
     return retVal;
 }
 
+// Marks a startup reconfiguration: if it fails, or is withdrawn without running, the device is synchronized instead
+// (see TakeSynchronizationOwedLocked()). That happens once the device has stopped being pending, so the synchronization
+// isn't deferred to this very reconfiguration.
 static void reconfigurationCompletedCallback(bool result, const char *deviceUuid)
 {
-    // A failed startup reconfiguration falls back to synchronization.
-    if (result == false)
-    {
-        FallBackToSynchronization(deviceUuid, true);
-    }
+    (void) result;
+    (void) deviceUuid;
 }
 
 // Queued so the device stops being pending without waiting for it. If the queue is full it runs here instead when
@@ -4214,17 +4294,9 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
 // serving the stale data the reconfiguration was meant to replace; otherwise it is left to the next start.
 static void FallBackToSynchronization(const char *deviceUuid, bool runInlineIfQueueFull)
 {
-    // Not for a device being removed (the removal may be what stopped its reconfiguration): the synchronization could
-    // run while the removal deletes the device and tells its driver, leaving the driver tracking it again. The removal
-    // registers before it stops the reconfiguration, so this sees it, and runs the synchronization if it fails.
-    if (DeferSynchronizationIfBeingRemoved(deviceUuid) == true)
-    {
-        icLogDebug(LOG_TAG, "%s: %s is being removed; synchronizing it only if that fails", __FUNCTION__, deviceUuid);
-
-        return;
-    }
-
-    icLogDebug(LOG_TAG, "%s: reconfiguration of %s failed; synchronizing it instead", __FUNCTION__, deviceUuid);
+    // If the device is being removed or reconfigured by the time this runs, it is deferred (see
+    // BeginSynchronization()).
+    icLogDebug(LOG_TAG, "%s: synchronizing %s in place of its reconfiguration", __FUNCTION__, deviceUuid);
 
     if (SubsystemsAreReadyForDevices() == true && QueueDeviceSynchronization(deviceUuid) == false)
     {
@@ -4260,7 +4332,8 @@ static bool QueueDeviceSynchronization(const char *deviceUuid)
     return result;
 }
 
-// Also the fallback when a reconfiguration covering a device's synchronization fails (FallBackToSynchronization()).
+// Also the fallback when a reconfiguration covering a device's synchronization doesn't succeed
+// (FallBackToSynchronization()).
 static void DeviceSynchronizationTask(void *arg)
 {
     char *uuid = (char *) arg;
@@ -4271,6 +4344,20 @@ static void DeviceSynchronizationTask(void *arg)
         return;
     }
 
+    if (BeginSynchronization(uuid) == false)
+    {
+        return;
+    }
+
+    synchronizingDevice = uuid;
+    SynchronizeDevice(uuid);
+    synchronizingDevice = NULL;
+
+    EndSynchronization(uuid);
+}
+
+static void SynchronizeDevice(const char *uuid)
+{
     scoped_icDevice *device = deviceServiceGetDevice(uuid);
     if (device != NULL)
     {
@@ -5168,7 +5255,9 @@ static void waitForOrCancelPendingReconfiguration(const char *uuid)
             if (taskRef != NULL)
             {
                 releaseReconfigureDeviceContext(taskRef);
-                deviceServiceRemoveReconfigureDeviceContext(ctx);
+
+                // A synchronization it owed is recorded on this removal, and runs if the removal fails.
+                WithdrawReconfiguration(ctx);
 
                 continue;
             }
@@ -5178,9 +5267,10 @@ static void waitForOrCancelPendingReconfiguration(const char *uuid)
 
         mutexLock(&reconfigurationControlMutex);
 
-        // Check before every wait: the task may finish (and broadcast) before this thread starts waiting.
+        // Check before every wait: the task may finish (and broadcast) before this thread starts waiting. A
+        // synchronization already running is waited for too (none starts during the removal).
         while ((ctx != NULL && IsReconfigurationContextPendingLocked(ctx) == true) ||
-               IsFinishingElsewhereLocked(uuid) == true)
+               IsFinishingElsewhereLocked(uuid) == true || IsSynchronizingElsewhereLocked(uuid) == true)
         {
             getCurrentTime(&now, supportMonotonic());
 
@@ -5188,7 +5278,7 @@ static void waitForOrCancelPendingReconfiguration(const char *uuid)
 
             if (elapsedSecs >= PENDING_RECONFIGURATION_TIMEOUT_SEC)
             {
-                icError("Pending reconfiguration of device %s is taking too long to cancel", uuid);
+                icError("Pending reconfiguration or synchronization of device %s is taking too long to finish", uuid);
                 break;
             }
 
@@ -5383,7 +5473,8 @@ static uint16_t CountBlockingReconfigurationsLocked(void)
 
 // Moves the context from the pending map to the finishing list in one step, so removal and shutdown never see it in
 // neither.
-// Returns true if the device's synchronization was left to this reconfiguration (see devicesAwaitingStartupSync).
+// Returns true if the device is owed a synchronization should this reconfiguration fail (see
+// TakeSynchronizationOwedLocked()).
 static bool BeginFinishingReconfiguration(ReconfigureDeviceContext *ctx)
 {
     bool awaitingSync = false;
@@ -5396,17 +5487,167 @@ static bool BeginFinishingReconfiguration(ReconfigureDeviceContext *ctx)
         g_ptr_array_add(finishingReconfigurations, acquireReconfigureDeviceContext(ctx));
     }
 
-    // Taken in the same step that ends the pending state, so a pass that runs after it sees the device as not pending
-    // and handles it itself.
-    if (IsReconfigurationContextPendingLocked(ctx) == true && devicesAwaitingStartupSync != NULL)
-    {
-        awaitingSync = g_hash_table_remove(devicesAwaitingStartupSync, ctx->deviceUuid);
-    }
+    // Taken in the same step that ends the pending state, so a pass or synchronization that runs after it sees the
+    // device as not pending and handles it itself.
+    awaitingSync = TakeSynchronizationOwedLocked(ctx);
 
     RemoveReconfigureDeviceContextLocked(ctx);
     mutexUnlock(&reconfigurationControlMutex);
 
     return awaitingSync;
+}
+
+// Caller holds reconfigurationControlMutex, and ctx is about to stop being pending. Returns true if the device is owed
+// a synchronization unless ctx succeeds: ctx is a startup reconfiguration, or one a synchronization was left to.
+static bool TakeSynchronizationOwedLocked(ReconfigureDeviceContext *ctx)
+{
+    if (IsReconfigurationContextPendingLocked(ctx) == false)
+    {
+        return false;
+    }
+
+    bool leftToIt = devicesAwaitingSynchronization != NULL &&
+                    g_hash_table_remove(devicesAwaitingSynchronization, ctx->deviceUuid) == TRUE;
+
+    return leftToIt == true || ctx->reconfigurationCompleted == reconfigurationCompletedCallback;
+}
+
+// Withdraws a pending reconfiguration that will never run (cancelled by a removal, or not scheduled). Returns true if
+// the device is owed a synchronization in its place, which the caller must then queue; if the device is being removed,
+// it is recorded on the removal instead (and runs if the removal fails).
+static bool WithdrawReconfiguration(ReconfigureDeviceContext *ctx)
+{
+    mutexLock(&reconfigurationControlMutex);
+
+    bool owed = TakeSynchronizationOwedLocked(ctx);
+    RemoveReconfigureDeviceContextLocked(ctx);
+
+    DeviceRemoval *removal =
+        owed == true && devicesBeingRemoved != NULL ? g_hash_table_lookup(devicesBeingRemoved, ctx->deviceUuid) : NULL;
+
+    if (removal != NULL)
+    {
+        removal->synchronizationSkipped = true;
+        owed = false;
+    }
+
+    mutexUnlock(&reconfigurationControlMutex);
+
+    return owed;
+}
+
+// Admits a synchronization about to call into the driver, unless the device is being removed (then it is recorded on
+// the removal, and runs if the removal fails) or has a reconfiguration pending (then it is left to that
+// reconfiguration, and runs if that doesn't succeed). Checked and recorded in one step, so neither can begin unnoticed
+// in between; neither begins while it runs, and both wait for it (see IsSynchronizingElsewhereLocked()).
+static bool BeginSynchronization(const char *deviceUuid)
+{
+    bool admitted = false;
+
+    mutexLock(&reconfigurationControlMutex);
+
+    DeviceRemoval *removal = devicesBeingRemoved != NULL ? g_hash_table_lookup(devicesBeingRemoved, deviceUuid) : NULL;
+
+    if (activeSynchronizations == NULL)
+    {
+        icLogDebug(LOG_TAG, "%s: shutting down; not synchronizing %s", __FUNCTION__, deviceUuid);
+    }
+    else if (removal != NULL)
+    {
+        icLogDebug(LOG_TAG, "%s: %s is being removed; synchronizing it only if that fails", __FUNCTION__, deviceUuid);
+        removal->synchronizationSkipped = true;
+    }
+    else if (pendingReconfiguration != NULL &&
+             hashMapGet(pendingReconfiguration, (void *) deviceUuid, (uint16_t) (strlen(deviceUuid) + 1)) != NULL)
+    {
+        icLogDebug(LOG_TAG,
+                   "%s: %s has a reconfiguration pending; leaving its synchronization to that",
+                   __FUNCTION__,
+                   deviceUuid);
+
+        if (devicesAwaitingSynchronization != NULL)
+        {
+            g_hash_table_add(devicesAwaitingSynchronization, g_strdup(deviceUuid));
+        }
+    }
+    else
+    {
+        int running = GPOINTER_TO_INT(g_hash_table_lookup(activeSynchronizations, deviceUuid));
+        g_hash_table_insert(activeSynchronizations, g_strdup(deviceUuid), GINT_TO_POINTER(running + 1));
+        admitted = true;
+    }
+
+    mutexUnlock(&reconfigurationControlMutex);
+
+    return admitted;
+}
+
+static void EndSynchronization(const char *deviceUuid)
+{
+    mutexLock(&reconfigurationControlMutex);
+
+    if (activeSynchronizations != NULL)
+    {
+        int running = GPOINTER_TO_INT(g_hash_table_lookup(activeSynchronizations, deviceUuid));
+
+        if (running > 1)
+        {
+            g_hash_table_insert(activeSynchronizations, g_strdup(deviceUuid), GINT_TO_POINTER(running - 1));
+        }
+        else
+        {
+            g_hash_table_remove(activeSynchronizations, deviceUuid);
+        }
+    }
+
+    pthread_cond_broadcast(ReconfigurationControlCond());
+    mutexUnlock(&reconfigurationControlMutex);
+}
+
+// Caller holds reconfigurationControlMutex. Whether a synchronization of the device is running on another thread (one
+// on this thread, which may be removing the device from within the driver's synchronization, isn't waited for).
+static bool IsSynchronizingElsewhereLocked(const char *deviceUuid)
+{
+    int running =
+        activeSynchronizations != NULL ? GPOINTER_TO_INT(g_hash_table_lookup(activeSynchronizations, deviceUuid)) : 0;
+
+    if (synchronizingDevice != NULL && strcmp(synchronizingDevice, deviceUuid) == 0)
+    {
+        running--;
+    }
+
+    return running > 0;
+}
+
+// For a reconfiguration about to run: waits, for up to PENDING_RECONFIGURATION_TIMEOUT_SEC, for a synchronization of
+// the device already running. (None starts while the reconfiguration is pending.)
+static void WaitForSynchronization(const char *deviceUuid)
+{
+    struct timespec start, now;
+
+    getCurrentTime(&start, supportMonotonic());
+    mutexLock(&reconfigurationControlMutex);
+
+    while (IsSynchronizingElsewhereLocked(deviceUuid) == true)
+    {
+        getCurrentTime(&now, supportMonotonic());
+
+        long elapsedSecs = now.tv_sec - start.tv_sec;
+
+        if (elapsedSecs >= PENDING_RECONFIGURATION_TIMEOUT_SEC)
+        {
+            icWarn("Synchronization of device %s still running after %d seconds; reconfiguring it anyway",
+                   deviceUuid,
+                   PENDING_RECONFIGURATION_TIMEOUT_SEC);
+            break;
+        }
+
+        incrementalCondTimedWait(ReconfigurationControlCond(),
+                                 &reconfigurationControlMutex,
+                                 (int) (PENDING_RECONFIGURATION_TIMEOUT_SEC - elapsedSecs));
+    }
+
+    mutexUnlock(&reconfigurationControlMutex);
 }
 
 // For a startup pass: if a reconfiguration of the device is pending, it covers the device (its synchronization too,
@@ -5424,9 +5665,9 @@ static bool SkipForPendingReconfiguration(const char *deviceUuid)
         icLogDebug(LOG_TAG, "%s: %s has a reconfiguration pending; not synchronizing it now", __FUNCTION__, deviceUuid);
         pending = true;
 
-        if (devicesAwaitingStartupSync != NULL)
+        if (devicesAwaitingSynchronization != NULL)
         {
-            g_hash_table_add(devicesAwaitingStartupSync, g_strdup(deviceUuid));
+            g_hash_table_add(devicesAwaitingSynchronization, g_strdup(deviceUuid));
         }
     }
 
@@ -5463,9 +5704,9 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
 
     DeviceRemoval *removal = devicesBeingRemoved != NULL ? g_hash_table_lookup(devicesBeingRemoved, deviceUuid) : NULL;
 
-    if (removed == true && devicesAwaitingStartupSync != NULL)
+    if (removed == true && devicesAwaitingSynchronization != NULL)
     {
-        g_hash_table_remove(devicesAwaitingStartupSync, deviceUuid);
+        g_hash_table_remove(devicesAwaitingSynchronization, deviceUuid);
     }
 
     if (removal != NULL)
@@ -5499,33 +5740,14 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
         }
     }
 
-    // A reconfiguration pending now (including one just requested) synchronizes the device if it fails; otherwise
-    // synchronize it here.
-    if (refused.synchronizationSkipped == true && refused.anyRemovalSucceeded == false &&
-        SkipForPendingReconfiguration(deviceUuid) == false)
+    // If a reconfiguration is pending by the time it runs (including one just requested), it is left to that.
+    if (refused.synchronizationSkipped == true && refused.anyRemovalSucceeded == false)
     {
         // Never inline: this is the removal caller's thread (possibly the event thread), which shutdown doesn't wait
         // for.
         icInfo("Removal of device %s failed; running the synchronization skipped during it", deviceUuid);
         FallBackToSynchronization(deviceUuid, false);
     }
-}
-
-// If the device is being removed, record that its fallback synchronization was skipped and return true.
-static bool DeferSynchronizationIfBeingRemoved(const char *deviceUuid)
-{
-    mutexLock(&reconfigurationControlMutex);
-
-    DeviceRemoval *removal = devicesBeingRemoved != NULL ? g_hash_table_lookup(devicesBeingRemoved, deviceUuid) : NULL;
-
-    if (removal != NULL)
-    {
-        removal->synchronizationSkipped = true;
-    }
-
-    mutexUnlock(&reconfigurationControlMutex);
-
-    return removal != NULL;
 }
 
 /*
@@ -5836,10 +6058,15 @@ void deviceServiceReconfigureDevice(const char *deviceUuid,
     // could deadlock against a handler of that signal.
     if (jsonDatabaseIsDeviceKnown(deviceUuid) == false)
     {
-        deviceServiceRemoveReconfigureDeviceContext(localRef);
+        bool owed = WithdrawReconfiguration(localRef);
         mutexUnlock(&localRef->mtx);
         LogReconfigurationNotScheduled(deviceUuid, RECONFIGURATION_UNKNOWN_DEVICE);
         releaseReconfigureDeviceContext(taskRef);
+
+        if (owed == true)
+        {
+            FallBackToSynchronization(deviceUuid, false);
+        }
 
         return;
     }
@@ -5851,10 +6078,16 @@ void deviceServiceReconfigureDevice(const char *deviceUuid,
 
     if (taskHandle == 0)
     {
-        // The task will never run, so nothing else would clear the pending state for this device.
+        // The task will never run, so nothing else would clear the pending state for this device, or give it the
+        // synchronization this reconfiguration owed (no configuration event is sent, as nothing ran).
         icError("Failed to schedule reconfiguration task for device %s", deviceUuid);
-        deviceServiceRemoveReconfigureDeviceContext(localRef);
+        bool owed = WithdrawReconfiguration(localRef);
         releaseReconfigureDeviceContext(taskRef);
+
+        if (owed == true)
+        {
+            FallBackToSynchronization(deviceUuid, false);
+        }
     }
 }
 

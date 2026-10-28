@@ -145,21 +145,18 @@ unset with `NULL`/`FALSE` means not found or failed.
 ### D6: Close the startup window
 Readiness is split into two flags under `subsystemsAreReadyMutex`:
 - `subsystemsReadyForDevices` (internal): subsystems can serve devices. Set first, and used by the
-  startup reconfiguration's failure fallback, which can run during the pass. That fallback queues the
-  normal `DeviceSynchronizationTask()` instead of calling the driver itself, so the device stops being
-  pending without waiting for the synchronization, and drivers that don't implement
-  `synchronizeDevice()` are skipped as they are on every other synchronization path. If the thread
-  pool won't take the task (its queue is full), the fallback runs the synchronization inline rather
-  than drop it, since a dropped fallback would leave the device serving pre-restart data. The
-  fallback is skipped for a device that is being removed (the removal may be what stopped its
-  reconfiguration), so the synchronization can't run while the removal deletes the device and tells
-  its driver. The removal registers before it stops the reconfiguration, so the check always sees it.
-  The skip is recorded on the removal: if every removal of the device fails, the synchronization runs
-  then, or is left to a reconfiguration pending by that time (including one refused during the
-  removal and requested again), which falls back to it if it fails. A synchronization run after a
-  failed removal is only ever queued, never run inline: it would otherwise run on the removal
-  caller's thread (possibly the event thread), which shutdown doesn't wait for. If the queue is full,
-  it is left to the next start.
+  synchronization fallback, which can run during the pass. A startup reconfiguration, or one a
+  device's synchronization was left to, owes the device that synchronization unless it succeeds: if it
+  fails, or is withdrawn without running (cancelled by a removal, or never scheduled), the fallback
+  queues the normal `DeviceSynchronizationTask()` once the device has stopped being pending, instead
+  of calling the driver itself, so the device stops being pending without waiting for the
+  synchronization, and drivers that don't implement `synchronizeDevice()` are skipped as they are on
+  every other synchronization path. If the thread pool won't take the task (its queue is full), a
+  fallback on a reconfiguration task (which shutdown waits for) runs the synchronization inline rather
+  than drop it, since a dropped fallback would leave the device serving pre-restart data. Any other
+  fallback (after a failed removal, or for a reconfiguration that couldn't be scheduled) is only ever
+  queued: it would otherwise run on the caller's thread (possibly the event thread), which shutdown
+  doesn't wait for. If the queue is full, it is left to the next start.
 - `deviceOperationsReady` (published): what `deviceServiceIsReadyForDeviceOperation()` returns, and
   therefore the client gate, the status's `isReadyForDeviceOperation`/`isReadyForPairing`, and
   discovery's driver filtering.
@@ -171,8 +168,10 @@ set subsystemsReadyForDevices = true
 startDeviceInitialization()        <-- marks every device needing reconfiguration pending (synchronously)
 if not shutting down (checked under subsystemsAreReadyMutex):
     set deviceOperationsReady = true    <-- readiness becomes observable here, and only here
+    count a readiness notification in flight
     notifyDriversForServiceStatusChange()
     sendDeviceServiceStatusEvent(ReadyForDeviceOperation)
+    stop counting it
 ```
 
 No observer can see "ready" while a device awaiting startup reconfiguration is unflagged, whether it
@@ -192,6 +191,14 @@ Shutdown can begin while the pass is running (a stop during startup). The pass s
 `deviceServiceIsShuttingDown()` is true, and readiness is published only if shutdown has not begun.
 That check runs under `subsystemsAreReadyMutex`, and shutdown sets its flag before clearing both
 readiness flags under the same mutex, so readiness is never re-published after shutdown clears it.
+Shutdown also sets its flag only once no readiness notification counted on another thread is in
+progress, waiting for one under the same mutex (within the same 120 s budget as the wait for the
+pass), so `READY_FOR_DEVICE_OPERATION` is never sent after shutdown has begun; a notification on
+shutdown's own thread (a ready-event handler that stops the service) isn't waited for. The flag is
+claimed atomically, so a second stop, or one made while another is in progress, returns without
+repeating any of shutdown. Because the subsystem manager can deliver readiness from within
+`deviceServiceStart()` (when everything is already ready as drivers finish starting), a ready-event
+handler can stop the service before start returns; start then returns false rather than carry on.
 `deviceServiceIsReadyForDeviceOperation()` also checks the shutting-down flag, so readiness ends the
 moment shutdown begins rather than when shutdown later clears the flags. A
 ready callback that arrives after shutdown has begun (e.g. a subsystem finishing a delayed
@@ -203,9 +210,19 @@ A callback on shutdown's own thread (a ready-event handler that stops the servic
 A pass skips any device that already has a reconfiguration pending, whatever its snapshot says, so a
 device pending for another reason (for example after a firmware upgrade) isn't synchronized underneath
 that reconfiguration. The skip is recorded in the same locked step that checks the pending state; if
-that reconfiguration then fails, the device is synchronized as the pass would have done (a startup
-reconfiguration already falls back through its own completion callback, so it isn't synchronized
-twice; neither falls back for a device being removed until that removal fails).
+that reconfiguration then fails or is withdrawn, the device is synchronized as the pass would have
+done (once, whether or not it is also a startup reconfiguration).
+
+Every synchronization is also checked when it is about to call the driver, not just when it is
+queued, since a removal or reconfiguration can begin in between. Under the control lock it either
+registers as running, or doesn't run: if the device is being removed, it is recorded on the removal
+and runs only if every removal of the device fails; if the device has a reconfiguration pending, it is
+left to that reconfiguration and runs only if that doesn't succeed. A removal waits for a
+synchronization already running (within its 60-second wait), and so does a reconfiguration task before
+it rebuilds the device (up to 60 s), so a driver is never asked to synchronize a device while it is
+being removed or rebuilt. A synchronization on the removing thread itself (a driver removing the
+device from within its own synchronization) isn't waited for. A removal registers before it stops a
+reconfiguration, so a fallback that reconfiguration's failure queues always sees the removal.
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
@@ -454,8 +471,10 @@ clears it:
   a source on that context could be dispatched by the application's loop first). A stop made on the
   event thread itself (from a callback that loop dispatched) quits once and detaches the thread
   instead, since that loop can't return until the stop does; each start's loop has its own "exited"
-  flag so a detached thread can't mark a later loop as exited. Stopping again, or stopping after the
-  event thread failed to start, finds no loop and returns at once.
+  flag so a detached thread can't mark a later loop as exited. The run is published before the thread
+  is created, and the thread records which run it executes before it can dispatch anything, so a stop
+  from a callback dispatched before `startMainLoop()` returns is still recognized. Stopping after the
+  event thread failed to start finds no loop and returns at once.
   What it cannot show: a real driver's reconfiguration completing (the integration harness can't restart
   Barton in-process, and running one to completion crashes in the Matter SBMD driver for reasons
   unrelated to this change), and the condition-variable clock fix, whose only observable effect is that

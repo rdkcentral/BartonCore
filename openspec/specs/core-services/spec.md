@@ -23,12 +23,25 @@ The `deviceService` SHALL orchestrate the complete service lifecycle in two phas
 - **WHEN** `b_core_client_stop()` is called
 - **THEN** the service SHALL shut down in this order: event handler, storage monitor, comm-fail watchdog, drivers, subsystems, event producer, database, main loop, configuration
 
+#### Scenario: Stop called again
+- **WHEN** `b_core_client_stop()` is called after the client was stopped, or while a stop is in progress
+- **THEN** it SHALL return without repeating any part of shutdown
+
+#### Scenario: Readiness being notified when shutdown is requested
+- **WHEN** shutdown is requested on one thread while readiness for device operation is being notified (to drivers and with `READY_FOR_DEVICE_OPERATION`) on another
+- **THEN** shutdown SHALL NOT begin until that notification has been delivered, waiting for up to 120 seconds (shared with the wait for the startup pass), so `READY_FOR_DEVICE_OPERATION` is never emitted after shutdown has begun
+
+#### Scenario: Stopped while starting
+- **WHEN** readiness is published from within `b_core_client_start()` and a handler of the ready event stops the client
+- **THEN** the stop SHALL complete without waiting for the start, and `b_core_client_start()` SHALL then return `FALSE` without starting anything further
+
 ### Requirement: Reconfiguration pending state
 A device SHALL be reported as having a pending reconfiguration (`deviceServiceIsReconfigurationPending()`) from the moment its reconfiguration is registered for scheduling until that reconfiguration's work is done (before its completion event is sent), it is cancelled, or it fails to be scheduled, and at no other time. Because public reads of the device are refused while it is pending, the pending state SHALL NOT outlive the scheduled work.
 
 #### Scenario: Scheduling fails
 - **WHEN** a reconfiguration is requested but the task scheduler reports that its task could not be scheduled
 - **THEN** the device SHALL no longer be reported as pending, and the reconfiguration context SHALL be released
+- **AND** if it was a startup reconfiguration, or one a device's synchronization was left to, the device SHALL be synchronized instead, and no configuration event SHALL be sent
 
 #### Scenario: Task finishes before scheduling returns
 - **WHEN** a reconfiguration is scheduled with no delay and its task finishes before the scheduling call returns
@@ -41,6 +54,7 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 #### Scenario: Pending reconfiguration cancelled
 - **WHEN** a reconfiguration that has not started yet is cancelled (device removal or shutdown)
 - **THEN** the device SHALL no longer be reported as pending, and the reference held for the cancelled task SHALL be released
+- **AND** if a removal cancelled a startup reconfiguration, or one a device's synchronization was left to, and that removal fails, the device SHALL then be synchronized
 
 #### Scenario: Reconfiguration starts as it is being cancelled
 - **WHEN** a removal or shutdown tries to cancel a reconfiguration whose task has already started
@@ -85,7 +99,15 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 #### Scenario: Startup pass while a reconfiguration is pending
 - **WHEN** a startup pass (the first or a repeated one) finds a device with a reconfiguration pending, whether from an earlier pass or requested for another reason
 - **THEN** that device SHALL be neither reconfigured again nor synchronized by this pass, whatever its stored class and profile versions
-- **AND** if that pending reconfiguration then fails, the device SHALL be synchronized as the pass would otherwise have done; if the device is being removed, only once that removal fails, and if a reconfiguration of the device is pending by then, only if that reconfiguration fails too
+- **AND** if that pending reconfiguration then fails or is withdrawn without running, the device SHALL be synchronized as the pass would otherwise have done; if the device is being removed, only once that removal fails, and if a reconfiguration of the device is pending by then, only if that reconfiguration doesn't succeed either
+
+#### Scenario: Synchronization while a device is being removed or reconfigured
+- **WHEN** a synchronization of a device is about to call its driver while that device is being removed or has a reconfiguration pending
+- **THEN** it SHALL NOT run then; it SHALL run once the removal fails, or once that reconfiguration doesn't succeed, and not at all if the device is removed or successfully reconfigured
+
+#### Scenario: Removal or reconfiguration while a synchronization is running
+- **WHEN** a device is removed, or its reconfiguration task starts, while a synchronization of that device is calling its driver
+- **THEN** the removal or reconfiguration SHALL wait for that synchronization to finish, for up to 60 seconds (for a removal, within its existing 60-second wait), before removing or rebuilding the device, unless the removal is made from within that synchronization
 
 ### Requirement: Pending reconfiguration metric
 The device service SHALL record a `device.reconfiguration.pending` gauge (unit `1`, no attributes) through the observability metrics API, holding the number of devices with a pending or in-progress reconfiguration. It SHALL be recorded as 0 when the service starts and updated whenever a reconfiguration becomes or stops being pending.
