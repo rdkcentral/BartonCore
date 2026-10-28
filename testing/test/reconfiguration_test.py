@@ -40,8 +40,9 @@ from testing.utils.barton_utils import commission_device, resource_uri
 # Far beyond the test's lifetime, so the scheduled reconfiguration never actually runs.
 DEFERRED_RECONFIGURATION_DELAY_SECS = 3600
 
-# Well below the 60 s the removal path waits when it cannot cancel and must wait for the task instead.
-REMOVAL_CANCEL_BOUND_SECS = 30
+# Below the 60 s the removal path waits when it cannot cancel and must wait for the task instead, with
+# room for the Matter driver's own removal work (up to two 15 s device operations) on a slow host.
+REMOVAL_CANCEL_BOUND_SECS = 50
 
 pytestmark = [
     pytest.mark.requires_matterjs,

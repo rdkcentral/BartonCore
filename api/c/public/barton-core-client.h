@@ -142,6 +142,8 @@ GQuark b_core_client_error_quark(void);
 #define B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_FAILED    "device-configuration-failed"
 // signal handler args: BCoreDeviceConfigurationFailedEvent *event
 // (also sent with session discovery type NONE when an existing device's reconfiguration fails)
+// Removing that device or stopping the client waits for these reconfiguration events' handlers to return, so a
+// handler must not block on a thread that may be doing either.
 #define B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED                   "device-added"
 // signal handler args: BCoreDeviceAddedEvent *event
 #define B_CORE_CLIENT_SIGNAL_NAME_DEVICE_RECOVERED               "device-recovered"
@@ -230,8 +232,15 @@ gboolean b_core_client_start(BCoreClient *self);
  * b_core_client_stop
  * @self: the BCoreClient instance.
  *
- * @brief Stop the BCoreClient. This will stop the service and its internal systems. If a device reconfiguration is
- * running, this waits up to 120 seconds for it to finish.
+ * @brief Stop the BCoreClient. This will stop the service and its internal systems.
+ *
+ * Reconfigurations that have not started are cancelled. One that is already running is asked to stop, and this call
+ * then waits up to 120 seconds for it to finish (including delivery of its completion event) before stopping drivers
+ * and subsystems. This wait is in addition to the time the drivers and subsystems themselves take to stop.
+ *
+ * A host that ends the process before this call returns does not lose the device being reconfigured: its
+ * reconfiguration is retried the next time the service starts. The exception is the brief moment in which the
+ * reconfiguration replaces the device's stored record, which is equally exposed to a crash or power loss.
  */
 void b_core_client_stop(BCoreClient *self);
 

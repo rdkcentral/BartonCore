@@ -352,6 +352,10 @@ struct DeviceDriver
 
     /*
      * Callback for notification that device service status has changed.
+     *
+     * Not synchronized with shutdown(): a notification can arrive while shutdown() runs or after it returns, if the
+     * service begins stopping as the status changes. It can also arrive after startup synchronization or
+     * reconfiguration has already called synchronizeDevice() or configureDevice().
      */
     void (*serviceStatusChanged)(void *ctx, DeviceServiceStatus *status);
 

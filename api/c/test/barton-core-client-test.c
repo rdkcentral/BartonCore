@@ -362,9 +362,8 @@ static void registerSignalHandlers(BCoreClient *client)
 static bool mockServiceReady = true;
 static const char *mockReconfiguringUuid = NULL;
 
-// Reset the gate globals so a test that toggles them cannot bleed into other tests. Gating tests use
-// this as per-test setup (cmocka skips teardown when a test fails, but always runs setup) and as
-// teardown (so the tests without a reset that follow start from the defaults).
+// Reset the gate globals so a test that toggles them cannot bleed into other tests. Gating tests run this as both
+// setup and teardown, so they start from the defaults and so do the tests without a reset that follow them.
 static int reset_reconfiguration_mocks(void **state)
 {
     (void) state;
@@ -980,8 +979,9 @@ static void test_b_core_client_get_devices_ignores_gate(void **state)
     assert_string_equal(secondUuid, "reconf-uuid");
 }
 
-// Resource writes and executes are never gated: they act on the live device, and values written during
-// a pending reconfiguration are carried over by the swap (unlike metadata).
+// Resource writes and executes are never gated: they act on the live device. The value a write leaves in the store
+// survives a pending reconfiguration, unless it lands after the rebuilt device read its initial values (see the
+// "Resource operations" requirement).
 static void test_b_core_client_write_and_execute_ignore_gate(void **state)
 {
     BCoreClient *client = *state;
@@ -3093,6 +3093,10 @@ static void test_sendDeviceAddedEvent(void **state)
 
     g_autoptr(BCoreDeviceAddedEvent) comparisonFixture = b_core_device_added_event_new();
 
+    // The event producer must use the ungated internal lookup, so close the client gate for this device.
+    mockServiceReady = false;
+    mockReconfiguringUuid = deviceUuid;
+
     // NULL deviceUuid
     sendDeviceAddedEvent(NULL);
 
@@ -3144,6 +3148,10 @@ static void test_sendDeviceRecoveredEvent(void **state)
     guint deviceClassVersion = 1;
 
     g_autoptr(BCoreDeviceRecoveredEvent) comparisonFixture = b_core_device_recovered_event_new();
+
+    // The event producer must use the ungated internal lookup, so close the client gate for this device.
+    mockServiceReady = false;
+    mockReconfiguringUuid = deviceUuid;
 
     // NULL deviceUuid
     sendDeviceRecoveredEvent(NULL);
@@ -5762,8 +5770,10 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sendDeviceConfigureCompletedEvent),
         cmocka_unit_test(test_sendDeviceConfigureFailedEvent),
         cmocka_unit_test(test_sendDeviceReconfigurationFinishedEvent),
-        cmocka_unit_test(test_sendDeviceAddedEvent),
-        cmocka_unit_test(test_sendDeviceRecoveredEvent),
+        cmocka_unit_test_setup_teardown(
+            test_sendDeviceAddedEvent, reset_reconfiguration_mocks, reset_reconfiguration_mocks),
+        cmocka_unit_test_setup_teardown(
+            test_sendDeviceRecoveredEvent, reset_reconfiguration_mocks, reset_reconfiguration_mocks),
         cmocka_unit_test(test_sendDeviceDiscoveryCompletedEvent),
         cmocka_unit_test(test_sendDiscoveryStoppedEvent),
         cmocka_unit_test(test_sendRecoveryStoppedEvent),

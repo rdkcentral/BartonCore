@@ -25,6 +25,7 @@
  */
 
 #include "deviceServicePrivate.h"
+#include "deviceUri.h"
 #include <device-driver/device-driver.h>
 #include <device/icDevice.h>
 #include <device/icDeviceMetadata.h>

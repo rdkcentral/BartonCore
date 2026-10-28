@@ -180,8 +180,8 @@ void sendZigbeeRemoteCliCommandResponseReceivedEvent(const char *uuid, const cha
 /*
  * broadcast a device configuration started event
  *
- * @param uuid - the UUID of the device that is being configured
  * @param deviceClass - the class of the device being configured
+ * @param uuid - the UUID of the device that is being configured
  * @param forRecovery - we were trying to recover this device
  */
 void sendDeviceConfigureStartedEvent(const char *deviceClass, const char *uuid, bool forRecovery);
@@ -189,8 +189,8 @@ void sendDeviceConfigureStartedEvent(const char *deviceClass, const char *uuid, 
 /*
  * broadcast a device configuration completed event
  *
- * @param uuid - the UUID of the device that was configured
  * @param deviceClass - the class of the device being configured
+ * @param uuid - the UUID of the device that was configured
  * @param forRecovery - we were trying to recover this device
  */
 void sendDeviceConfigureCompletedEvent(const char *deviceClass, const char *uuid, bool forRecovery);
@@ -198,8 +198,8 @@ void sendDeviceConfigureCompletedEvent(const char *deviceClass, const char *uuid
 /*
  * broadcast a device configuration failed event
  *
- * @param uuid - the UUID of the device that was configured
  * @param deviceClass - the class of the device being configured
+ * @param uuid - the UUID of the device that was configured
  * @param forRecovery - we were trying to recover this device
  */
 void sendDeviceConfigureFailedEvent(const char *deviceClass, const char *uuid, bool forRecovery);
@@ -208,8 +208,8 @@ void sendDeviceConfigureFailedEvent(const char *deviceClass, const char *uuid, b
  * broadcast a device configuration completed or failed event for an existing device that finished
  * reconfiguring outside of any discovery session (session discovery type NONE)
  *
- * @param uuid - the UUID of the device that was reconfigured
  * @param deviceClass - the class of the device that was reconfigured
+ * @param uuid - the UUID of the device that was reconfigured
  * @param succeeded - true to send a completed event, false to send a failed event
  */
 void sendDeviceReconfigurationFinishedEvent(const char *deviceClass, const char *uuid, bool succeeded);

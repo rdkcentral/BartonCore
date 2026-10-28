@@ -80,6 +80,8 @@ bcore_add_cmocka_test(
         sendDeviceReconfigurationFinishedEvent
         sendDeviceRemovedEvent
         sendEndpointRemovedEvent
+        jsonDatabaseRemoveDeviceById
+        jsonDatabaseIsDeviceKnown
         sendMetadataUpdatedEvent
         threadPoolAddTask
         observabilityGaugeCreate
@@ -87,6 +89,11 @@ bcore_add_cmocka_test(
     LINK_LIBRARIES BartonCoreStatic
     INCLUDES ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
 )
+
+# The pending-reconfiguration gauge test needs a backend that records gauges.
+if (TARGET testDeviceServiceReconfiguration AND BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
+    target_compile_definitions(testDeviceServiceReconfiguration PRIVATE OBSERVABILITY_BACKEND_RECORDS_GAUGES)
+endif()
 
 bcore_add_cmocka_test(
     NAME testJsonDatabase

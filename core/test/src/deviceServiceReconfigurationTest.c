@@ -61,11 +61,16 @@
 #define MAX_SCHEDULED_TASKS   8
 #define WAIT_TIMEOUT_SECS     5
 
+// How long a test gives a thread that should stay blocked to get past the point it is blocked at. Only a regression can
+// get past it, so a slow host can at worst miss one, never fail a correct build.
+#define BLOCKED_PROBE_USECS   (500 * G_TIME_SPAN_MILLISECOND)
+
 typedef struct
 {
     taskCallbackFunc func;
     void *arg;
     uint32_t handle;
+    uint64_t delay;
     bool consumed; // run or cancelled; the task's context reference is no longer ours to hand out
 } ScheduledTask;
 
@@ -106,15 +111,102 @@ static int finishedEventCount;
 static bool finishedEventSucceeded;
 static bool pendingWhenFinishedEventSent;
 static gchar *finishedEventUuid;
+static void (*finishedEventHook)(const char *uuid);
+
+static int removedEventCount;
+static int finishedEventsWhenRemoved;
+static void (*removedEventHook)(const char *uuid);
+static bool failDeviceRemoval;
 
 static GHashTable *syncCounts; // uuid -> number of synchronizeDevice() calls
 
 static void (*classVersionHook)(void);
 
-static bool blockShutdownUntilPassDone;
+static bool failThreadPoolAdd;
+
+static bool pauseShutdown; // pause shutdown just after it sets its shutting-down flag, until shutdownReleased
+static bool shutdownReleased;
 static bool shutdownBegan;
-static bool passDone;
+static bool commFailShutdownCalled; // shutdown got past waiting for reconfigurations
 static bool passReachedDevice;
+
+static bool probeShutdownWait;
+static const char *requestWhileCancelling; // device to request a reconfiguration of once a cancel was attempted
+static bool requestDuringSwap;             // make that request while its record is briefly missing, as mid-swap
+// The missingRecordOnCheck'th record check (from 1) for this device reports none, as if mid-swap or just deleted.
+static const char *missingRecordUuid;
+static int missingRecordOnCheck;
+static int recordChecks;
+static bool shutdownContinuedBeforeTaskRan;
+
+static GThread *removalThread;
+static bool removalFinishedDuringEvent;
+
+static BCoreClient *testClient;
+static GThread *requestThread;
+static GThread *eventStopThread; // started by StopFromOtherThreadDuringEvent()
+static bool shutdownPassedDuringEvent;
+static bool requestReturned;
+static bool requestReturnedDuringEvent;
+static bool requestScheduledDuringEvent;
+static bool pendingAfterRequestDuringEvent;
+static bool mergedCallbackCalled;
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Waiting                                                                                                          */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+// Wait (holding fakeLock) until predicate() holds or timeoutUsecs pass, and return predicate(). Bounded so a regression
+// fails the test rather than hanging it.
+static bool WaitLocked(bool (*predicate)(void), gint64 timeoutUsecs)
+{
+    gint64 deadline = g_get_monotonic_time() + timeoutUsecs;
+
+    while (predicate() == false)
+    {
+        if (g_cond_wait_until(&fakeCond, &fakeLock, deadline) == FALSE)
+        {
+            break;
+        }
+    }
+
+    return predicate();
+}
+
+static bool IsCancelAttempted(void)
+{
+    return cancelCount > 0;
+}
+
+static bool IsShutdownBegun(void)
+{
+    return shutdownBegan;
+}
+
+static bool IsShutdownReleased(void)
+{
+    return shutdownReleased;
+}
+
+static bool IsCommFailShutdownCalled(void)
+{
+    return commFailShutdownCalled;
+}
+
+static bool IsPassAtDevice(void)
+{
+    return passReachedDevice;
+}
+
+static bool IsDeviceRemovedEventSent(void)
+{
+    return removedEventCount > 0;
+}
+
+static bool IsRequestReturned(void)
+{
+    return requestReturned;
+}
 
 /* ---------------------------------------------------------------------------------------------------------------- */
 /* Fake driver                                                                                                      */
@@ -184,9 +276,9 @@ void __wrap_deviceEventHandlerShutdown(void)
     shutdownBegan = true;
     g_cond_broadcast(&fakeCond);
 
-    while (blockShutdownUntilPassDone == true && passDone == false)
+    if (pauseShutdown == true)
     {
-        g_cond_wait(&fakeCond, &fakeLock);
+        WaitLocked(IsShutdownReleased, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     }
 
     g_mutex_unlock(&fakeLock);
@@ -194,7 +286,14 @@ void __wrap_deviceEventHandlerShutdown(void)
 
 void __wrap_deviceServiceCommFailInit(void) {}
 
-void __wrap_deviceServiceCommFailShutdown(void) {}
+// Shutdown's next step after waiting for reconfigurations.
+void __wrap_deviceServiceCommFailShutdown(void)
+{
+    g_mutex_lock(&fakeLock);
+    commFailShutdownCalled = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
+}
 
 void __wrap_deviceServiceCommFailSetTimeoutSecs(uint32_t commFailTimeoutSecs)
 {
@@ -254,7 +353,6 @@ static gpointer RunTask(gpointer data)
 
 uint32_t __wrap_scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCallbackFunc func, void *arg)
 {
-    (void) delayAmount;
     (void) units;
 
     g_mutex_lock(&fakeLock);
@@ -268,7 +366,8 @@ uint32_t __wrap_scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCa
     if (failScheduling == false && scheduledCount < MAX_SCHEDULED_TASKS)
     {
         handle = nextHandle++;
-        scheduledTasks[scheduledCount++] = (ScheduledTask) {.func = func, .arg = arg, .handle = handle};
+        scheduledTasks[scheduledCount++] =
+            (ScheduledTask) {.func = func, .arg = arg, .handle = handle, .delay = delayAmount};
 
         // Like a real zero-delay task: it starts at once, possibly before this call returns.
         if (startTaskWhenScheduled == true)
@@ -281,17 +380,22 @@ uint32_t __wrap_scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCa
     }
 
     readyWhenScheduled = deviceServiceIsReadyForDeviceOperation();
+    g_cond_broadcast(&fakeCond);
     g_mutex_unlock(&fakeLock);
 
     return handle;
 }
 
-// Run inline, so every synchronization a startup pass queues has finished when the pass returns.
+// Run inline, so every synchronization a startup pass queues has finished when the pass returns. With
+// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does.
 bool __wrap_threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threadPoolTaskArgFreeFunc argFreeFunc)
 {
     (void) pool;
 
-    task(arg);
+    if (failThreadPoolAdd == false)
+    {
+        task(arg);
+    }
 
     if (argFreeFunc != NULL)
     {
@@ -302,7 +406,7 @@ bool __wrap_threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg
         free(arg);
     }
 
-    return true;
+    return failThreadPoolAdd == false;
 }
 
 ObservabilityGauge *__real_observabilityGaugeCreate(const char *name, const char *description, const char *unit);
@@ -365,10 +469,13 @@ void __wrap_sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReason reason
         return;
     }
 
+    bool ready = deviceServiceIsReadyForDeviceOperation();
+    bool pending = watchedUuid != NULL && deviceServiceIsReconfigurationPending(watchedUuid);
+
     g_mutex_lock(&fakeLock);
     readyEventCount++;
-    readyWhenReadyEventSent = deviceServiceIsReadyForDeviceOperation();
-    pendingWhenReadyEventSent = watchedUuid != NULL && deviceServiceIsReconfigurationPending(watchedUuid);
+    readyWhenReadyEventSent = ready;
+    pendingWhenReadyEventSent = pending;
     g_mutex_unlock(&fakeLock);
 }
 
@@ -376,19 +483,71 @@ void __wrap_sendDeviceReconfigurationFinishedEvent(const char *deviceClass, cons
 {
     (void) deviceClass;
 
+    // Before taking fakeLock: the gauge wrapper takes fakeLock under the reconfiguration lock this check takes.
+    bool pending = deviceServiceIsReconfigurationPending(uuid);
+
     g_mutex_lock(&fakeLock);
     finishedEventCount++;
     finishedEventSucceeded = succeeded;
-    pendingWhenFinishedEventSent = deviceServiceIsReconfigurationPending(uuid);
+    pendingWhenFinishedEventSent = pending;
     g_free(finishedEventUuid);
     finishedEventUuid = g_strdup(uuid);
+    void (*hook)(const char *) = finishedEventHook;
     g_mutex_unlock(&fakeLock);
+
+    // Runs as a client's signal handler would: on the reconfiguration task's thread, while the event is being sent.
+    if (hook != NULL)
+    {
+        hook(uuid);
+    }
 }
 
 void __wrap_sendDeviceRemovedEvent(const char *uuid, const char *deviceClass)
 {
-    (void) uuid;
     (void) deviceClass;
+
+    g_mutex_lock(&fakeLock);
+    removedEventCount++;
+    finishedEventsWhenRemoved = finishedEventCount;
+    g_cond_broadcast(&fakeCond);
+    void (*hook)(const char *) = removedEventHook;
+    g_mutex_unlock(&fakeLock);
+
+    // Runs as a client's device-removed handler would: during the removal, after the record is deleted.
+    if (hook != NULL)
+    {
+        hook(uuid);
+    }
+}
+
+bool __real_jsonDatabaseIsDeviceKnown(const char *uuid);
+
+bool __wrap_jsonDatabaseIsDeviceKnown(const char *uuid)
+{
+    g_mutex_lock(&fakeLock);
+    bool missing = false;
+
+    if (missingRecordUuid != NULL && g_strcmp0(uuid, missingRecordUuid) == 0)
+    {
+        missing = ++recordChecks == missingRecordOnCheck;
+    }
+
+    g_mutex_unlock(&fakeLock);
+
+    return missing == true ? false : __real_jsonDatabaseIsDeviceKnown(uuid);
+}
+
+bool __real_jsonDatabaseRemoveDeviceById(const char *uuid);
+
+// With failDeviceRemoval, deleting a device's record fails, as a storage failure would.
+bool __wrap_jsonDatabaseRemoveDeviceById(const char *uuid)
+{
+    if (failDeviceRemoval == true)
+    {
+        return false;
+    }
+
+    return __real_jsonDatabaseRemoveDeviceById(uuid);
 }
 
 void __wrap_sendEndpointRemovedEvent(icDeviceEndpoint *endpoint, const char *deviceClass, bool deviceRemoved)
@@ -436,6 +595,7 @@ static int GetSyncCount(const char *uuid)
     return count;
 }
 
+#ifdef OBSERVABILITY_BACKEND_RECORDS_GAUGES
 static int64_t GetPendingGaugeValue(void)
 {
     g_mutex_lock(&fakeLock);
@@ -444,6 +604,7 @@ static int64_t GetPendingGaugeValue(void)
 
     return value;
 }
+#endif
 
 static int GetScheduledCount(void)
 {
@@ -467,18 +628,45 @@ static void RunScheduledTask(int index)
 }
 
 // Runs the captured task only after a canceller has tried (and, with cancelSucceeds false, failed) to cancel it, so
-// that canceller is known to be waiting for this task rather than racing it.
+// that canceller is known to be waiting for this task rather than racing it. With probeShutdownWait, the task first
+// gives a shutdown that is (correctly) blocked on it time to get past its wait anyway.
 static gpointer RunFirstScheduledTaskOnceCancelAttempted(gpointer data)
 {
     (void) data;
 
     g_mutex_lock(&fakeLock);
 
-    while (cancelCount == 0)
+    bool attempted = WaitLocked(IsCancelAttempted, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+
+    if (attempted == true && probeShutdownWait == true)
     {
-        g_cond_wait(&fakeCond, &fakeLock);
+        shutdownContinuedBeforeTaskRan = WaitLocked(IsCommFailShutdownCalled, BLOCKED_PROBE_USECS);
     }
 
+    const char *requestUuid = requestWhileCancelling;
+    bool duringSwap = requestDuringSwap;
+    g_mutex_unlock(&fakeLock);
+
+    // While the canceller waits for this (still pending) reconfiguration, as a driver's post-upgrade request might.
+    if (attempted == true && requestUuid != NULL)
+    {
+        icDevice *saved = duringSwap ? jsonDatabaseGetDeviceById(requestUuid) : NULL;
+
+        if (saved != NULL)
+        {
+            __real_jsonDatabaseRemoveDeviceById(requestUuid);
+        }
+
+        deviceServiceReconfigureDevice(requestUuid, 60, NULL, false);
+
+        if (saved != NULL)
+        {
+            jsonDatabaseAddDevice(saved);
+            deviceDestroy(saved);
+        }
+    }
+
+    g_mutex_lock(&fakeLock);
     ScheduledTask task = scheduledTasks[0];
     scheduledTasks[0].consumed = true;
     taskStartedAt = g_get_monotonic_time();
@@ -503,6 +691,120 @@ static gpointer StopClient(gpointer data)
     b_core_client_stop(data);
 
     return NULL;
+}
+
+static gpointer RemoveDevice(gpointer data)
+{
+    deviceServiceRemoveDevice(data);
+
+    return NULL;
+}
+
+// Finished-event hook: a removal that starts while the completion event is being sent must wait until it has been sent.
+static void StartRemovalDuringEvent(const char *uuid)
+{
+    removalThread = g_thread_new("remove", RemoveDevice, (gpointer) g_intern_string(uuid));
+
+    g_mutex_lock(&fakeLock);
+    removalFinishedDuringEvent = WaitLocked(IsDeviceRemovedEventSent, BLOCKED_PROBE_USECS);
+    g_mutex_unlock(&fakeLock);
+}
+
+static gpointer RequestReconfiguration(gpointer data)
+{
+    deviceServiceReconfigureDevice(data, 0, NULL, false);
+
+    g_mutex_lock(&fakeLock);
+    requestReturned = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
+
+    return NULL;
+}
+
+// Finished-event hook: a reconfiguration requested from another thread while this one is finishing must return without
+// waiting (the requester may be a thread this handler depends on) and be scheduled straight away.
+static void RequestReconfigurationFromOtherThreadDuringEvent(const char *uuid)
+{
+    requestThread = g_thread_new("request", RequestReconfiguration, (gpointer) g_intern_string(uuid));
+
+    g_mutex_lock(&fakeLock);
+    requestReturnedDuringEvent = WaitLocked(IsRequestReturned, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    requestScheduledDuringEvent = scheduledCount >= 2;
+    g_mutex_unlock(&fakeLock);
+
+    // Outside fakeLock: the gauge wrapper takes fakeLock under the reconfiguration lock this check takes.
+    pendingAfterRequestDuringEvent = deviceServiceIsReconfigurationPending(uuid);
+}
+
+// Finished-event hook: a client that requests another reconfiguration from its completion handler.
+static void RequestReconfigurationFromHandler(const char *uuid)
+{
+    deviceServiceReconfigureDevice(uuid, 0, NULL, false);
+}
+
+static void RecordMergedCallback(bool result, const char *uuid)
+{
+    (void) result;
+    (void) uuid;
+
+    mergedCallbackCalled = true;
+}
+
+// Finished-event hook: two different requests, made while the device is being removed.
+static void RequestTwoReconfigurationsFromHandler(const char *uuid)
+{
+    g_mutex_lock(&fakeLock);
+    cancelSucceeds = true; // so teardown can cancel the re-requested one
+    g_mutex_unlock(&fakeLock);
+
+    deviceServiceReconfigureDevice(uuid, 0, NULL, false);
+    deviceServiceReconfigureDevice(uuid, 60, RecordMergedCallback, false);
+}
+
+// Finished-event hook: as above, with the new reconfiguration cancellable (it hasn't started).
+static void RequestCancellableReconfigurationFromHandler(const char *uuid)
+{
+    g_mutex_lock(&fakeLock);
+    cancelSucceeds = true;
+    g_mutex_unlock(&fakeLock);
+
+    deviceServiceReconfigureDevice(uuid, 0, NULL, false);
+}
+
+// Finished-event hook: another thread stops the service while this completion event is being sent. Shutdown must wait
+// for the event rather than tear down the event producer under it.
+static void StopFromOtherThreadDuringEvent(const char *uuid)
+{
+    (void) uuid;
+
+    eventStopThread = g_thread_new("stop", StopClient, testClient);
+
+    g_mutex_lock(&fakeLock);
+    shutdownPassedDuringEvent = WaitLocked(IsCommFailShutdownCalled, BLOCKED_PROBE_USECS);
+    g_mutex_unlock(&fakeLock);
+}
+
+// Finished-event hook: a client that stops the service from its completion handler.
+static void StopClientFromHandler(const char *uuid)
+{
+    (void) uuid;
+
+    b_core_client_stop(testClient);
+}
+
+// Finished-event hook: a client that removes the device from its completion handler.
+static void RemoveDeviceFromHandler(const char *uuid)
+{
+    assert_true(deviceServiceRemoveDevice(uuid));
+}
+
+// Completion callback that leaves no record of the device, as a failed save of the rebuilt device does.
+static void RemoveRecordOnCompletion(bool result, const char *uuid)
+{
+    (void) result;
+
+    assert_true(jsonDatabaseRemoveDeviceById(uuid));
 }
 
 // An earlier pass's reconfiguration of this device swapped in its rebuilt record after this pass took its snapshot.
@@ -535,12 +837,36 @@ static void ResetFakes(void)
     finishedEventSucceeded = true;
     pendingWhenFinishedEventSent = true;
     g_clear_pointer(&finishedEventUuid, g_free);
+    finishedEventHook = NULL;
+    removedEventCount = 0;
+    removedEventHook = NULL;
+    failDeviceRemoval = false;
+    finishedEventsWhenRemoved = -1;
     g_hash_table_remove_all(syncCounts);
     classVersionHook = NULL;
-    blockShutdownUntilPassDone = false;
+    failThreadPoolAdd = false;
+    pauseShutdown = false;
+    shutdownReleased = false;
     shutdownBegan = false;
-    passDone = false;
+    commFailShutdownCalled = false;
     passReachedDevice = false;
+    probeShutdownWait = false;
+    requestWhileCancelling = NULL;
+    requestDuringSwap = false;
+    missingRecordUuid = NULL;
+    missingRecordOnCheck = 0;
+    recordChecks = 0;
+    shutdownContinuedBeforeTaskRan = false;
+    removalThread = NULL;
+    removalFinishedDuringEvent = false;
+    requestThread = NULL;
+    eventStopThread = NULL;
+    shutdownPassedDuringEvent = false;
+    requestReturned = false;
+    requestReturnedDuringEvent = false;
+    requestScheduledDuringEvent = false;
+    pendingAfterRequestDuringEvent = false;
+    mergedCallbackCalled = false;
 }
 
 static int SetupService(void **state)
@@ -560,6 +886,7 @@ static int SetupService(void **state)
     b_core_initialize_params_container_set_storage_dir(params, fixture->storageDir);
 
     fixture->client = b_core_client_new(params);
+    testClient = fixture->client;
     assert_true(b_core_client_start(fixture->client));
     assert_non_null(readyForDevices);
 
@@ -634,38 +961,28 @@ static void test_startupPassFlagsDevicesBeforePublishingReadiness(void **state)
     assert_int_equal(GetSyncCount("stale"), 1);
 }
 
-// Shutdown beginning mid-pass stops scheduling and withholds readiness.
 static void BlockUntilShutdownBegins(void)
 {
     g_mutex_lock(&fakeLock);
     passReachedDevice = true;
     g_cond_broadcast(&fakeCond);
-
-    while (shutdownBegan == false)
-    {
-        g_cond_wait(&fakeCond, &fakeLock);
-    }
-
+    WaitLocked(IsShutdownBegun, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     g_mutex_unlock(&fakeLock);
 }
 
+// Shutdown beginning mid-pass stops scheduling and withholds readiness.
 static void test_shutdownDuringStartupPassWithholdsReadiness(void **state)
 {
     Fixture *fixture = *state;
 
     AddDevice("stale", STALE_CLASS_VERSION);
     classVersionHook = BlockUntilShutdownBegins;
-    blockShutdownUntilPassDone = true;
+    pauseShutdown = true;
 
     GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
 
     g_mutex_lock(&fakeLock);
-
-    while (passReachedDevice == false)
-    {
-        g_cond_wait(&fakeCond, &fakeLock);
-    }
-
+    bool passAtDevice = WaitLocked(IsPassAtDevice, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     g_mutex_unlock(&fakeLock);
 
     GThread *stopThread = g_thread_new("stop", StopClient, fixture->client);
@@ -679,17 +996,58 @@ static void test_shutdownDuringStartupPassWithholdsReadiness(void **state)
     int readyEvents = readyEventCount;
 
     g_mutex_lock(&fakeLock);
-    passDone = true;
+    shutdownReleased = true;
     g_cond_broadcast(&fakeCond);
     g_mutex_unlock(&fakeLock);
 
     g_thread_join(stopThread);
     fixture->stopped = true;
 
+    assert_true(passAtDevice);
     assert_false(ready);
     assert_false(pending);
     assert_int_equal(scheduled, 0);
     assert_int_equal(readyEvents, 0);
+}
+
+// Published readiness ends as soon as shutdown begins, and a subsystem that reports ready during shutdown starts no
+// new startup pass.
+static void test_readinessWithdrawnOnceShutdownBegins(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    readyForDevices();
+    assert_true(deviceServiceIsReadyForDeviceOperation());
+    AddDevice("stale", STALE_CLASS_VERSION);
+
+    pauseShutdown = true;
+    GThread *stopThread = g_thread_new("stop", StopClient, fixture->client);
+
+    g_mutex_lock(&fakeLock);
+    bool began = WaitLocked(IsShutdownBegun, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+
+    // Observed while shutdown is paused before it clears any readiness flag itself.
+    bool ready = deviceServiceIsReadyForDeviceOperation();
+    readyForDevices();
+    int scheduled = GetScheduledCount();
+    int readyEvents = readyEventCount;
+    int currentSyncs = GetSyncCount("current");
+
+    g_mutex_lock(&fakeLock);
+    shutdownReleased = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
+
+    g_thread_join(stopThread);
+    fixture->stopped = true;
+
+    assert_true(began);
+    assert_false(ready);
+    assert_int_equal(scheduled, 0);
+    assert_int_equal(readyEvents, 1);
+    assert_int_equal(currentSyncs, 1);
 }
 
 static void test_reconfigurationFinishUnpendsBeforeNotifying(void **state)
@@ -761,11 +1119,323 @@ static void test_removalWaitsForRunningReconfiguration(void **state)
     assert_true(returnedAt >= taskStartedAt);
     assert_true(returnedAt - start < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     assert_int_equal(finishedEventCount, 1);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(finishedEventsWhenRemoved, 1);
     assert_false(deviceServiceIsReconfigurationPending("stale"));
     assert_null(jsonDatabaseGetDeviceById("stale"));
 }
 
-// Shutdown waits for a running reconfiguration (blocking, not polling) and sends no completion event for it.
+// A removal that starts while the completion event is being sent (after the device stopped being reported as
+// reconfiguring) waits for the event, so device-removed never precedes it.
+static void test_removalDuringCompletionEventWaitsForIt(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    finishedEventHook = StartRemovalDuringEvent;
+
+    RunScheduledTask(0);
+    g_thread_join(removalThread);
+
+    assert_false(removalFinishedDuringEvent);
+    assert_int_equal(finishedEventCount, 1);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(finishedEventsWhenRemoved, 1);
+    assert_null(jsonDatabaseGetDeviceById("stale"));
+}
+
+// A client may remove the device from its completion handler; that removal must not wait for the event it is in.
+static void test_removalFromCompletionHandlerDoesNotWaitForItself(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    finishedEventHook = RemoveDeviceFromHandler;
+    gint64 start = g_get_monotonic_time();
+
+    RunScheduledTask(0);
+
+    assert_true(g_get_monotonic_time() - start < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    assert_int_equal(removedEventCount, 1);
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+    assert_null(jsonDatabaseGetDeviceById("stale"));
+}
+
+// A reconfiguration requested while the previous one is sending its completion event is scheduled, not dropped.
+static void test_reconfigurationRequestedWhileFinishingIsScheduled(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    finishedEventHook = RequestReconfigurationFromOtherThreadDuringEvent;
+
+    RunScheduledTask(0);
+    g_thread_join(requestThread);
+
+    assert_true(requestReturnedDuringEvent);
+    assert_true(requestScheduledDuringEvent);
+    assert_true(pendingAfterRequestDuringEvent);
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_true(deviceServiceIsReconfigurationPending("stale"));
+}
+
+// A reconfiguration requested from the finishing one's own event handler is scheduled.
+static void test_reconfigurationRequestedFromCompletionHandlerIsScheduled(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    finishedEventHook = RequestReconfigurationFromHandler;
+
+    RunScheduledTask(0);
+
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_true(deviceServiceIsReconfigurationPending("stale"));
+}
+
+// A reconfiguration requested while the device is being removed isn't scheduled: it is deferred, and discarded once the
+// removal succeeds, so it can't run after the removal and re-save the removed device.
+static void test_reconfigurationRequestedDuringRemovalIsRefused(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    finishedEventHook = RequestCancellableReconfigurationFromHandler;
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_true(deviceServiceRemoveDevice("stale"));
+    g_thread_join(taskThread);
+
+    assert_int_equal(finishedEventCount, 1);
+    assert_int_equal(GetScheduledCount(), 1);
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+    assert_null(jsonDatabaseGetDeviceById("stale"));
+}
+
+// A reconfiguration refused because the device was being removed is requested again if that removal fails, so it isn't
+// lost.
+static void test_reconfigurationRefusedByFailedRemovalIsRequestedAgain(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    failDeviceRemoval = true;
+    finishedEventHook = RequestCancellableReconfigurationFromHandler; // so teardown can cancel the re-requested one
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_false(deviceServiceRemoveDevice("stale"));
+    g_thread_join(taskThread);
+
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_true(deviceServiceIsReconfigurationPending("stale"));
+    assert_true(jsonDatabaseIsDeviceKnown("stale"));
+}
+
+// A request made while a removal waits for the device's still-pending reconfiguration is deferred like any other made
+// during a removal, not dropped as a duplicate, so it is requested again when the removal fails.
+static void test_reconfigurationRequestedWhileRemovalCancelsIsNotLost(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    failDeviceRemoval = true;
+    requestWhileCancelling = "stale";
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_false(deviceServiceRemoveDevice("stale"));
+    g_thread_join(taskThread);
+
+    g_mutex_lock(&fakeLock);
+    cancelSucceeds = true; // so teardown can cancel the re-requested one
+    g_mutex_unlock(&fakeLock);
+
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_int_equal(scheduledTasks[1].delay, 60);
+    assert_true(deviceServiceIsReconfigurationPending("stale"));
+}
+
+// The same, with the request made while the device's record is briefly missing (as during a reconfiguration's swap): it
+// is still deferred, not refused as an unknown device.
+static void test_reconfigurationRequestedDuringSwapWhileRemovingIsNotLost(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    failDeviceRemoval = true;
+    requestWhileCancelling = "stale";
+    requestDuringSwap = true;
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_false(deviceServiceRemoveDevice("stale"));
+    g_thread_join(taskThread);
+
+    g_mutex_lock(&fakeLock);
+    cancelSucceeds = true; // so teardown can cancel the re-requested one
+    g_mutex_unlock(&fakeLock);
+
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_int_equal(scheduledTasks[1].delay, 60);
+}
+
+// A request whose first record check finds none (the record was briefly missing, e.g. a swap that has since finished)
+// and that finds no removal in progress reads the record again rather than refusing an existing device.
+static void test_reconfigurationOfBrieflyMissingRecordIsScheduled(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    readyForDevices();
+    missingRecordUuid = "current";
+    missingRecordOnCheck = 1;
+
+    deviceServiceReconfigureDevice("current", 0, NULL, false);
+
+    assert_int_equal(GetScheduledCount(), 1);
+    assert_true(deviceServiceIsReconfigurationPending("current"));
+}
+
+// A device deleted between the record check and the insert is backed out of the pending map rather than scheduled.
+static void test_reconfigurationOfDeviceDeletedDuringRequestIsBackedOut(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    readyForDevices();
+    missingRecordUuid = "current";
+    missingRecordOnCheck = 2; // the check after the insert
+
+    deviceServiceReconfigureDevice("current", 0, NULL, false);
+
+    assert_int_equal(GetScheduledCount(), 0);
+    assert_false(deviceServiceIsReconfigurationPending("current"));
+}
+
+// Shutdown started on another thread while a completion event is being sent waits for that event.
+static void test_shutdownWaitsForCompletionEventInProgress(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    finishedEventHook = StopFromOtherThreadDuringEvent;
+
+    RunScheduledTask(0);
+
+    // Without a completion event nothing stopped the service; leave that to teardown and fail here.
+    assert_non_null(eventStopThread);
+    g_thread_join(eventStopThread);
+    fixture->stopped = true;
+
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(shutdownPassedDuringEvent);
+}
+
+// A request without a device uuid is refused rather than crashing.
+static void test_reconfigurationWithoutUuidIsRefused(void **state)
+{
+    (void) state;
+
+    readyForDevices();
+    deviceServiceReconfigureDevice(NULL, 0, NULL, false);
+
+    assert_int_equal(GetScheduledCount(), 0);
+}
+
+// Requests refused during a removal that then fails are merged, so the one requested again keeps the longest delay and
+// the completion callback.
+static void test_reconfigurationsRefusedByFailedRemovalAreMerged(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    failDeviceRemoval = true;
+    finishedEventHook = RequestTwoReconfigurationsFromHandler;
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_false(deviceServiceRemoveDevice("stale"));
+    g_thread_join(taskThread);
+
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_int_equal(scheduledTasks[1].delay, 60);
+
+    finishedEventHook = NULL;
+    RunScheduledTask(1);
+    assert_true(mergedCallbackCalled);
+}
+
+// A reconfiguration requested for a device that has no record is refused, and one requested from a device-removed
+// handler is deferred and then discarded with the removal; neither leaves the deleted device reported as reconfiguring.
+static void test_reconfigurationOfDeviceWithoutRecordIsRefused(void **state)
+{
+    (void) state;
+
+    deviceServiceReconfigureDevice("missing", 0, NULL, false);
+    assert_int_equal(GetScheduledCount(), 0);
+    assert_false(deviceServiceIsReconfigurationPending("missing"));
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    readyForDevices();
+    removedEventHook = RequestReconfigurationFromHandler;
+
+    assert_true(deviceServiceRemoveDevice("current"));
+
+    assert_int_equal(GetScheduledCount(), 0);
+    assert_false(deviceServiceIsReconfigurationPending("current"));
+}
+
+// A client may stop the service from a completion handler; shutdown must not wait for the event it is in.
+static void test_stopFromCompletionHandlerDoesNotWaitForItself(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    finishedEventHook = StopClientFromHandler;
+    gint64 start = g_get_monotonic_time();
+
+    RunScheduledTask(0);
+    fixture->stopped = true;
+
+    assert_true(g_get_monotonic_time() - start < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+}
+
+// No completion event is sent for a device that no longer has a record (for example after a failed save).
+static void test_noCompletionEventForDeviceWithoutRecord(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", CURRENT_CLASS_VERSION);
+    deviceServiceReconfigureDevice("stale", 0, RemoveRecordOnCompletion, false);
+    assert_int_equal(GetScheduledCount(), 1);
+
+    RunScheduledTask(0);
+
+    assert_int_equal(finishedEventCount, 0);
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+}
+
+// Shutdown waits for a running reconfiguration and sends no completion event for it.
 static void test_shutdownWaitsForRunningReconfiguration(void **state)
 {
     Fixture *fixture = *state;
@@ -773,6 +1443,7 @@ static void test_shutdownWaitsForRunningReconfiguration(void **state)
     AddDevice("stale", STALE_CLASS_VERSION);
     readyForDevices();
     cancelSucceeds = false;
+    probeShutdownWait = true;
 
     GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
     gint64 start = g_get_monotonic_time();
@@ -783,6 +1454,7 @@ static void test_shutdownWaitsForRunningReconfiguration(void **state)
     gint64 returnedAt = g_get_monotonic_time();
     g_thread_join(taskThread);
 
+    assert_false(shutdownContinuedBeforeTaskRan);
     assert_true(returnedAt >= taskStartedAt);
     assert_true(returnedAt - start < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     assert_int_equal(finishedEventCount, 0);
@@ -803,6 +1475,23 @@ static void test_failedStartupReconfigurationToleratesDriverWithoutSynchronize(v
     assert_false(finishedEventSucceeded);
     assert_false(deviceServiceIsReconfigurationPending("stale"));
     assert_int_equal(GetSyncCount("stale"), 0);
+}
+
+// A failed startup reconfiguration's fallback synchronization still runs when the thread pool won't take it.
+static void test_failedStartupReconfigurationSynchronizesWhenPoolRejectsTask(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    failThreadPoolAdd = true;
+
+    RunScheduledTask(0);
+
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(finishedEventSucceeded);
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+    assert_int_equal(GetSyncCount("stale"), 1);
 }
 
 static void test_repeatedStartupPassSkipsPendingDevice(void **state)
@@ -837,6 +1526,7 @@ static void test_repeatedStartupPassRechecksCurrentRecord(void **state)
     assert_int_equal(GetSyncCount("stale"), 1);
 }
 
+#ifdef OBSERVABILITY_BACKEND_RECORDS_GAUGES
 static void test_pendingGaugeTracksPendingReconfigurations(void **state)
 {
     (void) state;
@@ -857,6 +1547,7 @@ static void test_pendingGaugeTracksPendingReconfigurations(void **state)
     assert_true(deviceServiceRemoveDevice(stillPending));
     assert_int_equal(GetPendingGaugeValue(), 0);
 }
+#endif
 
 // A zero-delay task can start before scheduling returns; it waits for its handle to be stored, then completes.
 static void test_taskStartingBeforeSchedulingReturnsCompletes(void **state)
@@ -888,19 +1579,52 @@ int main(int argc, const char **argv)
             test_startupPassFlagsDevicesBeforePublishingReadiness, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_shutdownDuringStartupPassWithholdsReadiness, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_readinessWithdrawnOnceShutdownBegins, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_reconfigurationFinishUnpendsBeforeNotifying, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_schedulingFailureLeavesDeviceNotPending, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalCancelsNotYetStartedReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalWaitsForRunningReconfiguration, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_removalDuringCompletionEventWaitsForIt, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_removalFromCompletionHandlerDoesNotWaitForItself, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_noCompletionEventForDeviceWithoutRecord, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationRequestedWhileFinishingIsScheduled, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationRequestedFromCompletionHandlerIsScheduled, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_stopFromCompletionHandlerDoesNotWaitForItself, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationRequestedDuringRemovalIsRefused, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationRefusedByFailedRemovalIsRequestedAgain, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationsRefusedByFailedRemovalAreMerged, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationRequestedWhileRemovalCancelsIsNotLost, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationRequestedDuringSwapWhileRemovingIsNotLost, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationOfBrieflyMissingRecordIsScheduled, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_reconfigurationWithoutUuidIsRefused, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationOfDeviceDeletedDuringRequestIsBackedOut, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_shutdownWaitsForCompletionEventInProgress, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationOfDeviceWithoutRecordIsRefused, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_shutdownWaitsForRunningReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_repeatedStartupPassSkipsPendingDevice, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_repeatedStartupPassRechecksCurrentRecord, SetupService, TeardownService),
+#ifdef OBSERVABILITY_BACKEND_RECORDS_GAUGES
         cmocka_unit_test_setup_teardown(test_pendingGaugeTracksPendingReconfigurations, SetupService, TeardownService),
+#endif
         cmocka_unit_test_setup_teardown(
             test_taskStartingBeforeSchedulingReturnsCompletes, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_failedStartupReconfigurationToleratesDriverWithoutSynchronize, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_failedStartupReconfigurationSynchronizesWhenPoolRejectsTask, SetupService, TeardownService),
     };
 
     int result = cmocka_run_group_tests(tests, NULL, NULL);

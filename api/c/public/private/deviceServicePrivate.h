@@ -199,7 +199,7 @@ bool deviceServiceIsReadyForPairing(void);
 bool deviceServiceIsReadyForDeviceOperation(void);
 /*
  * Checks if the device needs reconfiguration
- * Supported private API: reads the device from the database, so it may be called for any known device at any time.
+ * Reads the device's current record from the database.
  *
  * @param deviceUuid the uuid of device
  * @return true if reconfiguration is required for the device
@@ -244,7 +244,8 @@ bool deviceServiceWaitForReconfigure(const char *deviceUuid);
 bool deviceServiceSendReconfigurationSignal(const char *deviceUuid, bool shouldTerminate);
 
 /*
- * @return true if reconfiguration is pending for the device
+ * @return true if a reconfiguration of the device is scheduled or running. False once its work is done, including while
+ *         its completion event is being sent.
  */
 bool deviceServiceIsReconfigurationPending(const char *deviceUuid);
 

@@ -49,23 +49,48 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
 `_read_metadata`) and `b_core_client_write_metadata` can fail with a `GError` in the
 `B_CORE_CLIENT_ERROR` domain:
 
-- `B_CORE_SERVICE_STATE_ERROR_NOT_READY`: the service has not yet emitted the `status-changed` event with
-  reason `READY_FOR_DEVICE_OPERATION` (or is shutting down). Wait for that event, then retry.
+- `B_CORE_SERVICE_STATE_ERROR_NOT_READY`: the service is not ready for device operation yet (or is
+  shutting down). Readiness is announced by the `status-changed` event with reason
+  `READY_FOR_DEVICE_OPERATION`, which may already have been sent before you connected to it. So
+  connect to `B_CORE_CLIENT_SIGNAL_NAME_STATUS_CHANGED`, then check the `ready-for-operation` property of
+  `b_core_client_get_status()`, and retry once either says the service is ready.
 - `B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING`: the device is being reconfigured. Retry after
   `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED` or `_FAILED` arrives for that device with
   session discovery type `B_CORE_DISCOVERY_TYPE_NONE`. Those events are sent whenever a reconfiguration
   finishes, so they are also the cue to re-read a device you have cached. Connect to these signals
-  before querying, so a reconfiguration that finishes in between is not missed. No event is sent if
-  the reconfiguration could not be scheduled, the device was removed before its reconfiguration
-  started, or the service is shutting down, so also retry with a bounded backoff rather than waiting
-  only for the event.
+  before querying, so a reconfiguration that finishes in between is not missed. If the device is
+  removed while it is being reconfigured, its configuration event arrives before `device-removed`,
+  unless the reconfiguration takes longer than the removal's 60-second wait or you remove the device
+  from that event's own handler. Removing the device or stopping the client waits for these
+  events' handlers to return, so don't block in a handler on a thread that is doing either. No
+  event is sent if the reconfiguration could not be scheduled, the device was removed before its
+  reconfiguration started, the device's record is gone when it finishes (for example because saving
+  the rebuilt device failed), or the service is shutting down, so also retry with a bounded backoff
+  rather than waiting only for the event.
 
 Treat both as "try again later", not "not found", and pass a `GError **` rather than `NULL` so you can
-tell them apart. List functions (such as `b_core_client_get_devices`), `b_core_client_write_resource`
-and `b_core_client_execute_resource` are never refused; lists include devices that are being
-reconfigured.
+tell them apart. As with any GLib function, the `GError *` you pass must be `NULL` (a cleared error);
+`b_core_client_read_resource` and `b_core_client_read_metadata` now check this and return `NULL` if it is
+not. List functions (such as `b_core_client_get_devices`), `b_core_client_write_resource` and
+`b_core_client_execute_resource` are never refused; lists include devices that are being reconfigured.
+
+How long a device stays in reconfiguration depends on why it is being rebuilt. After a firmware
+upgrade the drivers wait about 60 seconds for the device to restart before reconfiguring it. A
+battery-powered ("sleepy") Zigbee device is only reconfigured when it next checks in, which can take
+up to 30 minutes. If a reconfiguration cannot start at all, the device stays in this state until it is
+removed or Barton restarts. Size your retries accordingly.
+
+Signal handlers are callers like any other: a handler that looks a device or endpoint up with one of
+the functions above (for example to add details to a `resource-updated` event) gets the same errors.
+Use what the event already carries where you can (a `BCoreResource` includes its device UUID,
+endpoint ID and URI), and otherwise retry the lookup after the configuration event for that device.
+
+Configuration events for the same device can overlap if it is reconfigured again while the previous
+reconfiguration's event is still being delivered. An older event can then arrive after a newer one, or
+not at all, so treat the most recent event for a device as describing its current state. In that case
+a handler that removes the device can also wait up to 60 seconds for the other event's handlers.
 
 `b_core_client_stop` lets a reconfiguration that is still running finish, so it can take up to 120
-seconds. If your host stops the process sooner, the interrupted reconfiguration is retried the next
-time Barton starts.
+seconds longer than usual. If your host ends the process sooner, the interrupted reconfiguration is
+retried the next time Barton starts.
 

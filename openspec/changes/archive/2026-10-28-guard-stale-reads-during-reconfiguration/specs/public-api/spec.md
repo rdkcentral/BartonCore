@@ -17,7 +17,7 @@ for an unreadable resource, `read_metadata()` for inaccessible metadata). All ot
 `execute_resource()`, `change_resource_mode()`, and `open_commissioning_window()`, are unaffected.
 
 #### Scenario: Service not ready
-- **WHEN** a gated function is called while `b_core_client_get_status()` would report `isReadyForDeviceOperation` as false (before the service has emitted `READY_FOR_DEVICE_OPERATION`, or after shutdown begins)
+- **WHEN** a gated function is called while `b_core_client_get_status()` would report `ready-for-operation` as false (before the service has published readiness for device operation, or after shutdown begins)
 - **THEN** the function SHALL fail, set a `GError` with domain `B_CORE_CLIENT_ERROR` and code
   `B_CORE_SERVICE_STATE_ERROR_NOT_READY`, and return `NULL`/`FALSE`
 
@@ -45,17 +45,29 @@ When a reconfiguration of an existing device finishes, the service SHALL emit
 device's UUID and device class and a session discovery type of `B_CORE_DISCOVERY_TYPE_NONE`, so that
 clients holding data about the device know to re-query it. The event SHALL be emitted only after the
 device is no longer reported as reconfiguring, and SHALL NOT be emitted for a reconfiguration
-abandoned because the service is shutting down. For a reconfiguration started during startup, the event
-MAY be emitted before `READY_FOR_DEVICE_OPERATION`; a client that waits for readiness and then queries
-the device observes the reconfigured data.
+that finishes after the service has begun shutting down, or for a device that no longer has a stored record
+(for example because saving the rebuilt device failed). A failure to save the rebuilt device SHALL NOT
+be reported as success. If the device is removed while its reconfiguration is running or finishing,
+the event SHALL be emitted before `device-removed`, provided the reconfiguration finishes within the
+removal's 60-second wait and the removal is not made from that event's own handler. For a
+reconfiguration started during startup, the event MAY be emitted before `READY_FOR_DEVICE_OPERATION`;
+a client that waits for readiness and then queries the device observes the reconfigured data.
 
 #### Scenario: Reconfiguration succeeds
 - **WHEN** a reconfiguration of an existing device finishes successfully
-- **THEN** the service SHALL emit `device-configuration-completed` with session discovery type `B_CORE_DISCOVERY_TYPE_NONE`, and a subsequent single-device query for that device SHALL succeed
+- **THEN** the service SHALL emit `device-configuration-completed` with session discovery type `B_CORE_DISCOVERY_TYPE_NONE`, and, once the service is ready for device operation, a subsequent single-device query for that device SHALL succeed
 
 #### Scenario: Reconfiguration fails
 - **WHEN** a reconfiguration of an existing device fails
 - **THEN** the service SHALL emit `device-configuration-failed` with session discovery type `B_CORE_DISCOVERY_TYPE_NONE`, and the device SHALL no longer be reported as reconfiguring
+
+#### Scenario: Device record gone when the reconfiguration finishes
+- **WHEN** a reconfiguration finishes and the device no longer has a stored record
+- **THEN** the service SHALL NOT emit a configuration event for it
+
+#### Scenario: Device removed while its reconfiguration finishes
+- **WHEN** a device is removed while its reconfiguration's completion event is being sent
+- **THEN** the removal SHALL wait (for up to 60 seconds) until that event has been sent before removing the device and emitting `device-removed`, unless the removal is made from that event's own handler
 
 ## MODIFIED Requirements
 
@@ -90,7 +102,7 @@ The system SHALL provide endpoint query functions: `get_endpoints_by_profile()`,
 - **THEN** the service SHALL return `NULL` and set a `GError` with code `B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING`
 
 ### Requirement: Resource operations
-The system SHALL support reading, writing, and executing resources by URI. `b_core_client_read_resource()` SHALL return the resource's stored value, except that a readable resource whose caching policy is never-cache SHALL be read from the device through its driver. `b_core_client_write_resource()` SHALL send a write command to the device. `b_core_client_execute_resource()` SHALL invoke an executable resource. `b_core_client_get_resource_by_uri()` SHALL look up a single resource. `read_resource()` and `get_resource_by_uri()` SHALL accept a `GError **err` and are gated as described in "Readiness and reconfiguration error domain". `write_resource()` and `execute_resource()` SHALL NOT be gated and keep their existing signatures: they act on the live device, and resource values written while a reconfiguration is pending are re-read when the replacement device is built.
+The system SHALL support reading, writing, and executing resources by URI. `b_core_client_read_resource()` SHALL return the resource's stored value, except that a readable resource whose caching policy is never-cache SHALL be read from the device through its driver. `b_core_client_write_resource()` SHALL send a write command to the device. `b_core_client_execute_resource()` SHALL invoke an executable resource. `b_core_client_get_resource_by_uri()` SHALL look up a single resource. `read_resource()` and `get_resource_by_uri()` SHALL accept a `GError **err` and are gated as described in "Readiness and reconfiguration error domain". `write_resource()` and `execute_resource()` SHALL NOT be gated and keep their existing signatures: they act on the live device, and resource values written while a reconfiguration is pending are re-read when the replacement device is built, unless the write lands after the replacement has read its initial values; such a late write reaches the device but its stored value is replaced by the earlier reading until the device next reports.
 
 #### Scenario: Read resource
 - **WHEN** `b_core_client_read_resource()` is called with a valid resource URI while the service is ready and the owning device is not reconfiguring

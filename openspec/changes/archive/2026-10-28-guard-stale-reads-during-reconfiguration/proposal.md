@@ -6,8 +6,8 @@ in a consistent state. When a device undergoes reconfiguration (device-class ver
 endpoint profile version revision, or a `reconfigurationRequired` metadata flag), the service
 rebuilds the device in the background: it removes the old `icDevice` from the database and persists
 a freshly constructed one. A client that queries that device during this window receives data that
-is valid at read time but almost immediately stale. This has been observed in Zilker during
-startup, where one service reconfigures a device while another queries it.
+is valid at read time but almost immediately stale. This has been observed in a client during
+startup, where one component queries a device while the service reconfigures it.
 
 Crucially, the existing `READY_FOR_DEVICE_OPERATION` status event does **not** protect against
 this: that event is emitted *before* startup device initialization/reconfiguration begins, and
@@ -48,7 +48,12 @@ that correctly awaits readiness can still read a device mid-reconfiguration.
 - Make the reconfiguration timed waits actually block (they used the wrong clock and returned at
   once), so shutdown really waits for a running reconfiguration and removal and sleepy-device waits
   no longer busy-spin.
-- Do not publish readiness if shutdown begins during the startup pass.
+- Do not publish readiness if shutdown begins during the startup pass, and stop reporting it as soon
+  as shutdown begins.
+- Fix a pre-existing hang in `stopMainLoop()`: a quit issued before the event thread entered its main
+  loop was lost, so stopping the service right after starting it could block forever.
+- Correct the "Resource operations" requirement, which said `read_resource` reads from the device:
+  it returns the stored value unless the resource is never-cache, as the code already did.
 
 ## Capabilities
 
@@ -71,10 +76,10 @@ that correctly awaits readiness can still read a device mid-reconfiguration.
 - **Affected APIs**: Breaking signature changes on the six functions above; new
   `BCoreServiceStateError` enum and quark usage. `deviceServiceIsReadyForDeviceOperation()` and the
   status's `isReadyForDeviceOperation` turn true slightly later (after the startup flagging pass).
-- **Consumers**: C callers (the in-repo reference app, and out-of-repo consumers such as Zilker) must
+- **Consumers**: C callers (the in-repo reference app, and out-of-repo consumers) must
   pass the new `GError **` argument. Python/GObject-Introspection callers need no code changes beyond
   handling `GLib.Error`; the GIR typelib regenerates on install. See design.md "Migration Plan" for
-  consumer guidance, including Zilker-specific follow-ups.
+  consumer guidance.
 - **CMake flags**: No new flags. Behavior is protocol-agnostic and applies regardless of
   `BCORE_ZIGBEE`, `BCORE_MATTER`, or `BCORE_THREAD`.
 - **Versioning**: Major version bump required due to the breaking API/ABI change.
