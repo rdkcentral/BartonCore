@@ -14,10 +14,11 @@ SBMD's resource requirements (the JS heap/arena budget it actually needs per dev
   - `run_observability_suite.py` updated with a `--debug-gc {on,off,both}` flag that automates the flip/restore around a full suite run.
   - Documentation (`testing/observability/README.md`) covering how to run the suite, where results land, and how to read the report.
 - **Metric corrections made to get trustworthy scale data** (necessary groundwork, not the primary goal):
-  - **Fix `sbmd.js.heap.peak_bytes`** to also sample at GC-start (pre-compaction), so transient allocation spikes (notably driver loading) are captured before the compacting GC reclaims them and the peak no longer under-reports.
+  - **Add `sbmd.js.gc.alloc_churn_bytes`** histogram: bytes allocated since the previous GC cycle's post-compaction retained set. `sbmd.js.heap.peak_bytes` saturates near the allocator's GC-trigger threshold on every production cycle and so cannot distinguish a heavy allocation burst from a light one; churn is the signal that actually can, computed from data the GC callback already reads at GC start/end.
   - **Remove `sbmd.driver.load.heap_bytes`** (**BREAKING**: metric removed). The per-driver before/after heap delta could read negative when a compaction landed mid-load, making it unsound as shipped.
   - **Add `sbmd.js.heap.live_bytes`** gauge: `heap_used` sampled at GC-end (post-compaction), giving a true-occupancy signal that reveals a genuine retained-memory leak — something no existing heap metric (`used_bytes`, `peak_bytes`, `free_bytes`) can do under a lazy compacting GC, and the specific signal the resource-requirements question needed. Sampling is opportunistic (only on engine-driven GC cycles); it forces no extra collections.
-  - **Add `sbmd.driver.registration.total_ms`** (total wall time to discover, load, activate, and register all SBMD drivers) and **`sbmd.driver.bundle_load_ms`** (one-time SBMD utilities bundle load + capture-function injection time) — needed to separate real driver-load cost from a DEBUG_GC measurement artifact once the dev-container "~5s to load drivers" figure came under scrutiny.
+  - **Add `sbmd.driver.registration.total_ms`** (total wall time to discover, load, activate, and register all SBMD drivers across every configured directory) and **`sbmd.driver.bundle_load_ms`** (one-time SBMD utilities bundle load + capture-function injection time) — needed to separate real driver-load cost from a DEBUG_GC measurement artifact once the dev-container "~5s to load drivers" figure came under scrutiny.
+  - **`BCORE_SBMD_GC_INSTRUMENTATION` now defaults off** (the unconditional per-GC-cycle cost has no business running in shipping builds unconditionally); the dev platform profile enables it explicitly, so local dev, CI, and the observability suite are unaffected.
   - **Add a compile-time guard** in `MQuickJsRuntime.cpp`: enabling `BCORE_SBMD_GC_INSTRUMENTATION` without the mquickjs GC-callback patch (`0003-add-gc-callback-and-root-count.patch`) now fails with a clear `#error` instead of an opaque link failure. The patch itself gains a `MQUICKJS_HAS_GC_CALLBACK` capability macro to make the check possible.
 
 ## Capabilities
@@ -28,7 +29,7 @@ SBMD's resource requirements (the JS heap/arena budget it actually needs per dev
 
 ### Modified Capabilities
 
-- `sbmd-runtime-observability`: metric corrections made so the characterization suite's data could be trusted — `sbmd.driver.load.heap_bytes` requirement removed (unsound); `sbmd.js.heap.peak_bytes` requirement updated to also sample at GC-start; new `sbmd.js.heap.live_bytes`, `sbmd.driver.registration.total_ms`, and `sbmd.driver.bundle_load_ms` requirements added; a new requirement added for the `BCORE_SBMD_GC_INSTRUMENTATION` / mquickjs-patch compile-time guard.
+- `sbmd-runtime-observability`: metric corrections made so the characterization suite's data could be trusted — `sbmd.driver.load.heap_bytes` requirement removed (unsound); new `sbmd.js.heap.live_bytes`, `sbmd.js.gc.alloc_churn_bytes`, `sbmd.driver.registration.total_ms`, and `sbmd.driver.bundle_load_ms` requirements added; a new requirement added for the `BCORE_SBMD_GC_INSTRUMENTATION` / mquickjs-patch compile-time guard.
 
 ## Impact
 

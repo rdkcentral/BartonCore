@@ -167,19 +167,22 @@ def emit_report(scenario, payload):
 def emit_timeseries(scenario, columns, rows, payload=None):
     """Record a time-series scenario: writes a CSV sidecar and folds the rows
     into the consolidated JSON/txt so all three formats stay in sync."""
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
     csv_path = REPORT_DIR / f"{scenario}.csv"
-
-    with csv_path.open("w", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(columns)
-        writer.writerows(rows)
-
     entry = dict(payload or {})
     entry["timeseries"] = {"columns": columns, "rows": rows, "csv": csv_path.name}
 
+    # The CSV write must happen inside the same locked load-mutate-write
+    # transaction as the JSON entry that references it: _load() can trigger
+    # _clear_stale_csv_sidecars() (on a fresh run id) which deletes every
+    # *.csv in REPORT_DIR, so writing the CSV outside the lock risks either a
+    # concurrent writer deleting it out from under the JSON entry, or two
+    # writers racing on the same sidecar file.
     with _locked():
         data = _load()
+        with csv_path.open("w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(columns)
+            writer.writerows(rows)
         data["scenarios"][scenario] = entry
         _write(data)
 

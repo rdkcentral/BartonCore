@@ -1,17 +1,24 @@
 ## MODIFIED Requirements
 
 ### Requirement: Peak heap watermark gauge
-The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recording the highest value of `usage.heap_used` observed since `MQuickJsRuntime::Initialize()`. (`JS_MEMUSAGE_WALK_HEAP` is not set, so `usage.heap_free_blocks` is always 0; `heap_used` is used directly as the high-water mark of heap expansion.) The gauge SHALL be updated with each heap snapshot taken via `RecordHeapSnapshot()` (in-activity and idle captures), AND with a heap-usage sample taken at GC start (`is_end == 0`, before compaction) in `MQuickJsRuntimeMetrics::GCCallback`, folded in via `RecordPeakCandidate()`. The GC-start sample is required because the compacting GC reclaims transient allocation spikes (notably driver loading, which is itself what drives the arena toward the threshold that triggers these GC cycles) before the next in-activity or idle snapshot could otherwise observe them; without it, `peak_bytes` under-reports the true high-water mark. `RecordPeakCandidate()` SHALL only update the gauge (and the internally tracked peak value) when the newly observed `heap_used` exceeds the previously recorded peak, and MUST be called while `MQuickJsRuntime::GetMutex()` is held (the GC callback runs under that lock).
+The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recording the highest value of `usage.heap_used` observed at a heap snapshot taken via `RecordHeapSnapshot()` (in-activity and idle captures only). (`JS_MEMUSAGE_WALK_HEAP` is not set, so `usage.heap_free_blocks` is always 0; `heap_used` is used directly as the high-water mark of heap expansion.) The gauge SHALL only update when the newly observed `heap_used` exceeds the previously recorded peak. This gauge SHALL NOT be sampled from the GC callback: under production's lazy compacting GC, a collection only fires once the arena is nearly exhausted, so a GC-start reading is consistently close to that trigger threshold on every cycle rather than reflecting any particular driver's or handler's true allocation footprint. (An earlier iteration of this change folded a GC-start sample into this gauge via a `RecordPeakCandidate()` method; that approach was found unsound for the reason above and replaced with the `sbmd.js.gc.alloc_churn_bytes` histogram below, which is not subject to the same saturation.)
 
 #### Scenario: Peak watermark monotonically increases
 - **WHEN** successive JS handler invocations allocate progressively more memory
 - **THEN** `sbmd.js.heap.peak_bytes` reflects the highest value observed, never decreasing
 
-#### Scenario: Peak watermark captures a compacted-away spike
-- **WHEN** a transient allocation spike (e.g. during driver loading) drives `heap_used` above the current peak and is fully reclaimed by the next GC cycle before any in-activity or idle snapshot is taken
-- **THEN** `sbmd.js.heap.peak_bytes` still reflects that spike, because it was captured at GC start before compaction
-
 ## ADDED Requirements
+
+### Requirement: Per-GC-cycle allocation churn tracking
+The SBMD runtime SHALL record, for each completed GC cycle after the first, the allocation churn since the previous cycle as a histogram named `sbmd.js.gc.alloc_churn_bytes`, computed as this cycle's pre-compaction `heap_used` (captured at `is_end == 0` in `MQuickJsRuntimeMetrics::GCCallback`) minus the previous cycle's post-compaction `heap_used` (the previous cycle's retained live set). Unlike `sbmd.js.heap.peak_bytes`, this is a cycle-to-cycle delta and so is not saturated by the allocator's GC-trigger threshold — it can distinguish a heavy allocation burst from a light one. The very first GC cycle in a process's lifetime has no prior post-GC baseline and SHALL NOT produce an observation. This histogram SHALL be compiled only when `BCORE_SBMD_GC_INSTRUMENTATION` is enabled.
+
+#### Scenario: Churn recorded from the second GC cycle onward
+- **WHEN** a second (or later) GC cycle completes
+- **THEN** `sbmd.js.gc.alloc_churn_bytes` gains one observation equal to this cycle's pre-compaction `heap_used` minus the previous cycle's post-compaction `heap_used`
+
+#### Scenario: No observation on the very first GC cycle
+- **WHEN** the first GC cycle of a process's lifetime completes
+- **THEN** `sbmd.js.gc.alloc_churn_bytes` gains no observation, because there is no prior post-GC baseline to subtract against
 
 ### Requirement: Retained live-set gauge
 The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.live_bytes` recording `heap_used` sampled at GC end (`is_end == 1`, after compaction) in `MQuickJsRuntimeMetrics::GCCallback`. Because transient garbage has just been reclaimed at this point, the sampled value equals the true retained live set — the one heap metric capable of distinguishing genuine retained-memory growth from the churn that `sbmd.js.heap.used_bytes` and `sbmd.js.heap.peak_bytes` cannot separate from reclaimable garbage under a lazy compacting GC. Sampling SHALL be opportunistic: it SHALL occur only when the engine drives a GC cycle on its own (or an explicit `JS_GC()` call in tests); the runtime SHALL NOT force an additional GC cycle solely to populate this gauge, so it has zero effect on `sbmd.js.heap.peak_bytes` or GC cadence. This gauge SHALL be compiled only when `BCORE_SBMD_GC_INSTRUMENTATION` is enabled (it depends on the `JS_SetGCCallback` API).
@@ -33,11 +40,11 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.live_bytes` recordin
 - **THEN** `sbmd.js.heap.live_bytes` SHALL NOT appear in the telemetry dump
 
 ### Requirement: Driver registration total time tracking
-The SBMD runtime SHALL record the total wall-clock time to discover, load, activate, and register all SBMD drivers as a histogram named `sbmd.driver.registration.total_ms`, measured from the start of `SbmdFactory::RegisterDriversFromDirectory` (before any file discovery) to the point all drivers in the directory have been processed and `sbmd.driver.registered.count` is recorded.
+The SBMD runtime SHALL record the total wall-clock time to discover, load, activate, and register all SBMD drivers across every configured SBMD directory as a single histogram observation named `sbmd.driver.registration.total_ms`, measured from the start of `SbmdFactory::RegisterDrivers` (before iterating the configured directory list) to the point every configured directory has been processed and the final `sbmd.driver.registered.count` is recorded. `SbmdFactory::RegisterDriversFromDirectory` runs once per semicolon-separated directory and SHALL NOT itself start or stop this timer.
 
-#### Scenario: Registration total recorded once per registration pass
-- **WHEN** `SbmdFactory::RegisterDriversFromDirectory` completes processing a directory
-- **THEN** `sbmd.driver.registration.total_ms` contains one observation covering that entire pass, independent of how many individual drivers were loaded
+#### Scenario: Registration total recorded once per startup, independent of directory count
+- **WHEN** `SbmdFactory::RegisterDrivers` finishes processing every configured directory (whether one directory or several)
+- **THEN** `sbmd.driver.registration.total_ms` contains exactly one observation covering the entire pass, independent of how many directories or individual drivers were involved
 
 ### Requirement: SBMD bundle load time tracking
 The SBMD runtime SHALL record the one-time cost of loading the SBMD utilities bundle and injecting the capture function into the shared JS context as a histogram named `sbmd.driver.bundle_load_ms`. This SHALL be recorded exactly once, the first time `SbmdFactory::RegisterDriversFromDirectory` finds the runtime not yet ready (`runtimeReady == false`), and SHALL NOT be recorded again on subsequent calls once the runtime is ready.

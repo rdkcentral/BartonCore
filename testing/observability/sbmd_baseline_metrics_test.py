@@ -78,9 +78,11 @@ _EXPECTED_METRICS = [
 ]
 
 _EXPECTED_GC_METRICS = [
-    ("sbmd.js.gc.count",       "counter"),
-    ("sbmd.js.gc.duration_ms", "histogram"),
-    ("sbmd.js.gc_roots",       "gauge"),
+    ("sbmd.js.gc.count",             "counter"),
+    ("sbmd.js.gc.duration_ms",       "histogram"),
+    ("sbmd.js.gc_roots",             "gauge"),
+    ("sbmd.js.heap.live_bytes",      "gauge"),
+    ("sbmd.js.gc.alloc_churn_bytes", "histogram"),
 ]
 
 # Configured arena size for the dev build.  Gateways may differ; the test

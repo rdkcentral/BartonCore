@@ -1,13 +1,13 @@
 ## 1. Heap metric corrections
 
-- [x] 1.1 In `MQuickJsRuntimeMetrics::GCCallback`, capture pre-compaction `heap_used` at GC start (`is_end == 0`) via `JS_GetMemoryUsage` and fold it into `sbmd.js.heap.peak_bytes` through a new `RecordPeakCandidate(size_t)` method that only advances the gauge when the new reading exceeds the previously recorded peak.
+- [x] 1.1 In `MQuickJsRuntimeMetrics::GCCallback`, capture pre-compaction `heap_used` at GC start (`is_end == 0`) via `JS_GetMemoryUsage`. Post-review, this reading is NOT folded into `sbmd.js.heap.peak_bytes` (a GC only fires once the arena is nearly exhausted under the production allocator, so a GC-start reading is ~constant across cycles and cannot distinguish a heavy cycle from a light one); instead it is used as the "before" side of a new histogram, `sbmd.js.gc.alloc_churn_bytes` (this cycle's pre-compaction `heap_used` minus the previous cycle's post-compaction `heap_used`), recorded at GC end. `peak_bytes` continues to be driven only by `RecordHeapSnapshot()` (in-activity and idle captures).
 - [x] 1.2 In the same callback, capture post-compaction `heap_used` at GC end (`is_end == 1`) and record it as a new gauge `sbmd.js.heap.live_bytes` (created in `MQuickJsRuntimeMetrics`'s constructor, guarded by `BARTON_CONFIG_SBMD_GC_INSTRUMENTATION`). No forced GC is introduced; sampling is opportunistic on engine-driven cycles only.
 - [x] 1.3 Remove `sbmd.driver.load.heap_bytes`: delete the histogram handle, its creation, and `RecordDriverLoadSuccess`'s `std::optional<double> heapDelta` parameter from `SbmdFactoryMetrics`; remove the `usageBefore`/`usageAfter` `JS_GetMemoryUsage` calls and heap-delta computation from `SbmdFactory::RegisterDriversFromDirectory`; update the `#else` stub class to match the new signature.
 - [x] 1.4 Update `openspec/specs/sbmd-runtime-observability/spec.md`'s "Driver load cost tracking" requirement and remove its "Load heap cost recorded per driver" scenario to match the code removal (already done directly, ahead of this change's archive).
 
 ## 2. Driver load timing
 
-- [x] 2.1 Add `sbmd.driver.registration.total_ms` histogram to `SbmdFactoryMetrics`; record it in `SbmdFactory::RegisterDriversFromDirectory` from a `steady_clock::now()` taken before file discovery to a `steady_clock::now()` taken after `sbmd.driver.registered.count` is recorded.
+- [x] 2.1 Add `sbmd.driver.registration.total_ms` histogram to `SbmdFactoryMetrics`; record it in `SbmdFactory::RegisterDrivers` from a `steady_clock::now()` taken before iterating the configured directory list to a `steady_clock::now()` taken after `sbmd.driver.registered.count` is recorded for the final time, once per process (not once per configured directory).
 - [x] 2.2 Add `sbmd.driver.bundle_load_ms` histogram to `SbmdFactoryMetrics`; record it exactly once, timing the `SbmdBundleLoader::LoadBundle` + capture-function-injection block guarded by `!runtimeReady`.
 
 ## 3. GC instrumentation compile-time guard
