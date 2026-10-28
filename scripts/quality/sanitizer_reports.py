@@ -40,8 +40,10 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-# "#3 0x55d0 in func /abs/path/file.c:12:5 (bin+0x1)" or "#3 func /abs/path/file.c:12 (bin+0x1)"
-SAN_FRAME = re.compile(r"^\s*#\d+\s+(?:0x[0-9a-f]+\s+in\s+)?(?P<func>\S+)\s+(?P<file>/\S+?):\d+")
+# "#3 0x55d0 in func /abs/path/file.c:12:5 (bin+0x1)" or "#3 func /abs/path/file.c:12 (bin+0x1)".
+# Demangled C++ names may contain spaces ("ns::f(int, char const*)"), so the
+# function name runs up to the whitespace before the absolute source path.
+SAN_FRAME = re.compile(r"^\s*#\d+\s+(?:0x[0-9a-f]+\s+in\s+)?(?P<func>.+?)\s+(?P<file>/\S+?):\d+")
 SAN_HEADER = re.compile(
     r"(?:ERROR|WARNING): (?P<tool>AddressSanitizer|LeakSanitizer|ThreadSanitizer|UndefinedBehaviorSanitizer): "
     r"(?P<kind>[A-Za-z0-9_ -]+?)(?: \(|$| on | in | at )"

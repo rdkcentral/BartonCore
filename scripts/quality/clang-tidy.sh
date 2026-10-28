@@ -42,6 +42,7 @@ RAW="${REPORT_DIR}/clang-tidy.txt"
 
 set +e
 "$RUN_CLANG_TIDY" -quiet -p "${PRESET_BUILD_DIR}" -j "$(nproc)" \
+    -header-filter="^${QUALITY_ROOT}/(api|core|libs|reference)/" \
     "^${QUALITY_ROOT}/(api|core|libs|reference)/" > "$RAW" 2>"${REPORT_DIR}/clang-tidy.stderr"
 rc=$?
 set -e

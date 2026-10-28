@@ -38,7 +38,8 @@ python3 -c 'import sys, gi; gi.require_version("GIRepository", "2.0"); from gi.r
     || quality_finish blocked "BCore typelib not installed; run 'sudo cmake --build build --target install' (see scripts/ci/run_integration_tests.sh) in the same container first"
 
 set +e
-testing/py_test.sh --cov --cov-report=xml --cov-report=term "$@" > "${REPORT_DIR}/pytest.log" 2>&1
+COVERAGE_FILE="${REPORT_DIR}/.coverage" testing/py_test.sh --cov --cov-report="xml:${REPORT_DIR}/coverage.xml" \
+    --cov-report=term "$@" > "${REPORT_DIR}/pytest.log" 2>&1
 rc=$?
 set -e
 quality_require_file "${REPORT_DIR}/coverage.xml" "pytest-cov produced no coverage.xml (see pytest.log)"

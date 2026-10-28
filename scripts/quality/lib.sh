@@ -55,6 +55,7 @@ quality_init() {
     done
     REPORT_DIR="${REPORTS_ROOT}/${CHECK_NAME}"
     mkdir -p "${REPORT_DIR}"
+    rm -f "${REPORT_DIR}/summary.json"
     cd "${QUALITY_ROOT}"
 }
 

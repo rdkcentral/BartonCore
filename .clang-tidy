@@ -25,6 +25,8 @@
 # Style checks (readability-*, modernize-*) are intentionally excluded; clang-format owns style.
 # Excluded checks and the reasons are documented in docs/REQUIRED_CHECKS.md.
 Checks: '-*,bugprone-*,cert-*,clang-analyzer-*,performance-*,-bugprone-easily-swappable-parameters,-cert-err33-c'
-HeaderFilterRegex: '^(api|core|libs|reference)/'
+# clang-tidy matches HeaderFilterRegex against absolute paths, so the first-party
+# filter (^<repo>/(api|core|libs|reference)/) is passed on the command line by
+# scripts/quality/clang-tidy.sh and the `tidy` preset instead of being set here.
 WarningsAsErrors: ''
 FormatStyle: none

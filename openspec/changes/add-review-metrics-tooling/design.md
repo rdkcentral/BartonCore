@@ -304,6 +304,7 @@ endif()
 - CMake list-valued config defines (`BARTON_CONFIG_MATTER_*_HEADER_PATHS`, `*_IMPLEMENTATIONS`) contain `;`, which makes cppcheck bail out of every translation unit ("bad macro syntax"). The target first runs `config/cmake/modules/cppcheck_compile_db.py`, which writes `compile_commands.cppcheck.json` without `-D` arguments containing `;` (these defines are consumed only by CMake).
 - cppcheck does not predefine compiler macros, so `sbrm.h` ("GCC is required"), `nlbyteorder.h`, and `gstconfig.h` hit `#error` and most translation units were silently skipped. The target passes `-D__GNUC__=13 -D__x86_64__ -D__ORDER_LITTLE_ENDIAN__=1234 -D__ORDER_BIG_ENDIAN__=4321 -D__BYTE_ORDER__=1234` and `-j<logical cores>`.
 - Full-tree analysis then takes ~17 min wall / ~6.3 CPU-hours on a 128-core host. Decision (user): `cppcheck.sh` analyzes only C/C++ sources changed since the merge base with `QUALITY_BASE_REF` (default `origin/main`, else `main`), plus sources that `#include` a changed header; `--full` and `--update-baseline` analyze the whole tree. The selection reaches the target through the `BCORE_CPPCHECK_ONLY` environment variable (a file listing source paths), which the helper uses to filter the compile database.
+- Changed headers are mapped to translation units through the ninja dependency log (`ninja -t deps`) of `build/dev`, so translation units that include a changed header transitively are analyzed too (a basename `git grep` for direct includes missed them).
 
 ---
 
@@ -332,7 +333,7 @@ endif()
     { "name": "asan", "inherits": "dev", "cacheVariables": { "BCORE_BUILD_WITH_ASAN": "ON" } },
     { "name": "ubsan", "inherits": "dev", "cacheVariables": { "BCORE_BUILD_WITH_ASAN": "OFF", "BCORE_BUILD_WITH_UBSAN": "ON" } },
     { "name": "tsan", "inherits": "dev", "cacheVariables": { "BCORE_BUILD_WITH_ASAN": "OFF", "BCORE_BUILD_WITH_TSAN": "ON" } },
-    { "name": "tidy", "inherits": "dev", "cacheVariables": { "BCORE_BUILD_WITH_ASAN": "OFF", "CMAKE_C_CLANG_TIDY": "clang-tidy", "CMAKE_CXX_CLANG_TIDY": "clang-tidy" } }
+    { "name": "tidy", "inherits": "dev", "cacheVariables": { "BCORE_BUILD_WITH_ASAN": "OFF", "CMAKE_C_CLANG_TIDY": "clang-tidy;--header-filter=^${sourceDir}/(api|core|libs|reference)/", "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--header-filter=^${sourceDir}/(api|core|libs|reference)/" } }
   ]
 }
 ```
@@ -360,7 +361,7 @@ Differences from `-C`:
 
 **Decision:**
 
-- `.clang-tidy`: `Checks: '-*,bugprone-*,cert-*,clang-analyzer-*,performance-*,-bugprone-easily-swappable-parameters,-cert-err33-c'`, `HeaderFilterRegex: '^(api|core|libs|reference)/'`, `WarningsAsErrors: ''`, `FormatStyle: none`. Excluded checks are noisy-but-low-value for this C codebase and are listed with reasons in `docs/REQUIRED_CHECKS.md`.
+- `.clang-tidy`: `Checks: '-*,bugprone-*,cert-*,clang-analyzer-*,performance-*,-bugprone-easily-swappable-parameters,-cert-err33-c'`, `WarningsAsErrors: ''`, `FormatStyle: none`. No `HeaderFilterRegex`: clang-tidy matches it against absolute header paths, so `clang-tidy.sh` and the `tidy` preset pass an anchored `--header-filter=^<repo>/(api|core|libs|reference)/` instead, and `third_party/barton_common/CMakeLists.txt` clears `CMAKE_<LANG>_CLANG_TIDY` for BartonCommon's targets. Excluded checks are noisy-but-low-value for this C codebase and are listed with reasons in `docs/REQUIRED_CHECKS.md`.
 - `pyproject.toml` additions:
 
 ```toml
@@ -380,6 +381,7 @@ warn_unused_ignores = true
 
 [tool.coverage.run]
 branch = true
+patch = ["subprocess"]   # testing/conftest.py runs each test in a child pytest; pytest-cov 7 no longer instruments subprocesses
 source = ["testing"]
 data_file = "build/reports/pytest-cov/.coverage"
 

@@ -94,7 +94,7 @@ for arg in "$@"; do
         --sanitizer=*)
             SANITIZER="${arg#*=}"
             ;;
-        --junitxml=*|--junit-xml=*)
+        --junitxml=*|--junit-xml=*|--junitxml|--junit-xml)
             HAS_JUNITXML=true
             PYTEST_ARGS+=("$arg")
             ;;

@@ -39,6 +39,9 @@ warn_unused_ignores = true
 
 [tool.coverage.run]
 branch = true
+# testing/conftest.py runs each test in a child pytest process; pytest-cov 7
+# no longer instruments subprocesses, so coverage.py's own patch is required.
+patch = ["subprocess"]
 source = ["testing"]
 data_file = "build/reports/pytest-cov/.coverage"
 

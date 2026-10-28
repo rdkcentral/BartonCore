@@ -77,7 +77,11 @@ while getopts ":hc:i:sat" option; do
     esac
 done
 
-if [ -e ${MATTER_BUILD_DIR} ]; then
+if [ -e ${MATTER_BUILD_DIR} ] && [ ! -d ${MATTER_INSTALL_DIR} ]; then
+    echo "Matter build dir ${MATTER_BUILD_DIR} exists but install dir ${MATTER_INSTALL_DIR} does not." >&2
+    echo "Each install dir needs its own parent directory (the source/build tree is <parent>/matter). Delete ${MATTER_BUILD_DIR} or choose another install dir." >&2
+    exit 1
+elif [ -e ${MATTER_BUILD_DIR} ]; then
     echo "Matter build dir already exists at: ${MATTER_BUILD_DIR}. Delete it if you want to rebuild Matter."
 else
     rm -rf ${MATTER_INSTALL_DIR}

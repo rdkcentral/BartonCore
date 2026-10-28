@@ -62,8 +62,8 @@
       "inherits": "dev",
       "cacheVariables": {
         "BCORE_BUILD_WITH_ASAN": "OFF",
-        "CMAKE_C_CLANG_TIDY": "clang-tidy",
-        "CMAKE_CXX_CLANG_TIDY": "clang-tidy",
+        "CMAKE_C_CLANG_TIDY": "clang-tidy;--header-filter=^${sourceDir}/(api|core|libs|reference)/",
+        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--header-filter=^${sourceDir}/(api|core|libs|reference)/",
         "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-noasan/matter-install"
       }
     }

@@ -43,6 +43,10 @@ if(NOT bartoncommon_POPULATED)
     FetchContent_Populate(BartonCommon)
     set(BARTONCORE_SAVED_CMAKE_SKIP_INSTALL_RULES ${CMAKE_SKIP_INSTALL_RULES})
     set(CMAKE_SKIP_INSTALL_RULES ON)
+    # Third-party code is not linted; directory-scoped variables shadow the
+    # `tidy` preset's cache entries for BartonCommon's targets only.
+    set(CMAKE_C_CLANG_TIDY "")
+    set(CMAKE_CXX_CLANG_TIDY "")
     add_subdirectory(${bartoncommon_SOURCE_DIR} ${bartoncommon_BINARY_DIR})
     set(CMAKE_SKIP_INSTALL_RULES ${BARTONCORE_SAVED_CMAKE_SKIP_INSTALL_RULES})
     # CMAKE_SKIP_INSTALL_RULES prevents cmake_install.cmake from being generated,

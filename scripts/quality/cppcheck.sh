@@ -31,7 +31,8 @@ quality_init cppcheck "Usage: $0 [--full] [--update-baseline]
 Configures build/dev and runs 'cmake --build build/dev --target cppcheck'.
 By default only C/C++ sources changed since the merge base with
 \${QUALITY_BASE_REF:-origin/main} (falling back to main), plus sources that
-include a changed header, are analyzed. --full and --update-baseline analyze
+include a changed header (directly or transitively, per the ninja dependency
+log), are analyzed. --full and --update-baseline analyze
 every translation unit (slow: whole-tree analysis takes CPU-hours)." "$@"
 
 quality_require_tool cppcheck
@@ -58,10 +59,39 @@ if [[ $full -eq 0 ]]; then
     only="${REPORT_DIR}/analyzed-files.txt"
     {
         grep -E '\.(c|cc|cpp)$' "$changed" || true
-        while IFS= read -r header; do
-            git grep -l -E "#[[:space:]]*include[[:space:]]*[<\"]([^>\"]*/)?$(basename "$header")[>\"]" \
-                -- '*.c' '*.cc' '*.cpp' || true
-        done < <(grep -E '\.(h|hpp)$' "$changed" || true)
+        if grep -qE '\.(h|hpp)$' "$changed"; then
+            # Changed headers: select every translation unit whose compiler
+            # dependency list (ninja deps log) includes one, directly or transitively.
+            ninja -C "${BUILD_ROOT}/dev" -t deps > "${REPORT_DIR}/ninja-deps.txt" 2> /dev/null \
+                || quality_finish error "cannot read ninja dependency log for build/dev"
+            python3 - "$QUALITY_ROOT" "$changed" "${REPORT_DIR}/ninja-deps.txt" <<'PY' \
+                || quality_finish error "cannot map changed headers to translation units"
+import os
+import sys
+
+root = sys.argv[1] + os.sep
+with open(sys.argv[2]) as f:
+    headers = {root + p for p in f.read().split() if p.endswith((".h", ".hpp"))}
+source, hit, found = None, False, False
+with open(sys.argv[3]) as f:
+    for line in f:
+        if not line.startswith(" "):
+            if source and hit and source.startswith(root):
+                print(source.removeprefix(root))
+            source, hit = None, False
+            continue
+        path = os.path.normpath(line.strip())
+        found = True
+        # The first dependency is not always the source (e.g. the ASan ignorelist).
+        if source is None and path.endswith((".c", ".cc", ".cpp")):
+            source = path
+        if path in headers:
+            hit = True
+if source and hit and source.startswith(root):
+    print(source.removeprefix(root))
+sys.exit(0 if found else 1)
+PY
+        fi
     } | sort -u > "$only"
     if [[ ! -s "$only" ]]; then
         : > "${REPORT_DIR}/findings.txt"

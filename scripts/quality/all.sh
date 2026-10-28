@@ -43,6 +43,7 @@ HERE="$(dirname "${BASH_SOURCE[0]}")"
 declare -A RESULTS=()
 for check in "${CHECKS[@]}"; do
     echo "==> ${check}"
+    rm -f "${REPORTS_ROOT}/${check}/summary.json"
     set +e
     case "$check" in
         sanitizers-*) "${HERE}/sanitizers.sh" "${check#sanitizers-}" ;;
