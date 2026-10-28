@@ -9,6 +9,7 @@ OpenSpec v4's `openspec validate` enforces a structural contract for specs (a `#
   - Reword the one requirement in `sbmd-runtime-observability` that lacks a `SHALL`/`MUST` keyword.
 - Install the `openspec` CLI in the Docker builder image (pinned version) and bump the image version, so validation runs identically for developers and in CI.
 - Add a CI workflow that runs `openspec validate --specs --strict` over all specs and fails the build on any error.
+- In the same workflow, fail any pull request whose diff adds or modifies an unarchived change under `openspec/changes/`; proposal-only PRs opt out with the `openspec-proposal` label.
 - Add a `pre-commit` hook that runs the same strict validation locally before each commit.
 
 ## Capabilities

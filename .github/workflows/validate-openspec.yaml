@@ -23,7 +23,8 @@
 
 # The goal of this workflow is to enforce that every OpenSpec spec conforms to
 # the OpenSpec v4 structure by running `openspec validate --specs --strict`
-# inside the builder image (which provides the pinned openspec CLI).
+# inside the builder image (which provides the pinned openspec CLI), and that
+# pull requests do not leave OpenSpec changes unarchived.
 
 name: Validate OpenSpec Specs
 
@@ -32,6 +33,8 @@ on:
         branches:
             - main
     pull_request:
+        # labeled/unlabeled re-evaluate the openspec-proposal override.
+        types: [opened, synchronize, reopened, labeled, unlabeled]
     workflow_dispatch:
 
 # Minimal token scope: checkout (contents) and pulling the builder image from
@@ -78,3 +81,34 @@ jobs:
             -
                 name: Validate specs (strict)
                 run: ./dockerw -n openspec validate --specs --strict --no-interactive
+
+    check_unarchived_openspec_changes:
+        name: Check for Unarchived OpenSpec Changes
+        runs-on: ubuntu-latest
+        # Proposal-only PRs intentionally add an unarchived change; the
+        # openspec-proposal label opts them out of this check.
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'openspec-proposal')
+
+        steps:
+            -
+                name: Checkout code
+                uses: actions/checkout@v4
+                with:
+                    repository: ${{ github.repository }}
+                    fetch-depth: 0
+            -
+                name: Fail if the PR adds or modifies an unarchived change
+                env:
+                    BASE_SHA: ${{ github.event.pull_request.base.sha }}
+                    HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                run: |
+                    unarchived=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA" -- \
+                        'openspec/changes/' ':(exclude)openspec/changes/archive/')
+                    if [ -n "$unarchived" ]; then
+                        echo "::error::This PR adds or modifies OpenSpec changes that are not archived."
+                        echo "Archive them with 'openspec archive <change>' before merging, or apply the"
+                        echo "'openspec-proposal' label if this is a proposal-only PR."
+                        echo "$unarchived"
+                        exit 1
+                    fi
+                    echo "No unarchived OpenSpec changes in this PR."
