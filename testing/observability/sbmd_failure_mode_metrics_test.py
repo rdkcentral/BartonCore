@@ -49,7 +49,6 @@ exercised via the matter_deferred_cmd_test_device fixture.
 import pytest
 
 from testing.helpers.sbmd_metrics_helpers import (
-    bucket_sum,
     find_datapoint,
     format_histogram,
     get_metrics,
@@ -61,6 +60,7 @@ pytestmark = [pytest.mark.requires_matterjs]
 _DRIVER = "deferred-command-test"
 _OP_TYPE = "execute"
 _N = 5
+_SCRIPT_TIMEOUT_MS = 5000  # BCORE_SBMD_SCRIPT_TIMEOUT_MS
 
 
 def _commission(default_environment, matter_deferred_cmd_test_device):
@@ -133,8 +133,9 @@ def test_timeout_outcome_records_duration_in_high_latency_buckets(
     The spec states that timeout outcomes are recorded only in handler.outcome;
     sbmd.js.exception is NOT incremented for handler-phase timeouts.
 
-    The duration observation must land in a high-latency bucket (>= 5000 ms
-    bound, index 12+) confirming the script timeout was the cause.
+    The duration observation's recorded max must be at or above the
+    BCORE_SBMD_SCRIPT_TIMEOUT_MS watchdog bound, confirming the script
+    timeout was the cause.
 
     This test takes ~5 s to complete.
     """
@@ -166,12 +167,17 @@ def test_timeout_outcome_records_duration_in_high_latency_buckets(
 
     assert dur_dp is not None, "handler.duration_ms not recorded for timeout path"
     assert dur_dp["count"] == 1
-    # Duration must be in a high-latency bucket (>= 5000 ms, bucket index 12+).
-    high_latency = bucket_sum(dur_dp, 12, 16)
-    print(f"\n  Observations in >=5000 ms buckets: {high_latency}")
-    assert high_latency >= 1, (
-        f"Timeout handler duration not in expected high-latency buckets. "
-        f"Bucket distribution: {dur_dp.get('buckets')}, max={dur_dp.get('max')} ms"
+    # Check the recorded max directly rather than a histogram bucket range:
+    # bucket index 12 is "(2.5k, 5k]", so a bucket_sum(dp, 12, 16) check would
+    # also accept a handler well under the watchdog, and the exact 5000 ms
+    # boundary itself still falls in bucket 12 (le=5000), not 13 — neither
+    # fixed bucket range can express ">= 5000 ms" precisely.
+    dur_max = dur_dp.get("max")
+    print(f"\n  handler.duration_ms max: {dur_max} ms (watchdog: {_SCRIPT_TIMEOUT_MS} ms)")
+    assert dur_max is not None and dur_max >= _SCRIPT_TIMEOUT_MS, (
+        f"Timeout handler duration max ({dur_max} ms) is below the "
+        f"{_SCRIPT_TIMEOUT_MS} ms watchdog bound. Bucket distribution: "
+        f"{dur_dp.get('buckets')}"
     )
 
 
