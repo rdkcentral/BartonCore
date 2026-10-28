@@ -32,9 +32,17 @@ on:
     push:
         branches:
             - main
+        paths:
+            - 'openspec/**'
+            - '.github/workflows/validate-openspec.yaml'
+            - 'docker/Dockerfile'
     pull_request:
         # labeled/unlabeled re-evaluate the openspec-proposal override.
         types: [opened, synchronize, reopened, labeled, unlabeled]
+        paths:
+            - 'openspec/**'
+            - '.github/workflows/validate-openspec.yaml'
+            - 'docker/Dockerfile'
     workflow_dispatch:
 
 # Minimal token scope: checkout (contents) and pulling the builder image from
