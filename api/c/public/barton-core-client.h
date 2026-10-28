@@ -236,7 +236,8 @@ gboolean b_core_client_start(BCoreClient *self);
  *
  * Reconfigurations that have not started are cancelled. One that is already running is asked to stop, and this call
  * then waits up to 120 seconds for it to finish (including delivery of its completion event) before stopping drivers
- * and subsystems. This wait is in addition to the time the drivers and subsystems themselves take to stop.
+ * and subsystems. It likewise waits, up to 120 seconds, for a startup pass that is in progress. These waits are in
+ * addition to the time the drivers and subsystems themselves take to stop.
  *
  * A host that ends the process before this call returns does not lose the device being reconfigured: its
  * reconfiguration is retried the next time the service starts. The exception is the brief moment in which the

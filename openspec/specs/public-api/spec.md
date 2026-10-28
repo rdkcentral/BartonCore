@@ -53,11 +53,11 @@ The system SHALL support Matter device commissioning via `b_core_client_commissi
 - **THEN** the service SHALL return a `BCoreCommissioningInfo` containing `manual-code` and `qr-code` strings
 
 ### Requirement: Device CRUD operations
-The system SHALL provide functions to query, lookup, and remove devices: `get_devices()`, `get_device_by_id()`, `get_device_by_uri()`, `get_devices_by_device_class()`, `get_devices_by_subsystem()`, `remove_device()`. Single-device lookups (`get_device_by_id()`, `get_device_by_uri()`) SHALL accept a `GError **err` out-parameter and are gated as described in "Readiness and reconfiguration error domain". List getters (`get_devices()`, `get_devices_by_device_class()`, `get_devices_by_subsystem()`) SHALL NOT be gated and SHALL include devices that are reconfiguring: a reconfiguring device still exists, and an omitted or empty result would be indistinguishable from removal.
+The system SHALL provide functions to query, lookup, and remove devices: `get_devices()`, `get_device_by_id()`, `get_device_by_uri()`, `get_devices_by_device_class()`, `get_devices_by_subsystem()`, `remove_device()`. Single-device lookups (`get_device_by_id()`, `get_device_by_uri()`) SHALL accept a `GError **err` out-parameter and are gated as described in "Readiness and reconfiguration error domain". List getters (`get_devices()`, `get_devices_by_device_class()`, `get_devices_by_subsystem()`) SHALL NOT be gated and SHALL include devices that are reconfiguring: a reconfiguring device still exists, and an omitted or empty result would be indistinguishable from removal. The exception is the moment in which a reconfiguration replaces the device's stored record, when a list MAY omit it; clients SHALL rely on `device-removed`, not on a device's absence from a list, to detect removal.
 
 #### Scenario: Get all devices
 - **WHEN** `b_core_client_get_devices()` is called, whether or not the service is ready and whether or not any device is reconfiguring
-- **THEN** the service SHALL return a `GList*` of all known `BCoreDevice` objects, including any device currently undergoing reconfiguration
+- **THEN** the service SHALL return a `GList*` of all known `BCoreDevice` objects, including any device currently undergoing reconfiguration, except momentarily while a reconfiguration replaces its stored record
 
 #### Scenario: Get device by UUID
 - **WHEN** `b_core_client_get_device_by_id()` is called with a valid UUID while the service is ready and the device is not reconfiguring

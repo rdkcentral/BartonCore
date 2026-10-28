@@ -104,7 +104,8 @@ unset with `NULL`/`FALSE` means not found or failed.
   precedence, so a call that fails both reports `NOT_READY`.
 - List getters (`get_devices`, `get_devices_by_device_class`, `get_devices_by_subsystem`,
   `get_endpoints_by_profile`, `get_metadata_by_uri`, `query_resources_by_uri`) are not gated at all
-  and keep their signatures. They include reconfiguring devices: such a device still exists (it can
+  and keep their signatures. They include reconfiguring devices (except in the instant the swap replaces
+  the record, a known limitation): such a device still exists (it can
   be removed, operated, and has metadata), so omitting it makes "busy" indistinguishable from
   "removed" with no accompanying `device-removed` event. Clients that reconcile their own records
   against a list would delete it, and because reconfiguration used to announce nothing, a client whose
@@ -185,7 +186,14 @@ readiness flags under the same mutex, so readiness is never re-published after s
 `deviceServiceIsReadyForDeviceOperation()` also checks the shutting-down flag, so readiness ends the
 moment shutdown begins rather than when shutdown later clears the flags. A
 ready callback that arrives after shutdown has begun (e.g. a subsystem finishing a delayed
-initialization) is ignored entirely, so it can't re-raise `subsystemsReadyForDevices` either.
+initialization) is ignored entirely, so it can't re-raise `subsystemsReadyForDevices` either. Because
+the pass now runs on the ready-callback thread rather than the initializer thread pool (whose
+destruction shutdown already waited for), shutdown counts ready callbacks in flight and waits for them
+(up to 120 s, like the reconfiguration wait) before tearing down the thread pool and drivers they use.
+A callback on shutdown's own thread (a ready-event handler that stops the service) is not waited for.
+A repeated pass skips any device that already has a reconfiguration pending, whatever its snapshot
+says, so a device pending for another reason (for example after a firmware upgrade) isn't synchronized
+underneath that reconfiguration.
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
@@ -428,7 +436,9 @@ clears it:
   running task finishes). No production code was restructured for it, but it exposed one pre-existing
   bug: `stopMainLoop()` called `g_main_loop_quit()` directly, and a quit issued before the event thread
   entered `g_main_loop_run()` was lost, leaving `pthread_join()` waiting forever when the service was
-  stopped right after starting. It now quits from inside the loop with a high-priority idle callback.
+  stopped right after starting. It now quits repeatedly until the event thread reports that its loop
+  returned, which also works when the application iterates the default context itself (a quit sent as
+  a source on that context could be dispatched by the application's loop first).
   What it cannot show: a real driver's reconfiguration completing (the integration harness can't restart
   Barton in-process, and running one to completion crashes in the Matter SBMD driver for reasons
   unrelated to this change), and the condition-variable clock fix, whose only observable effect is that

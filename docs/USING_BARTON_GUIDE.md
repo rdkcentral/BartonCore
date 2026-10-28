@@ -72,7 +72,9 @@ Treat both as "try again later", not "not found", and pass a `GError **` rather 
 tell them apart. As with any GLib function, the `GError *` you pass must be `NULL` (a cleared error);
 `b_core_client_read_resource` and `b_core_client_read_metadata` now check this and return `NULL` if it is
 not. List functions (such as `b_core_client_get_devices`), `b_core_client_write_resource` and
-`b_core_client_execute_resource` are never refused; lists include devices that are being reconfigured.
+`b_core_client_execute_resource` are never refused; lists include devices that are being reconfigured,
+except for the brief moment in which a reconfiguration replaces the device's stored record. So don't
+treat a device missing from one list as removed: rely on `device-removed` for that.
 
 How long a device stays in reconfiguration depends on why it is being rebuilt. After a firmware
 upgrade the drivers wait about 60 seconds for the device to restart before reconfiguring it. A
@@ -87,7 +89,8 @@ endpoint ID and URI), and otherwise retry the lookup after the configuration eve
 
 Configuration events for the same device can overlap if it is reconfigured again while the previous
 reconfiguration's event is still being delivered. An older event can then arrive after a newer one, or
-not at all, so treat the most recent event for a device as describing its current state. In that case
+not at all, so treat each event as a cue to re-read the device (with a bounded retry), not as its
+current state. In that case
 a handler that removes the device can also wait up to 60 seconds for the other event's handlers.
 
 `b_core_client_stop` lets a reconfiguration that is still running finish, so it can take up to 120

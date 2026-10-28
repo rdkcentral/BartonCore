@@ -129,6 +129,8 @@ static bool shutdownReleased;
 static bool shutdownBegan;
 static bool commFailShutdownCalled; // shutdown got past waiting for reconfigurations
 static bool passReachedDevice;
+static bool passReleased;
+static void (*readyEventHook)(void);
 
 static bool probeShutdownWait;
 static const char *requestWhileCancelling; // device to request a reconfiguration of once a cancel was attempted
@@ -206,6 +208,11 @@ static bool IsDeviceRemovedEventSent(void)
 static bool IsRequestReturned(void)
 {
     return requestReturned;
+}
+
+static bool IsPassReleased(void)
+{
+    return passReleased;
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
@@ -476,7 +483,14 @@ void __wrap_sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReason reason
     readyEventCount++;
     readyWhenReadyEventSent = ready;
     pendingWhenReadyEventSent = pending;
+    void (*hook)(void) = readyEventHook;
     g_mutex_unlock(&fakeLock);
+
+    // Runs as a client's status-changed handler would: on the thread publishing readiness.
+    if (hook != NULL)
+    {
+        hook();
+    }
 }
 
 void __wrap_sendDeviceReconfigurationFinishedEvent(const char *deviceClass, const char *uuid, bool succeeded)
@@ -850,6 +864,8 @@ static void ResetFakes(void)
     shutdownBegan = false;
     commFailShutdownCalled = false;
     passReachedDevice = false;
+    passReleased = false;
+    readyEventHook = NULL;
     probeShutdownWait = false;
     requestWhileCancelling = NULL;
     requestDuringSwap = false;
@@ -968,6 +984,70 @@ static void BlockUntilShutdownBegins(void)
     g_cond_broadcast(&fakeCond);
     WaitLocked(IsShutdownBegun, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     g_mutex_unlock(&fakeLock);
+}
+
+// Class version hook: holds the startup pass at its first device until the test releases it.
+static void HoldPassUntilReleased(void)
+{
+    g_mutex_lock(&fakeLock);
+    passReachedDevice = true;
+    g_cond_broadcast(&fakeCond);
+    WaitLocked(IsPassReleased, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+}
+
+// Ready-event hook: a client that stops the service from its status-changed handler.
+static void StopClientFromReadyHandler(void)
+{
+    b_core_client_stop(testClient);
+}
+
+// Shutdown waits for a startup pass in progress before tearing down the drivers and thread pool it uses.
+static void test_shutdownWaitsForStartupPassInProgress(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    classVersionHook = HoldPassUntilReleased;
+
+    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
+
+    g_mutex_lock(&fakeLock);
+    bool passAtDevice = WaitLocked(IsPassAtDevice, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+
+    GThread *stopThread = g_thread_new("stop", StopClient, fixture->client);
+
+    g_mutex_lock(&fakeLock);
+    bool shutdownPassedDuringPass = WaitLocked(IsCommFailShutdownCalled, BLOCKED_PROBE_USECS);
+    passReleased = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
+
+    g_thread_join(passThread);
+    g_thread_join(stopThread);
+    fixture->stopped = true;
+
+    assert_true(passAtDevice);
+    assert_false(shutdownPassedDuringPass);
+    assert_int_equal(GetScheduledCount(), 0);
+    assert_int_equal(readyEventCount, 0);
+}
+
+// A client may stop the service from its ready-event handler; shutdown must not wait for the pass it is in.
+static void test_stopFromReadyEventHandlerDoesNotWaitForItself(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    readyEventHook = StopClientFromReadyHandler;
+    gint64 start = g_get_monotonic_time();
+
+    readyForDevices();
+    fixture->stopped = true;
+
+    assert_true(g_get_monotonic_time() - start < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    assert_int_equal(readyEventCount, 1);
 }
 
 // Shutdown beginning mid-pass stops scheduling and withholds readiness.
@@ -1513,6 +1593,26 @@ static void test_repeatedStartupPassSkipsPendingDevice(void **state)
     assert_int_equal(GetSyncCount("stale"), 0);
 }
 
+// A repeated pass leaves alone a device whose record is current but that has a reconfiguration pending for another
+// reason (here, as after a firmware upgrade): it is neither synchronized under that reconfiguration nor reconfigured
+// again.
+static void test_repeatedStartupPassSkipsDevicePendingForOtherReason(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    readyForDevices();
+    assert_int_equal(GetSyncCount("current"), 1);
+
+    deviceServiceReconfigureDevice("current", 60, NULL, false);
+    assert_int_equal(GetScheduledCount(), 1);
+
+    readyForDevices();
+
+    assert_int_equal(GetScheduledCount(), 1);
+    assert_int_equal(GetSyncCount("current"), 1);
+}
+
 static void test_repeatedStartupPassRechecksCurrentRecord(void **state)
 {
     (void) state;
@@ -1580,6 +1680,9 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(
             test_shutdownDuringStartupPassWithholdsReadiness, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_readinessWithdrawnOnceShutdownBegins, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_shutdownWaitsForStartupPassInProgress, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_stopFromReadyEventHandlerDoesNotWaitForItself, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_reconfigurationFinishUnpendsBeforeNotifying, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_schedulingFailureLeavesDeviceNotPending, SetupService, TeardownService),
@@ -1616,6 +1719,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(test_shutdownWaitsForRunningReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_repeatedStartupPassSkipsPendingDevice, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_repeatedStartupPassRechecksCurrentRecord, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_repeatedStartupPassSkipsDevicePendingForOtherReason, SetupService, TeardownService),
 #ifdef OBSERVABILITY_BACKEND_RECORDS_GAUGES
         cmocka_unit_test_setup_teardown(test_pendingGaugeTracksPendingReconfigurations, SetupService, TeardownService),
 #endif

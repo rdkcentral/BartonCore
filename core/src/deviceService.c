@@ -114,6 +114,12 @@ static bool finalizeNewDevice(icDevice *device, bool sendEvents, bool inRepairMo
 
 static void subsystemManagerReadyForDevicesCallback();
 
+static void PublishReadinessForDevices(void);
+
+static pthread_cond_t *ReadyCallbacksCond(void);
+
+static void WaitForReadyCallbacksLocked(void);
+
 static void deviceDescriptorsReadyForPairingCallback(void);
 
 static void descriptorsUpdatedCallback(void);
@@ -344,6 +350,14 @@ static bool subsystemsReadyForDevices = false;
 // Published readiness (deviceServiceIsReadyForDeviceOperation); set only after the startup pass has marked every device
 // needing reconfiguration as pending, so no caller can observe "ready" while a soon-to-be-replaced device is unflagged.
 static bool deviceOperationsReady = false;
+
+// Readiness callbacks (startup passes) running, under subsystemsAreReadyMutex. Shutdown waits for them before tearing
+// down the drivers and thread pool they use, except those running on its own thread (a handler of the ready event that
+// stops the service), which readyCallbackDepth counts.
+static int readyCallbacksInFlight = 0;
+static __thread int readyCallbackDepth = 0;
+// Only access through ReadyCallbacksCond(): timed waits need the monotonic clock initTimedWaitCond() sets.
+static pthread_cond_t readyCallbacksCond;
 
 static bool isDeviceDescriptorsListReady = false;
 
@@ -1857,6 +1871,8 @@ void allServicesAvailableNotify(void)
  */
 static GMainLoop *eventLoop;
 static pthread_t eventThread;
+/* Atomic: set by the event thread once its loop has returned */
+static gint eventLoopExited;
 
 /**
  * This is run by startMainLoop as the glib global default thread context
@@ -1869,6 +1885,7 @@ static void *glibEventRunner(GMainLoop *mainLoop)
 
     g_main_loop_run(mainLoop);
     g_info("eventLoop quit");
+    g_atomic_int_set(&eventLoopExited, TRUE);
 
     g_main_loop_unref(mainLoop);
 
@@ -1899,22 +1916,22 @@ static void *glibEventRunner(GMainLoop *mainLoop)
  */
 static void startMainLoop(void)
 {
+    g_atomic_int_set(&eventLoopExited, FALSE);
     eventLoop = g_main_loop_new(NULL, FALSE);
     createThread(&eventThread, (taskFunc) glibEventRunner, g_main_loop_ref(eventLoop), "glibEvt");
 }
 
-static gboolean QuitMainLoop(gpointer loop)
-{
-    g_main_loop_quit(loop);
-
-    return G_SOURCE_REMOVE;
-}
-
 static void stopMainLoop(void)
 {
-    // Quit from inside the loop: a g_main_loop_quit() issued before the event thread enters g_main_loop_run() is lost,
-    // which would leave the join below waiting forever.
-    g_idle_add_full(G_PRIORITY_HIGH, QuitMainLoop, g_main_loop_ref(eventLoop), (GDestroyNotify) g_main_loop_unref);
+    // A g_main_loop_quit() issued before the event thread enters g_main_loop_run() is lost (run marks the loop running
+    // again), so quit until the thread reports that its loop returned. Quitting directly, rather than from a source,
+    // also works when the application iterates the default context itself and could dispatch that source first.
+    while (g_atomic_int_get(&eventLoopExited) == FALSE)
+    {
+        g_main_loop_quit(eventLoop);
+        g_usleep(10 * G_TIME_SPAN_MILLISECOND);
+    }
+
     pthread_join(eventThread, NULL);
 
     g_main_loop_unref(g_steal_pointer(&eventLoop));
@@ -2124,6 +2141,10 @@ void deviceServiceShutdown()
     mutexLock(&subsystemsAreReadyMutex);
     subsystemsReadyForDevices = false;
     deviceOperationsReady = false;
+
+    // A startup pass in progress uses drivers and the thread pool; it stops at its next device now that shutdown has
+    // begun, so let it finish before tearing those down.
+    WaitForReadyCallbacksLocked();
     mutexUnlock(&subsystemsAreReadyMutex);
 
     mutexLock(&deviceDescriptorsListLatestMutex);
@@ -3423,10 +3444,13 @@ static void subsystemManagerReadyForDevicesCallback()
     pthread_mutex_lock(&subsystemsAreReadyMutex);
     bool stopping = deviceServiceIsShuttingDown();
 
-    // A subsystem can finish initializing during shutdown; don't undo shutdown's reset of this flag.
+    // A subsystem can finish initializing during shutdown; don't undo shutdown's reset of this flag. Otherwise count
+    // this callback as in flight, under the same lock shutdown checks it with, so shutdown waits for it.
     if (stopping == false)
     {
         subsystemsReadyForDevices = true;
+        readyCallbacksInFlight++;
+        readyCallbackDepth++;
     }
 
     pthread_mutex_unlock(&subsystemsAreReadyMutex);
@@ -3438,6 +3462,17 @@ static void subsystemManagerReadyForDevicesCallback()
         return;
     }
 
+    PublishReadinessForDevices();
+
+    pthread_mutex_lock(&subsystemsAreReadyMutex);
+    readyCallbacksInFlight--;
+    readyCallbackDepth--;
+    pthread_cond_broadcast(ReadyCallbacksCond());
+    pthread_mutex_unlock(&subsystemsAreReadyMutex);
+}
+
+static void PublishReadinessForDevices(void)
+{
     // Mark every device needing reconfiguration as pending before readiness is published (to the client gate,
     // device service status, drivers and the ready event), so no device is readable while awaiting replacement.
     startDeviceInitialization();
@@ -3462,6 +3497,45 @@ static void subsystemManagerReadyForDevicesCallback()
 
     notifyDriversForServiceStatusChange();
     sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonReadyForDeviceOperation);
+}
+
+static void InitReadyCallbacksCond(void)
+{
+    initTimedWaitCond(&readyCallbacksCond);
+}
+
+static pthread_cond_t *ReadyCallbacksCond(void)
+{
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+
+    pthread_once(&once, InitReadyCallbacksCond);
+
+    return &readyCallbacksCond;
+}
+
+// Caller holds subsystemsAreReadyMutex and has begun shutting down. Bounded like the wait for running reconfigurations.
+static void WaitForReadyCallbacksLocked(void)
+{
+    struct timespec start, now;
+
+    getCurrentTime(&start, supportMonotonic());
+
+    while (readyCallbacksInFlight - readyCallbackDepth > 0)
+    {
+        getCurrentTime(&now, supportMonotonic());
+
+        long elapsedSecs = now.tv_sec - start.tv_sec;
+
+        if (elapsedSecs >= SHUTDOWN_RECONFIGURATION_WAIT_SEC)
+        {
+            icWarn("Startup pass still running after %d seconds; continuing shutdown",
+                   SHUTDOWN_RECONFIGURATION_WAIT_SEC);
+            break;
+        }
+
+        incrementalCondTimedWait(
+            ReadyCallbacksCond(), &subsystemsAreReadyMutex, (int) (SHUTDOWN_RECONFIGURATION_WAIT_SEC - elapsedSecs));
+    }
 }
 
 // the time zone changed... notify any devices that have the well-known timezone resource
@@ -4127,22 +4201,20 @@ static void startDeviceInitialization(void)
     {
         icDevice *device = linkedListIteratorGetNext(iterator);
 
-        // Scheduled synchronously so the device is already pending when readiness is published.
-        if (DeviceNeedsReconfiguring(device) == true)
+        // A device with a reconfiguration pending (from an earlier pass, or requested for another reason such as a
+        // firmware upgrade) is covered by it, including its synchronization, whatever this snapshot says.
+        if (deviceServiceIsReconfigurationPending(device->uuid) == true)
         {
-            // A repeated pass may see a device an earlier pass is still reconfiguring (which covers synchronization).
-            if (deviceServiceIsReconfigurationPending(device->uuid) == true)
-            {
-                continue;
-            }
+            continue;
+        }
 
-            // ...or one it already finished, since this snapshot may predate that.
-            if (deviceServiceDeviceNeedsReconfiguring(device->uuid) == true)
-            {
-                deviceServiceReconfigureDevice(device->uuid, 0, reconfigurationCompletedCallback, false);
+        // Scheduled synchronously so the device is already pending when readiness is published. Checked again against
+        // the current record, since this snapshot may predate an earlier pass's reconfiguration finishing.
+        if (DeviceNeedsReconfiguring(device) == true && deviceServiceDeviceNeedsReconfiguring(device->uuid) == true)
+        {
+            deviceServiceReconfigureDevice(device->uuid, 0, reconfigurationCompletedCallback, false);
 
-                continue;
-            }
+            continue;
         }
 
         if (QueueDeviceSynchronization(device->uuid) == false)
