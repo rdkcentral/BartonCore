@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Agent Skill: Matter Virtual Devices
+
+## Purpose
+
+Defines the structure and required content of the `matter-virtual-devices` agent skill, covering pre-built Matter sample apps, `chip-tool`, matter.js virtual devices, and authoring custom virtual device types.
+
+## Requirements
 
 ### Requirement: Matter virtual devices skill SKILL.md conforms to Agent Skills spec
 The `matter-virtual-devices` skill SHALL be located at `.github/skills/matter-virtual-devices/SKILL.md`. The frontmatter SHALL include `name: matter-virtual-devices`, a `description` field explaining the skill covers working with Matter test devices, and `compatibility` noting the BartonCore Docker development container.

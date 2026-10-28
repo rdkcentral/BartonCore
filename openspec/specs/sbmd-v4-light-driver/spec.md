@@ -1,4 +1,10 @@
-## ADDED Requirements
+# SBMD v4 Light Driver
+
+## Purpose
+
+Specifies the v4 JavaScript SBMD light driver: on/off via attribute and write handlers, the optional current-level resource, and continued unchanged passing of existing integration tests.
+
+## Requirements
 
 ### Requirement: Light driver as v4 JavaScript file
 The light driver SHALL be implemented as a single `light.sbmd.js` file using the v4 `SbmdDriver({...})` registration format. It SHALL declare constants for all cluster, attribute, command, and resource IDs. It SHALL support the same device types as the v3 `light.sbmd` driver.

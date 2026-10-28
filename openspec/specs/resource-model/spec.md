@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Resource Model
+
+## Purpose
+
+Specifies the URI-based, protocol-agnostic resource model: resource addressing, string-serialized values, the type system, the mode bitmask, caching and lazy-save policy, the device-class and endpoint-profile contracts, device-class versioning, and common device-level resources.
+
+## Requirements
 
 ### Requirement: URI-based resource addressing
 The system SHALL address all device data using a hierarchical URI scheme: `/<deviceId>` for devices, `/<deviceId>/ep/<N>` for endpoints, `/<deviceId>/ep/<N>/r/<resourceName>` for endpoint resources, `/<deviceId>/r/<resourceName>` for device-level resources, and `/<deviceId>/ep/<N>/m/<metadataName>` or `/<deviceId>/m/<metadataName>` for metadata.
