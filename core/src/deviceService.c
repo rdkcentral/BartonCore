@@ -342,8 +342,9 @@ typedef struct
 
 static GHashTable *devicesBeingRemoved = NULL;
 
-// Devices a startup pass skipped because a reconfiguration of them was already pending (set of uuids). If that
-// reconfiguration fails, the device still gets the synchronization the pass would have queued.
+// Devices whose synchronization was left to a pending reconfiguration of them (set of uuids): skipped by a startup
+// pass, or by a removal that then failed (see EndDeviceRemoval()). If that reconfiguration fails, the device still gets
+// the synchronization.
 static GHashTable *devicesAwaitingStartupSync = NULL;
 static ObservabilityGauge *pendingReconfigurationGauge = NULL;
 static uint16_t discoveryTimeoutSeconds = 0;
@@ -4099,8 +4100,8 @@ FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, con
         ctx->reconfigurationCompleted(result, ctx->deviceUuid);
     }
 
-    // A startup pass skipped this device's synchronization because this reconfiguration was pending, and it failed. (A
-    // startup reconfiguration's own callback already falls back.)
+    // This device's synchronization was left to this reconfiguration (by a startup pass or a failed removal), and it
+    // failed. (A startup reconfiguration's own callback already falls back.)
     if (BeginFinishingReconfiguration(ctx) == true && result == false &&
         ctx->reconfigurationCompleted != reconfigurationCompletedCallback)
     {
@@ -5371,7 +5372,7 @@ static uint16_t CountBlockingReconfigurationsLocked(void)
 
 // Moves the context from the pending map to the finishing list in one step, so removal and shutdown never see it in
 // neither.
-// Returns true if a startup pass skipped the device's synchronization while this reconfiguration was pending.
+// Returns true if the device's synchronization was left to this reconfiguration (see devicesAwaitingStartupSync).
 static bool BeginFinishingReconfiguration(ReconfigureDeviceContext *ctx)
 {
     bool awaitingSync = false;
