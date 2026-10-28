@@ -50,10 +50,11 @@ namespace barton
             "sbmd.js.heap.free_bytes", "Bytes between top of heap and bottom of JS call stack", "By");
         heapPeakGauge = observabilityGaugeCreate(
             "sbmd.js.heap.peak_bytes",
-            "All-time high-water mark of heap_used since last init. Captured at GC start "
-            "(pre-compaction) as well as at every heap snapshot, so it includes transient "
-            "allocation spikes — notably driver loading — that the compacting GC would otherwise "
-            "reclaim before the next sample could observe them",
+            "All-time high-water mark of heap_used observed at handler-invocation heap snapshots "
+            "(periodic idle sampler and forced snapshots). Under production's lazy compacting GC "
+            "this tends toward the GC trigger threshold rather than reflecting any one driver's "
+            "true allocation footprint — see sbmd.js.gc.alloc_churn_bytes for a per-cycle signal "
+            "that is not subject to this saturation",
             "By");
         mutexWaitHisto = observabilityHistogramCreate(
             "sbmd.js.mutex.wait_ms", "Time spent waiting to acquire the JS mutex before a handler call", "ms");
@@ -72,6 +73,14 @@ namespace barton
             "high-water), this is the metric that reveals genuine retained-memory growth — a slow "
             "leak shows here as a rising post-GC floor. Sampled opportunistically on engine-driven "
             "GC cycles only, so it adds no forced collections",
+            "By");
+        gcAllocChurnHisto = observabilityHistogramCreate(
+            "sbmd.js.gc.alloc_churn_bytes",
+            "Bytes allocated since the previous GC cycle's post-compaction live set (this cycle's "
+            "pre-compaction heap_used minus the previous cycle's post-compaction heap_used). The "
+            "honest replacement for 'how much did driver loading / a handler burst allocate', "
+            "since peak_bytes saturates near the GC trigger threshold on every cycle and cannot "
+            "distinguish a heavy cycle from a light one",
             "By");
 #endif
     }
@@ -195,15 +204,6 @@ namespace barton
         observabilityGaugeRecord(gcRootsGauge, static_cast<int64_t>(gcRootCount));
     }
 
-    void MQuickJsRuntimeMetrics::RecordPeakCandidate(size_t heapUsed)
-    {
-        if (static_cast<int64_t>(heapUsed) > peakHeapRecorded)
-        {
-            peakHeapRecorded = static_cast<int64_t>(heapUsed);
-            observabilityGaugeRecord(heapPeakGauge, peakHeapRecorded);
-        }
-    }
-
     void MQuickJsRuntimeMetrics::RecordArenaSize(int64_t bytes)
     {
         observabilityGaugeRecord(heapArenaGauge, bytes);
@@ -240,18 +240,18 @@ namespace barton
             metrics->gcStartTime = std::chrono::steady_clock::now();
 
             // At GC start the heap has not yet been compacted, so heap_used is at its maximum
-            // for this cycle. This is the only point where transient allocation spikes (notably
-            // driver loading, which drives the arena toward its limit and triggers these very GC
-            // cycles) are observable before the compacting GC reclaims them. Fold it into the
-            // all-time peak. We are already on the thread holding the JS mutex, so read usage
-            // directly without re-locking.
+            // for this cycle. Under production's lazy allocator this value is ~constant across
+            // cycles (a GC only fires once the arena is nearly exhausted), so it is NOT a useful
+            // peak_bytes candidate — captured here only as the "before" side of the allocation-
+            // churn calculation at GC end. We are already on the thread holding the JS mutex, so
+            // read usage directly without re-locking.
             if (ctx)
             {
                 JSMemoryUsage usage = {};
 
                 if (JS_GetMemoryUsage(ctx, &usage, 0) == 0)
                 {
-                    metrics->RecordPeakCandidate(usage.heap_used);
+                    metrics->preGCHeapUsed = usage.heap_used;
                 }
             }
 
@@ -275,7 +275,20 @@ namespace barton
 
             if (JS_GetMemoryUsage(ctx, &usage, 0) == 0)
             {
-                observabilityGaugeRecord(metrics->heapLiveGauge, static_cast<int64_t>(usage.heap_used));
+                auto postGCHeapUsed = static_cast<int64_t>(usage.heap_used);
+
+                observabilityGaugeRecord(metrics->heapLiveGauge, postGCHeapUsed);
+
+                // Churn = what this cycle's allocations added on top of the PREVIOUS cycle's
+                // retained live set. No prior baseline on the very first cycle, so skip it.
+                if (metrics->prevPostGCHeapUsed >= 0)
+                {
+                    double churn = static_cast<double>(metrics->preGCHeapUsed) -
+                                   static_cast<double>(metrics->prevPostGCHeapUsed);
+                    observabilityHistogramRecord(metrics->gcAllocChurnHisto, churn);
+                }
+
+                metrics->prevPostGCHeapUsed = postGCHeapUsed;
             }
         }
     }

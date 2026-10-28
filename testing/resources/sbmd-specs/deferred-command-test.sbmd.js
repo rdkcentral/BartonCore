@@ -326,9 +326,10 @@ function handleRearmToggleSecondResponse(args) {
 }
 
 /**
- * Issues requestCommand with a 1 ms overall timeout.  The virtual device
- * always takes longer than 1 ms to respond, so the deadline expires and
- * sbmd.deferred.timeout increments.
+ * Issues requestCommand with an immediate (0 ms) overall timeout.  Setting an
+ * explicit 0 makes the deadline already-elapsed the moment it is recorded, so
+ * the timeout fires deterministically on the first deadline check regardless
+ * of how fast the virtual device responds — not a race against a 1 ms window.
  *
  * Expected metrics after one call:
  *   sbmd.deferred.timeout{…}    += 1
@@ -338,7 +339,7 @@ function executeTimeoutToggle(args) {
     return Sbmd.result().device.requestCommand(CL_ONOFF, CMD_TOGGLE, null, {
         onResponse: handleToggleResponse,
         onError: handleToggleError,
-        timeoutMs: 1
+        timeoutMs: 0
     });
 }
 

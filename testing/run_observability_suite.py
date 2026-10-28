@@ -58,8 +58,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OBS_DIR = REPO / "testing" / "observability"
-REPORT_DIR = REPO / "testing" / ".metrics-reports"
-RUN_LOG = REPORT_DIR / "observability_run.log"
+# Honor a caller-provided SBMD_REPORT_DIR override (e.g. an outer wrapper that
+# wants the report elsewhere) instead of silently overwriting it for every
+# child process below.
+REPORT_DIR = Path(os.environ.get("SBMD_REPORT_DIR", str(REPO / "testing" / ".metrics-reports")))
 GCFLIP = REPO / "testing" / "gcflip.sh"
 
 
@@ -68,9 +70,9 @@ def _run(cmd, check=True):
     return subprocess.run(cmd, cwd=REPO, check=check)
 
 
-def _gcflip(state):
+def _gcflip(state, check=True):
     """Flip the mquickjs DEBUG_GC build to *state* (on|off).  Cached after first."""
-    _run(["bash", str(GCFLIP), state])
+    return _run(["bash", str(GCFLIP), state], check=check)
 
 
 def _run_suite(extra, report_dir):
@@ -146,18 +148,18 @@ def main():
     # Strip a leading `--` separator if argparse kept it.
     extra = args.pytest_args[1:] if args.pytest_args[:1] == ["--"] else args.pytest_args
 
-    if not args.no_build:
-        _run(["cmake", "--build", "build", "--target", "install"])
-
-    if not args.no_deps:
-        # BartonCore's client needs the D-Bus session bus; best-effort (already up is fine).
-        _run(["sudo", "-n", "service", "dbus", "start"], check=False)
-        _run(["npm", "--prefix", "testing/mocks/devices/matterjs", "ci"])
-
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-
     rc = 0
     try:
+        if not args.no_build:
+            _run(["cmake", "--build", "build", "--target", "install"])
+
+        if not args.no_deps:
+            # BartonCore's client needs the D-Bus session bus; best-effort (already up is fine).
+            _run(["sudo", "-n", "service", "dbus", "start"], check=False)
+            _run(["npm", "--prefix", "testing/mocks/devices/matterjs", "ci"])
+
+        REPORT_DIR.mkdir(parents=True, exist_ok=True)
+
         if args.debug_gc == "on":
             _gcflip("on")
             rc = _run_suite(extra, REPORT_DIR)
@@ -175,10 +177,23 @@ def main():
             )
             rc = rc_on or rc_off
     finally:
-        # Never leave a dev checkout on the non-default build.
+        # Never leave a dev checkout on the non-default build. This covers the
+        # build/deps setup above too, not just the suite run: if setup fails
+        # while the checkout happens to already be on DEBUG_GC-off, we still
+        # want to attempt the restore rather than exit silently off-default.
+        # check=False: a restore failure must not raise out of finally and mask
+        # the suite's real exit code — surface it as a loud warning instead.
         if args.debug_gc in ("off", "both"):
             print("\nRestoring DEBUG_GC-on dev default...", flush=True)
-            _gcflip("on")
+            restore = _gcflip("on", check=False)
+            if restore.returncode != 0:
+                print(
+                    f"WARNING: failed to restore DEBUG_GC-on (gcflip exit "
+                    f"{restore.returncode}) — checkout may be left on the off build; "
+                    f"run 'testing/gcflip.sh on' manually.",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
     return rc
 

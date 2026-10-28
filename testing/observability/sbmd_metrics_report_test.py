@@ -505,6 +505,7 @@ def test_report_gc_pressure(default_environment, matter_deferred_cmd_test_device
         "metrics": collect(metrics, [
             "sbmd.js.gc.count",
             "sbmd.js.gc.duration_ms",
+            "sbmd.js.gc.alloc_churn_bytes",
             "sbmd.js.heap.peak_bytes",
             "sbmd.js.heap.free_bytes",
             "sbmd.js.gc_roots",

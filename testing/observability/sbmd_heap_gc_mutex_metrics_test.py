@@ -192,15 +192,16 @@ def test_live_set_stays_below_oom_threshold(default_environment, matter_light):
     time.sleep(1)
 
     metrics = get_metrics(client)
+    live_dps = metrics.get("sbmd.js.heap.live_bytes", {}).get("dataPoints", [])
 
-    if "sbmd.js.heap.live_bytes" not in metrics:
+    if not live_dps:
         pytest.skip(
             "sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF "
             "or no GC fired during the run"
         )
 
     arena = metrics["sbmd.js.heap.arena_bytes"]["dataPoints"][0]["value"]
-    live = metrics["sbmd.js.heap.live_bytes"]["dataPoints"][0]["value"]
+    live = live_dps[0]["value"]
     peak  = metrics["sbmd.js.heap.peak_bytes"]["dataPoints"][0]["value"]
 
     print(f"\n  arena:       {arena:,} bytes")
@@ -371,14 +372,15 @@ def test_live_bytes_recorded_after_gc(
     time.sleep(2)
 
     metrics = get_metrics(client)
+    live_dps = metrics.get("sbmd.js.heap.live_bytes", {}).get("dataPoints", [])
 
-    assert "sbmd.js.heap.live_bytes" in metrics, (
-        "sbmd.js.heap.live_bytes was not recorded even though GC instrumentation "
+    assert live_dps, (
+        "sbmd.js.heap.live_bytes recorded no datapoints even though GC instrumentation "
         "is on and GC pressure was applied — the GC-end sampling path is not firing."
     )
 
     arena = metrics["sbmd.js.heap.arena_bytes"]["dataPoints"][0]["value"]
-    live = metrics["sbmd.js.heap.live_bytes"]["dataPoints"][0]["value"]
+    live = live_dps[0]["value"]
     peak = metrics["sbmd.js.heap.peak_bytes"]["dataPoints"][0]["value"]
 
     print(f"\n  arena:     {arena:,} bytes")
@@ -630,8 +632,11 @@ def test_mutex_wait_nonzero_under_concurrent_load(default_environment, matter_li
     for t in threads:
         t.join(timeout=60)
 
-    if errors:
-        print(f"\n  WARNING: {len(errors)} concurrent calls raised exceptions: {errors}")
+    assert not errors, (
+        f"{len(errors)} of 50 concurrent calls raised exceptions: {errors[:3]} — "
+        f"a broken client/device operation must fail this test, not just print a "
+        f"warning while the mutex-contention check below passes regardless."
+    )
 
     time.sleep(0.5)
     metrics = get_metrics(client)

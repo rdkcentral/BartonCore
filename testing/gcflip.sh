@@ -62,6 +62,17 @@ err() { printf '\033[1;31m[gcflip] ERROR:\033[0m %s\n' "$*" >&2; }
 
 sha_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
+# A cache key covering everything that changes what gets built: the mquickjs
+# pin, the variant (on|off), and the content of every file that feeds the
+# build (patched CMakeLists.txt + all patches). If any of these change, the
+# key changes, so a stale archive built from an older pin/patch set is never
+# silently reused.
+cache_key() {
+    local variant="$1"
+    cat "$PATCH_DIR/CMakeLists.txt" "$PATCH_DIR"/0001-*.patch "$PATCH_DIR"/0002-*.patch "$PATCH_DIR"/0003-*.patch 2>/dev/null \
+        | sha256sum | cut -d' ' -f1 | { read -r patch_sha _; echo "${PIN}:${variant}:${patch_sha}"; }
+}
+
 # Build the mquickjs archive for a given variant (on|off) into the cache.
 build_variant() {
     local variant="$1"
@@ -89,19 +100,36 @@ build_variant() {
         mkdir -p build
         cd build
         cmake .. >/dev/null
-        make >/dev/null 2>&1
+        local build_log="$CACHE_DIR/build-$variant.log"
+        if ! make >"$build_log" 2>&1; then
+            err "mquickjs build failed for variant '$variant' — tail of $build_log:"
+            tail -n 40 "$build_log" >&2
+            exit 1
+        fi
         find . -name libmquickjs.a -exec cp {} "$out" \;
     )
     rm -rf "$src"
     [[ -f "$out" ]] || { err "build produced no libmquickjs.a for variant '$variant'"; exit 1; }
     local built_sha; built_sha="$(sha_of "$out")"
     echo "$built_sha" > "$out.sha"
+    cache_key "$variant" > "$out.key"
     log "cached $out (sha ${built_sha:0:12})"
 }
 
 ensure_variant_cached() {
     local variant="$1"
-    [[ -f "$CACHE_DIR/libmquickjs-$variant.a" ]] || build_variant "$variant"
+    local out="$CACHE_DIR/libmquickjs-$variant.a"
+    local key_file="$out.key"
+    local want_key; want_key="$(cache_key "$variant")"
+
+    if [[ -f "$out" && -f "$key_file" && "$(cat "$key_file")" == "$want_key" ]]; then
+        return
+    fi
+
+    if [[ -f "$out" ]]; then
+        log "cached DEBUG_GC-$variant archive is stale (pin/patch changed) — rebuilding"
+    fi
+    build_variant "$variant"
 }
 
 current_state() {
@@ -127,6 +155,16 @@ relink_bartoncore() {
 flip_to() {
     local variant="$1"
     mkdir -p "$CACHE_DIR"
+
+    # Preserve the image/container-provided archive before the FIRST ever
+    # overwrite, so there is always a way back to the pristine artifact even
+    # though it won't byte-match either cached on/off variant.
+    local original_backup="$CACHE_DIR/libmquickjs-original.a"
+    if [[ ! -f "$original_backup" && -f "$INSTALLED_A" ]]; then
+        cp "$INSTALLED_A" "$original_backup"
+        log "backed up pristine installed archive -> $original_backup"
+    fi
+
     ensure_variant_cached "$variant"
 
     local target="$CACHE_DIR/libmquickjs-$variant.a"

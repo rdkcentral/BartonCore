@@ -42,7 +42,9 @@ any stale file; the rest append.  A run with no reporting tests never touches th
 artifacts, so a previous run's data is preserved.
 """
 
+import contextlib
 import csv
+import fcntl
 import json
 import os
 import time
@@ -58,6 +60,22 @@ REPORT_DIR = Path(
 )
 JSON_PATH = REPORT_DIR / "sbmd_metrics.json"
 TXT_PATH = REPORT_DIR / "sbmd_metrics.txt"
+LOCK_PATH = REPORT_DIR / ".sbmd_metrics.lock"
+
+
+@contextlib.contextmanager
+def _locked():
+    """Serialize the load-mutate-write cycle across concurrent writers (separate
+    subprocesses today; pytest-xdist or any other future parallelism tomorrow),
+    so two scenarios racing on the same report never interleave or clobber each
+    other's contribution."""
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    with open(LOCK_PATH, "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 def _run_id():
@@ -72,6 +90,19 @@ def _fresh():
     }
 
 
+def _clear_stale_csv_sidecars():
+    """Remove leftover <scenario>.csv files from a previous run.  Called once,
+    the first time a fresh run starts, so a filtered/partial rerun doesn't
+    leave CSVs for scenarios that aren't in the current report."""
+    if not REPORT_DIR.is_dir():
+        return
+    for csv_path in REPORT_DIR.glob("*.csv"):
+        try:
+            csv_path.unlink()
+        except OSError:
+            pass
+
+
 def _load():
     """Load the current run's data, or start fresh if the file is from an old run."""
     if JSON_PATH.exists():
@@ -80,16 +111,29 @@ def _load():
 
             if data.get("run_id") == _run_id():
                 return data
-        except (ValueError, OSError):
-            pass
+        except (ValueError, OSError) as exc:
+            print(
+                f"WARNING: sbmd_report_writer: failed to parse {JSON_PATH} ({exc}) "
+                f"— starting a fresh report; any earlier scenarios in this run are lost",
+                flush=True,
+            )
 
+    _clear_stale_csv_sidecars()
     return _fresh()
 
 
 def _write(data):
+    """Write both artifacts atomically: a crash/SIGKILL mid-write must never leave
+    a truncated JSON file behind for the next _load() to choke on."""
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    JSON_PATH.write_text(json.dumps(data, indent=2, default=str))
-    TXT_PATH.write_text(_render(data))
+
+    tmp_json = JSON_PATH.with_name(JSON_PATH.name + ".tmp")
+    tmp_json.write_text(json.dumps(data, indent=2, default=str))
+    os.replace(tmp_json, JSON_PATH)
+
+    tmp_txt = TXT_PATH.with_name(TXT_PATH.name + ".tmp")
+    tmp_txt.write_text(_render(data))
+    os.replace(tmp_txt, TXT_PATH)
 
 
 def summarize_metric(metrics, name):
@@ -114,9 +158,10 @@ def collect(metrics, names):
 
 def emit_report(scenario, payload):
     """Record one scenario's structured data into the consolidated artifacts."""
-    data = _load()
-    data["scenarios"][scenario] = payload
-    _write(data)
+    with _locked():
+        data = _load()
+        data["scenarios"][scenario] = payload
+        _write(data)
 
 
 def emit_timeseries(scenario, columns, rows, payload=None):
@@ -133,9 +178,10 @@ def emit_timeseries(scenario, columns, rows, payload=None):
     entry = dict(payload or {})
     entry["timeseries"] = {"columns": columns, "rows": rows, "csv": csv_path.name}
 
-    data = _load()
-    data["scenarios"][scenario] = entry
-    _write(data)
+    with _locked():
+        data = _load()
+        data["scenarios"][scenario] = entry
+        _write(data)
 
 
 # ── assessment (status flags) ─────────────────────────────────────────────────
@@ -146,8 +192,12 @@ def emit_timeseries(scenario, columns, rows, payload=None):
 # Thresholds reuse the suite's existing pass/fail limits where they exist and add
 # a hard "whoa that's bad" ceiling everywhere; see the constants below.
 
-ARENA_BYTES = 1_048_576          # configured mquickjs arena (BCORE_MQUICKJS_MEMSIZE_BYTES)
-SCRIPT_TIMEOUT_MS = 5000         # BCORE_SBMD_SCRIPT_TIMEOUT_MS (handler watchdog)
+ARENA_BYTES = 1_048_576          # configured mquickjs arena (BCORE_MQUICKJS_MEMSIZE_BYTES);
+                                 # fallback only — _arena_bytes() prefers the sibling
+                                 # sbmd.js.heap.arena_bytes metric when a scenario collected it
+SCRIPT_TIMEOUT_MS = int(os.environ.get("SBMD_SCRIPT_TIMEOUT_MS", "5000"))
+                                 # BCORE_SBMD_SCRIPT_TIMEOUT_MS (handler watchdog); override via
+                                 # SBMD_SCRIPT_TIMEOUT_MS if the build changes this CMake option
 MAX_DEFERRAL_DEPTH = 10          # SbmdDeferredExecutor re-arm circuit-breaker
 
 # Per-call transient allocation is graded per (driver, op_type) series against an
@@ -196,7 +246,19 @@ def _gauge(summary):
     return dps[0].get("value") if dps else None
 
 
-def _assess(name, summary):
+def _arena_bytes(sibling_metrics):
+    """Resolve the arena size to grade against: prefer the sbmd.js.heap.arena_bytes
+    sibling metric from the SAME scenario (correct for a non-default
+    BCORE_MQUICKJS_MEMSIZE_BYTES build), falling back to the compiled-in default
+    only when that scenario didn't collect it."""
+    if sibling_metrics:
+        v = _gauge(sibling_metrics.get("sbmd.js.heap.arena_bytes", {}))
+        if v:
+            return v
+    return ARENA_BYTES
+
+
+def _assess(name, summary, arena_bytes=ARENA_BYTES):
     """Return (status, note) for one metric summary.  status ∈ ok/watch/concern/
     devonly/info."""
     # ── hard-fault / logical metrics (graded in every mode) ───────────────────
@@ -227,12 +289,18 @@ def _assess(name, summary):
         # Grade the WORST per-(driver, op_type) series' max against an absolute
         # per-call ceiling, not the scenario average: the average moves with the
         # mix of ops a test happens to fire and would dilute a single hot series.
+        # A single call's heap_used delta can read negative under the moving/
+        # compacting GC (sbmd.driver.load.heap_bytes was removed for exactly this
+        # reason), so this is NOT a leak signal — a compaction mid-call can only
+        # make a reading look SMALLER than it really allocated, never larger, so
+        # grading the per-series MAXIMUM as an allocation-size ceiling (not as
+        # evidence of retained/leaked state) stays sound even under that GC.
         # TODO(regression): the complementary half — flag a series that DRIFTS
         # from its own baseline even while under the ceiling — needs a persisted
         # per-series history to compare against. Not wired yet, so today we only
         # enforce the absolute ceiling.
-        watch_ceil = ARENA_BYTES * HEAP_DELTA_WATCH_FRAC
-        concern_ceil = ARENA_BYTES * HEAP_DELTA_CONCERN_FRAC
+        watch_ceil = arena_bytes * HEAP_DELTA_WATCH_FRAC
+        concern_ceil = arena_bytes * HEAP_DELTA_CONCERN_FRAC
         worst, worst_attrs = None, {}
         for dp in dps:
             mx = dp.get("max")
@@ -252,7 +320,8 @@ def _assess(name, summary):
         if worst >= concern_ceil:
             return "concern", (
                 f"peak {worst:+,.0f} B/call on {who} "
-                f"(≥{HEAP_DELTA_CONCERN_FRAC:.0%} arena) — likely per-call leak"
+                f"(≥{HEAP_DELTA_CONCERN_FRAC:.0%} arena) — unusually large single-call "
+                f"allocation, not itself evidence of a leak"
             )
         if worst >= watch_ceil:
             return "watch", (
@@ -278,10 +347,12 @@ def _assess(name, summary):
         return "info", f"{_counter_total(summary)} runaway-cap hit(s) (expected in profile)"
 
     if name == "sbmd.driver.registered.count":
-        return "info", f"{_gauge(summary)} drivers registered"
+        v = _gauge(summary)
+        return "info", (f"{v} drivers registered" if v is not None else "no data")
 
     if name == "sbmd.js.heap.arena_bytes":
-        return "info", f"{_gauge(summary):,} B configured arena"
+        v = _gauge(summary)
+        return "info", (f"{v:,} B configured arena" if v is not None else "no data")
 
     if name == "sbmd.js.gc_roots":
         v = _gauge(summary)
@@ -297,7 +368,7 @@ def _assess(name, summary):
         v = _gauge(summary)
         if not v:
             return "info", "no post-GC sample yet (recorded only when a GC fires)"
-        frac = v / ARENA_BYTES
+        frac = v / arena_bytes
         if frac >= 0.75:
             return (
                 "concern",
@@ -312,13 +383,13 @@ def _assess(name, summary):
         # mquickjs's lazy compacting GC this rides near 100% and is NOT current
         # occupancy, so it is reported, never graded.  (An OOM would surface as a
         # JS exception / allocation failure, which sbmd.js.exception grades.)
-        frac = (_gauge(summary) or 0) / ARENA_BYTES
+        frac = (_gauge(summary) or 0) / arena_bytes
         return "info", f"peak {frac:.1%} of arena (all-time high-water, not live occupancy)"
 
     if name == "sbmd.js.heap.free_bytes":
         # Instantaneous free space.  Dips are expected under lazy GC (garbage is
         # reclaimed on demand), so this is reported, never graded.
-        frac = (_gauge(summary) or 0) / ARENA_BYTES
+        frac = (_gauge(summary) or 0) / arena_bytes
         return "info", f"{frac:.1%} free at sample time (uncollected garbage is reclaimable)"
 
     if name == "sbmd.js.heap.used_bytes":
@@ -349,7 +420,17 @@ def _assess(name, summary):
         return "ok", f"max GC pause {mx:.1f} ms"
 
     if name == "sbmd.js.gc.count":
-        return "info", f"{_gauge(summary):,} GC cycles"
+        v = _gauge(summary)
+        return "info", (f"{v:,} GC cycles" if v is not None else "no data")
+
+    if name == "sbmd.js.gc.alloc_churn_bytes":
+        # Exploratory signal (no established thresholds yet), so always info —
+        # see sbmd.js.heap.peak_bytes for why this replaces GC-start peak sampling.
+        mx = _hist_max(summary)
+        avg = _hist_avg(summary)
+        if mx is None:
+            return "info", "no observations (needs ≥2 GC cycles)"
+        return "info", f"max {mx:+,.0f} B/cycle, avg {avg:+,.0f} B/cycle"
 
     if name == "sbmd.js.mutex.wait_ms":
         avg = _hist_avg(summary)
@@ -420,9 +501,9 @@ def _render_datapoint(dp, indent):
     return out
 
 
-def _render_metric(name, summary, indent, fault_injection=False):
+def _render_metric(name, summary, indent, fault_injection=False, arena_bytes=ARENA_BYTES):
     pad = " " * indent
-    status, note = _assess(name, summary)
+    status, note = _assess(name, summary, arena_bytes=arena_bytes)
     # In a fault-injection scenario the deliberate timeout/runaway trips record a
     # non-success handler.outcome; that is expected, not a real fault, so it must
     # not drive the verdict. The test itself is the real correctness gate.
@@ -451,9 +532,13 @@ def _render_metric(name, summary, indent, fault_injection=False):
 def _render_metrics_map(metrics, indent, fault_injection=False):
     out = []
     worst = "ok"
+    # Resolve once per metrics map: a sibling sbmd.js.heap.arena_bytes entry (if
+    # this scenario collected it) makes every arena-relative grade in this map
+    # correct for a non-default BCORE_MQUICKJS_MEMSIZE_BYTES build.
+    arena_bytes = _arena_bytes(metrics)
 
     for name, summary in metrics.items():
-        lines, status = _render_metric(name, summary, indent, fault_injection)
+        lines, status = _render_metric(name, summary, indent, fault_injection, arena_bytes)
         out.extend(lines)
         worst = _worse(worst, status)
 

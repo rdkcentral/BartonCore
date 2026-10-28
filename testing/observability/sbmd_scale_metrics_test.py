@@ -49,6 +49,7 @@ is absent (BCORE_SBMD_GC_INSTRUMENTATION=OFF or no GC fired).
 import os
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -82,16 +83,28 @@ _CONCURRENT_WRITES_PER_DEVICE = int(os.environ.get("SBMD_CONCURRENT_WRITES", "25
 # Number of generated stub drivers for the driver-scaling test.
 _N_STUB_DRIVERS = int(os.environ.get("SBMD_SCALE_DRIVERS", "100"))
 
-# Matter device-type base for generated stubs.  Well outside real device types
-# and the existing test drivers (command-echo uses 0xfff10000), so the 100 stubs
-# neither collide with each other nor match any real device.
-_STUB_DEVICE_TYPE_BASE = 0xFFF20000
+# Matter device-type base for generated stubs.  SbmdLoader parses matter.deviceTypes
+# via GetUint16Array(), which narrows every value to uint16_t — a base like
+# 0xFFF20000 (used in an earlier version of this test) truncates to just 0x0000
+# plus the index, colliding with real production device types in 0x00-0x63 (e.g.
+# door-lock=0x000a, contact-sensor=0x0015, air-quality=0x002c, water-leak=0x0043).
+# 0xF000 keeps all 100 stubs inside a single 16-bit value, unique among
+# themselves and clear of every real device type used in this repo (all <0x0310).
+_STUB_DEVICE_TYPE_BASE = 0xF000
 
 # Sanity ceiling on the average retained bytes per commissioned device.  A light
 # retains a device object, subscriptions, and cached attributes — a few KB.  A
 # value far above this would mean per-device retention is heavier than expected
 # and the arena would size poorly; it is a generous guard, not a tight budget.
 _MAX_AVG_BYTES_PER_DEVICE = 32 * 1024
+
+# Tight flatness tolerance for the "retained memory does not scale with device
+# count" claim.  _MAX_AVG_BYTES_PER_DEVICE above is deliberately generous (a
+# catastrophic-growth ceiling); a real, modest linear footprint of up to 32 KiB
+# per device would still pass it despite contradicting the no-scaling claim.
+# This bound is well above the few-hundred-byte sample jitter seen empirically
+# between devices, but far tighter than the generous guard.
+_FLAT_SLOPE_TOLERANCE_BYTES = 4 * 1024
 
 # The retained live set must stay well under the arena even at the top of the
 # sweep (real occupancy, post-GC).
@@ -113,14 +126,20 @@ _SWEEP_LOAD_WRITES = 20
 
 def _drive_load_and_read(client, device):
     """Drive real load on *device*, then read the current post-GC live_bytes."""
+    write_errors = []
     for i in range(_SWEEP_LOAD_WRITES):
         try:
             client.write_resource(
                 resource_uri(device, "isOn", endpoint_id=1),
                 "true" if i % 2 == 0 else "false",
             )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - collected, asserted below
+            write_errors.append(exc)
+    assert not write_errors, (
+        f"{len(write_errors)}/{_SWEEP_LOAD_WRITES} isOn writes failed for this device: "
+        f"{write_errors[:3]} — a device that silently fails every write would still be "
+        f"counted as 'exercised' in the retained-memory curve, invalidating it."
+    )
     time.sleep(0.2)
     return _live_bytes(client)
 
@@ -128,6 +147,42 @@ def _drive_load_and_read(client, device):
 def _gauge(metrics, name):
     dps = metrics.get(name, {}).get("dataPoints", [])
     return dps[0]["value"] if dps else ""
+
+
+def _gc_count(client):
+    dps = get_metrics(client).get("sbmd.js.gc.count", {}).get("dataPoints", [])
+    return dps[0].get("value", 0) if dps else None
+
+
+# Bounded retries for the freshness check below.  Each round drives another
+# _SWEEP_LOAD_WRITES batch, so this caps worst-case extra load per device.
+_MAX_FRESHNESS_ROUNDS = 5
+
+
+def _drive_until_fresh_sample(client, device):
+    """Drive load on *device* until a NEW GC cycle has actually fired since
+    entry (not just re-reading a stale live_bytes value left over from a
+    previous device's GC), then return the fresh post-GC live set.
+
+    Under DEBUG_GC off, live_bytes only updates when the engine's own lazy GC
+    fires; one _SWEEP_LOAD_WRITES batch usually fills the arena enough to
+    trigger it, but if it doesn't, driving more load (rather than silently
+    returning whatever value happens to still be sitting in the gauge) is what
+    makes the per-device curve trustworthy as a *fresh* sample series, not an
+    artifact of under-driving.
+    """
+    gc_before = _gc_count(client)
+    live = None
+    for _ in range(_MAX_FRESHNESS_ROUNDS):
+        live = _drive_load_and_read(client, device)
+        if gc_before is None or _gc_count(client) != gc_before:
+            return live
+    pytest.fail(
+        f"No GC cycle fired after {_MAX_FRESHNESS_ROUNDS} load rounds on this device "
+        f"(gc.count stayed at {gc_before}) — live_bytes would be a stale sample from a "
+        f"previous device, not a fresh post-commission reading, which would silently "
+        f"flatten the retained-memory curve regardless of the true value."
+    )
 
 
 def test_retained_memory_vs_device_count(default_environment):
@@ -173,11 +228,16 @@ def test_retained_memory_vs_device_count(default_environment):
             light = MatterLight()
             light.start()
             devices.append(light)
+            # The orchestrator's device-added flag is sticky (set once, never
+            # reset), so wait_for_device_added() would return instantly after
+            # the first device without this reset — masking whether THIS
+            # device actually finished commissioning before we drive load on it.
+            default_environment._commissioned_device = False
             commissioned = commission_device(default_environment, light, "light")
 
-            # Drive real load on this device so the engine's own lazy GC fires
-            # (under off) and refreshes live_bytes, then read the post-GC live set.
-            live = _drive_load_and_read(client, commissioned)
+            # Drive real load on this device until a fresh GC cycle confirms
+            # live_bytes reflects THIS commission, not a stale prior reading.
+            live = _drive_until_fresh_sample(client, commissioned)
             if live is not None:
                 live_samples.append(live)
             metrics = get_metrics(client)
@@ -238,6 +298,7 @@ def test_retained_memory_vs_device_count(default_environment):
                     "sbmd.js.heap.free_bytes",
                     "sbmd.js.heap.peak_bytes",
                     "sbmd.js.gc_roots",
+                    "sbmd.js.heap.arena_bytes",
                 ]),
             },
         )
@@ -251,6 +312,19 @@ def test_retained_memory_vs_device_count(default_environment):
             f"Average retained memory per device is {per_device:,.0f} B, above the "
             f"{_MAX_AVG_BYTES_PER_DEVICE:,} B guard. Per-device retention is heavier "
             f"than expected; re-check subscriptions/cached-attribute growth."
+        )
+        # The guard above is generous enough that a real, modest linear per-device
+        # footprint (e.g. up to 32 KiB/device) would still pass it, even though
+        # that would contradict "SBMD retained memory does not scale with device
+        # count". This tighter bound is the one that actually backs that claim —
+        # it is well above the few-hundred-byte sample jitter seen empirically,
+        # but far below any device-count-scaling footprint worth flagging.
+        assert abs(per_device) <= _FLAT_SLOPE_TOLERANCE_BYTES, (
+            f"Average retained memory per device is {per_device:+,.0f} B, outside the "
+            f"\u00b1{_FLAT_SLOPE_TOLERANCE_BYTES:,} B flatness tolerance. A genuinely flat "
+            f"per-device JS footprint (state lives in the C++ layer, not the JS arena) "
+            f"should land well inside this band; a value outside it indicates real "
+            f"per-device JS retention worth investigating before loosening this bound."
         )
     finally:
         for light in devices:
@@ -291,47 +365,71 @@ def _gauge_val(metrics, name, default=0):
 
 # ── per-driver op closures: each returns fn(i) doing one invocation ───────────
 
+# Driver filename stem (telemetry "driver" attribute) for the shared deferred
+# worker every scenario drives in addition to its own *driven* closures.
+_DEFERRED_DRIVER_STEM = "deferred-command-test"
+
+
+# Each driven-closure factory returns (fn, attrs, mode):
+#   attrs — the (driver, op_type) the op's SUCCESSFUL direct invocation lands in
+#   mode  — "exact": a synchronous, non-deferred handler call (exactly one
+#           InvokeHandler per client call), so the aggregate success count
+#           across every closure sharing (driver, op_type) must equal
+#           len(matching closures) * _CONCURRENT_WRITES_PER_DEVICE exactly —
+#           "min": the invocation count is not 1:1 with client calls (a
+#           sideband push can be coalesced by Matter subscription batching into
+#           fewer attribute reports), so only "at least one fired" is asserted.
 def _light_op(client, device):
+    attrs = {"driver": "light", "op_type": "write"}
+
     def op(i):
         client.write_resource(
             resource_uri(device, "isOn", endpoint_id=1),
             "true" if i % 2 == 0 else "false",
         )
-    return op
+    return op, attrs, "exact"
 
 
 def _lock_op(client, device):
+    attrs = {"driver": "door-lock", "op_type": "execute"}
+
     def op(i):
         client.execute_resource(
             resource_uri(device, "lock" if i % 2 == 0 else "unlock", endpoint_id=1), "", ""
         )
-    return op
+    return op, attrs, "exact"
 
 
 def _thermostat_op(client, device):
+    attrs = {"driver": "thermostat", "op_type": "write"}
+
     def op(i):
         client.write_resource(
             resource_uri(device, "heatSetpoint", endpoint_id=1), str(1800 + (i % 6) * 50)
         )
-    return op
+    return op, attrs, "exact"
 
 
-def _sideband_op(instance, operation, base):
+def _sideband_op(instance, operation, base, driver_stem):
     # Sensors are read-only over Matter; pushing a value via the matter.js sideband
     # triggers an attribute report, which invokes the driver's attribute handler.
+    # The resulting report count isn't 1:1 with pushes (subscription batching
+    # can coalesce them), so this is "min" — at least one must land.
+    attrs = {"driver": driver_stem, "op_type": "attribute_report"}
+
     def op(i):
         instance.sideband.send(operation, {"value": base + (i % 10) * 10})
-    return op
+    return op, attrs, "min"
 
 
 def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_context):
     """
     Drive healthy concurrent load via the *driven* per-driver op closures plus a
     deferred worker, then inject the two deferred circuit-breaker faults, and
-    assert EVERY runtime metric family.  *driven* is a list of fn(i) callables,
-    one per concurrently-driven driver (a light write, a lock execute, a sensor
-    sideband push, ...), so the same helper serves both the homogeneous-device
-    and heterogeneous-driver scenarios.
+    assert EVERY runtime metric family.  *driven* is a list of
+    (fn(i), attrs, mode) tuples, one per concurrently-driven driver (a light
+    write, a lock execute, a sensor sideband push, ...), so the same helper
+    serves both the homogeneous-device and heterogeneous-driver scenarios.
 
     Assertions are correctness/bounds only (build-independent); magnitudes are
     reported for the prod-representative DEBUG_GC off run.  The js.exception and
@@ -339,7 +437,9 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
     deliberate faults in phase 2 don't pollute the healthy-path assertions.
     """
     errors = []
-    total_writes = len(driven) * _CONCURRENT_WRITES_PER_DEVICE
+    # +1 for the deferred worker, which fires the same number of ops as every
+    # other driven closure but isn't itself one of the *driven* entries.
+    total_writes = (len(driven) + 1) * _CONCURRENT_WRITES_PER_DEVICE
 
     def op_worker(fn):
         for i in range(_CONCURRENT_WRITES_PER_DEVICE):
@@ -356,14 +456,22 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
                 errors.append(exc)
 
     # Phase 1 — healthy concurrent load.
-    workers = [threading.Thread(target=op_worker, args=(fn,)) for fn in driven]
+    workers = [threading.Thread(target=op_worker, args=(fn,)) for fn, _, _ in driven]
     workers.append(threading.Thread(target=deferred_worker, args=(deferred,)))
     t0 = time.time()
     for w in workers:
         w.start()
+    _JOIN_TIMEOUT_S = 180
     for w in workers:
-        w.join(timeout=180)
+        w.join(timeout=_JOIN_TIMEOUT_S)
     elapsed = time.time() - t0
+    stuck = [w for w in workers if w.is_alive()]
+    assert not stuck, (
+        f"{len(stuck)}/{len(workers)} worker thread(s) still running after the "
+        f"{_JOIN_TIMEOUT_S}s join timeout — phase 1 (healthy load) must fully "
+        f"complete before phase 2 (fault injection) starts, or the two overlap "
+        f"and neither snapshot is meaningful."
+    )
     time.sleep(1.5)
     m = get_metrics(client)
 
@@ -380,12 +488,50 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
     # independent of the report's cosmetic fault-injection downgrade.
     total_success = 0
     phase1_nonsuccess = []
+    success_by_key = {}
     for dp in m.get("sbmd.handler.outcome", {}).get("dataPoints", []):
         attrs = dp.get("attributes", {})
         if attrs.get("outcome") == "success":
             total_success += dp.get("value", 0)
+            key = (attrs.get("driver"), attrs.get("op_type"))
+            success_by_key[key] = success_by_key.get(key, 0) + dp.get("value", 0)
         else:
             phase1_nonsuccess.append((attrs, dp.get("value", 0)))
+
+    # Per-series expected-count check: a single successful call anywhere can
+    # make `total_success > 0` true even if every other driven closure's calls
+    # silently vanished, so verify each (driver, op_type) series individually.
+    expected_exact = {}
+    expected_min_keys = set()
+    for _, attrs, mode in driven:
+        key = (attrs["driver"], attrs["op_type"])
+        if mode == "exact":
+            expected_exact[key] = expected_exact.get(key, 0) + _CONCURRENT_WRITES_PER_DEVICE
+        else:
+            expected_min_keys.add(key)
+    # The deferred worker's toggle is a deferred (requestCommand) call, not a
+    # synchronous one-InvokeHandler-per-call op, so its exact per-call
+    # multiplier isn't assumed here — only that every issued toggle shows up
+    # at least once.
+    expected_min_keys.add((_DEFERRED_DRIVER_STEM, "execute"))
+    deferred_floor = {(_DEFERRED_DRIVER_STEM, "execute"): _CONCURRENT_WRITES_PER_DEVICE}
+
+    series_errors = []
+    for key, expected_count in expected_exact.items():
+        actual = success_by_key.get(key, 0)
+        if actual != expected_count:
+            series_errors.append(
+                f"{key[0]}/{key[1]}: expected exactly {expected_count} successful "
+                f"direct invocations, observed {actual}"
+            )
+    for key in expected_min_keys:
+        floor = deferred_floor.get(key, 1)
+        actual = success_by_key.get(key, 0)
+        if actual < floor:
+            series_errors.append(
+                f"{key[0]}/{key[1]}: expected at least {floor} successful invocation(s), "
+                f"observed {actual}"
+            )
 
     exceptions = sum(
         dp.get("value", 0) for dp in m.get("sbmd.js.exception", {}).get("dataPoints", [])
@@ -457,6 +603,7 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
             "sbmd.js.exception",
             "sbmd.js.gc.count",
             "sbmd.js.gc.duration_ms",
+            "sbmd.js.gc.alloc_churn_bytes",
             "sbmd.js.gc_roots",
             "sbmd.deferred.in_flight",
             "sbmd.deferred.duration_ms",
@@ -467,6 +614,7 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
             "sbmd.js.heap.live_bytes",
             "sbmd.js.heap.peak_bytes",
             "sbmd.js.heap.free_bytes",
+            "sbmd.js.heap.arena_bytes",
         ]),
     })
 
@@ -476,7 +624,11 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
         f"non-success handler outcome(s) under healthy load (pre fault-injection): "
         f"{phase1_nonsuccess}"
     )
-    assert total_success > 0, "no successful handler invocations recorded"
+    assert not series_errors, (
+        "per-series invocation count check failed — a driven closure's calls "
+        "partially or fully vanished even though the global success total was "
+        "positive:\n  " + "\n  ".join(series_errors)
+    )
     assert exceptions == 0, f"{exceptions} JS exceptions under healthy concurrent load"
     assert mutex_sum > 0, (
         "mutex.wait_ms sum is 0 under concurrent load — the shared JS mutex should "
@@ -630,13 +782,30 @@ def test_all_runtime_metrics_across_heterogeneous_drivers(default_environment):
             _light_op(client, light_dev),
             _lock_op(client, lock_dev),
             _thermostat_op(client, thermostat_dev),
-            _sideband_op(temp, "setTemperature", 2000),
-            _sideband_op(humidity, "setHumidity", 4000),
+            _sideband_op(temp, "setTemperature", 2000, "temperature-sensor"),
+            _sideband_op(humidity, "setHumidity", 4000, "humidity-sensor"),
         ]
         _exercise_all_runtime_metrics(
             client, driven, deferred,
             "heterogeneous_driver_runtime",
             {"distinct_active_drivers": len(driven) + 1},
+        )
+
+        # The point of this scenario is contention between DISTINCT drivers, not
+        # just N copies of one — verify telemetry actually reflects that mix,
+        # rather than trusting the aggregate success/mutex/duration checks
+        # (which a single working driver could satisfy alone).
+        final_metrics = get_metrics(client)
+        distinct_drivers = {
+            dp.get("attributes", {}).get("driver")
+            for dp in final_metrics.get("sbmd.handler.outcome", {}).get("dataPoints", [])
+            if dp.get("attributes", {}).get("outcome") == "success"
+            and dp.get("attributes", {}).get("driver")
+        }
+        assert len(distinct_drivers) >= len(driven), (
+            f"Expected successful handler.outcome telemetry from at least "
+            f"{len(driven)} distinct drivers (the point of this scenario), observed "
+            f"{len(distinct_drivers)}: {sorted(distinct_drivers)}"
         )
     finally:
         for dev in devices:
@@ -766,13 +935,28 @@ def test_driver_load_scales_with_stub_drivers(hundred_driver_environment):
             "sbmd.js.heap.peak_bytes",
             "sbmd.js.heap.live_bytes",
             "sbmd.js.heap.free_bytes",
+            "sbmd.js.heap.arena_bytes",
         ]),
     })
 
     assert load_failures == 0, f"{load_failures} driver(s) failed to load"
-    assert registered >= _N_STUB_DRIVERS, (
-        f"Only {registered} drivers registered; expected at least the "
-        f"{_N_STUB_DRIVERS} stubs (plus real drivers). Some stubs failed to register."
+    # Baseline = production + test .sbmd.js files (same glob pattern used by
+    # test_registered_driver_count_correct). Exact equality, not a lower bound:
+    # ">= _N_STUB_DRIVERS" alone would pass even if every production/test driver
+    # were missing, since the stub count alone already clears that bar.
+    workspace_root = Path(__file__).parent.parent.parent
+    production_specs = workspace_root / "core" / "deviceDrivers" / "matter" / "sbmd" / "specs"
+    test_specs = workspace_root / "testing" / "resources" / "sbmd-specs"
+    baseline_count = len(list(production_specs.glob("*.sbmd.js"))) + len(
+        list(test_specs.glob("*.sbmd.js"))
+    )
+    expected_total = baseline_count + _N_STUB_DRIVERS
+    assert registered == expected_total, (
+        f"Expected exactly {expected_total} registered drivers "
+        f"({baseline_count} baseline production+test drivers + {_N_STUB_DRIVERS} stubs), "
+        f"got {registered}. A lower-bound check here would pass even if every "
+        f"baseline driver silently failed to register, as long as the stubs alone "
+        f"cleared {_N_STUB_DRIVERS}."
     )
     # gc_roots must not scale with driver count — a registry that rooted per-driver
     # objects would leak.  It is recorded only during handler runs, so 0 = not-yet-

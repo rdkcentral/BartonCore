@@ -18,7 +18,7 @@ The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram name
 - **THEN** the idle background thread records one observation to `sbmd.js.heap.used_bytes`
 
 #### Scenario: Arena size recorded at initialization
-- **WHEN** `MQuickJsRuntime::Initialize(N)` is called
+- **WHEN** `MQuickJsRuntime::Instance().Initialize(N)` is called
 - **THEN** the `sbmd.js.heap.arena_bytes` gauge records the value `N`
 
 #### Scenario: Free bytes reflects remaining capacity
@@ -26,15 +26,22 @@ The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram name
 - **THEN** `sbmd.js.heap.free_bytes` gauge records the current `usage.free_size` value (gap between heap top and stack bottom)
 
 ### Requirement: Peak heap watermark gauge
-The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recording the highest value of `usage.heap_used` observed since `MQuickJsRuntime::Initialize()`. (`JS_MEMUSAGE_WALK_HEAP` is not set, so `usage.heap_free_blocks` is always 0; `heap_used` is used directly as the high-water mark of heap expansion.) The gauge SHALL be updated with each heap snapshot taken via `RecordHeapSnapshot()` (in-activity and idle captures), AND with a heap-usage sample taken at GC start (`is_end == 0`, before compaction) in `MQuickJsRuntimeMetrics::GCCallback`, folded in via `RecordPeakCandidate()`. The GC-start sample is required because the compacting GC reclaims transient allocation spikes (notably driver loading, which is itself what drives the arena toward the threshold that triggers these GC cycles) before the next in-activity or idle snapshot could otherwise observe them; without it, `peak_bytes` under-reports the true high-water mark. `RecordPeakCandidate()` SHALL only update the gauge (and the internally tracked peak value) when the newly observed `heap_used` exceeds the previously recorded peak, and MUST be called while `MQuickJsRuntime::GetMutex()` is held (the GC callback runs under that lock).
+The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recording the highest value of `usage.heap_used` observed at a heap snapshot taken via `RecordHeapSnapshot()` (in-activity and idle captures only). (`JS_MEMUSAGE_WALK_HEAP` is not set, so `usage.heap_free_blocks` is always 0; `heap_used` is used directly as the high-water mark of heap expansion.) The gauge SHALL only update when the newly observed `heap_used` exceeds the previously recorded peak. This gauge SHALL NOT be sampled from the GC callback: under production's lazy compacting GC, a collection only fires once the arena is nearly exhausted, so a GC-start reading is consistently close to that trigger threshold on every cycle rather than reflecting any particular driver's or handler's true allocation footprint — sampling it there would not distinguish a heavy GC cycle from a light one, only tell you a GC happened at all.
 
 #### Scenario: Peak watermark monotonically increases
 - **WHEN** successive JS handler invocations allocate progressively more memory
 - **THEN** `sbmd.js.heap.peak_bytes` reflects the highest value observed, never decreasing
 
-#### Scenario: Peak watermark captures a compacted-away spike
-- **WHEN** a transient allocation spike (e.g. during driver loading) drives `heap_used` above the current peak and is fully reclaimed by the next GC cycle before any in-activity or idle snapshot is taken
-- **THEN** `sbmd.js.heap.peak_bytes` still reflects that spike, because it was captured at GC start before compaction
+### Requirement: Per-GC-cycle allocation churn tracking
+The SBMD runtime SHALL record, for each completed GC cycle after the first, the allocation churn since the previous cycle as a histogram named `sbmd.js.gc.alloc_churn_bytes`, computed as `preGCHeapUsed - prevPostGCHeapUsed` — this cycle's pre-compaction `heap_used` (captured at `is_end == 0`) minus the PREVIOUS cycle's post-compaction `heap_used` (the previous cycle's retained live set). This is the honest replacement for "how much did a driver load / handler burst allocate": unlike `sbmd.js.heap.peak_bytes`, it is not saturated by the allocator's GC-trigger threshold, because it is a cycle-to-cycle delta rather than an absolute reading. The very first GC cycle in a process's lifetime has no prior post-GC baseline and SHALL NOT produce an observation. This histogram SHALL be compiled only when `BCORE_SBMD_GC_INSTRUMENTATION` is enabled (it depends on the `JS_SetGCCallback` API), using data already read by the live_bytes sampling at GC start/end, so it adds no additional memory-usage reads.
+
+#### Scenario: Churn recorded from the second GC cycle onward
+- **WHEN** a second (or later) GC cycle completes
+- **THEN** `sbmd.js.gc.alloc_churn_bytes` gains one observation equal to this cycle's pre-compaction `heap_used` minus the previous cycle's post-compaction `heap_used`
+
+#### Scenario: No observation on the very first GC cycle
+- **WHEN** the first GC cycle of a process's lifetime completes
+- **THEN** `sbmd.js.gc.alloc_churn_bytes` gains no observation, because there is no prior post-GC baseline to subtract against
 
 ### Requirement: Retained live-set gauge
 The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.live_bytes` recording `heap_used` sampled at GC end (`is_end == 1`, after compaction) in `MQuickJsRuntimeMetrics::GCCallback`. Because transient garbage has just been reclaimed at this point, the sampled value equals the true retained live set — the one heap metric capable of distinguishing genuine retained-memory growth from the churn that `sbmd.js.heap.used_bytes` and `sbmd.js.heap.peak_bytes` cannot separate from reclaimable garbage under a lazy compacting GC. Sampling SHALL be opportunistic: it SHALL occur only when the engine drives a GC cycle on its own (or an explicit `JS_GC()` call in tests); the runtime SHALL NOT force an additional GC cycle solely to populate this gauge, so it has zero effect on `sbmd.js.heap.peak_bytes` or GC cadence. This gauge SHALL be compiled only when `BCORE_SBMD_GC_INSTRUMENTATION` is enabled (it depends on the `JS_SetGCCallback` API).
@@ -56,7 +63,7 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.live_bytes` recordin
 - **THEN** `sbmd.js.heap.live_bytes` SHALL NOT appear in the telemetry dump
 
 ### Requirement: Force snapshot API
-The system SHALL provide a `MQuickJsRuntimeMetrics::ForceSnapshot()` public static function that synchronously samples heap stats, adds one observation to the `sbmd.js.heap.used_bytes` histogram, updates `sbmd.js.heap.free_bytes` with the current `usage.free_size`, advances `sbmd.js.heap.peak_bytes` only if the current `usage.heap_used` exceeds the previously recorded peak (maintaining the high-water mark guarantee), and calls `TickleSampler()` to reset the idle thread's timer. This function SHALL be callable without holding the JS mutex (it acquires it internally). `ForceSnapshot()` SHALL silently no-op — without acquiring the JS mutex or calling `JS_GetMemoryUsage` — if called before `MQuickJsRuntime::Initialize()` has succeeded. This check MUST be thread-safe: implementations SHALL use a dedicated `std::atomic<bool> jsContextReady` flag in `MQuickJsRuntime` (set to `true` with `memory_order_release` at the end of `Initialize()` and cleared to `false` at the start of `Shutdown()`) rather than calling `GetSharedContext()`, which requires the JS mutex to already be held and therefore cannot be used for a lock-free early-exit guard. The system SHALL also provide `MQuickJsRuntimeMetrics::TickleSampler()`, which notifies the idle background thread to reset its sleep timer without taking a snapshot. The idle background thread SHALL use `ForceSnapshot()` when its idle timer expires.
+The system SHALL provide a `MQuickJsRuntimeMetrics::ForceSnapshot()` public function that synchronously samples heap stats, adds one observation to the `sbmd.js.heap.used_bytes` histogram, updates `sbmd.js.heap.free_bytes` with the current `usage.free_size`, advances `sbmd.js.heap.peak_bytes` only if the current `usage.heap_used` exceeds the previously recorded peak (maintaining the high-water mark guarantee), and calls `TickleSampler()` to reset the idle thread's timer. This function SHALL be callable without holding the JS mutex (it acquires it internally). `ForceSnapshot()` SHALL silently no-op — without acquiring the JS mutex or calling `JS_GetMemoryUsage` — if called before `MQuickJsRuntime::Instance().Initialize()` has succeeded. This check MUST be thread-safe: implementations SHALL use a dedicated `std::atomic<bool> jsContextReady` flag in `MQuickJsRuntime` (set to `true` with `memory_order_release` at the end of `Initialize()` and cleared to `false` at the start of `Shutdown()`) rather than calling `GetSharedContext()`, which requires the JS mutex to already be held and therefore cannot be used for a lock-free early-exit guard. The system SHALL also provide `MQuickJsRuntimeMetrics::TickleSampler()`, which notifies the idle background thread to reset its sleep timer without taking a snapshot. The idle background thread SHALL use `ForceSnapshot()` when its idle timer expires.
 
 #### Scenario: ForceSnapshot produces an immediate observation
 - **WHEN** `MQuickJsRuntimeMetrics::ForceSnapshot()` is called
@@ -108,7 +115,7 @@ The SBMD runtime SHALL count handler invocation outcomes using a counter named `
 - **THEN** `sbmd.handler.outcome` counter for `outcome="error"` increments by one
 
 ### Requirement: JS mutex wait time tracking
-The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point mutex acquisition begins until the lock is held, in all code paths that acquire the mutex for handler invocation. The measurement is centralized in `MQuickJsRuntime::AcquireMutex()`, which acquires the mutex and records the wait duration via `MQuickJsRuntimeMetrics::RecordMutexWait()` before returning the lock to the caller.
+The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point mutex acquisition begins until the lock is held, in all code paths that acquire the mutex for handler invocation. The measurement is centralized in `MQuickJsRuntime::Instance().AcquireMutex()`, which acquires the mutex and records the wait duration via `MQuickJsRuntimeMetrics::RecordMutexWait()` before returning the lock to the caller.
 
 #### Scenario: Mutex wait recorded on contention
 - **WHEN** two threads attempt to invoke SBMD handlers concurrently
@@ -126,11 +133,11 @@ The SBMD runtime SHALL record, for each successfully loaded driver, the wall-clo
 - **THEN** `sbmd.driver.load.duration_ms` contains one observation attributed to that driver's name
 
 ### Requirement: Driver registration total time tracking
-The SBMD runtime SHALL record the total wall-clock time to discover, load, activate, and register all SBMD drivers as a histogram named `sbmd.driver.registration.total_ms`, measured from the start of `SbmdFactory::RegisterDriversFromDirectory` (before any file discovery) to the point all drivers in the directory have been processed and `sbmd.driver.registered.count` is recorded.
+The SBMD runtime SHALL record the total wall-clock time to discover, load, activate, and register all SBMD drivers across every configured SBMD directory as a single histogram observation named `sbmd.driver.registration.total_ms`, measured from the start of `SbmdFactory::RegisterDrivers` (before iterating the configured directory list) to the point every configured directory has been processed and the final `sbmd.driver.registered.count` is recorded. `SbmdFactory::RegisterDriversFromDirectory` runs once per semicolon-separated directory and SHALL NOT itself start or stop this timer, so that a deployment with multiple configured directories (production + test-only directories, or a test harness's injected extra directory) yields one observation for the whole startup sequence rather than one partial observation per directory.
 
-#### Scenario: Registration total recorded once per registration pass
-- **WHEN** `SbmdFactory::RegisterDriversFromDirectory` completes processing a directory
-- **THEN** `sbmd.driver.registration.total_ms` contains one observation covering that entire pass, independent of how many individual drivers were loaded
+#### Scenario: Registration total recorded once per startup, independent of directory count
+- **WHEN** `SbmdFactory::RegisterDrivers` finishes processing every configured directory (whether one directory or several)
+- **THEN** `sbmd.driver.registration.total_ms` contains exactly one observation covering the entire pass, independent of how many directories or individual drivers were involved
 
 ### Requirement: SBMD bundle load time tracking
 The SBMD runtime SHALL record the one-time cost of loading the SBMD utilities bundle and injecting the capture function into the shared JS context as a histogram named `sbmd.driver.bundle_load_ms`. This SHALL be recorded exactly once, the first time `SbmdFactory::RegisterDriversFromDirectory` finds the runtime not yet ready (`runtimeReady == false`), and SHALL NOT be recorded again on subsequent calls once the runtime is ready.
@@ -216,18 +223,18 @@ The SBMD runtime SHALL count deferred operations terminated because they reached
 > **Note:** Integration test coverage for this scenario is planned as future work (task 9.7). It requires a test-only driver whose response handler unconditionally re-arms with another `requestCommand`, which in turn requires new test infrastructure (a new `.sbmd.js` spec file and a fixture whose virtual device responds at least 11 times).
 
 ### Requirement: Subsystem metrics initialization
-Each SBMD metrics class (`MQuickJsRuntimeMetrics`, `SbmdHandlerInvokerMetrics`, `SbmdFactoryMetrics`, `SpecBasedMatterDeviceDriverMetrics`) initializes its metric handles in its constructor. No explicit `InitializeMetrics()` / `ShutdownMetrics()` lifecycle calls are needed: handles are created when the owning object is constructed and persist for the process lifetime. `MQuickJsRuntimeMetrics` is constructed as an `inline static` member of `MQuickJsRuntime`; `SbmdHandlerInvokerMetrics` as a `static` member of `SbmdHandlerInvoker`; `SbmdFactoryMetrics` as a non-static member of the `SbmdFactory` singleton; `SpecBasedMatterDeviceDriverMetrics` as a `static` member of `SpecBasedMatterDeviceDriver`. No `MetricsRegistry` or centralized initialization sequence is required.
+Each SBMD metrics class (`MQuickJsRuntimeMetrics`, `SbmdHandlerInvokerMetrics`, `SbmdFactoryMetrics`, `SpecBasedMatterDeviceDriverMetrics`) SHALL initialize its metric handles in its constructor. No explicit `InitializeMetrics()` / `ShutdownMetrics()` lifecycle calls are needed: handles are created when the owning object is constructed and persist for the process lifetime. `MQuickJsRuntimeMetrics` is constructed as an `inline static` member of `MQuickJsRuntime`; `SbmdHandlerInvokerMetrics` as a `static` member of `SbmdHandlerInvoker`; `SbmdFactoryMetrics` as a non-static member of the `SbmdFactory` singleton; `SpecBasedMatterDeviceDriverMetrics` as a `static` member of `SpecBasedMatterDeviceDriver`. No `MetricsRegistry` or centralized initialization sequence is required.
 
 #### Scenario: Metrics available after first use
 - **WHEN** any SBMD recording method is called
 - **THEN** the call succeeds without error (handles are live from object construction)
 
 #### Scenario: Recording before runtime initialization is safe
-- **WHEN** a recording function is called before `MQuickJsRuntime::Initialize()`
+- **WHEN** a recording function is called before `MQuickJsRuntime::Instance().Initialize()`
 - **THEN** the call is silently ignored without crashing
 
 ### Requirement: GC cycle count tracking
-The SBMD runtime SHALL count GC cycles using a counter named `sbmd.js.gc.count`. The counter SHALL increment by one each time the mquickjs garbage collector completes a cycle. In production, all cycles are allocator-triggered (implicit); the callback also fires for explicit `JS_GC()` calls, which appear only in tests. The counter is incremented in the `is_end == 1` phase of the `JS_SetGCCallback` callback registered by `MQuickJsRuntime::Initialize()`.
+The SBMD runtime SHALL count GC cycles using a counter named `sbmd.js.gc.count`. The counter SHALL increment by one each time the mquickjs garbage collector completes a cycle. In production, all cycles are allocator-triggered (implicit); the callback also fires for explicit `JS_GC()` calls, which appear only in tests. The counter is incremented in the `is_end == 1` phase of the `JS_SetGCCallback` callback registered by `MQuickJsRuntime::Instance().Initialize()`.
 
 #### Scenario: GC cycle increments counter
 - **WHEN** a GC cycle completes (via explicit `JS_GC()` call or allocator trigger)

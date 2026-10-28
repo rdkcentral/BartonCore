@@ -52,6 +52,12 @@ bool SbmdFactory::RegisterDrivers()
 {
     bool allRegistered = true;
 
+    // registration.total_ms spans the whole discover-to-count sequence across
+    // EVERY configured directory, not one directory's slice of it — captured
+    // here, once per factory lifetime, rather than per RegisterDriversFromDirectory
+    // call (which runs once per semicolon-separated directory).
+    auto regStart = std::chrono::steady_clock::now();
+
     g_autofree gchar *sbmdDirs = deviceServiceConfigurationGetSbmdDirs();
     if (sbmdDirs == nullptr || sbmdDirs[0] == '\0')
     {
@@ -86,13 +92,18 @@ bool SbmdFactory::RegisterDrivers()
         RegisterDriversFromDirectory(dirPath, allRegistered);
     }
 
+    metrics.RecordRegisteredDriverCount(static_cast<int64_t>(drivers.size()));
+
+    double registrationTotalMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - regStart).count();
+    metrics.RecordRegistrationTotal(registrationTotalMs);
+
     return allRegistered;
 }
 
 void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered)
 {
     std::error_code ec;
-    auto regStart = std::chrono::steady_clock::now();
 
     bool exists = std::filesystem::exists(dirPath, ec);
 
@@ -280,10 +291,4 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         icError("Filesystem error during SBMD directory iteration: %s", e.what());
         allRegistered = false;
     }
-
-    double registrationTotalMs =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - regStart).count();
-    metrics.RecordRegistrationTotal(registrationTotalMs);
-
-    metrics.RecordRegisteredDriverCount(static_cast<int64_t>(drivers.size()));
 }

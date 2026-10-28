@@ -7,9 +7,10 @@ scale — and emit a consolidated **metrics report** instead of just passing or
 failing. Use them to answer "how does the SBMD runtime behave?", not to gate
 merges (they are excluded from the CI integration run).
 
-Tests live in this directory (`testing/observability/`). The narrative writeup of
-what the current run found is in
-[`testing/sbmd_observability_findings.md`](../sbmd_observability_findings.md).
+Tests live in this directory (`testing/observability/`). There is no checked-in
+findings writeup — run the suite (see below) to generate current results; the
+report is regenerated fresh every run, so a stale committed snapshot would only
+mislead.
 
 ---
 

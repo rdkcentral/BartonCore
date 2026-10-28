@@ -87,15 +87,6 @@ namespace barton
         void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
 
         /**
-         * Fold a heap_used measurement into the all-time peak gauge
-         * (sbmd.js.heap.peak_bytes) without touching the per-invocation histogram
-         * or free gauge. Called from the GC-start callback to capture the
-         * pre-compaction high-water mark. Must be called while holding
-         * MQuickJsRuntime::GetMutex() (the GC callback runs under that lock).
-         */
-        void RecordPeakCandidate(size_t heapUsed);
-
-        /**
          * Record the arena size gauge (called once at initialization time
          * with the configured memory-pool size).
          */
@@ -117,14 +108,20 @@ namespace barton
          * GC instrumentation callback — registered with JS_SetGCCallback with
          * this instance as opaque. Records GC cycle frequency (sbmd.js.gc.count)
          * and per-cycle duration (sbmd.js.gc.duration_ms). Called by the mquickjs
-         * engine at GC start (isEnd == 0) and end (isEnd == 1). At GC start it also
-         * captures the pre-compaction heap_used as a peak_bytes candidate, which is
-         * how transient loading spikes reach the all-time high-water mark before the
-         * compacting GC reclaims them. At GC end it samples the just-compacted
-         * heap_used into sbmd.js.heap.live_bytes — the true retained live set, with
-         * transient garbage reclaimed. This is opportunistic (only when the engine
-         * runs a GC on its own) so it adds no forced collections and cannot perturb
-         * peak_bytes or the runtime's GC cadence.
+         * engine at GC start (isEnd == 0) and end (isEnd == 1). Under the
+         * production (DEBUG_GC off) allocator, a GC only fires when the arena is
+         * nearly exhausted, so the pre-compaction heap_used at GC start is ~constant
+         * (close to the trigger threshold) on every cycle — NOT a signal of how much
+         * a particular driver or handler burst allocated. At GC start it is captured
+         * only to compute allocation churn since the previous cycle
+         * (sbmd.js.gc.alloc_churn_bytes = this cycle's pre-compaction heap_used minus
+         * the previous cycle's post-compaction live set), which IS a meaningful
+         * per-cycle signal and is free given the two reads this callback already
+         * does. At GC end it samples the just-compacted heap_used into
+         * sbmd.js.heap.live_bytes — the true retained live set, with transient
+         * garbage reclaimed. This is opportunistic (only when the engine runs a GC
+         * on its own) so it adds no forced collections and cannot perturb the
+         * runtime's GC cadence.
          */
         static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
 
@@ -139,6 +136,7 @@ namespace barton
         ObservabilityHistogram *gcDurationHisto = nullptr;
         ObservabilityGauge *gcRootsGauge = nullptr;
         ObservabilityGauge *heapLiveGauge = nullptr;
+        ObservabilityHistogram *gcAllocChurnHisto = nullptr;
 
         void RunSampler();
 
@@ -149,6 +147,8 @@ namespace barton
         std::mutex samplerCvMutex;
         std::chrono::steady_clock::time_point gcStartTime;
         int64_t peakHeapRecorded = 0;
+        size_t preGCHeapUsed = 0;
+        int64_t prevPostGCHeapUsed = -1; // -1 sentinel: no prior post-GC baseline yet
     };
 
 } // namespace barton
@@ -169,8 +169,6 @@ namespace barton
         void TickleSampler() {}
 
         void RecordHeapSnapshot(const JSMemoryUsage &, size_t) {}
-
-        void RecordPeakCandidate(size_t) {}
 
         void RecordArenaSize(int64_t) {}
 

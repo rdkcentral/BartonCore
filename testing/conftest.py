@@ -56,14 +56,18 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "slow: marks tests that take more than 10 seconds; excluded from the default CI run",
+        "slow: marks tests that take more than 10 seconds. Purely informational — "
+        "the default CI run excludes the observability suite by path "
+        "(scripts/ci/run_integration_tests.sh --ignore), not by this marker.",
     )
 
     # Assign one report run id in the parent process (not the per-test
     # subprocesses, which inherit it via the environment) so every reporting
     # scenario from this invocation lands in the same consolidated artifact.
+    # Nanosecond resolution (not whole seconds) avoids two rapid invocations
+    # colliding on the same id, which would make _load() reuse a stale report.
     if not os.environ.get(_SUBPROCESS_MARKER_ENV):
-        os.environ["SBMD_REPORT_RUN_ID"] = str(int(time.time()))
+        os.environ["SBMD_REPORT_RUN_ID"] = str(time.time_ns())
 
 
 # The following list of plugins are automatically loaded by pytest when running tests.
