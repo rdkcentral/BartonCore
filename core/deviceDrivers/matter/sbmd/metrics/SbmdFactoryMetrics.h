@@ -24,7 +24,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 
 #ifdef BARTON_CONFIG_SBMD_METRICS
 
@@ -33,8 +32,8 @@
 namespace barton
 {
     /**
-     * Observability metrics for SbmdFactory: driver load durations, heap
-     * impact, failure counts, and registered-driver gauge.
+     * Observability metrics for SbmdFactory: driver load durations, failure
+     * counts, and registered-driver gauge.
      */
     class SbmdFactoryMetrics
     {
@@ -44,17 +43,24 @@ namespace barton
         /** Record a driver load failure. */
         void RecordDriverLoadFailure(const char *driver, const char *reason);
 
-        /** Record a successful driver load. heapDelta is nullopt if memory usage could not be measured. */
-        void RecordDriverLoadSuccess(double durationMs, std::optional<double> heapDelta, const char *driver);
+        /** Record a successful driver load. */
+        void RecordDriverLoadSuccess(double durationMs, const char *driver);
 
         /** Record the current registered-driver count. */
         void RecordRegisteredDriverCount(int64_t count);
 
+        /** Record total wall time to discover, load, activate, and register all drivers. */
+        void RecordRegistrationTotal(double durationMs);
+
+        /** Record the one-time SBMD bundle load + capture-injection time. */
+        void RecordBundleLoad(double durationMs);
+
     private:
         ObservabilityCounter *driverLoadFailureCounter = nullptr;
         ObservabilityHistogram *driverLoadDurationHisto = nullptr;
-        ObservabilityHistogram *driverLoadHeapDeltaHisto = nullptr;
         ObservabilityGauge *registeredDriversGauge = nullptr;
+        ObservabilityHistogram *registrationTotalHisto = nullptr;
+        ObservabilityHistogram *bundleLoadHisto = nullptr;
     };
 
 } // namespace barton
@@ -68,9 +74,13 @@ namespace barton
     public:
         void RecordDriverLoadFailure(const char *, const char *) {}
 
-        void RecordDriverLoadSuccess(double, std::optional<double>, const char *) {}
+        void RecordDriverLoadSuccess(double, const char *) {}
 
         void RecordRegisteredDriverCount(int64_t) {}
+
+        void RecordRegistrationTotal(double) {}
+
+        void RecordBundleLoad(double) {}
     };
 } // namespace barton
 

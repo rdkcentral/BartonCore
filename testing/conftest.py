@@ -41,6 +41,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -53,6 +54,20 @@ def pytest_configure(config):
         "markers",
         "requires_matterjs: skip test when Node.js or matter.js is not available",
     )
+    config.addinivalue_line(
+        "markers",
+        "slow: marks tests that take more than 10 seconds. Purely informational — "
+        "the default CI run excludes the observability suite by path "
+        "(scripts/ci/run_integration_tests.sh --ignore), not by this marker.",
+    )
+
+    # Assign one report run id in the parent process (not the per-test
+    # subprocesses, which inherit it via the environment) so every reporting
+    # scenario from this invocation lands in the same consolidated artifact.
+    # Nanosecond resolution (not whole seconds) avoids two rapid invocations
+    # colliding on the same id, which would make _load() reuse a stale report.
+    if not os.environ.get(_SUBPROCESS_MARKER_ENV):
+        os.environ["SBMD_REPORT_RUN_ID"] = str(time.time_ns())
 
 
 # The following list of plugins are automatically loaded by pytest when running tests.
@@ -242,6 +257,9 @@ def _run_in_subprocess(item):
             item.nodeid,
         ]
 
+        if os.environ.get("SBMD_VERBOSE"):
+            cmd.append("--capture=no")
+
         # In CI, py_test.sh preloads libasan via LD_PRELOAD so Python/GI tests can
         # load ASAN-instrumented Barton libraries. Keep the environment intact for
         # this child pytest process.
@@ -270,6 +288,11 @@ def _run_in_subprocess(item):
             raise AssertionError(
                 f"Subprocess test unexpectedly passed (xpass): {message}"
             )
+
+        if os.environ.get("SBMD_VERBOSE"):
+            output = result.stdout + result.stderr
+            if output.strip():
+                print(output, end="", flush=True)
 
         if outcome in ("failed", "unknown") or result.returncode != 0:
             output = result.stdout + result.stderr

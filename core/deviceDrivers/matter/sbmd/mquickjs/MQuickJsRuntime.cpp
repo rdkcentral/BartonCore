@@ -46,6 +46,16 @@ extern "C" {
 extern const JSSTDLibraryDef js_stdlib;
 }
 
+// GC instrumentation (gc.count/duration_ms, gc_roots, heap.live_bytes) is built on
+// the JS_SetGCCallback / JS_GetGCRootCount API added by mquickjs patch 0003. A build
+// that enables BARTON_CONFIG_SBMD_GC_INSTRUMENTATION against an engine without that
+// patch used to fail with an opaque linker error; this turns it into a clear,
+// actionable compile-time error instead.
+#if defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION) && !defined(MQUICKJS_HAS_GC_CALLBACK)
+#error                                                                                                                 \
+    "BCORE_SBMD_GC_INSTRUMENTATION requires the mquickjs GC-callback API (patch 0003-add-gc-callback-and-root-count). Either apply that patch to the mquickjs build or disable BCORE_SBMD_GC_INSTRUMENTATION."
+#endif
+
 namespace barton
 {
     using namespace mquickjs;

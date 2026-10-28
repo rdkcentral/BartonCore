@@ -52,6 +52,12 @@ bool SbmdFactory::RegisterDrivers()
 {
     bool allRegistered = true;
 
+    // registration.total_ms spans the whole discover-to-count sequence across
+    // EVERY configured directory, not one directory's slice of it — captured
+    // here, once per factory lifetime, rather than per RegisterDriversFromDirectory
+    // call (which runs once per semicolon-separated directory).
+    auto regStart = std::chrono::steady_clock::now();
+
     g_autofree gchar *sbmdDirs = deviceServiceConfigurationGetSbmdDirs();
     if (sbmdDirs == nullptr || sbmdDirs[0] == '\0')
     {
@@ -85,6 +91,12 @@ bool SbmdFactory::RegisterDrivers()
 
         RegisterDriversFromDirectory(dirPath, allRegistered);
     }
+
+    metrics.RecordRegisteredDriverCount(static_cast<int64_t>(drivers.size()));
+
+    double registrationTotalMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - regStart).count();
+    metrics.RecordRegistrationTotal(registrationTotalMs);
 
     return allRegistered;
 }
@@ -127,6 +139,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
     // InjectCaptureFunction may acquire it internally.
     if (!runtimeReady)
     {
+        auto bundleStart = std::chrono::steady_clock::now();
         auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         if (!SbmdBundleLoader::LoadBundle(ctx))
@@ -146,6 +159,10 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 return;
             }
         }
+
+        double bundleLoadMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bundleStart).count();
+        metrics.RecordBundleLoad(bundleLoadMs);
 
         runtimeReady = true;
         icInfo("SBMD bundles loaded and capture function injected");
@@ -210,12 +227,10 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
 
                 // Load the driver registration under the JS mutex
                 auto loadStart = std::chrono::steady_clock::now();
-                std::optional<JSMemoryUsage> usageBefore;
                 std::unique_ptr<SbmdRegistration> registration;
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
                     auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
-                    usageBefore = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
                     registration =
                         SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
                 }
@@ -230,7 +245,6 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
 
                 // Create the driver and activate it
                 auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
-                std::optional<JSMemoryUsage> usageAfter;
 
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
@@ -243,8 +257,6 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                         allRegistered = false;
                         continue;
                     }
-
-                    usageAfter = MQuickJsRuntime::Instance().GetMemoryUsage(ctx, 0);
                 }
 
                 auto loadEnd = std::chrono::steady_clock::now();
@@ -263,15 +275,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 drivers.push_back(std::move(sbmdDriver));
 
                 double loadDurationMs = std::chrono::duration<double, std::milli>(loadEnd - loadStart).count();
-                std::optional<double> heapDelta;
-
-                if (usageBefore && usageAfter)
-                {
-                    heapDelta =
-                        static_cast<double>(usageAfter->heap_used) - static_cast<double>(usageBefore->heap_used);
-                }
-
-                metrics.RecordDriverLoadSuccess(loadDurationMs, heapDelta, driverStem.c_str());
+                metrics.RecordDriverLoadSuccess(loadDurationMs, driverStem.c_str());
 
                 icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
             }
@@ -287,6 +291,4 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         icError("Filesystem error during SBMD directory iteration: %s", e.what());
         allRegistered = false;
     }
-
-    metrics.RecordRegisteredDriverCount(static_cast<int64_t>(drivers.size()));
 }

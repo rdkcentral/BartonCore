@@ -29,7 +29,7 @@ These tests verify that SbmdFactory's startup instrumentation records correctly
 after Barton starts.  No devices are commissioned; the metrics are populated
 entirely by RegisterDriversFromDirectory during the startup sequence.
 
-  - sbmd.driver.load.duration_ms and sbmd.driver.load.heap_bytes must have at
+  - sbmd.driver.load.duration_ms must have at
     least one observation (one per successfully loaded driver).
   - sbmd.driver.registered.count gauge must equal the total number of .sbmd.js
     files across the production and test specs directories.
@@ -57,10 +57,10 @@ pytestmark = [
 
 def test_driver_load_cost_metrics_populated(default_environment):
     """
-    7.9: After startup sbmd.driver.load.duration_ms and
-    sbmd.driver.load.heap_bytes each have at least one observation —
-    one histogram datapoint per successfully loaded driver.
+    7.9: After startup sbmd.driver.load.duration_ms has at least one
+    observation — one histogram datapoint per successfully loaded driver.
     """
+
     client = default_environment.get_client()
     telemetry = json.loads(client.get_telemetry())
     metrics = telemetry.get("metrics", {})
@@ -77,14 +77,23 @@ def test_driver_load_cost_metrics_populated(default_environment):
         "sbmd.driver.load.duration_ms sum should be positive (loading takes non-zero time)"
     )
 
-    # heap_bytes — each loaded driver contributes one observation
-    heap_metric = metrics.get("sbmd.driver.load.heap_bytes")
-    assert heap_metric is not None, (
-        "sbmd.driver.load.heap_bytes not found in telemetry after startup"
-    )
-    heap_dps = heap_metric.get("dataPoints", [])
-    assert len(heap_dps) >= 1, "sbmd.driver.load.heap_bytes has no datapoints"
-    assert sum(dp["count"] for dp in heap_dps) >= 1
+
+def test_load_span_metrics_populated(default_environment):
+    """
+    The coarse load spans recorded by RegisterDriversFromDirectory are present
+    and positive: registration.total_ms (whole discover->register) and
+    bundle_load_ms (one-time bundle + capture injection).
+    """
+    client = default_environment.get_client()
+    telemetry = json.loads(client.get_telemetry())
+    metrics = telemetry.get("metrics", {})
+
+    for name in ("sbmd.driver.registration.total_ms", "sbmd.driver.bundle_load_ms"):
+        metric = metrics.get(name)
+        assert metric is not None, f"{name} not found in telemetry after startup"
+        dps = metric.get("dataPoints", [])
+        assert sum(dp["count"] for dp in dps) >= 1, f"{name} has no observations"
+        assert sum(dp["sum"] for dp in dps) > 0, f"{name} sum should be positive"
 
 
 def test_registered_driver_count_correct(default_environment):

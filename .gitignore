@@ -21,3 +21,7 @@ __pycache__/
 node_modules/
 package-lock.json
 !testing/mocks/devices/matterjs/package-lock.json
+
+# SBMD observability suite reports (regenerated on every run; see
+# testing/observability/README.md)
+testing/.metrics-reports*/

@@ -33,10 +33,16 @@ namespace barton
             observabilityCounterCreate("sbmd.driver.load.failure", "Number of SBMD driver loads that failed", "1");
         driverLoadDurationHisto = observabilityHistogramCreate(
             "sbmd.driver.load.duration_ms", "Time to load and activate an SBMD driver", "ms");
-        driverLoadHeapDeltaHisto = observabilityHistogramCreate(
-            "sbmd.driver.load.heap_bytes", "Change in mquickjs heap_used across a driver load", "By");
         registeredDriversGauge = observabilityGaugeCreate(
             "sbmd.driver.registered.count", "Number of SBMD drivers successfully registered", "1");
+        registrationTotalHisto =
+            observabilityHistogramCreate("sbmd.driver.registration.total_ms",
+                                         "Total wall time to discover, load, activate, and register all SBMD drivers",
+                                         "ms");
+        bundleLoadHisto =
+            observabilityHistogramCreate("sbmd.driver.bundle_load_ms",
+                                         "Time to load the SBMD utilities bundle and inject the capture function",
+                                         "ms");
     }
 
     void SbmdFactoryMetrics::RecordDriverLoadFailure(const char *driver, const char *reason)
@@ -44,20 +50,24 @@ namespace barton
         observabilityCounterAddWithAttrs(driverLoadFailureCounter, 1, "driver", driver, "reason", reason, nullptr);
     }
 
-    void
-    SbmdFactoryMetrics::RecordDriverLoadSuccess(double durationMs, std::optional<double> heapDelta, const char *driver)
+    void SbmdFactoryMetrics::RecordDriverLoadSuccess(double durationMs, const char *driver)
     {
         observabilityHistogramRecordWithAttrs(driverLoadDurationHisto, durationMs, "driver", driver, nullptr);
-
-        if (heapDelta.has_value())
-        {
-            observabilityHistogramRecordWithAttrs(driverLoadHeapDeltaHisto, *heapDelta, "driver", driver, nullptr);
-        }
     }
 
     void SbmdFactoryMetrics::RecordRegisteredDriverCount(int64_t count)
     {
         observabilityGaugeRecord(registeredDriversGauge, count);
+    }
+
+    void SbmdFactoryMetrics::RecordRegistrationTotal(double durationMs)
+    {
+        observabilityHistogramRecord(registrationTotalHisto, durationMs);
+    }
+
+    void SbmdFactoryMetrics::RecordBundleLoad(double durationMs)
+    {
+        observabilityHistogramRecord(bundleLoadHisto, durationMs);
     }
 
 } // namespace barton
