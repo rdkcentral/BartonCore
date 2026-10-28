@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Device Type Endpoint Resolution
+
+## Purpose
+
+Specifies how SBMD device drivers resolve Matter endpoints by device-type matching, building an endpoint map during device initialization and binding resources to the Nth matching endpoint.
+
+## Requirements
 
 ### Requirement: Endpoint resolution by device type matching
 The system SHALL resolve Matter endpoint IDs for SBMD endpoints by matching the endpoint's Descriptor device type list against the driver's `matterMeta.deviceTypes` list, rather than searching for the first endpoint that hosts a specific cluster.

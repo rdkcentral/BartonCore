@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Changelog Generation
+
+## Purpose
+
+Specifies how the project's changelog is generated and maintained across releases, ensuring new entries are prepended and a full historical changelog is preserved.
+
+## Requirements
 
 ### Requirement: Changelog entries are prepended across releases
 The release workflow SHALL produce a `CHANGELOG.md` where each new release entry is prepended
