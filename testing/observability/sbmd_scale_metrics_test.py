@@ -395,7 +395,7 @@ def _lock_op(client, device):
 
     def op(i):
         client.execute_resource(
-            resource_uri(device, "lock" if i % 2 == 0 else "unlock", endpoint_id=1), "", ""
+            resource_uri(device, "lock" if i % 2 == 0 else "unlock", endpoint_id=1), ""
         )
     return op, attrs, "exact"
 
@@ -451,7 +451,7 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
     def deferred_worker(dev):
         for _ in range(_CONCURRENT_WRITES_PER_DEVICE):
             try:
-                client.execute_resource(resource_uri(dev, "toggle", endpoint_id=1), "", "")
+                client.execute_resource(resource_uri(dev, "toggle", endpoint_id=1), "")
             except Exception as exc:  # noqa: BLE001
                 errors.append(exc)
 
@@ -550,7 +550,7 @@ def _exercise_all_runtime_metrics(client, driven, deferred, scenario, extra_cont
     # window.  These are the only paths that fire deferred.timeout / max_depth.
     for res, wait in (("timeoutToggle", 2.0), ("runawayToggle", 5.0)):
         try:
-            client.execute_resource(resource_uri(deferred, res, endpoint_id=1), "", "")
+            client.execute_resource(resource_uri(deferred, res, endpoint_id=1), "")
         except Exception as exc:  # noqa: BLE001
             errors.append(exc)
         time.sleep(wait)

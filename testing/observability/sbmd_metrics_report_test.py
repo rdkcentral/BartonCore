@@ -490,7 +490,7 @@ def test_report_gc_pressure(default_environment, matter_deferred_cmd_test_device
 
     for _ in range(_N_GC_PRESSURE):
         client.execute_resource(
-            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+            resource_uri(device, "gcPressure", endpoint_id=1), ""
         )
 
     time.sleep(2)
@@ -524,7 +524,7 @@ def test_report_deferred_profile(default_environment, matter_deferred_cmd_test_d
     client = default_environment.get_client()
 
     for resource in ("toggle", "rearmToggle", "timeoutToggle", "runawayToggle"):
-        client.execute_resource(resource_uri(device, resource, endpoint_id=1), "", "")
+        client.execute_resource(resource_uri(device, resource, endpoint_id=1), "")
 
     # runawayToggle unwinds up to the depth limit asynchronously; let it settle.
     time.sleep(5)

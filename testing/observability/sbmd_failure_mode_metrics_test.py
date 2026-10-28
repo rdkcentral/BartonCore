@@ -87,7 +87,7 @@ def test_exception_outcome_increments_correctly(
 
     for _ in range(_N):
         client.execute_resource(
-            resource_uri(device, "throwError", endpoint_id=1), "", ""
+            resource_uri(device, "throwError", endpoint_id=1), ""
         )
 
     metrics = get_metrics(client)
@@ -143,7 +143,7 @@ def test_timeout_outcome_records_duration_in_high_latency_buckets(
     client = default_environment.get_client()
 
     # execute_resource blocks until the handler returns (~5 s for busyLoop).
-    client.execute_resource(resource_uri(device, "busyLoop", endpoint_id=1), "", "")
+    client.execute_resource(resource_uri(device, "busyLoop", endpoint_id=1), "")
 
     metrics = get_metrics(client)
 
@@ -198,7 +198,7 @@ def test_error_result_outcome_does_not_produce_exception_outcome(
 
     for _ in range(_N):
         client.execute_resource(
-            resource_uri(device, "errorResult", endpoint_id=1), "", ""
+            resource_uri(device, "errorResult", endpoint_id=1), ""
         )
 
     metrics = get_metrics(client)

@@ -82,7 +82,7 @@ def test_deferred_re_arm_records_depth_one(
     device = _commission(default_environment, matter_deferred_cmd_test_device)
     client = default_environment.get_client()
 
-    client.execute_resource(resource_uri(device, "rearmToggle", endpoint_id=1), "", "")
+    client.execute_resource(resource_uri(device, "rearmToggle", endpoint_id=1), "")
 
     # rearmToggle issues two Toggles, returning isOn to its starting value.  The
     # transient isOn change can be coalesced away by Matter attribute reporting,
@@ -141,7 +141,7 @@ def test_deferred_timeout_increments_counter_and_cleans_up(
     client = default_environment.get_client()
 
     client.execute_resource(
-        resource_uri(device, "timeoutToggle", endpoint_id=1), "", ""
+        resource_uri(device, "timeoutToggle", endpoint_id=1), ""
     )
     # The timeout fires asynchronously.  Give the runtime time to process it.
     time.sleep(2)
@@ -190,7 +190,7 @@ def test_deferred_max_depth_increments_and_cleans_up(
     client = default_environment.get_client()
 
     client.execute_resource(
-        resource_uri(device, "runawayToggle", endpoint_id=1), "", ""
+        resource_uri(device, "runawayToggle", endpoint_id=1), ""
     )
     # Runaway fires up to 10 re-arms synchronously under the JS mutex.
     # Give the runtime enough time to unwind all of them.

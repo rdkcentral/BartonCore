@@ -301,7 +301,7 @@ def test_gc_fires_under_allocation_pressure(
 
     for _ in range(_N_GC_PRESSURE):
         client.execute_resource(
-            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+            resource_uri(device, "gcPressure", endpoint_id=1), ""
         )
     time.sleep(2)
 
@@ -367,7 +367,7 @@ def test_live_bytes_recorded_after_gc(
 
     for _ in range(_N_GC_PRESSURE):
         client.execute_resource(
-            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+            resource_uri(device, "gcPressure", endpoint_id=1), ""
         )
     time.sleep(2)
 
@@ -429,7 +429,7 @@ def test_heavy_transient_allocation_is_not_retained(
         # A gcPressure call allocates then releases, and (under any build) drives
         # a GC — so live_bytes is refreshed to the post-GC live set afterwards.
         client.execute_resource(
-            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+            resource_uri(device, "gcPressure", endpoint_id=1), ""
         )
         time.sleep(0.3)
         m = get_metrics(client)
@@ -445,7 +445,7 @@ def test_heavy_transient_allocation_is_not_retained(
 
     for _ in range(_N_GC_PRESSURE):
         client.execute_resource(
-            resource_uri(device, "gcPressure", endpoint_id=1), "", ""
+            resource_uri(device, "gcPressure", endpoint_id=1), ""
         )
     time.sleep(1)
 
