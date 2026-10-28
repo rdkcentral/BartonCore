@@ -1390,8 +1390,29 @@ static void test_reconfigurationRequestedDuringRemovalIsRefused(void **state)
     assert_null(jsonDatabaseGetDeviceById("stale"));
 }
 
+// A fallback synchronization skipped because the device was being removed runs once that removal fails.
+static void test_synchronizationSkippedByFailedRemovalRunsAfterIt(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    failDeviceRemoval = true;
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_false(deviceServiceRemoveDevice("stale"));
+    g_thread_join(taskThread);
+
+    assert_false(finishedEventSucceeded);
+    assert_true(jsonDatabaseIsDeviceKnown("stale"));
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+    assert_int_equal(GetSyncCount("stale"), 1);
+}
+
 // A reconfiguration refused because the device was being removed is requested again if that removal fails, so it isn't
-// lost.
+// lost. The synchronization skipped during the removal is left to that reconfiguration, and runs if it fails.
 static void test_reconfigurationRefusedByFailedRemovalIsRequestedAgain(void **state)
 {
     (void) state;
@@ -1410,6 +1431,13 @@ static void test_reconfigurationRefusedByFailedRemovalIsRequestedAgain(void **st
     assert_int_equal(GetScheduledCount(), 2);
     assert_true(deviceServiceIsReconfigurationPending("stale"));
     assert_true(jsonDatabaseIsDeviceKnown("stale"));
+    assert_int_equal(GetSyncCount("stale"), 0);
+
+    finishedEventHook = NULL;
+    RunScheduledTask(1);
+
+    assert_false(deviceServiceIsReconfigurationPending("stale"));
+    assert_int_equal(GetSyncCount("stale"), 1);
 }
 
 // A request made while a removal waits for the device's still-pending reconfiguration is deferred like any other made
@@ -1821,6 +1849,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(test_removalWaitsForRunningReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_skippedDeviceNotSynchronizedWhileBeingRemoved, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_synchronizationSkippedByFailedRemovalRunsAfterIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalDuringCompletionEventWaitsForIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_removalFromCompletionHandlerDoesNotWaitForItself, SetupService, TeardownService),

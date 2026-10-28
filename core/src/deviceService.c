@@ -214,7 +214,7 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
 
 static void FallBackToSynchronization(const char *deviceUuid);
 
-static bool IsDeviceBeingRemoved(const char *deviceUuid);
+static bool DeferSynchronizationIfBeingRemoved(const char *deviceUuid);
 
 static void BeginDeviceRemoval(const char *deviceUuid);
 
@@ -336,6 +336,8 @@ typedef struct
     uint32_t refusedDelaySeconds;
     reconfigurationCompleteCallback refusedCompleted;
     bool refusedAllowAsap;
+    // A fallback synchronization skipped while removing, run once the removals end if none of them succeeded.
+    bool synchronizationSkipped;
 } DeviceRemoval;
 
 static GHashTable *devicesBeingRemoved = NULL;
@@ -4212,10 +4214,10 @@ static void FallBackToSynchronization(const char *deviceUuid)
 {
     // Not for a device being removed (the removal may be what stopped its reconfiguration): the synchronization could
     // run while the removal deletes the device and tells its driver, leaving the driver tracking it again. The removal
-    // registers before it stops the reconfiguration, so this sees it.
-    if (IsDeviceBeingRemoved(deviceUuid) == true)
+    // registers before it stops the reconfiguration, so this sees it, and runs the synchronization if it fails.
+    if (DeferSynchronizationIfBeingRemoved(deviceUuid) == true)
     {
-        icLogDebug(LOG_TAG, "%s: %s is being removed; not synchronizing it", __FUNCTION__, deviceUuid);
+        icLogDebug(LOG_TAG, "%s: %s is being removed; synchronizing it only if that fails", __FUNCTION__, deviceUuid);
 
         return;
     }
@@ -5484,6 +5486,32 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
                 deviceUuid, refused.refusedDelaySeconds, refused.refusedCompleted, refused.refusedAllowAsap);
         }
     }
+
+    // A reconfiguration pending now (including one just requested) synchronizes the device if it fails; otherwise
+    // synchronize it here.
+    if (refused.synchronizationSkipped == true && refused.anyRemovalSucceeded == false &&
+        SkipForPendingReconfiguration(deviceUuid) == false)
+    {
+        icInfo("Removal of device %s failed; running the synchronization skipped during it", deviceUuid);
+        FallBackToSynchronization(deviceUuid);
+    }
+}
+
+// If the device is being removed, record that its fallback synchronization was skipped and return true.
+static bool DeferSynchronizationIfBeingRemoved(const char *deviceUuid)
+{
+    mutexLock(&reconfigurationControlMutex);
+
+    DeviceRemoval *removal = devicesBeingRemoved != NULL ? g_hash_table_lookup(devicesBeingRemoved, deviceUuid) : NULL;
+
+    if (removal != NULL)
+    {
+        removal->synchronizationSkipped = true;
+    }
+
+    mutexUnlock(&reconfigurationControlMutex);
+
+    return removal != NULL;
 }
 
 /*
@@ -5492,15 +5520,6 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
  * device restarting after a firmware upgrade), a completion callback if any was given, and as-soon-as-possible if any
  * asked. Caller holds reconfigurationControlMutex.
  */
-static bool IsDeviceBeingRemoved(const char *deviceUuid)
-{
-    mutexLock(&reconfigurationControlMutex);
-    bool beingRemoved = devicesBeingRemoved != NULL && g_hash_table_contains(devicesBeingRemoved, deviceUuid);
-    mutexUnlock(&reconfigurationControlMutex);
-
-    return beingRemoved;
-}
-
 static bool DeferIfBeingRemovedLocked(const char *deviceUuid,
                                       uint32_t delaySeconds,
                                       reconfigurationCompleteCallback reconfigurationCompleted,

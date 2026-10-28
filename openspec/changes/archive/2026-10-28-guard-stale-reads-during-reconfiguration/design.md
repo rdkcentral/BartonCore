@@ -154,6 +154,9 @@ Readiness is split into two flags under `subsystemsAreReadyMutex`:
   fallback is skipped for a device that is being removed (the removal may be what stopped its
   reconfiguration), so the synchronization can't run while the removal deletes the device and tells
   its driver. The removal registers before it stops the reconfiguration, so the check always sees it.
+  The skip is recorded on the removal: if every removal of the device fails, the synchronization runs
+  then, or is left to a reconfiguration pending by that time (including one refused during the
+  removal and requested again), which falls back to it if it fails.
 - `deviceOperationsReady` (published): what `deviceServiceIsReadyForDeviceOperation()` returns, and
   therefore the client gate, the status's `isReadyForDeviceOperation`/`isReadyForPairing`, and
   discovery's driver filtering.
@@ -199,7 +202,7 @@ device pending for another reason (for example after a firmware upgrade) isn't s
 that reconfiguration. The skip is recorded in the same locked step that checks the pending state; if
 that reconfiguration then fails, the device is synchronized as the pass would have done (a startup
 reconfiguration already falls back through its own completion callback, so it isn't synchronized
-twice; neither falls back for a device being removed).
+twice; neither falls back for a device being removed until that removal fails).
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
