@@ -38,8 +38,9 @@ endif()
 add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})
 
 # add library dependencies for this binary
-target_link_options(barton-core-reference PRIVATE -L ${CMAKE_BINARY_DIR}/matter-install/lib)
+target_link_options(barton-core-reference PRIVATE -L ${BCORE_MATTER_INSTALL_DIR}/lib)
 target_link_libraries(barton-core-reference BartonCore linenoise)
+target_link_libraries(barton-core-reference $<BUILD_INTERFACE:bCoreWarnings>)
 
 if (BCORE_REFERENCE_CAMERA_SUPPORT)
     find_package(PkgConfig REQUIRED)

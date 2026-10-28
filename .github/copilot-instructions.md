@@ -15,6 +15,9 @@ These rules are **not fully enforceable by clang-format** -- `SeparateDefinition
 - Always place a blank line before `if`, `for`, `while`, `switch`, and `return` statements, unless the preceding line is an opening brace or another control flow statement's opening line.
 - Always place a blank line after a closing brace `}` unless it is followed by `else`, `catch`, or another closing brace.
 
+## Required Checks
+- Before submitting a change, run the quality checks described in [docs/REQUIRED_CHECKS.md](../docs/REQUIRED_CHECKS.md) via `./dockerw scripts/quality/<check>.sh` (or `scripts/quality/all.sh`). It defines the checks, report locations under `build/reports/`, exit codes, and how to update baselines.
+
 <!-- rtk-instructions v2 -->
 # RTK — Token-Optimized CLI
 

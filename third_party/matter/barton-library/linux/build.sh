@@ -41,7 +41,7 @@ help() {
 
 MY_DIR=$(dirname $(readlink -f $0))
 BARTON_COMMON=$(realpath $MY_DIR/../barton-common)
-CHIP_ROOT=$MY_DIR/third_party/connectedhomeip
+CHIP_ROOT=${CHIP_ROOT:-$MY_DIR/third_party/connectedhomeip}
 PROJECT_CONFIG_DIR=$MY_DIR/include/project_config
 
 OUT_DIR=$MY_DIR/out

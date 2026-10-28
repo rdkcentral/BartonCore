@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 19,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "dev-linux",
+      "displayName": "Dev (Linux): loads config/cmake/platforms/dev/linux.cmake",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_PROJECT_barton-core_INCLUDE": "${sourceDir}/config/cmake/platforms/dev/linux.cmake",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-install"
+      }
+    },
+    {
+      "name": "dev",
+      "inherits": "dev-linux",
+      "displayName": "Dev (alias of dev-linux)"
+    },
+    {
+      "name": "coverage",
+      "inherits": "dev",
+      "cacheVariables": {
+        "BCORE_TEST_COVERAGE": "ON",
+        "BCORE_BUILD_WITH_ASAN": "OFF",
+        "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-noasan/matter-install"
+      }
+    },
+    {
+      "name": "asan",
+      "inherits": "dev",
+      "cacheVariables": {
+        "BCORE_BUILD_WITH_ASAN": "ON"
+      }
+    },
+    {
+      "name": "ubsan",
+      "inherits": "dev",
+      "cacheVariables": {
+        "BCORE_BUILD_WITH_ASAN": "OFF",
+        "BCORE_BUILD_WITH_UBSAN": "ON",
+        "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-noasan/matter-install"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "dev",
+      "cacheVariables": {
+        "BCORE_BUILD_WITH_ASAN": "OFF",
+        "BCORE_BUILD_WITH_TSAN": "ON",
+        "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-noasan/matter-install"
+      }
+    },
+    {
+      "name": "tidy",
+      "inherits": "dev",
+      "cacheVariables": {
+        "BCORE_BUILD_WITH_ASAN": "OFF",
+        "CMAKE_C_CLANG_TIDY": "clang-tidy",
+        "CMAKE_CXX_CLANG_TIDY": "clang-tidy",
+        "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-noasan/matter-install"
+      }
+    }
+  ]
+}

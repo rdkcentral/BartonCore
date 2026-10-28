@@ -3,8 +3,44 @@ minversion = "6.0"
 testpaths = [
     "testing",
 ]
-addopts = "--capture=fd --durations=10"
+addopts = "--capture=fd --durations=10 --strict-markers"
+markers = [
+    "requires_matterjs: skip test when Node.js or matter.js is not available",
+]
 log_cli = true
 log_cli_level = "DEBUG"
 log_cli_format = "%(asctime)s %(name)s [%(levelname)s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[dependency-groups]
+quality = [
+    "ruff==0.17.2",
+    "mypy==2.4.0",
+    "gcovr==8.7",
+    "lizard==1.24.3",
+    "pip-audit==2.10.1",
+    "pytest-cov==7.1.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["build", "third_party"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["testing"]
+explicit_package_bases = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+[tool.coverage.run]
+branch = true
+source = ["testing"]
+data_file = "build/reports/pytest-cov/.coverage"
+
+[tool.coverage.xml]
+output = "build/reports/pytest-cov/coverage.xml"

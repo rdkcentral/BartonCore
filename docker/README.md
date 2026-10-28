@@ -87,3 +87,33 @@ from the command pallette to rebuild the image will not rebuild the base image b
 `Dockerfile.devcontainer` image. So if you trying to make any changes that will affect the base image,
 you must run `docker/build.sh`, then rebuild the devcontainer for the changes to the base image to
 reflect within the devcontainer.
+
+## Quality Tools Stage
+
+The `quality_tools` stage (between `third_party_builder` and `dev_builder`) installs the static analysis, metrics, and SBOM tools used by `scripts/quality/` and documented in [docs/REQUIRED_CHECKS.md](../docs/REQUIRED_CHECKS.md). Scripts never install tools, so a tool missing from this stage makes its check report `blocked`.
+
+| Tool | Source | Pin |
+| --- | --- | --- |
+| clang-tidy-18, cppcheck, abigail-tools | Ubuntu noble apt | `ARG *_VERSION` exact package versions |
+| bloaty | Built from source | `ARG BLOATY_COMMIT`, verified with `git rev-parse` |
+| syft (linux amd64) | GitHub release tarball | `ARG SYFT_VERSION` and `ARG SYFT_SHA256` |
+| jscpd | npm | `ARG JSCPD_VERSION` |
+| ruff, mypy, gcovr, lizard, pip-audit, pytest-cov | PyPI | `quality` dependency group in the repo-root `pyproject.toml` |
+
+### Named build context and `.dockerignore`
+
+The main build context is `docker/`. The Python tools are declared in the repo-root `pyproject.toml`, which is outside that context, so `compose.yaml` passes the repo root as the additional named context `repo` (`additional_contexts: repo: ..`). The Dockerfile reads it with `RUN --mount=from=repo,source=pyproject.toml,...`, which requires BuildKit (the default for `docker compose build`). The repo-root `.dockerignore` excludes everything except `pyproject.toml` so the `repo` context stays small; it has no effect on the `docker/` context.
+
+### Bootstrap pip
+
+The system pip in the image is 24.0, and `pip install --group` requires pip 25.1 or newer. The stage creates a throwaway venv, installs a hash-pinned pip into it (`ARG BOOTSTRAP_PIP_VERSION` and `ARG BOOTSTRAP_PIP_SHA256`), and uses it with `--python /usr/bin/python3 --break-system-packages` to install the `quality` group into the system interpreter, where the system `pytest` can load `pytest-cov`. The venv is removed in the same layer, and the system pip is left unchanged.
+
+### Updating pins
+
+1. apt packages: find the new version with `apt-cache policy <package>` inside the image and update the matching `ARG`.
+2. bloaty: set `BLOATY_COMMIT` to the full commit SHA.
+3. syft: set `SYFT_VERSION` and copy the linux amd64 tarball SHA-256 from the release's `checksums.txt` into `SYFT_SHA256`.
+4. jscpd: set `JSCPD_VERSION`.
+5. Python tools: edit the `quality` group in `pyproject.toml` (exact `==` pins).
+6. Bootstrap pip: set `BOOTSTRAP_PIP_VERSION` and take the wheel's SHA-256 from its PyPI file listing.
+7. Bump `docker/version` and rebuild with `docker/build.sh`.

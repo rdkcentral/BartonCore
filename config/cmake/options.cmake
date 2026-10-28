@@ -158,6 +158,15 @@ bcore_option(NAME BCORE_BUILD_WITH_SSP
 bcore_option(NAME BCORE_BUILD_WITH_ASAN
            DEFINITION BARTON_CONFIG_BUILD_WITH_ASAN
            DESCRIPTION "Build Barton with Address Sanitizer")
+bcore_option(NAME BCORE_BUILD_WITH_UBSAN
+           DEFINITION BARTON_CONFIG_BUILD_WITH_UBSAN
+           DESCRIPTION "Build Barton with Undefined Behavior Sanitizer")
+bcore_option(NAME BCORE_BUILD_WITH_TSAN
+           DEFINITION BARTON_CONFIG_BUILD_WITH_TSAN
+           DESCRIPTION "Build Barton with Thread Sanitizer (incompatible with ASAN)")
+bcore_option(NAME BCORE_WERROR
+           DEFINITION BARTON_CONFIG_WERROR
+           DESCRIPTION "Treat compiler warnings as errors for first-party code")
 bcore_option(NAME BCORE_TEST_COVERAGE
            DEFINITION BARTON_CONFIG_TEST_COVERAGE
            DESCRIPTION "Enable test coverage")
@@ -219,6 +228,9 @@ bcore_string_option(NAME BCORE_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
+# Where build-matter.sh installs the Matter SDK. Presets may point several build
+# trees at one shared install to avoid rebuilding Matter per tree.
+set(BCORE_MATTER_INSTALL_DIR "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Matter SDK install directory")
 bcore_string_option(NAME BCORE_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
                     DEFINITION BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
                     DESCRIPTION "Directory to which telemetry files are uploaded in debug builds."

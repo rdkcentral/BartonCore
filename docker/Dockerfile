@@ -349,12 +349,68 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     apt-get install -y nodejs
 
 ###############################################################################
+# Quality tools stage
+#
+# Static analysis, metrics, and SBOM tools consumed by scripts/quality/ and the
+# review-metrics-* agentic review skills. All versions are pinned; direct
+# downloads are SHA-256 verified. Python tools come from the `quality`
+# dependency group in the repo-root pyproject.toml, provided by the `repo`
+# named build context (see docker/compose.yaml additional_contexts).
+###############################################################################
+FROM third_party_builder AS quality_tools
+
+ARG CLANG_TIDY_VERSION="1:18.1.3-1ubuntu1"
+ARG CPPCHECK_VERSION="2.13.0-2ubuntu3"
+ARG ABIGAIL_VERSION="2.4-3build1"
+
+RUN apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y --no-install-recommends \
+    clang-tidy-18="${CLANG_TIDY_VERSION}" \
+    cppcheck="${CPPCHECK_VERSION}" \
+    abigail-tools="${ABIGAIL_VERSION}" \
+    && update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18 50 \
+    && rm -rf /var/lib/apt/lists/*
+
+# bloaty is not packaged for noble; build a pinned commit from source.
+ARG BLOATY_COMMIT="f1a83e63f36beb628dcf022e1201a2eb391a22a6"
+RUN git clone --filter=blob:none https://github.com/google/bloaty.git /tmp/bloaty && \
+    cd /tmp/bloaty && git checkout "${BLOATY_COMMIT}" && \
+    test "$(git rev-parse HEAD)" = "${BLOATY_COMMIT}" && \
+    git submodule update --init --recursive --depth 1 && \
+    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBLOATY_ENABLE_RE2=ON && \
+    cmake --build build && cmake --install build --prefix /usr/local && \
+    rm -rf /tmp/bloaty
+
+ARG SYFT_VERSION="1.55.0"
+ARG SYFT_SHA256="bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d"
+RUN curl -fsSL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz" \
+    -o /tmp/syft.tar.gz && \
+    echo "${SYFT_SHA256}  /tmp/syft.tar.gz" | sha256sum --check && \
+    tar xzf /tmp/syft.tar.gz -C /usr/local/bin syft && \
+    rm /tmp/syft.tar.gz
+
+ARG JSCPD_VERSION="5.4.2"
+RUN npm install -g --ignore-scripts "jscpd@${JSCPD_VERSION}"
+
+# Python quality tools (see D2). The system pip (24.0) lacks `--group`, so a
+# throwaway venv provides a pinned pip >= 25.1 that installs into the system
+# interpreter via `--python`, keeping the tools importable by the system pytest.
+ARG BOOTSTRAP_PIP_VERSION="26.2.2"
+ARG BOOTSTRAP_PIP_SHA256="fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
+RUN --mount=from=repo,source=pyproject.toml,target=/tmp/repo/pyproject.toml \
+    python3 -m venv /tmp/pip-bootstrap && \
+    printf 'pip==%s --hash=sha256:%s\n' "${BOOTSTRAP_PIP_VERSION}" "${BOOTSTRAP_PIP_SHA256}" > /tmp/pip-bootstrap.txt && \
+    /tmp/pip-bootstrap/bin/pip install --require-hashes -r /tmp/pip-bootstrap.txt && \
+    /tmp/pip-bootstrap/bin/pip --python /usr/bin/python3 install --break-system-packages \
+        --group /tmp/repo/pyproject.toml:quality && \
+    rm -rf /tmp/pip-bootstrap /tmp/pip-bootstrap.txt
+
+###############################################################################
 # Development build stage
 #
 # This stage is responsible for installing packages and other tasks useful for
 # development.
 ###############################################################################
-FROM third_party_builder AS dev_builder
+FROM quality_tools AS dev_builder
 
 # Install packages useful for development
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \

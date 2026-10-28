@@ -86,11 +86,25 @@ Pass these with `-D` to cmake or appended to `./build.sh`:
 | `BCORE_BUILD_REFERENCE` | ON | Build the reference application |
 | `BCORE_BUILD_WITH_SSP` | OFF | Stack smash protection |
 | `BCORE_BUILD_WITH_ASAN` | OFF | Address Sanitizer |
+| `BCORE_BUILD_WITH_UBSAN` | OFF | Undefined Behavior Sanitizer (combinable with ASAN) |
+| `BCORE_BUILD_WITH_TSAN` | OFF | Thread Sanitizer (configure error if combined with ASAN) |
+| `BCORE_WERROR` | OFF | Treat warnings in first-party code as errors |
+| `BCORE_MATTER_INSTALL_DIR` | `<build>/matter-install` | Matter SDK install location (presets share one per sanitizer flavor) |
 | `BCORE_GEN_GIR` | OFF | Generate GObject Introspection files (enabled by the dev profile) |
 | `BCORE_TEST_COVERAGE` | OFF | Enable code coverage |
 | `BCORE_MATTER_VALIDATE_SCHEMAS` | ON | Validate SBMD specs during build |
 | `BCORE_MATTER_USE_RANDOM_PORT` | OFF | Use random Matter operational port |
 | `BCORE_MATTER_SKIP_SDK` | OFF | Skip building Matter SDK separately |
+
+### CMake Presets
+
+`CMakePresets.json` provides `dev-linux` (alias `dev`, same settings as `./build.sh`) plus `coverage`, `asan`, `ubsan`, `tsan`, and `tidy`, each building into `build/<preset>`:
+
+```bash
+cmake --preset dev && cmake --build build/dev
+```
+
+See `docs/REQUIRED_CHECKS.md` for the quality checks that use these presets.
 
 ### Example: Build Without Zigbee
 

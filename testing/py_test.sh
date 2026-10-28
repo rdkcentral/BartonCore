@@ -36,6 +36,7 @@
 # ./py_test.sh
 # ./py_test.sh -s --log-cli-level=DEBUG
 # ./py_test.sh --toolchain=gcc -s --log-cli-level=DEBUG
+# ./py_test.sh --sanitizer=tsan
 
 
 # set -x
@@ -70,9 +71,18 @@ function show_help {
     echo "                           libBartonCore.so. Determines which ASAN runtime"
     echo "                           to preload. If not specified, auto-detects from"
     echo "                           the system default 'cc'."
+    echo "  --sanitizer=<asan|ubsan|tsan|none>"
+    echo "                           Sanitizer libBartonCore.so was built with."
+    echo "                           Determines which runtime to preload (default: asan)."
+    echo "                           Use 'none' for non-sanitized (e.g. coverage) builds."
+    echo ""
+    echo "JUnit XML is written to \${BCORE_REPORTS_DIR:-<repo>/build/reports}/pytest/junit.xml"
+    echo "unless --junitxml is passed explicitly."
 }
 
 TOOLCHAIN=""
+SANITIZER="asan"
+HAS_JUNITXML=false
 
 # Parse our options, pass the rest through to pytest
 PYTEST_ARGS=()
@@ -80,6 +90,13 @@ for arg in "$@"; do
     case "$arg" in
         -t=*|--toolchain=*)
             TOOLCHAIN="${arg#*=}"
+            ;;
+        --sanitizer=*)
+            SANITIZER="${arg#*=}"
+            ;;
+        --junitxml=*|--junit-xml=*)
+            HAS_JUNITXML=true
+            PYTEST_ARGS+=("$arg")
             ;;
         -h|--help)
             show_help
@@ -91,8 +108,9 @@ for arg in "$@"; do
     esac
 done
 
-# Determine the correct ASAN runtime to preload based on the compiler that
-# built libBartonCore.so. Clang uses libclang_rt.asan; GCC uses libasan.so.
+# Determine the sanitizer runtime to preload based on the sanitizer and the
+# compiler that built libBartonCore.so. Python itself is not instrumented, so
+# the runtime must be preloaded. Clang uses libclang_rt.<san>; GCC uses lib<san>.so.
 if [[ -z "$TOOLCHAIN" ]]; then
     # Auto-detect from the system default compiler
     if cc --version 2>/dev/null | grep -qi clang; then
@@ -102,26 +120,60 @@ if [[ -z "$TOOLCHAIN" ]]; then
     fi
 fi
 
-case "$TOOLCHAIN" in
-    clang)
-        ARCH="$(uname -m)"
-        case "$ARCH" in
-            x86_64) CLANG_ASAN_BASENAME="libclang_rt.asan-x86_64.so" ;;
-            aarch64|arm64) CLANG_ASAN_BASENAME="libclang_rt.asan-aarch64.so" ;;
-            *)
-                echo "Error: unsupported architecture '$ARCH' for clang ASAN runtime." >&2
-                exit 1
-                ;;
-        esac
-        ASAN_LIB=$(clang -print-file-name="$CLANG_ASAN_BASENAME")
+case "$SANITIZER" in
+    asan)
+        CLANG_RT="asan"
+        GCC_RT="libasan.so"
         ;;
-    gcc)
-        ASAN_LIB=$(gcc -print-file-name=libasan.so)
+    ubsan)
+        CLANG_RT="ubsan_standalone"
+        GCC_RT="libubsan.so"
+        ;;
+    tsan)
+        CLANG_RT="tsan"
+        GCC_RT="libtsan.so"
+        ;;
+    none)
         ;;
     *)
-        echo "Error: unknown toolchain '$TOOLCHAIN'. Use 'clang' or 'gcc'." >&2
+        echo "Error: unknown sanitizer '$SANITIZER'. Use 'asan', 'ubsan', 'tsan', or 'none'." >&2
         exit 1
         ;;
 esac
 
-LD_PRELOAD="$ASAN_LIB" pytest "${PYTEST_ARGS[@]}"
+SANITIZER_LIB=""
+if [[ "$SANITIZER" != "none" ]]; then
+    case "$TOOLCHAIN" in
+        clang)
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+                x86_64) CLANG_ARCH="x86_64" ;;
+                aarch64|arm64) CLANG_ARCH="aarch64" ;;
+                *)
+                    echo "Error: unsupported architecture '$ARCH' for clang sanitizer runtime." >&2
+                    exit 1
+                    ;;
+            esac
+            SANITIZER_LIB=$(clang -print-file-name="libclang_rt.${CLANG_RT}-${CLANG_ARCH}.so")
+            ;;
+        gcc)
+            SANITIZER_LIB=$(gcc -print-file-name="$GCC_RT")
+            ;;
+        *)
+            echo "Error: unknown toolchain '$TOOLCHAIN'. Use 'clang' or 'gcc'." >&2
+            exit 1
+            ;;
+    esac
+fi
+
+if [[ "$HAS_JUNITXML" == false ]]; then
+    REPORTS_DIR="${BCORE_REPORTS_DIR:-$REPO_ROOT/build/reports}"
+    mkdir -p "$REPORTS_DIR/pytest"
+    PYTEST_ARGS+=("--junitxml=$REPORTS_DIR/pytest/junit.xml")
+fi
+
+if [[ -n "$SANITIZER_LIB" ]]; then
+    LD_PRELOAD="$SANITIZER_LIB" pytest "${PYTEST_ARGS[@]}"
+else
+    pytest "${PYTEST_ARGS[@]}"
+fi
