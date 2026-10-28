@@ -18,6 +18,7 @@
 - [x] 3.1 Add `.github/workflows/validate-openspec.yaml` running `openspec validate --specs --strict --no-interactive` over all specs on `pull_request`, failing on any error (Apache-2.0 header, mirroring existing workflow style)
 - [x] 3.2 Add a `pre-commit` hook (wired through `hooks/`) that runs `openspec validate --specs --strict` and aborts the commit on failure
 - [x] 3.3 Confirm strict validation returns non-zero on a deliberately-malformed spec (the command the hook and CI both run)
+- [x] 3.4 Add a pull-request-only job to `validate-openspec.yaml` that fails when the diff adds or modifies an unarchived change under `openspec/changes/`, skipped for PRs labeled `openspec-proposal`
 
 ## 4. Verify
 

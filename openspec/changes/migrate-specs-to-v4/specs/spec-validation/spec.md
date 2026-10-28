@@ -29,6 +29,21 @@ A CI workflow SHALL run `openspec validate --specs --strict` over all specs on e
 - **WHEN** a pull request adds or edits a spec so that it no longer conforms to the v4 structure
 - **THEN** the OpenSpec validation check SHALL fail and block the pull request
 
+### Requirement: CI rejects pull requests with unarchived changes
+A CI check SHALL fail any pull request whose diff adds or modifies files under `openspec/changes/<change>/` outside `openspec/changes/archive/`, so implemented changes are archived before merge. A pull request labeled `openspec-proposal` SHALL be exempt, so proposal-only pull requests can land an unarchived change.
+
+#### Scenario: Pull request leaves a change unarchived
+- **WHEN** a pull request without the `openspec-proposal` label adds or modifies a file under an unarchived change directory
+- **THEN** the unarchived-changes check SHALL fail and list the offending files
+
+#### Scenario: Pull request archives its change
+- **WHEN** a pull request's only `openspec/changes/` additions are under `openspec/changes/archive/`
+- **THEN** the unarchived-changes check SHALL pass
+
+#### Scenario: Proposal-only pull request
+- **WHEN** a pull request labeled `openspec-proposal` adds an unarchived change
+- **THEN** the unarchived-changes check SHALL be skipped
+
 ### Requirement: Pre-commit hook validates specs locally
 The repository's pre-commit hook SHALL run `openspec validate --specs --strict` before each commit and SHALL abort the commit when any spec is invalid.
 
