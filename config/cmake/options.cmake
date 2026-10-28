@@ -231,9 +231,10 @@ bcore_string_option(NAME BCORE_MATTER_LIB
 # Where build-matter.sh installs the Matter SDK. Presets may point several build
 # trees at one shared install to avoid rebuilding Matter per tree.
 set(BCORE_MATTER_INSTALL_DIR "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Matter SDK install directory")
-if (NOT "${BCORE_MATTER_INSTALL_DIR}" IN_LIST CMAKE_PREFIX_PATH)
-    list(APPEND CMAKE_PREFIX_PATH "${BCORE_MATTER_INSTALL_DIR}")
-endif()
+# Search hints for the Matter SDK outside the dev profile. CMAKE_PREFIX_PATH is
+# left alone because GIR generation and test RPATHs treat it as a single directory.
+list(APPEND CMAKE_LIBRARY_PATH "${BCORE_MATTER_INSTALL_DIR}/lib")
+list(APPEND CMAKE_INCLUDE_PATH "${BCORE_MATTER_INSTALL_DIR}/include")
 bcore_string_option(NAME BCORE_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
                     DEFINITION BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
                     DESCRIPTION "Directory to which telemetry files are uploaded in debug builds."

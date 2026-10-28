@@ -110,7 +110,7 @@ The system pip in the image is 24.0, and `pip install --group` requires pip 25.1
 
 ### Updating pins
 
-1. apt packages: find the new version with `apt-cache policy <package>` inside the image and update the matching `ARG`.
+1. apt packages: find the new version with `apt-cache policy <package>` inside the image and update the matching `ARG`. The packages are `apt-mark hold`-ed so the `apt-get upgrade` in `dev_builder` cannot replace them; if a newer LLVM point release lands, a later install that needs it (e.g. `clangd`) fails until `CLANG_TIDY_VERSION` is bumped to match.
 2. bloaty: set `BLOATY_COMMIT` to the full commit SHA.
 3. syft: set `SYFT_VERSION` and copy the linux amd64 tarball SHA-256 from the release's `checksums.txt` into `SYFT_SHA256`.
 4. jscpd: set `JSCPD_VERSION`.

@@ -368,6 +368,7 @@ RUN apt-get update && DEBIAN_FRONTEND='noninteractive' apt-get install -y --no-i
     cppcheck="${CPPCHECK_VERSION}" \
     abigail-tools="${ABIGAIL_VERSION}" \
     && update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18 50 \
+    && apt-mark hold clang-tidy-18 cppcheck abigail-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # bloaty is not packaged for noble; build a pinned commit from source.

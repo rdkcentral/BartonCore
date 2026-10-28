@@ -48,6 +48,8 @@ SAN_HEADER = re.compile(
     r"(?:ERROR|WARNING): (?P<tool>AddressSanitizer|LeakSanitizer|ThreadSanitizer|UndefinedBehaviorSanitizer): "
     r"(?P<kind>[A-Za-z0-9_ -]+?)(?: \(|$| on | in | at )"
 )
+# LeakSanitizer lists one allocation stack per leak under a single report header.
+LSAN_LEAK = re.compile(r"^(?P<kind>Direct|Indirect) leak of ")
 UBSAN_RUNTIME = re.compile(r"(?P<file>/\S+?):\d+:\d+: runtime error: (?P<msg>.*)")
 
 
@@ -68,6 +70,7 @@ def normalize_kind(kind: str) -> str:
 def sanitizer_keys(root: str, log: str, junit: str | None) -> set[str]:
     keys: set[str] = set()
     pending: str | None = None
+    in_lsan = False
     with open(log, encoding="utf-8", errors="replace") as f:
         for line in f:
             m = UBSAN_RUNTIME.search(line)
@@ -81,6 +84,14 @@ def sanitizer_keys(root: str, log: str, junit: str | None) -> set[str]:
                 if pending:
                     keys.add(f"{pending}: <no first-party frame>")
                 pending = f"{m['tool']}: {normalize_kind(m['kind'])}"
+                in_lsan = m["tool"] == "LeakSanitizer"
+                continue
+            m = LSAN_LEAK.match(line)
+            if in_lsan and m:
+                # Each leak block gets its own key from its first first-party frame.
+                if pending and not pending.startswith("LeakSanitizer: detected"):
+                    keys.add(f"{pending}: <no first-party frame>")
+                pending = f"LeakSanitizer: {m['kind'].lower()} leak"
                 continue
             if pending:
                 m = SAN_FRAME.match(line)
@@ -92,6 +103,8 @@ def sanitizer_keys(root: str, log: str, junit: str | None) -> set[str]:
                 elif line.startswith("SUMMARY:"):
                     keys.add(f"{pending}: <no first-party frame>")
                     pending = None
+            if line.startswith("SUMMARY:"):
+                in_lsan = False
     if pending:
         keys.add(f"{pending}: <no first-party frame>")
     if junit and os.path.exists(junit):

@@ -39,7 +39,7 @@ ALL_CHECKS=(build-warnings clang-tidy cppcheck complexity duplication python-lin
 CHECKS=("$@")
 [[ ${#CHECKS[@]} -eq 0 ]] && CHECKS=("${ALL_CHECKS[@]}")
 
-HERE="$(dirname "${BASH_SOURCE[0]}")"
+HERE="${QUALITY_ROOT}/scripts/quality"
 declare -A RESULTS=()
 for check in "${CHECKS[@]}"; do
     echo "==> ${check}"

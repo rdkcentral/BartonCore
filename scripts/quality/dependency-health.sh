@@ -35,6 +35,7 @@ syft scan "dir:${QUALITY_ROOT}" --exclude './build/**' --exclude './.worktrees/*
     -o "spdx-json=${REPORT_DIR}/sbom.spdx.json" > "${REPORT_DIR}/syft.log" 2>&1 \
     || quality_finish error "syft failed (see syft.log)"
 
+rm -f "${REPORT_DIR}/pip-audit.json"
 set +e
 pip-audit --format json --output "${REPORT_DIR}/pip-audit.json" --progress-spinner off \
     > "${REPORT_DIR}/pip-audit.log" 2>&1
