@@ -1411,6 +1411,27 @@ static void test_synchronizationSkippedByFailedRemovalRunsAfterIt(void **state)
     assert_int_equal(GetSyncCount("stale"), 1);
 }
 
+// When the thread pool won't take that synchronization, it is left to the next start rather than run on the thread that
+// called for the removal, which shutdown doesn't wait for.
+static void test_synchronizationSkippedByFailedRemovalNotRunInline(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    failDeviceRemoval = true;
+    failThreadPoolAdd = true;
+
+    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
+
+    assert_false(deviceServiceRemoveDevice("stale"));
+    g_thread_join(taskThread);
+
+    assert_true(jsonDatabaseIsDeviceKnown("stale"));
+    assert_int_equal(GetSyncCount("stale"), 0);
+}
+
 // A reconfiguration refused because the device was being removed is requested again if that removal fails, so it isn't
 // lost. The synchronization skipped during the removal is left to that reconfiguration, and runs if it fails.
 static void test_reconfigurationRefusedByFailedRemovalIsRequestedAgain(void **state)
@@ -1851,6 +1872,8 @@ int main(int argc, const char **argv)
             test_skippedDeviceNotSynchronizedWhileBeingRemoved, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_synchronizationSkippedByFailedRemovalRunsAfterIt, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_synchronizationSkippedByFailedRemovalNotRunInline, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalDuringCompletionEventWaitsForIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_removalFromCompletionHandlerDoesNotWaitForItself, SetupService, TeardownService),

@@ -156,7 +156,10 @@ Readiness is split into two flags under `subsystemsAreReadyMutex`:
   its driver. The removal registers before it stops the reconfiguration, so the check always sees it.
   The skip is recorded on the removal: if every removal of the device fails, the synchronization runs
   then, or is left to a reconfiguration pending by that time (including one refused during the
-  removal and requested again), which falls back to it if it fails.
+  removal and requested again), which falls back to it if it fails. A synchronization run after a
+  failed removal is only ever queued, never run inline: it would otherwise run on the removal
+  caller's thread (possibly the event thread), which shutdown doesn't wait for. If the queue is full,
+  it is left to the next start.
 - `deviceOperationsReady` (published): what `deviceServiceIsReadyForDeviceOperation()` returns, and
   therefore the client gate, the status's `isReadyForDeviceOperation`/`isReadyForPairing`, and
   discovery's driver filtering.

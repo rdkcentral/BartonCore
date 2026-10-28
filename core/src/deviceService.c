@@ -212,7 +212,7 @@ static bool SkipForPendingReconfiguration(const char *deviceUuid);
 
 static void reconfigurationCompletedCallback(bool result, const char *deviceUuid);
 
-static void FallBackToSynchronization(const char *deviceUuid);
+static void FallBackToSynchronization(const char *deviceUuid, bool runInlineIfQueueFull);
 
 static bool DeferSynchronizationIfBeingRemoved(const char *deviceUuid);
 
@@ -4105,7 +4105,7 @@ FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, con
     if (BeginFinishingReconfiguration(ctx) == true && result == false &&
         ctx->reconfigurationCompleted != reconfigurationCompletedCallback)
     {
-        FallBackToSynchronization(deviceUuid);
+        FallBackToSynchronization(deviceUuid, true);
     }
 
     if (deviceClass != NULL && deviceServiceIsShuttingDown() == false && jsonDatabaseIsDeviceKnown(deviceUuid) == true)
@@ -4205,13 +4205,14 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
     // A failed startup reconfiguration falls back to synchronization.
     if (result == false)
     {
-        FallBackToSynchronization(deviceUuid);
+        FallBackToSynchronization(deviceUuid, true);
     }
 }
 
-// Queued so the device stops being pending without waiting for it; if the queue is full it runs here instead, since
-// dropping it would leave the device serving the stale data the reconfiguration was meant to replace.
-static void FallBackToSynchronization(const char *deviceUuid)
+// Queued so the device stops being pending without waiting for it. If the queue is full it runs here instead when
+// runInlineIfQueueFull (on a reconfiguration task, which shutdown waits for), since dropping it would leave the device
+// serving the stale data the reconfiguration was meant to replace; otherwise it is left to the next start.
+static void FallBackToSynchronization(const char *deviceUuid, bool runInlineIfQueueFull)
 {
     // Not for a device being removed (the removal may be what stopped its reconfiguration): the synchronization could
     // run while the removal deletes the device and tells its driver, leaving the driver tracking it again. The removal
@@ -4227,6 +4228,16 @@ static void FallBackToSynchronization(const char *deviceUuid)
 
     if (SubsystemsAreReadyForDevices() == true && QueueDeviceSynchronization(deviceUuid) == false)
     {
+        if (runInlineIfQueueFull == false)
+        {
+            icLogWarn(LOG_TAG,
+                      "%s: could not queue synchronization of %s; leaving it to the next start",
+                      __FUNCTION__,
+                      deviceUuid);
+
+            return;
+        }
+
         icLogWarn(LOG_TAG, "%s: could not queue synchronization of %s; running it now", __FUNCTION__, deviceUuid);
 
         g_autofree char *uuid = g_strdup(deviceUuid);
@@ -5493,8 +5504,10 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
     if (refused.synchronizationSkipped == true && refused.anyRemovalSucceeded == false &&
         SkipForPendingReconfiguration(deviceUuid) == false)
     {
+        // Never inline: this is the removal caller's thread (possibly the event thread), which shutdown doesn't wait
+        // for.
         icInfo("Removal of device %s failed; running the synchronization skipped during it", deviceUuid);
-        FallBackToSynchronization(deviceUuid);
+        FallBackToSynchronization(deviceUuid, false);
     }
 }
 
