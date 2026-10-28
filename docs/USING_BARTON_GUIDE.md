@@ -53,7 +53,9 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   shutting down). Readiness is announced by the `status-changed` event with reason
   `READY_FOR_DEVICE_OPERATION`, which may already have been sent before you connected to it. So
   connect to `B_CORE_CLIENT_SIGNAL_NAME_STATUS_CHANGED`, then check the `ready-for-operation` property of
-  `b_core_client_get_status()`, and retry once either says the service is ready.
+  `b_core_client_get_status()`, and retry once either says the service is ready. Stopping the client
+  waits for the handlers of the status-changed event that reports readiness (unless the stop is made
+  from one of them), so don't block in such a handler on a thread that is stopping the client.
 - `B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING`: the device is being reconfigured. Retry after
   `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED` or `_FAILED` arrives for that device with
   session discovery type `B_CORE_DISCOVERY_TYPE_NONE`. Those events are sent whenever a reconfiguration
@@ -93,7 +95,8 @@ not at all, so treat each event as a cue to re-read the device (with a bounded r
 current state. In that case
 a handler that removes the device can also wait up to 60 seconds for the other event's handlers.
 
-`b_core_client_stop` lets a reconfiguration that is still running finish, so it can take up to 120
-seconds longer than usual. If your host ends the process sooner, the interrupted reconfiguration is
+`b_core_client_stop` lets a reconfiguration that is still running finish, and likewise a startup pass
+that is still deciding which devices to reconfigure. Each wait lasts up to 120 seconds, so stopping can
+take up to 240 seconds longer than usual. If your host ends the process sooner, the interrupted reconfiguration is
 retried the next time Barton starts.
 

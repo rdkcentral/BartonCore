@@ -153,6 +153,8 @@ static bool requestReturnedDuringEvent;
 static bool requestScheduledDuringEvent;
 static bool pendingAfterRequestDuringEvent;
 static bool mergedCallbackCalled;
+static bool stopCalledFromHandler;   // a handler started stopping the client, so teardown must not stop it again
+static bool stopReturnedFromHandler; // ...and that stop returned
 
 /* ---------------------------------------------------------------------------------------------------------------- */
 /* Waiting                                                                                                          */
@@ -213,6 +215,11 @@ static bool IsRequestReturned(void)
 static bool IsPassReleased(void)
 {
     return passReleased;
+}
+
+static bool IsStopReturnedFromHandler(void)
+{
+    return stopReturnedFromHandler;
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
@@ -799,12 +806,37 @@ static void StopFromOtherThreadDuringEvent(const char *uuid)
     g_mutex_unlock(&fakeLock);
 }
 
+// Stops the client as a handler would, recording that it did so (and returned) for the test and its teardown.
+static void StopClientAsHandler(void)
+{
+    g_mutex_lock(&fakeLock);
+    stopCalledFromHandler = true;
+    g_mutex_unlock(&fakeLock);
+
+    b_core_client_stop(testClient);
+
+    g_mutex_lock(&fakeLock);
+    stopReturnedFromHandler = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
+}
+
 // Finished-event hook: a client that stops the service from its completion handler.
 static void StopClientFromHandler(const char *uuid)
 {
     (void) uuid;
 
-    b_core_client_stop(testClient);
+    StopClientAsHandler();
+}
+
+// A callback on the default main context, dispatched on the service's event thread: stops the client from there.
+static gboolean StopClientFromEventLoop(gpointer data)
+{
+    (void) data;
+
+    StopClientAsHandler();
+
+    return G_SOURCE_REMOVE;
 }
 
 // Finished-event hook: a client that removes the device from its completion handler.
@@ -866,6 +898,8 @@ static void ResetFakes(void)
     passReachedDevice = false;
     passReleased = false;
     readyEventHook = NULL;
+    stopCalledFromHandler = false;
+    stopReturnedFromHandler = false;
     probeShutdownWait = false;
     requestWhileCancelling = NULL;
     requestDuringSwap = false;
@@ -999,7 +1033,7 @@ static void HoldPassUntilReleased(void)
 // Ready-event hook: a client that stops the service from its status-changed handler.
 static void StopClientFromReadyHandler(void)
 {
-    b_core_client_stop(testClient);
+    StopClientAsHandler();
 }
 
 // Shutdown waits for a startup pass in progress before tearing down the drivers and thread pool it uses.
@@ -1044,10 +1078,27 @@ static void test_stopFromReadyEventHandlerDoesNotWaitForItself(void **state)
     gint64 start = g_get_monotonic_time();
 
     readyForDevices();
-    fixture->stopped = true;
+    fixture->stopped = stopCalledFromHandler;
 
+    assert_true(stopReturnedFromHandler);
     assert_true(g_get_monotonic_time() - start < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     assert_int_equal(readyEventCount, 1);
+}
+
+// A client may stop the service from a callback the service's event loop dispatches (for example a signal handler, or
+// an idle callback when the client runs no loop of its own); stopping must not wait for that loop to return.
+static void test_stopFromEventLoopCallbackReturns(void **state)
+{
+    Fixture *fixture = *state;
+
+    g_idle_add(StopClientFromEventLoop, NULL);
+
+    g_mutex_lock(&fakeLock);
+    bool returned = WaitLocked(IsStopReturnedFromHandler, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    fixture->stopped = stopCalledFromHandler;
+    g_mutex_unlock(&fakeLock);
+
+    assert_true(returned);
 }
 
 // Shutdown beginning mid-pass stops scheduling and withholds readiness.
@@ -1493,8 +1544,9 @@ static void test_stopFromCompletionHandlerDoesNotWaitForItself(void **state)
     gint64 start = g_get_monotonic_time();
 
     RunScheduledTask(0);
-    fixture->stopped = true;
+    fixture->stopped = stopCalledFromHandler;
 
+    assert_true(stopReturnedFromHandler);
     assert_true(g_get_monotonic_time() - start < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     assert_int_equal(finishedEventCount, 1);
     assert_false(deviceServiceIsReconfigurationPending("stale"));
@@ -1593,6 +1645,23 @@ static void test_repeatedStartupPassSkipsPendingDevice(void **state)
     assert_int_equal(GetSyncCount("stale"), 0);
 }
 
+// A device a repeated pass skipped because the first pass's reconfiguration of it was pending is synchronized once, not
+// twice, when that reconfiguration fails: the startup fallback covers it.
+static void test_repeatedStartupPassSkipsFailingStartupReconfigurationOnce(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    readyForDevices();
+    assert_int_equal(GetScheduledCount(), 1);
+
+    RunScheduledTask(0);
+
+    assert_false(finishedEventSucceeded);
+    assert_int_equal(GetSyncCount("stale"), 1);
+}
+
 // A repeated pass leaves alone a device whose record is current but that has a reconfiguration pending for another
 // reason (here, as after a firmware upgrade): it is neither synchronized under that reconfiguration nor reconfigured
 // again.
@@ -1610,6 +1679,26 @@ static void test_repeatedStartupPassSkipsDevicePendingForOtherReason(void **stat
     readyForDevices();
 
     assert_int_equal(GetScheduledCount(), 1);
+    assert_int_equal(GetSyncCount("current"), 1);
+}
+
+// A device a startup pass skipped because a reconfiguration of it was pending for another reason is still synchronized
+// if that reconfiguration fails.
+static void test_skippedDeviceSynchronizedWhenPendingReconfigurationFails(void **state)
+{
+    (void) state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    deviceServiceReconfigureDevice("current", 60, NULL, false);
+    assert_int_equal(GetScheduledCount(), 1);
+
+    readyForDevices();
+    assert_int_equal(GetSyncCount("current"), 0);
+
+    RunScheduledTask(0);
+
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(finishedEventSucceeded);
     assert_int_equal(GetSyncCount("current"), 1);
 }
 
@@ -1683,6 +1772,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(test_shutdownWaitsForStartupPassInProgress, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_stopFromReadyEventHandlerDoesNotWaitForItself, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_stopFromEventLoopCallbackReturns, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_reconfigurationFinishUnpendsBeforeNotifying, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_schedulingFailureLeavesDeviceNotPending, SetupService, TeardownService),
@@ -1721,6 +1811,10 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(test_repeatedStartupPassRechecksCurrentRecord, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_repeatedStartupPassSkipsDevicePendingForOtherReason, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_skippedDeviceSynchronizedWhenPendingReconfigurationFails, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_repeatedStartupPassSkipsFailingStartupReconfigurationOnce, SetupService, TeardownService),
 #ifdef OBSERVABILITY_BACKEND_RECORDS_GAUGES
         cmocka_unit_test_setup_teardown(test_pendingGaugeTracksPendingReconfigurations, SetupService, TeardownService),
 #endif

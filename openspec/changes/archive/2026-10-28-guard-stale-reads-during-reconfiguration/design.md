@@ -191,9 +191,12 @@ the pass now runs on the ready-callback thread rather than the initializer threa
 destruction shutdown already waited for), shutdown counts ready callbacks in flight and waits for them
 (up to 120 s, like the reconfiguration wait) before tearing down the thread pool and drivers they use.
 A callback on shutdown's own thread (a ready-event handler that stops the service) is not waited for.
-A repeated pass skips any device that already has a reconfiguration pending, whatever its snapshot
-says, so a device pending for another reason (for example after a firmware upgrade) isn't synchronized
-underneath that reconfiguration.
+A pass skips any device that already has a reconfiguration pending, whatever its snapshot says, so a
+device pending for another reason (for example after a firmware upgrade) isn't synchronized underneath
+that reconfiguration. The skip is recorded in the same locked step that checks the pending state; if
+that reconfiguration then fails, the device is synchronized as the pass would have done (a startup
+reconfiguration already falls back through its own completion callback, so it isn't synchronized
+twice).
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
@@ -438,7 +441,10 @@ clears it:
   entered `g_main_loop_run()` was lost, leaving `pthread_join()` waiting forever when the service was
   stopped right after starting. It now quits repeatedly until the event thread reports that its loop
   returned, which also works when the application iterates the default context itself (a quit sent as
-  a source on that context could be dispatched by the application's loop first).
+  a source on that context could be dispatched by the application's loop first). A stop made on the
+  event thread itself (from a callback that loop dispatched) quits once and detaches the thread
+  instead, since that loop can't return until the stop does; each start's loop has its own "exited"
+  flag so a detached thread can't mark a later loop as exited.
   What it cannot show: a real driver's reconfiguration completing (the integration harness can't restart
   Barton in-process, and running one to completion crashes in the Matter SBMD driver for reasons
   unrelated to this change), and the condition-variable clock fix, whose only observable effect is that
@@ -471,7 +477,7 @@ Guidance for consumers:
 ## Open Questions
 
 - None. Whether list getters should omit reconfiguring devices was resolved in favour of inclusion
-  (D4), paired with the completion event (D7). Whether to gate list getters, resource writes and
+  (D4; a list can still miss a device in the instant the swap replaces its record), paired with the completion event (D7). Whether to gate list getters, resource writes and
   commands at all was resolved against it (D4, D5): each would harm clients that ignore the new
   errors more than it protects anyone. Whether every `NULL`/`FALSE` from a gated function should set
   `err` (new "not found"/"write failed" codes) was resolved against it (D3): the existing

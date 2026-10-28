@@ -123,6 +123,8 @@ GQuark b_core_client_error_quark(void);
 
 #define B_CORE_CLIENT_SIGNAL_NAME_STATUS_CHANGED                 "status-changed"
 // signal handler args: BCoreStatusEvent *event
+// Stopping the client waits for the handlers of the event that reports readiness for device operations to return
+// (unless it is stopped from one of them), so a handler must not block on a thread that may be stopping the client.
 #define B_CORE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED              "discovery-started"
 // signal handler args: BCoreDiscoveryStartedEvent *event
 #define B_CORE_CLIENT_SIGNAL_NAME_RECOVERY_STARTED               "recovery-started"

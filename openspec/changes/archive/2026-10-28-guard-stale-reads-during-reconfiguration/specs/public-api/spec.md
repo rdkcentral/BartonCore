@@ -95,7 +95,7 @@ The system SHALL provide endpoint query functions: `get_endpoints_by_profile()`,
 
 #### Scenario: Get endpoints by profile
 - **WHEN** `b_core_client_get_endpoints_by_profile()` is called with a profile name
-- **THEN** the service SHALL return a `GList*` of all `BCoreEndpoint` objects matching that profile across all devices, including endpoints of devices undergoing reconfiguration
+- **THEN** the service SHALL return a `GList*` of all `BCoreEndpoint` objects matching that profile across all devices, including endpoints of devices undergoing reconfiguration, except momentarily while a reconfiguration replaces a device's stored record
 
 #### Scenario: Get endpoint while reconfiguring
 - **WHEN** `b_core_client_get_endpoint_by_id()` or `b_core_client_get_endpoint_by_uri()` is called for a device with a pending or in-progress reconfiguration
@@ -122,7 +122,7 @@ The system SHALL support reading, writing, and executing resources by URI. `b_co
 
 #### Scenario: Query resources by URI pattern
 - **WHEN** `b_core_client_query_resources_by_uri()` is called with a URI pattern
-- **THEN** the service SHALL return a `GList*` of all `BCoreResource` objects matching the pattern, including resources of devices undergoing reconfiguration
+- **THEN** the service SHALL return a `GList*` of all `BCoreResource` objects matching the pattern, including resources of devices undergoing reconfiguration, except momentarily while a reconfiguration replaces a device's stored record
 
 ### Requirement: Metadata operations
 The system SHALL support reading and writing metadata by URI. Metadata stores non-functional device information (migration data, discovered details, security zone config). `b_core_client_read_metadata()` and `b_core_client_write_metadata()` are gated as described in "Readiness and reconfiguration error domain"; `write_metadata()` gains a `GError **err`. `write_metadata()` is gated because a reconfiguration carries metadata over from a snapshot taken when it starts, so a metadata write made while it is pending would be silently lost. `b_core_client_get_metadata_by_uri()` SHALL NOT be gated.
@@ -137,4 +137,4 @@ The system SHALL support reading and writing metadata by URI. Metadata stores no
 
 #### Scenario: Get metadata by URI pattern
 - **WHEN** `b_core_client_get_metadata_by_uri()` is called with a URI pattern
-- **THEN** the service SHALL return a `GList*` of all matching `BCoreMetadata` objects, including metadata of devices undergoing reconfiguration
+- **THEN** the service SHALL return a `GList*` of all matching `BCoreMetadata` objects, including metadata of devices undergoing reconfiguration, except momentarily while a reconfiguration replaces a device's stored record
