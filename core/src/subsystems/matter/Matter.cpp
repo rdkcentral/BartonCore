@@ -183,7 +183,7 @@ Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric
 {
     MatterDriverFactory::Instance();
 
-    if (!MQuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
+    if (!MQuickJsRuntime::Instance().Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
     {
         icError("FATAL: Failed to initialize SBMD JS runtime.");
         throw std::runtime_error("Failed to initialize SBMD JS runtime.");
@@ -515,7 +515,7 @@ bool Matter::Stop()
 
     // Stop the SBMD JS runtime -- joins the background heap sampler thread before
     // the metric handles it uses are released below.
-    MQuickJsRuntime::Shutdown();
+    MQuickJsRuntime::Instance().Shutdown();
 
     return true;
 }

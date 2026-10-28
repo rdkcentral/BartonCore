@@ -51,7 +51,7 @@
  * over.
  *
  * All operations require the caller to hold the shared runtime mutex (e.g.
- * MQuickJsRuntime::GetMutex()), since they operate on the shared context.
+ * MQuickJsRuntime::Instance().GetMutex()), since they operate on the shared context.
  */
 
 #pragma once

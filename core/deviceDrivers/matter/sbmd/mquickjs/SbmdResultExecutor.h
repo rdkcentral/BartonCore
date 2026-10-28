@@ -35,7 +35,7 @@
  * operations (sendCommand, writeAttribute, etc.) are delegated to a
  * callback interface so the executor is decoupled from MatterDevice.
  *
- * All JSValue walking happens while the caller holds MQuickJsRuntime::GetMutex().
+ * All JSValue walking happens while the caller holds MQuickJsRuntime::Instance().GetMutex().
  * Non-terminal ops that don't need the JS context (updateResource, log, etc.)
  * are collected into a list and executed AFTER releasing the mutex.
  */
@@ -175,7 +175,7 @@ namespace barton
 
     /**
      * Walks a handler result JSValue and extracts it into ParsedResult.
-     * Must be called while holding MQuickJsRuntime::GetMutex().
+     * Must be called while holding MQuickJsRuntime::Instance().GetMutex().
      */
     class SbmdResultExecutor
     {

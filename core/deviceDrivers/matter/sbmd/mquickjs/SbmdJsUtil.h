@@ -26,7 +26,7 @@
 /*
  * Small, stateless helpers for working with mquickjs JSValue objects.
  *
- * All functions require the caller to hold MQuickJsRuntime::GetMutex(), since
+ * All functions require the caller to hold MQuickJsRuntime::Instance().GetMutex(), since
  * they operate on the shared context.
  */
 

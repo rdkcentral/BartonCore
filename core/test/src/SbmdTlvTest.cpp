@@ -53,13 +53,13 @@ namespace
     protected:
         static void SetUpTestSuite()
         {
-            ASSERT_TRUE(MQuickJsRuntime::Initialize(256 * 1024));
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(256 * 1024));
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
         }
 
-        static void TearDownTestSuite() { MQuickJsRuntime::Shutdown(); }
+        static void TearDownTestSuite() { MQuickJsRuntime::Instance().Shutdown(); }
 
         /*
          * Evaluate a JS expression (which must yield a string) and return it.
@@ -68,14 +68,14 @@ namespace
          */
         std::string Eval(const std::string &js)
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
             JSValue result = JS_Eval(ctx, js.c_str(), js.size(), "<test>", JS_EVAL_RETVAL);
 
             if (JS_IsException(result))
             {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
+                MQuickJsRuntime::Instance().CheckAndClearPendingException(ctx);
                 return "<exception>";
             }
 

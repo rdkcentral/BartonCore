@@ -129,7 +129,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
     if (!runtimeReady)
     {
         auto bundleStart = std::chrono::steady_clock::now();
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
         if (!SbmdBundleLoader::LoadBundle(ctx))
         {
@@ -139,7 +139,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         }
 
         {
-            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
             if (!SbmdLoader::InjectCaptureFunction(ctx))
             {
@@ -218,8 +218,8 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 auto loadStart = std::chrono::steady_clock::now();
                 std::unique_ptr<SbmdRegistration> registration;
                 {
-                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-                    auto *ctx = MQuickJsRuntime::GetSharedContext();
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
                     registration =
                         SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
                 }
@@ -236,8 +236,8 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
 
                 {
-                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-                    auto *ctx = MQuickJsRuntime::GetSharedContext();
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
 
                     if (!sbmdDriver->Activate(ctx))
                     {

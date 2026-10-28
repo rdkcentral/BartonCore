@@ -82,7 +82,7 @@ namespace barton
 
         /**
          * Record pool health metrics from an already-captured JSMemoryUsage.
-         * Must be called while holding MQuickJsRuntime::GetMutex().
+         * Must be called while holding MQuickJsRuntime::Instance().GetMutex().
          */
         void RecordHeapSnapshot(const JSMemoryUsage &usage, size_t gcRootCount);
 

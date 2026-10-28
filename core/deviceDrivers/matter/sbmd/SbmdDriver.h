@@ -33,7 +33,7 @@
  *
  * The source text is retained so the file can be re-evaluated on activation.
  * The mquickjs context is shared across all drivers — activation requires
- * the caller to hold MQuickJsRuntime::GetMutex().
+ * the caller to hold MQuickJsRuntime::Instance().GetMutex().
  */
 
 #pragma once
@@ -87,7 +87,7 @@ namespace barton
          * Activate the driver — re-evaluate the .sbmd.js file and hold all handler JSValues alive.
          *
          * After activation, handler functions can be called safely for the driver's active lifetime.
-         * Caller must hold MQuickJsRuntime::GetMutex().
+         * Caller must hold MQuickJsRuntime::Instance().GetMutex().
          *
          * @param ctx The mquickjs context
          * @return true if activation succeeded
@@ -98,7 +98,7 @@ namespace barton
          * Deactivate the driver — release all held handler references and clear handler JSValues.
          *
          * After deactivation, only metadata is available. The driver can be re-activated later.
-         * Caller must hold MQuickJsRuntime::GetMutex().
+         * Caller must hold MQuickJsRuntime::Instance().GetMutex().
          *
          * @param ctx The mquickjs context
          */
