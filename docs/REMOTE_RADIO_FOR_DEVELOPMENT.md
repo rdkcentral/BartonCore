@@ -77,7 +77,8 @@ Everything this creates on the dev server is named after you:
 | Kind | Name | Scope |
 |---|---|---|
 | Container, image and Compose project | `<user>-remote-radios` | One per user |
-| Zigbee container and Compose project | `<user>-remote-zigbee` | One per user, started from ZigbeeCore |
+| Zigbee container, Compose project, network | `<user>-remote-zigbee` | One per user, created by ZigbeeCore; each workspace's barton container joins the network |
+| Zigbee volume | `<user>-remote-zigbee-state` | One per user, created by ZigbeeCore |
 | Network | `<user>-remote-radios` | One per user, joined by each of your workspaces |
 | Volume | `<user>-remote-radios-state` | One per user |
 | Workspace network | `<user>-<workspace>` | One per BartonCore workspace |
@@ -500,8 +501,12 @@ a ZigbeeCore checkout (see "Remote radios" in its README):
 scripts/remote-zigbee.sh up      # ZigbeeCore
 ```
 
-The workstation picks up zigbeed, cpcd and libcpc from that checkout the next
-time `remote-radios.service` starts there.
+This needs nothing from BartonCore: ZigbeeCore creates its own network and
+volume, and its README covers working on ZigbeeCore without Barton. The
+workstation notices ZigbeeCore within about a minute, fetches zigbeed, cpcd and
+libcpc from that checkout, and starts running the radio itself; no restart is
+needed. It fetches them again each time `remote-radios.service` starts, which is
+how a rebuilt zigbeed reaches it.
 
 zigbeed's tokens file is stored on the workstation, in
 `~/.local/state/remote-radios/host_token.nvm`, but it is populated by
@@ -512,15 +517,15 @@ the dev server after each change (`tokens-notify.log` in the workstation logs).
 ZigbeeCore then reads the configuration from zigbeed and reports it to Barton.
 A change missed while the tunnel is down is not resent.
 
-That records the checkout in `~/.remote-radios/zigbee.env`. From then on
-`./dockerw -T` starts the container whenever it is not running, and points
-Barton at it by setting `ZIGBEE_CORE_IP` to the container's IPv4 address on your
-radios network (Barton accepts only a numeric address, because it trusts
-ZigbeeCore's events by their source address). If the `remote-zigbee` container is
-recreated and gets a new address, restart the barton container. ZigbeeCore is reached
-over your private radios network, and sends its events back to the barton
-container at its alias `barton` there. If two of your workspaces run at once,
-both answer to that alias; only one can usefully use Zigbee anyway.
+`up` records the checkout in `~/.remote-radios/zigbee.env`. From then on
+`./dockerw -T` starts the container whenever it is not running, and makes Barton
+its client: the barton container joins ZigbeeCore's network
+`<user>-remote-zigbee` under the alias `zigbee-client`, to which ZigbeeCore sends
+its events, and `ZIGBEE_CORE_IP` is set to ZigbeeCore's IPv4 address there
+(Barton accepts only a numeric address, because it trusts ZigbeeCore's events by
+their source address). If the `remote-zigbee` container is recreated and gets a
+new address, restart the barton container. If two of your workspaces run at
+once, both answer to `zigbee-client`; only one can usefully use Zigbee anyway.
 
 Without it, `./dockerw -T` says so, and Barton must be run with Zigbee disabled
 (`-z` for the reference app); otherwise it waits for a ZigbeeCore that never
@@ -608,8 +613,9 @@ forwarded serial port and its local cpcd), otbr-agent and its registration on th
 border router's MeshCoP advertisement, and (when a dongle is configured) usb-ip
 reachability, the imported device, the dongle's HCI adapter, the dev server's
 `bluetoothd`, `ble_adapter_id`, and a BLE scan that must see at least one
-device. When the `remote-zigbee` container is running it also checks that
-otbr-agent is on the other spinel interface from zigbeed.
+device. When the workstation runs the radio itself, it also checks that
+otbr-agent is on the other spinel interface from zigbeed. ZigbeeCore's
+container is checked by `./dockerw -T`.
 
 ### Manual BLE verification
 

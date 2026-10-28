@@ -210,11 +210,7 @@ services:
         # Join the user's radios network as well as the workspace network.
         networks:
             workspace: {}
-            remote-radios:
-                # ZigbeeCore sends its events here (ZB_CLIENT_IP).  With two of
-                # the user's workspaces running at once, both answer to it.
-                aliases:
-                    - barton
+            remote-radios: {}
         volumes:
             - type: volume
               source: state

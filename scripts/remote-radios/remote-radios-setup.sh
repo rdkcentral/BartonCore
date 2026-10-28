@@ -1301,6 +1301,7 @@ if [ "$mode" = acquire ]; then
 fi
 # An hh4 guest has claimed the radio (see check_radio_mode).
 if [ -e "$dir/claims/silabs.claim" ]; then echo CLAIMED; fi
+if [ -e "$dir/zigbee.env" ]; then echo ZIGBEECORE; fi
 exit 0
 '
 
@@ -1466,16 +1467,31 @@ CPC_SOCK_MISSES=0
 # own cpcd, so while its claim exists the raw serial port is forwarded instead
 # of running the radio here; when the claim clears, the radio comes back here.
 check_radio_mode() {
-    local want=cpc
+    local want=cpc newly_available=0
     grep -qx CLAIMED <<< "$LEASE_REPLY" && want=serial
     [ "$want" = "$RADIO_MODE" ] && return 0
     if [ "$want" = cpc ] && [ "${CPC_AVAILABLE:-0}" != 1 ]; then
-        want=serial
-        [ "$want" = "$RADIO_MODE" ] && return 0
+        # ZigbeeCore may have been set up since this service started.  Its
+        # hint file is reported with the lease, so fetching zigbeed is only
+        # attempted once it exists, and at most every 10 minutes after a
+        # failed attempt (a hint without a build, say).
+        if [ -n "${SILABS_SERIAL:-}" ] && grep -qx ZIGBEECORE <<< "$LEASE_REPLY" \
+            && [ "$(date +%s)" -ge "${CPC_FETCH_RETRY_AT:-0}" ]; then
+            if fetch_cpc_binaries; then
+                CPC_AVAILABLE=1 newly_available=1
+                info "ZigbeeCore is now set up on the dev server; running the radio on this workstation."
+            else
+                CPC_FETCH_RETRY_AT=$(( $(date +%s) + 600 ))
+            fi
+        fi
+        if [ "${CPC_AVAILABLE:-0}" != 1 ]; then
+            want=serial
+            [ "$want" = "$RADIO_MODE" ] && return 0
+        fi
     fi
     if [ "$want" = serial ]; then
         info "An hh4 guest has claimed the radio; forwarding its serial port instead."
-    else
+    elif [ "$newly_available" = 0 ]; then
         info "The radio's claim has cleared; running the radio on this workstation again."
     fi
     stop_radio

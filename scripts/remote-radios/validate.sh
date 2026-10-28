@@ -801,15 +801,18 @@ check_otbr() {
 # Section: Zigbee (ZigbeeCore's remote-zigbee container)
 ###############################################################################
 check_zigbee() {
-    section "Zigbee (remote-zigbee container)"
+    section "Zigbee"
 
-    # Optional: present only when set up from a ZigbeeCore checkout.  Checked
-    # without connecting to ZigbeeCore.
-    if ! getent hosts remote-zigbee >/dev/null 2>&1; then
-        skip "remote-zigbee container" "Not running — set it up from ZigbeeCore with scripts/remote-zigbee.sh up"
+    # zigbeed runs on the workstation, next to cpcd, whenever the workstation
+    # runs the radio itself (relay mode).  It does not in serial mode: until
+    # ZigbeeCore is set up on the dev server, or while an hh4 guest holds the
+    # radio.  ZigbeeCore's own container is checked by dockerw -T, from outside
+    # this container, which is not on its network.
+    if [ ! -S "${RADIO_RELAY_SOCKET:-/run/remote-radios/cpc/relay.sock}" ]; then
+        skip "zigbeed" "Not running — the workstation forwards the radio's serial port (ZigbeeCore not set up, or an hh4 guest holds the radio)"
         return
     fi
-    pass "remote-zigbee container" "Resolvable on this user's radios network"
+    pass "zigbeed" "Runs on the workstation (see remote-radios.service there)"
 
     # Thread and Zigbee share the multi-PAN radio, each on its own spinel
     # interface: otbr-agent on 2, zigbeed on 1.
@@ -817,24 +820,6 @@ check_zigbee() {
         pass "otbr-agent spinel interface" "iid=2 (zigbeed uses 1)"
     else
         fail "otbr-agent spinel interface" "otbr-agent is not on iid=2 and will collide with zigbeed"
-    fi
-
-    # cpcd's own count of clients on the radio endpoint (12): otbr-agent and
-    # zigbeed.  The kernel's socket tables do not show the zigbee container's
-    # connection reliably from here.
-    if [ -S "${RADIO_RELAY_SOCKET:-/run/remote-radios/cpc/relay.sock}" ]; then
-        # zigbeed runs on the workstation next to cpcd; its EZSP link to
-        # ZigbeeCore is checked from the remote-zigbee container.
-        pass "zigbeed on the radio" "Runs on the workstation (see remote-radios.service there)"
-        return
-    fi
-    local cpcd_log="${CPCD_LOG:-/tmp/cpcd.log}" clients
-    clients=$(sed -n 's/.*Endpoint socket #12: Client [a-z]*\. \([0-9]*\) connection.*/\1/p' \
-        "$cpcd_log" 2>/dev/null | tail -1)
-    if [ "${clients:-0}" -ge 2 ]; then
-        pass "zigbeed on the radio" "${clients} clients on cpcd endpoint 12 (otbr-agent and zigbeed)"
-    else
-        fail "zigbeed on the radio" "${clients:-0} client(s) on cpcd endpoint 12 — zigbeed is not attached; see: docker logs \${USER}-remote-zigbee"
     fi
 }
 

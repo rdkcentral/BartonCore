@@ -149,18 +149,20 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
         else
             notice "Zigbee unavailable: ${ZIGBEE_HINT} names ${zigbeeDir}, which has no scripts/remote-zigbee.sh."
         fi
-        # Barton accepts only a numeric address for ZigbeeCore (it trusts events
-        # by comparing their source to it), so pass the container's address on
-        # the radios network.  If the container is recreated with a new
-        # address, restart Barton's container.
-        radiosNetwork="$(. "${DIR}/docker/.env" >/dev/null 2>&1; printf '%s-remote-radios' "${BUILDER_USER}")"
-        zigbeeIp="$(docker inspect -f "{{with index .NetworkSettings.Networks \"${radiosNetwork}\"}}{{.IPAddress}}{{end}}" \
+        # ZigbeeCore's container is on its own network, which Barton joins as
+        # its client (compose.remote-zigbee-client.yaml).  Barton accepts only a
+        # numeric address for ZigbeeCore (it trusts events by comparing their
+        # source to it), so pass the container's address there.  If the
+        # container is recreated with a new address, restart Barton's container.
+        zigbeeNetwork="$(. "${DIR}/docker/.env" >/dev/null 2>&1; printf '%s-remote-zigbee' "${BUILDER_USER}")"
+        zigbeeIp="$(docker inspect -f "{{with index .NetworkSettings.Networks \"${zigbeeNetwork}\"}}{{.IPAddress}}{{end}}" \
             "$zigbeeContainer" 2>/dev/null)"
         if [ -n "$zigbeeIp" ]; then
-            notice "ZigbeeCore is at ${zigbeeIp} on ${radiosNetwork}."
+            notice "ZigbeeCore is at ${zigbeeIp} on ${zigbeeNetwork}."
             EXTRA_ENV="${EXTRA_ENV} -e ZIGBEE_CORE_IP=${zigbeeIp}"
+            COMPOSE_FILES+=(-f "${DIR}/docker/compose.remote-zigbee-client.yaml")
         else
-            notice "Zigbee unavailable: ${zigbeeContainer} has no address on ${radiosNetwork}; run Barton with -z."
+            notice "Zigbee unavailable: ${zigbeeContainer} has no address on ${zigbeeNetwork}; run Barton with -z."
         fi
     else
         notice "Zigbee is not set up; run Barton with -z, or set it up from a ZigbeeCore checkout:"
@@ -237,7 +239,8 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
 fi
 
 # --use-aliases: `run` otherwise ignores the service's network aliases, and
-# ZigbeeCore's remote-zigbee container reaches Barton by its alias, barton.
+# ZigbeeCore's remote-zigbee container reaches Barton by its alias,
+# zigbee-client.
 docker compose "${COMPOSE_FILES[@]}" run \
     --rm \
     --use-aliases \
