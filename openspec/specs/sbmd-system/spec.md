@@ -1,4 +1,10 @@
-## MODIFIED Requirements
+# SBMD System
+
+## Purpose
+
+Specifies the Spec-Based Matter Driver system: how the factory loads driver files, claims devices using C++ metadata, and supports the v4 handler model in `SpecBasedMatterDeviceDriver`.
+
+## Requirements
 
 ### Requirement: SBMD factory loads driver files
 The SBMD factory SHALL scan configured directories for `.sbmd.js` files (instead of `.sbmd` YAML files). For each file, the factory SHALL evaluate it in the mquickjs context, extract claim metadata to C++ structures, and register the driver with `MatterDriverFactory` in the **inactive** state. The factory SHALL NOT activate drivers at startup; after extracting a driver's claim metadata the factory SHALL release the spec source text and heavy parsed registration so that a registered-but-unused driver retains only its claim metadata. The factory SHALL no longer use `SbmdParser` or yaml-cpp for driver loading. A spec rejected only because a numeric claim/version field is not an integer within its range SHALL be skipped (not registered, logged, and counted) without failing the registration of the remaining drivers.

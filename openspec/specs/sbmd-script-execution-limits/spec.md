@@ -1,4 +1,10 @@
-## MODIFIED Requirements
+# SBMD Script Execution Limits
+
+## Purpose
+
+Specifies safety limits for SBMD embedded-JavaScript execution: per-invocation script timeouts, an overall operation timeout for deferred chains, and a maximum deferral depth.
+
+## Requirements
 
 ### Requirement: Script timeout enforcement for handler invocations
 The mquickjs interrupt handler SHALL enforce per-invocation timeouts for v4 handler function calls, using the same `BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS` configuration as v3 mapper scripts. The deadline SHALL be set before each handler call and cleared immediately after.
@@ -7,7 +13,6 @@ The mquickjs interrupt handler SHALL enforce per-invocation timeouts for v4 hand
 - **WHEN** a handler function runs longer than `BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS`
 - **THEN** the mquickjs interrupt handler terminates execution and the runtime reports the operation as failed
 
-## ADDED Requirements
 
 ### Requirement: Overall operation timeout for deferred chains
 The runtime SHALL enforce an overall operation deadline for resource operations that involve deferred chains. The deadline SHALL be set when the first deferral occurs (from `matter.defaultTimeoutMs` or a system default) and SHALL NOT reset on subsequent deferrals. Per-hop `timeoutMs` values SHALL be capped at the remaining overall budget.
