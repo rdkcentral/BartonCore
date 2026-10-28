@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Relay a remote radio's host links between two machines.
 
-Two kinds of link are relayed:
+Three kinds of link are relayed:
 
-  cpcd's client sockets (modes agent and proxy), described below; and
-  zigbeed's EZSP serial link (mode ezsp), described at run_ezsp().
+  cpcd's client sockets (modes agent and proxy), described below;
+  zigbeed's EZSP serial link (mode ezsp), described at run_ezsp(); and
+  changes to zigbeed's tokens file (mode notify), described at run_notify().
 
 
 cpcd talks to its clients (otbr-agent, zigbeed) over local AF_UNIX
@@ -41,8 +42,10 @@ import select
 import signal
 import socket
 import struct
+import subprocess
 import sys
 import threading
+import time
 
 MAX_MESSAGE = 65536          # well above cpcd's largest message (4087)
 OPEN_ENDPOINT = 1            # cpcd control message type
@@ -315,6 +318,42 @@ def run_ezsp(args):
             pass
 
 
+def run_notify(args):
+    """Report changes to zigbeed's tokens file by running a command.
+
+    ZigbeeCore learns that the Zigbee network's configuration changed by
+    watching zigbeed's tokens file, then fetches the new configuration from
+    zigbeed over EZSP.  With zigbeed on another machine the file is out of its
+    reach, so this watches it here and runs COMMAND (which touches ZigbeeCore's
+    copy) after each change.  Changes within --settle seconds of each other are
+    reported once.  A report that fails is not retried: this only mirrors a
+    convenience signal, and a missed one does no harm.
+    """
+    path = os.path.expanduser(args.file)
+    def mtime():
+        try:
+            return os.stat(path).st_mtime_ns
+        except FileNotFoundError:
+            return None
+
+    last = mtime()
+    pending_since = None
+    log(f"watching {path}")
+    while True:
+        time.sleep(args.interval)
+        now = mtime()
+        if now != last:
+            last = now
+            pending_since = time.monotonic()
+        elif pending_since is not None and time.monotonic() - pending_since >= args.settle:
+            pending_since = None
+            rc = subprocess.call(args.command)
+            if rc == 0:
+                log("reported a tokens change")
+            else:
+                log(f"could not report a tokens change (exit {rc})")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="mode", required=True)
@@ -333,11 +372,25 @@ def main():
                    help="path of the tty for zigbeed, e.g. ~/.local/state/ttyZigbeeNCP")
     e.add_argument("--listen", default="127.0.0.1:20002",
                    help="host:port to listen on (default 127.0.0.1:20002)")
+    n = sub.add_parser("notify", help="run a command when zigbeed's tokens change")
+    n.add_argument("--file", required=True, help="zigbeed's tokens file")
+    n.add_argument("--interval", type=float, default=1.0,
+                   help="seconds between checks (default 1)")
+    n.add_argument("--settle", type=float, default=2.0,
+                   help="seconds without change before reporting (default 2)")
+    n.add_argument("command", nargs=argparse.REMAINDER,
+                   help="command to run after a change (after --)")
     args = p.parse_args()
+    if args.mode == "notify":
+        if args.command[:1] == ["--"]:
+            args.command = args.command[1:]
+        if not args.command:
+            p.error("notify needs a command, after --")
     # Run cleanup (finally blocks) when stopped by a service manager too.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
-        {"agent": run_agent, "proxy": run_proxy, "ezsp": run_ezsp}[args.mode](args)
+        {"agent": run_agent, "proxy": run_proxy, "ezsp": run_ezsp,
+         "notify": run_notify}[args.mode](args)
     except KeyboardInterrupt:
         pass
 

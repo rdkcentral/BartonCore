@@ -506,7 +506,11 @@ time `remote-radios.service` starts there.
 zigbeed's tokens file is stored on the workstation, in
 `~/.local/state/remote-radios/host_token.nvm`, but it is populated by
 ZigbeeCore: the network blob ZigbeeCore manages comes with the network init
-request.
+request. ZigbeeCore learns of changes to that file by watching it, so the
+workstation writes a marker of the same name to `~/.remote-radios/zigbee/` on
+the dev server after each change (`tokens-notify.log` in the workstation logs).
+ZigbeeCore then reads the configuration from zigbeed and reports it to Barton.
+A change missed while the tunnel is down is not resent.
 
 That records the checkout in `~/.remote-radios/zigbee.env`. From then on
 `./dockerw -T` starts the container whenever it is not running, and points

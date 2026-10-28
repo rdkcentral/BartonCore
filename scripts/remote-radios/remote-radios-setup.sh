@@ -930,6 +930,7 @@ resolve_remote_params() {
     BT_USBIP_SOCK_REMOTE="${remote_home}/.remote-radios/usbip/usbipd.sock"
     CPC_SOCK_REMOTE="${remote_home}/.remote-radios/cpc/relay.sock"
     EZSP_SOCK_REMOTE="${remote_home}/.remote-radios/zigbee/ezsp.sock"
+    ZIGBEE_TOKENS_REMOTE="${remote_home}/.remote-radios/zigbee/host_token.nvm"
 
     # Create the per-user 0700 socket directories on the dev server BEFORE any
     # reverse tunnel starts — sshd cannot bind a StreamLocal (UNIX socket)
@@ -1107,6 +1108,7 @@ CPC_PIDS=""
 CPC_TUNNEL_PID=""
 CPC_SOCK_REMOTE=""
 EZSP_SOCK_REMOTE=""
+ZIGBEE_TOKENS_REMOTE=""
 
 # run_supervised NAME CMD... — run CMD, restarting it with back-off while the
 # service runs.  Each process logs to ${STATE_DIR}/NAME.log.
@@ -1164,6 +1166,16 @@ EOF
         until [ -S '${CPC_SOCKET_DIR}/ctrl.cpcd.sock' ] && [ -e '${STATE_DIR}/ttyZigbeeNCP' ]; do sleep 1; done
         cd '$RADIO_DIR' && LD_LIBRARY_PATH='$INSTALL_DIR' exec '${INSTALL_DIR}/zigbeed' \
             -r 'spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0' -d 2 -p '${STATE_DIR}/ttyZigbeeNCP'"
+    # ZigbeeCore learns that the network's configuration changed by watching
+    # zigbeed's tokens file, which is here rather than beside it.  Mirror each
+    # change as a marker of the same name in its directory on the dev server;
+    # it then reads the configuration from zigbeed itself.  The marker's
+    # contents are irrelevant, but writing them (rather than touching it) is
+    # what ZigbeeCore's inotify watch reacts to.
+    run_supervised tokens-notify python3 "$relay" notify \
+        --file "${RADIO_DIR}/host_token.nvm" -- \
+        ssh -o BatchMode=yes -o ClearAllForwardings=yes -o ConnectTimeout=8 "$SSH_TARGET" \
+        "date +%s%N > ${ZIGBEE_TOKENS_REMOTE}"
 
     start_cpc_tunnel
 }
