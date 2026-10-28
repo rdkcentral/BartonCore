@@ -105,6 +105,27 @@ USBIPD_LOCAL_PORT=3240
 # Silabs local relay port for remote-serial.py (loopback only).
 SILABS_LOCAL_PORT=20000
 
+# The radio normally runs here, on the workstation: cpcd drives it, and zigbeed
+# runs next to it, because Zigbee's MAC timing (answering beacon requests during
+# a joining device's scan) cannot tolerate the round trip to the dev server.
+# Only cpcd's client sockets (for the dev server's otbr-agent) and zigbeed's
+# EZSP link (for ZigbeeCore) cross the tunnel, both via radio-relay.py.
+#
+# While an hh4 QEMU guest holds the claim on the radio, the workstation instead
+# forwards the raw serial port (remote-serial.py), since the guest runs its own
+# cpcd.  RADIO_MODE is "cpc" or "serial" accordingly.
+CPC_INSTANCE="cpcd_rr"
+CPC_RELAY_PORT=20001
+EZSP_RELAY_PORT=20002
+RADIO_MODE="cpc"
+CPC_BINARIES="cpcd zigbeed libcpc.so.3"
+# cpcd and zigbeed run from here.  ZigbeeCore builds the workstation's cpcd and
+# libcpc to keep cpcd's sockets under the working directory (rather than the
+# shared, possibly root-owned /dev/shm), and zigbeed keeps the Zigbee network's
+# tokens here, so the network follows this workstation across reboots.
+RADIO_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/remote-radios"
+CPC_SOCKET_DIR="${RADIO_DIR}/cpcd/${CPC_INSTANCE}"
+
 # Known Silabs serial radio USB IDs (VID:PID).
 SILABS_IDS="10c4:ea60 1366:0105 1366:1024"
 
@@ -689,7 +710,7 @@ install_runtime_files() {
     RUNTIME_CHANGED=0
 
     local f tmp src
-    for f in "$SCRIPT_NAME" remote-serial.py; do
+    for f in "$SCRIPT_NAME" remote-serial.py radio-relay.py; do
         tmp="${staging}/${f}"
         src=""
         if [ -n "$SCRIPT_DIR" ] && [ "$SCRIPT_DIR" != "$INSTALL_DIR" ] \
@@ -907,13 +928,15 @@ resolve_remote_params() {
     # change is required.  socat inside the container bridges it to TCP for
     # `usbip attach`.
     BT_USBIP_SOCK_REMOTE="${remote_home}/.remote-radios/usbip/usbipd.sock"
+    CPC_SOCK_REMOTE="${remote_home}/.remote-radios/cpc/relay.sock"
+    EZSP_SOCK_REMOTE="${remote_home}/.remote-radios/zigbee/ezsp.sock"
 
     # Create the per-user 0700 socket directories on the dev server BEFORE any
     # reverse tunnel starts — sshd cannot bind a StreamLocal (UNIX socket)
     # forward if its parent directory does not exist ("remote port forwarding
     # failed for listen path").
     ssh -o BatchMode=yes -o ClearAllForwardings=yes "$SSH_TARGET" \
-        'mkdir -p ~/.remote-radios/radios ~/.remote-radios/usbip && chmod 700 ~/.remote-radios ~/.remote-radios/radios ~/.remote-radios/usbip' \
+        'mkdir -p ~/.remote-radios/radios ~/.remote-radios/usbip ~/.remote-radios/cpc ~/.remote-radios/zigbee && chmod 700 ~/.remote-radios ~/.remote-radios/radios ~/.remote-radios/usbip ~/.remote-radios/cpc ~/.remote-radios/zigbee' \
         || die "Could not create ~/.remote-radios socket dirs on ${SSH_TARGET}."
 
     ok "Remote UID ${REMOTE_UID}; Silabs socket ${SILABS_SOCK_REMOTE}; BT usbip socket ${BT_USBIP_SOCK_REMOTE}"
@@ -1014,7 +1037,184 @@ SILABS_SOCKET_HOST=${SILABS_SOCK_REMOTE}
 SILABS_SOCKET=/run/remote-radios/radios/silabs.sock
 BT_USBIP_SOCKET_HOST=$([ -n "${BT_BUSID:-}" ] && echo "${BT_USBIP_SOCK_REMOTE}" || echo "")
 BT_USBIP_SOCKET=$([ -n "${BT_BUSID:-}" ] && echo "/run/remote-radios/usbip/usbipd.sock" || echo "")
+RADIO_MODE=${RADIO_MODE}
 EOF" 2>/dev/null || warn "Could not write remote radios.env hint."
+}
+
+# ---------------------------------------------------------------------------
+# The radio on this workstation (CPC mode)
+# ---------------------------------------------------------------------------
+# fetch_cpc_binaries — copy cpcd, zigbeed and libcpc from the developer's
+# ZigbeeCore checkout on the dev server, which BartonCore's remote-radios
+# already needs.  The dev server's checkout is the one place they are built, so
+# there is nothing to build here; they are refreshed whenever they change.
+# Returns non-zero when they are unavailable, leaving CPC mode off.
+# clean_staging DIR — remove a fetch staging directory: its known files, then
+# the directories, so nothing is removed recursively by path.
+clean_staging() {
+    rm -f "$1"/cpcd-workstation/bin/cpcd "$1"/cpcd-workstation/lib/libcpc.so.3 "$1"/zigbeed/debug/zigbeed
+    rmdir "$1"/cpcd-workstation/bin "$1"/cpcd-workstation/lib "$1"/cpcd-workstation \
+        "$1"/zigbeed/debug "$1"/zigbeed "$1" 2>/dev/null || true
+}
+
+fetch_cpc_binaries() {
+    local zc
+    zc=$(ssh -o BatchMode=yes -o ClearAllForwardings=yes -o ConnectTimeout=10 "$SSH_TARGET" \
+        'sed -n "s/^ZIGBEECORE_DIR=//p" ~/.remote-radios/zigbee.env 2>/dev/null') || zc=""
+    if [ -z "$zc" ]; then
+        warn "ZigbeeCore is not set up on ${SSH_TARGET} (run scripts/remote-zigbee.sh up in a ZigbeeCore checkout there)."
+        return 1
+    fi
+
+    local staging
+    mkdir -p "${CONFIG_DIR}/staging" "$INSTALL_DIR"
+    staging="$(mktemp -d "${CONFIG_DIR}/staging/cpc.XXXXXX")"
+    # One transfer, as a tar stream, so there is a single round trip.  -h
+    # follows libcpc's symlink chain to the real library.
+    if ! ssh -o BatchMode=yes -o ClearAllForwardings=yes "$SSH_TARGET" \
+        "cd '$zc/build' && tar -chf - cpcd-workstation/bin/cpcd cpcd-workstation/lib/libcpc.so.3 zigbeed/debug/zigbeed" \
+        | tar -xf - -C "$staging" 2>/dev/null; then
+        warn "Could not copy cpcd/zigbeed from ${zc}/build on ${SSH_TARGET}; build ZigbeeCore there first (its cpcd-workstation build is needed)."
+        clean_staging "$staging"
+        return 1
+    fi
+
+    local f src changed=0
+    for f in $CPC_BINARIES; do
+        case "$f" in
+            cpcd) src="$staging/cpcd-workstation/bin/cpcd" ;;
+            zigbeed) src="$staging/zigbeed/debug/zigbeed" ;;
+            *) src="$staging/cpcd-workstation/lib/$f" ;;
+        esac
+        if ! cmp -s "$src" "${INSTALL_DIR}/$f"; then
+            chmod 0755 "$src"
+            mv -f "$src" "${INSTALL_DIR}/$f"
+            changed=1
+        fi
+    done
+    clean_staging "$staging"
+    [ "$changed" = 1 ] && info "Updated cpcd and zigbeed from ${zc} on ${SSH_TARGET}."
+
+    # They run here, built on the dev server, so check they actually load.
+    if ! LD_LIBRARY_PATH="$INSTALL_DIR" "${INSTALL_DIR}/cpcd" --version >/dev/null 2>&1; then
+        warn "cpcd from ${SSH_TARGET} does not run on this workstation (built on a newer system?)."
+        return 1
+    fi
+    return 0
+}
+
+CPC_PIDS=""
+CPC_TUNNEL_PID=""
+CPC_SOCK_REMOTE=""
+EZSP_SOCK_REMOTE=""
+
+# run_supervised NAME CMD... — run CMD, restarting it with back-off while the
+# service runs.  Each process logs to ${STATE_DIR}/NAME.log.
+run_supervised() {
+    local name="$1"; shift
+    (
+        # The service runs with set -e; a supervisor must survive its child
+        # failing, which is exactly what it is there to handle.
+        set +e
+        trap 'kill "$child" 2>/dev/null; wait "$child" 2>/dev/null; exit 0' TERM INT
+        backoff=2
+        while true; do
+            started=$SECONDS
+            "$@" >> "${STATE_DIR}/${name}.log" 2>&1 &
+            child=$!
+            wait "$child"
+            echo "[$(date -Is)] ${name} exited ($?)" >> "${STATE_DIR}/${name}.log"
+            [ $((SECONDS - started)) -ge 60 ] && backoff=2
+            sleep "$backoff" & wait $!
+            backoff=$(( backoff * 2 < 30 ? backoff * 2 : 30 ))
+        done
+    ) &
+    CPC_PIDS="${CPC_PIDS} $!"
+}
+
+# start_cpc_stack — run the radio here: cpcd, the relay agent for the dev
+# server's otbr-agent, zigbeed, and its EZSP relay; then tunnel both relays.
+start_cpc_stack() {
+    [ -n "${SILABS_DEV:-}" ] || return 0
+    [ -z "$CPC_PIDS" ] || return 0
+    local relay="${INSTALL_DIR}/radio-relay.py"
+    [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/radio-relay.py" ] && relay="${SCRIPT_DIR}/radio-relay.py"
+
+    info "Running the radio on this workstation (cpcd + zigbeed, ${SILABS_DEV})..."
+    local conf="${STATE_DIR}/cpcd.conf"
+    mkdir -p "$RADIO_DIR"; chmod 700 "$RADIO_DIR"
+    cat > "$conf" <<EOF
+# written by remote-radios-setup.sh
+instance_name: ${CPC_INSTANCE}
+bus_type: UART
+uart_device_file: ${SILABS_DEV}
+uart_device_baud: 115200
+uart_hardflow: true
+EOF
+    # cpcd's sockets go in ${CPC_SOCKET_DIR}, relative to the working
+    # directory, where the agent and zigbeed (through libcpc) find them.
+    run_supervised cpcd sh -c "cd '$RADIO_DIR' && LD_LIBRARY_PATH='$INSTALL_DIR' exec '${INSTALL_DIR}/cpcd' --conf '$conf'"
+    run_supervised cpc-relay python3 "$relay" agent \
+        --socket-dir "$CPC_SOCKET_DIR" --listen "127.0.0.1:${CPC_RELAY_PORT}"
+    run_supervised ezsp-relay python3 "$relay" ezsp \
+        --link "${STATE_DIR}/ttyZigbeeNCP" --listen "127.0.0.1:${EZSP_RELAY_PORT}"
+    # zigbeed keeps the Zigbee network's tokens in its working directory, so
+    # the network follows this workstation.  It waits for cpcd and its tty.
+    run_supervised zigbeed sh -c "
+        until [ -S '${CPC_SOCKET_DIR}/ctrl.cpcd.sock' ] && [ -e '${STATE_DIR}/ttyZigbeeNCP' ]; do sleep 1; done
+        cd '$RADIO_DIR' && LD_LIBRARY_PATH='$INSTALL_DIR' exec '${INSTALL_DIR}/zigbeed' \
+            -r 'spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0' -d 2 -p '${STATE_DIR}/ttyZigbeeNCP'"
+
+    start_cpc_tunnel
+}
+
+# start_cpc_tunnel — one ssh carrying both relays to per-user sockets on the
+# dev server: cpc/relay.sock (otbr-agent's cpcd sockets) and zigbee/ezsp.sock.
+start_cpc_tunnel() {
+    ssh -o BatchMode=yes -o ClearAllForwardings=yes -o ConnectTimeout=8 "$SSH_TARGET" \
+        "rm -f ${CPC_SOCK_REMOTE} ${EZSP_SOCK_REMOTE}" 2>/dev/null || true
+    ssh -N \
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+        -o ExitOnForwardFailure=no \
+        -o StreamLocalBindUnlink=yes \
+        -o ControlMaster=no -o ControlPath=none \
+        -R "${CPC_SOCK_REMOTE}:127.0.0.1:${CPC_RELAY_PORT}" \
+        -R "${EZSP_SOCK_REMOTE}:127.0.0.1:${EZSP_RELAY_PORT}" \
+        "$SSH_TARGET" \
+        > "${STATE_DIR}/cpc-tunnel.log" 2>&1 &
+    CPC_TUNNEL_PID=$!
+}
+
+# stop_cpc_stack — stop everything start_cpc_stack started.  The dev server's
+# sockets are left to the caller (the lease's release removes them).
+stop_cpc_stack() {
+    local p
+    [ -n "$CPC_TUNNEL_PID" ] && { kill "$CPC_TUNNEL_PID" 2>/dev/null || true; }
+    for p in $CPC_PIDS; do kill "$p" 2>/dev/null || true; done
+    # wait reports a killed process as failed (143), which set -e would turn
+    # into the whole service exiting.
+    for p in $CPC_PIDS $CPC_TUNNEL_PID; do wait "$p" 2>/dev/null || true; done
+    CPC_PIDS=""; CPC_TUNNEL_PID=""
+}
+
+# start_radio / stop_radio — whichever form of forwarding RADIO_MODE selects.
+start_radio() {
+    # The radios container picks its mode from which socket exists, so the
+    # other mode's socket must not be left behind (by a mode switch or by a
+    # previous run).
+    local stale="$SILABS_SOCK_REMOTE"
+    [ "$RADIO_MODE" = cpc ] || stale="${CPC_SOCK_REMOTE} ${EZSP_SOCK_REMOTE}"
+    ssh -o BatchMode=yes -o ConnectTimeout=8 -o ClearAllForwardings=yes "$SSH_TARGET" \
+        "rm -f ${stale}" 2>/dev/null || true
+    if [ "$RADIO_MODE" = cpc ]; then start_cpc_stack; else start_silabs_tunnel; fi
+}
+stop_radio() {
+    stop_cpc_stack
+    if [ -n "${SILABS_TUNNEL_PID:-}" ]; then
+        kill "$SILABS_TUNNEL_PID" 2>/dev/null || true
+        wait "$SILABS_TUNNEL_PID" 2>/dev/null || true
+        SILABS_TUNNEL_PID=""
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1087,6 +1287,9 @@ if [ -n "$cur_id" ] && [ "$cur_id" != "$id" ]; then echo "TOOK ${cur_host:-unkno
 if [ "$mode" = acquire ]; then
     for p in "$@"; do [ -S "$p" ] || echo "MISSING $p"; done
 fi
+# An hh4 guest has claimed the radio (see check_radio_mode).
+if [ -e "$dir/claims/silabs.claim" ]; then echo CLAIMED; fi
+exit 0
 '
 
 # lease_op <mode> [remote paths...] — run the lease script on the dev server.
@@ -1167,6 +1370,7 @@ stand_down() {
         wait "$SILABS_TUNNEL_PID" 2>/dev/null || true
         SILABS_TUNNEL_PID=""
     fi
+    stop_cpc_stack
     if [ -n "${BT_TUNNEL_PID:-}" ]; then
         kill "$BT_TUNNEL_PID" 2>/dev/null || true
         BT_TUNNEL_PID=""
@@ -1177,7 +1381,7 @@ stand_down() {
 # start_forwarding — export the dongle and bring up both tunnels.
 start_forwarding() {
     start_bind_helper
-    start_silabs_tunnel
+    start_radio
     start_bt_tunnel
     write_remote_env_hint
 }
@@ -1187,7 +1391,7 @@ start_forwarding() {
 # ---------------------------------------------------------------------------
 teardown() {
     info "Tearing down remote-radios tunnels..."
-    [ -n "${SILABS_TUNNEL_PID:-}" ] && kill "$SILABS_TUNNEL_PID" 2>/dev/null || true
+    stop_radio
     [ -n "${BT_TUNNEL_PID:-}" ] && kill "$BT_TUNNEL_PID" 2>/dev/null || true
     # Give up the lease, removing the remote sockets and env hint — but only if
     # this workstation still holds it; otherwise they belong to the new owner.
@@ -1195,7 +1399,8 @@ teardown() {
         info "Keeping the lease for the take-over restart."
     else
         lease_op release ${SILABS_SOCK_REMOTE:+"$SILABS_SOCK_REMOTE"} \
-            ${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"} || true
+            ${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"} \
+            ${CPC_SOCK_REMOTE:+"$CPC_SOCK_REMOTE"} ${EZSP_SOCK_REMOTE:+"$EZSP_SOCK_REMOTE"} || true
     fi
     ok "Teardown complete."
 }
@@ -1230,6 +1435,41 @@ check_remote_sockets() {
     else
         BT_SOCK_MISSES=0
     fi
+    if [ -n "${CPC_TUNNEL_PID:-}" ] && grep -qE "^MISSING (${CPC_SOCK_REMOTE}|${EZSP_SOCK_REMOTE})$" <<< "$LEASE_REPLY"; then
+        CPC_SOCK_MISSES=$((CPC_SOCK_MISSES + 1))
+        if [ "$CPC_SOCK_MISSES" -ge 2 ]; then
+            warn "Radio relay sockets are gone from ${SSH_TARGET} — restarting their tunnel."
+            kill "$CPC_TUNNEL_PID" 2>/dev/null || true
+            wait "$CPC_TUNNEL_PID" 2>/dev/null || true
+            CPC_SOCK_MISSES=0
+            start_cpc_tunnel
+        fi
+    else
+        CPC_SOCK_MISSES=0
+    fi
+}
+CPC_SOCK_MISSES=0
+
+# check_radio_mode — follow hh4's claim on the radio.  A QEMU guest runs its
+# own cpcd, so while its claim exists the raw serial port is forwarded instead
+# of running the radio here; when the claim clears, the radio comes back here.
+check_radio_mode() {
+    local want=cpc
+    grep -qx CLAIMED <<< "$LEASE_REPLY" && want=serial
+    [ "$want" = "$RADIO_MODE" ] && return 0
+    if [ "$want" = cpc ] && [ "${CPC_AVAILABLE:-0}" != 1 ]; then
+        want=serial
+        [ "$want" = "$RADIO_MODE" ] && return 0
+    fi
+    if [ "$want" = serial ]; then
+        info "An hh4 guest has claimed the radio; forwarding its serial port instead."
+    else
+        info "The radio's claim has cleared; running the radio on this workstation again."
+    fi
+    stop_radio
+    RADIO_MODE="$want"
+    start_radio
+    write_remote_env_hint
 }
 
 monitor_loop() {
@@ -1248,7 +1488,7 @@ monitor_loop() {
             resolve_remote_params
             # Another workstation may have taken over while this one was away.
             wait_for_lease
-            start_silabs_tunnel
+            start_radio
             start_bt_tunnel
             write_remote_env_hint
             continue
@@ -1265,7 +1505,8 @@ monitor_loop() {
             local rc=0
             lease_op acquire \
                 ${SILABS_TUNNEL_PID:+${SILABS_SOCK_REMOTE:+"$SILABS_SOCK_REMOTE"}} \
-                ${BT_TUNNEL_PID:+${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"}} || rc=$?
+                ${BT_TUNNEL_PID:+${BT_USBIP_SOCK_REMOTE:+"$BT_USBIP_SOCK_REMOTE"}} \
+                ${CPC_TUNNEL_PID:+"$CPC_SOCK_REMOTE" "$EZSP_SOCK_REMOTE"} || rc=$?
             if [ "$rc" -eq 2 ]; then
                 stand_down
                 wait_for_lease
@@ -1274,6 +1515,7 @@ monitor_loop() {
             fi
             if [ "$rc" -eq 0 ]; then
                 check_remote_sockets
+                check_radio_mode
             fi
         fi
 
@@ -1284,7 +1526,7 @@ monitor_loop() {
             SILABS_DEV="$(resolve_silabs_dev "$SILABS_SERIAL")"
             if [ -n "$SILABS_DEV" ]; then
                 ok "Silabs radio appeared at ${SILABS_DEV}."
-                start_silabs_tunnel
+                start_radio
             fi
         fi
         if [ -n "${BT_BUSID:-}" ] && [ -z "${BIND_HELPER_PID:-}" ] \
@@ -1323,6 +1565,17 @@ monitor_loop() {
             && ! kill -0 "$BT_TUNNEL_PID" 2>/dev/null; then
             warn "Bluetooth usb-ip tunnel died — restarting."
             start_bt_tunnel
+        fi
+        # CPC mode: the tunnel, and noticing an unplugged radio (cpcd itself is
+        # restarted by its supervisor, which would otherwise spin).
+        if [ -n "${CPC_TUNNEL_PID:-}" ] && ! kill -0 "$CPC_TUNNEL_PID" 2>/dev/null; then
+            warn "Radio relay tunnel died — restarting."
+            start_cpc_tunnel
+        fi
+        if [ -n "$CPC_PIDS" ] && [ -n "${SILABS_DEV:-}" ] && [ ! -e "$SILABS_DEV" ]; then
+            warn "Silabs radio ${SILABS_DEV} was unplugged; waiting for it to return."
+            stop_cpc_stack
+            SILABS_DEV=""
         fi
     done
 }
@@ -1418,6 +1671,15 @@ run_as_service() {
     else
         wait_for_lease
     fi
+    # Run the radio here unless the binaries are unavailable, or an hh4 guest
+    # holds the radio's claim; either way the serial port is forwarded instead.
+    CPC_AVAILABLE=0
+    if [ -n "${SILABS_SERIAL:-}" ] && fetch_cpc_binaries; then CPC_AVAILABLE=1; fi
+    RADIO_MODE=cpc
+    if [ "$CPC_AVAILABLE" != 1 ] || grep -qx CLAIMED <<< "${LEASE_REPLY:-}"; then
+        RADIO_MODE=serial
+    fi
+    info "Radio mode: ${RADIO_MODE}."
     start_forwarding
     ok "Remote radios are forwarded to ${SSH_TARGET}."
     monitor_loop

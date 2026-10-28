@@ -80,6 +80,12 @@ set -e
 # with a clear message if both are unset.  SILABS_DEVICE is only ever set on
 # purpose, so it wins over the socket, which the compose overlay defaults.
 SILABS_SOCKET="${SILABS_SOCKET:-}"
+# When the radio runs on the workstation (the usual case), its cpcd's client
+# sockets arrive relayed through this socket instead, and radio-relay.py
+# recreates them here for otbr-agent.  LINK_MODE is "relay" or "serial",
+# chosen whenever the link is (re)established from whichever socket exists.
+RADIO_RELAY_SOCKET="${RADIO_RELAY_SOCKET:-}"
+LINK_MODE=serial
 SILABS_DEVICE="${SILABS_DEVICE:-}"
 if [ -n "${SILABS_DEVICE}" ] && [ -n "${SILABS_SOCKET}" ]; then
     echo "[remote-radios] SILABS_DEVICE is set — using the local radio and ignoring SILABS_SOCKET."
@@ -218,7 +224,7 @@ stop_silabs_link() {
         wait ${SOCAT_PID} 2>/dev/null || true
         SOCAT_PID=""
     fi
-    rm -f "${VIRTUAL_TTY}"
+    rm -f "${VIRTUAL_TTY}" /dev/shm/cpcd/"${CPC_INSTANCE}"/*.cpcd.sock
 }
 
 # resume_silabs — connect the radio once nothing prevents it.  Non-zero on
@@ -237,6 +243,22 @@ resume_silabs() {
     return 0
 }
 
+# radio_link_available — true when the workstation forwards the radio in
+# either form.
+radio_link_available() {
+    { [ -n "${RADIO_RELAY_SOCKET}" ] && [ -S "${RADIO_RELAY_SOCKET}" ]; } || [ -S "${SILABS_SOCKET}" ]
+}
+
+# select_link_mode — prefer the relayed cpcd; the raw serial port is forwarded
+# only while an hh4 guest holds the radio, and this container is released then.
+select_link_mode() {
+    if [ -n "${RADIO_RELAY_SOCKET}" ] && [ -S "${RADIO_RELAY_SOCKET}" ]; then
+        LINK_MODE=relay
+    else
+        LINK_MODE=serial
+    fi
+}
+
 # start_silabs_socat — bridge the bind-mounted UNIX socket to a local PTY that
 # cpcd opens as /dev/ttyRadio.  Sets SOCAT_PID.  Returns non-zero on failure.
 #
@@ -246,7 +268,11 @@ resume_silabs() {
 start_silabs_socat() {
     [ -n "${SOCAT_PID:-}" ] && kill ${SOCAT_PID} 2>/dev/null || true
     [ -n "${SOCAT_PID:-}" ] && wait ${SOCAT_PID} 2>/dev/null || true
+    SOCAT_PID=""
     rm -f "${VIRTUAL_TTY}"
+    select_link_mode
+    # The relay needs no serial bridge: the radio-relay proxy stands in for cpcd.
+    [ "${LINK_MODE}" = relay ] && return 0
 
     # Wait for the socket to exist (it may vanish briefly on tunnel restarts).
     local waitCount=0
@@ -291,7 +317,6 @@ CPCD_LOG="/tmp/cpcd.log"
 CPCD_WAIT_MAX=30
 
 write_cpcd_conf() {
-    echo "[remote-radios] Writing cpcd config to ${CPCD_CONF}..."
     mkdir -p "$(dirname "${CPCD_CONF}")"
     cat > "${CPCD_CONF}" <<EOF
 # cpcd configuration — written at container startup by remote-radios-entrypoint.sh
@@ -309,6 +334,10 @@ EOF
 start_cpcd() {
     local fatal="${1:-fatal}"
     : > "${CPCD_LOG}"
+    if [ "${LINK_MODE}" = relay ]; then
+        start_cpc_proxy "${fatal}"
+        return
+    fi
     # stdbuf -oL forces line-buffered stdout so grep can detect the ready
     # message promptly through the pipe.
     stdbuf -oL cpcd --conf "${CPCD_CONF}" > >(tee "${CPCD_LOG}") 2>&1 &
@@ -337,11 +366,48 @@ start_cpcd() {
     return 0
 }
 
+# start_cpc_proxy — recreate the workstation cpcd's client sockets in
+# /dev/shm/cpcd/${CPC_INSTANCE}, so otbr-agent connects exactly as it would to
+# a local cpcd.  Tracked as CPCD_PID.
+start_cpc_proxy() {
+    local fatal="$1"
+    local sockdir="/dev/shm/cpcd/${CPC_INSTANCE}"
+    python3 /usr/local/bin/radio-relay.py proxy \
+        --socket-dir "${sockdir}" --upstream "${RADIO_RELAY_SOCKET}" \
+        > >(tee "${CPCD_LOG}") 2>&1 &
+    CPCD_PID=$!
+    local waitCount=0
+    while [ ! -S "${sockdir}/ctrl.cpcd.sock" ]; do
+        if ! kill -0 ${CPCD_PID} 2>/dev/null || [ ${waitCount} -ge 10 ]; then
+            echo "[remote-radios] ERROR: the radio relay did not start." >&2
+            cat "${CPCD_LOG}" >&2
+            [ "${fatal}" = "fatal" ] && exit 1
+            return 1
+        fi
+        sleep 1
+        waitCount=$((waitCount + 1))
+    done
+    echo "[remote-radios] Radio relay ready (PID ${CPCD_PID}; cpcd runs on the workstation)."
+}
+
 # restart_cpcd — kill the old cpcd, rewrite config, start a fresh instance.
 restart_cpcd() {
     echo "[remote-radios] Restarting cpcd..."
     [ -n "${CPCD_PID:-}" ] && kill ${CPCD_PID} 2>/dev/null || true
     [ -n "${CPCD_PID:-}" ] && wait ${CPCD_PID} 2>/dev/null || true
+    # The workstation may have switched how it provides the radio (an hh4
+    # claim came or went), so pick the link afresh.
+    local wasMode="${LINK_MODE}"
+    select_link_mode
+    if [ "${LINK_MODE}" != "${wasMode}" ] || [ "${LINK_MODE}" = relay ]; then
+        [ -n "${SOCAT_PID:-}" ] && kill ${SOCAT_PID} 2>/dev/null || true
+        [ -n "${SOCAT_PID:-}" ] && wait ${SOCAT_PID} 2>/dev/null || true
+        SOCAT_PID=""
+        rm -f /dev/shm/cpcd/"${CPC_INSTANCE}"/*.cpcd.sock
+        if [ "${LINK_MODE}" = serial ]; then
+            start_silabs_socat || return 1
+        fi
+    fi
     sleep 1
     write_cpcd_conf
     start_cpcd nonfatal
@@ -560,9 +626,26 @@ bt_usbip_detach() {
     if [ -n "${port}" ] && { vhci_used_ports | grep -qx "${port} ${devid}" \
         || vhci_ports_in_state 007 | grep -q "^${port} "; }; then
         echo "[remote-radios] Detaching Bluetooth dongle from vhci port ${port}"
-        usbip detach -p "${port}" 2>/dev/null || true
+        usbip detach -p "${port}" 2>/dev/null || vhci_sysfs_detach "${port}" || true
     fi
     rm -f "${BT_USBIP_PORT_FILE}"
+}
+
+# vhci_sysfs_detach <port> — detach through the kernel's own interface.  The
+# usbip tool fails to open the vhci driver while a port is left attached to a
+# connection that died (as when the workstation's tunnel drops), which is
+# precisely when the port needs detaching; the sysfs write still works.
+vhci_sysfs_detach() {
+    local status ctl
+    for status in /sys/devices/platform/vhci_hcd.*/status*; do
+        [ -r "${status}" ] || continue
+        if awk -v port="$1" 'NR > 1 && ($2 + 0) == port { found = 1 } END { exit !found }' "${status}"; then
+            ctl="$(dirname "${status}")"
+            echo "$1" > "${ctl}/detach" 2>/dev/null && return 0
+        fi
+    done
+    echo "[remote-radios] WARNING: could not detach vhci port $1." >&2
+    return 1
 }
 
 # start_bluetooth_chain — attach the dongle, identify its HCI device, and start
@@ -741,7 +824,7 @@ service_monitor() {
                     SILABS_YIELD_REASON=claim
                 fi
             elif [ -n "${SILABS_YIELDED}" ]; then
-                if [ ! -S "${SILABS_SOCKET}" ]; then
+                if ! radio_link_available; then
                     # Still not forwarded.  Nothing to try until it appears.
                     SILABS_YIELD_REASON=absent
                 elif resume_silabs; then
@@ -757,7 +840,7 @@ service_monitor() {
         # Silabs health checks are meaningless while the radio is released.
         if [ -z "${SILABS_YIELDED}" ]; then
             # Silabs layer 0: socat (remote mode only).
-            if [ -n "${SILABS_SOCKET}" ] && [ -n "${SOCAT_PID:-}" ] && ! is_process_alive ${SOCAT_PID}; then
+            if [ "${LINK_MODE}" = serial ] && [ -n "${SILABS_SOCKET}" ] && [ -n "${SOCAT_PID:-}" ] && ! is_process_alive ${SOCAT_PID}; then
                 echo "[monitor] socat (PID ${SOCAT_PID}) died." >&2
                 restartSilabs="socat"
             fi
@@ -766,6 +849,18 @@ service_monitor() {
             if [ -z "${restartSilabs}" ] && ! is_process_alive ${CPCD_PID}; then
                 echo "[monitor] cpcd (PID ${CPCD_PID}) died." >&2
                 restartSilabs="cpcd"
+            fi
+
+            # The workstation switched between running the radio itself and
+            # forwarding its serial port (an hh4 claim came or went).
+            if [ -z "${restartSilabs}" ] && [ -n "${SILABS_SOCKET}" ]; then
+                local wasMode="${LINK_MODE}"
+                select_link_mode
+                if [ "${LINK_MODE}" != "${wasMode}" ]; then
+                    echo "[monitor] The workstation now provides the radio by ${LINK_MODE}; reconnecting." >&2
+                    LINK_MODE="${wasMode}"
+                    restartSilabs="socat"
+                fi
             fi
         fi
 
@@ -874,15 +969,15 @@ if [ -n "${SILABS_SOCKET}" ]; then
     #--------------------------------------------------------------------------
     # Remote tunnel mode — bridge the UNIX socket to a PTY via socat.
     #--------------------------------------------------------------------------
-    echo "[remote-radios] Silabs remote mode: bridging UNIX socket ${SILABS_SOCKET}"
+    echo "[remote-radios] Silabs radio is forwarded from the workstation."
 
     # Give a workstation that is just connecting a moment to create the
     # socket, but never wait on it indefinitely here: everything else (the
     # Bluetooth dongle, the service monitor) would be held up too.
     SILABS_WAIT_MAX=20
     silabsWaitCount=0
-    echo "[remote-radios] Waiting for Silabs tunnel socket ${SILABS_SOCKET}..."
-    while [ ! -S "${SILABS_SOCKET}" ] && [ ${silabsWaitCount} -lt ${SILABS_WAIT_MAX} ]; do
+    echo "[remote-radios] Waiting for the workstation's radio link (relay ${RADIO_RELAY_SOCKET} or serial ${SILABS_SOCKET})..."
+    while ! radio_link_available && [ ${silabsWaitCount} -lt ${SILABS_WAIT_MAX} ]; do
         sleep 2
         silabsWaitCount=$((silabsWaitCount + 2))
     done
@@ -894,16 +989,16 @@ if [ -n "${SILABS_SOCKET}" ]; then
         SILABS_YIELDED=1
         SILABS_YIELD_REASON=claim
         echo "[remote-radios] Silabs radio is claimed via ${SILABS_CLAIM} — starting without it."
-    elif [ ! -S "${SILABS_SOCKET}" ]; then
+    elif ! radio_link_available; then
         SILABS_YIELDED=1
         SILABS_YIELD_REASON=absent
-        echo "[remote-radios] Silabs tunnel socket ${SILABS_SOCKET} is not present yet — starting without it." >&2
+        echo "[remote-radios] The workstation's radio link is not present yet — starting without it." >&2
         echo "[remote-radios]   It connects automatically once your workstation forwards the radio" >&2
         echo "[remote-radios]   (remote-radios.service; see docs/REMOTE_RADIO_FOR_DEVELOPMENT.md)." >&2
     else
-        echo "[remote-radios] Silabs tunnel socket is present.  Starting socat bridge..."
         if start_silabs_socat; then
-            echo "[remote-radios] Virtual serial device ready: ${RADIO_DEVICE} (via ${SILABS_SOCKET})"
+            [ "${LINK_MODE}" = serial ] && \
+                echo "[remote-radios] Virtual serial device ready: ${RADIO_DEVICE} (via ${SILABS_SOCKET})"
         else
             SILABS_YIELDED=1
             SILABS_YIELD_REASON=unavailable
@@ -969,7 +1064,11 @@ write_cpcd_conf
 if [ -n "${SILABS_YIELDED}" ]; then
     echo "[remote-radios] Deferring cpcd until the Silabs radio is available (${SILABS_YIELD_REASON})."
 else
-    echo "[remote-radios] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
+    if [ "${LINK_MODE}" = relay ]; then
+        echo "[remote-radios] Connecting to the workstation's cpcd through the radio relay..."
+    else
+        echo "[remote-radios] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
+    fi
     if [ -n "${SILABS_SOCKET}" ]; then
         # A forwarded radio can be slow or briefly unreachable; keep running
         # and let the monitor retry rather than exiting.
@@ -1023,9 +1122,11 @@ while true; do
     # Wait for cpcd to be alive before starting otbr-agent.  This can last as
     # long as the radio is not forwarded, so say so once rather than every
     # few seconds.
-    if ! pgrep -x cpcd >/dev/null 2>&1; then
+    # cpcd's control socket exists whether cpcd runs here or on the
+    # workstation behind the radio relay.
+    if [ ! -S "/dev/shm/cpcd/${CPC_INSTANCE}/ctrl.cpcd.sock" ]; then
         echo "[remote-radios] Waiting for cpcd before starting otbr-agent..." >&2
-        while ! pgrep -x cpcd >/dev/null 2>&1; do
+        while [ ! -S "/dev/shm/cpcd/${CPC_INSTANCE}/ctrl.cpcd.sock" ]; do
             sleep 5
         done
     fi

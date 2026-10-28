@@ -261,6 +261,15 @@ radioClaimDirHostValue="$(dirname "$silabsSocketDirHostValue")/claims"
 mkdir -p "$radioClaimDirHostValue" 2>/dev/null || true
 echo "RADIO_CLAIM_DIR=$radioClaimDirValue" >> $OUTFILE
 echo "RADIO_CLAIM_DIR_HOST=$radioClaimDirHostValue" >> $OUTFILE
+
+# Radio relay directory — when the radio runs on the workstation (the usual
+# case), its cpcd's client sockets are relayed to a socket here, from which the
+# remote-radios container recreates them for otbr-agent.
+radioRelayDirValue="$(dirname "$silabsSocketDirValue")/cpc"
+radioRelayDirHostValue="$(dirname "$silabsSocketDirHostValue")/cpc"
+mkdir -p "$radioRelayDirHostValue" 2>/dev/null || true
+echo "RADIO_RELAY_DIR=$radioRelayDirValue" >> $OUTFILE
+echo "RADIO_RELAY_DIR_HOST=$radioRelayDirHostValue" >> $OUTFILE
 echo "SILABS_DEVICE=$silabsDeviceValue" >> $OUTFILE
 echo "BACKBONE_IF=$backboneIfValue" >> $OUTFILE
 

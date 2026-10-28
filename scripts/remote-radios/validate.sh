@@ -350,9 +350,25 @@ check_dbus() {
 check_radio() {
     section "Silabs Radio (Zigbee/Thread) Connection"
 
-    if [ -n "${SILABS_SOCKET}" ]; then
+    local relay="${RADIO_RELAY_SOCKET:-/run/remote-radios/cpc/relay.sock}"
+    if [ -n "${SILABS_SOCKET}" ] && [ -S "${relay}" ]; then
         #----------------------------------------------------------------------
-        # Remote serial-over-SSH tunnel mode (bind-mounted UNIX socket)
+        # The usual case: cpcd and zigbeed run on the workstation, and its
+        # cpcd's client sockets are relayed here for otbr-agent.
+        #----------------------------------------------------------------------
+        pass "Silabs mode" "Radio runs on the workstation (relay ${relay})"
+        local proxy_pid
+        proxy_pid=$(pgrep -f "radio-relay.py proxy" 2>/dev/null | head -1) || true
+        if [ -n "$proxy_pid" ]; then
+            pass "Radio relay" "PID $proxy_pid"
+        else
+            fail "Radio relay" "radio-relay.py proxy is not running — otbr-agent cannot reach the workstation's cpcd"
+        fi
+
+    elif [ -n "${SILABS_SOCKET}" ]; then
+        #----------------------------------------------------------------------
+        # Remote serial-over-SSH tunnel mode (bind-mounted UNIX socket); used
+        # while an hh4 guest holds the radio, when this container is released.
         #----------------------------------------------------------------------
         pass "Silabs mode" "Remote tunnel (socket ${SILABS_SOCKET})"
 
@@ -411,10 +427,12 @@ check_radio() {
         return
     fi
 
-    # cpcd process (runs in both modes)
+    # cpcd process (here unless it runs on the workstation)
     local cpcd_pid
     cpcd_pid=$(pgrep -x cpcd 2>/dev/null | head -1) || true
-    if [ -n "$cpcd_pid" ]; then
+    if [ -n "${SILABS_SOCKET}" ] && [ -S "${relay}" ]; then
+        :
+    elif [ -n "$cpcd_pid" ]; then
         if is_process_alive "$cpcd_pid"; then
             pass "cpcd process" "PID $cpcd_pid (alive)"
         else
@@ -804,6 +822,12 @@ check_zigbee() {
     # cpcd's own count of clients on the radio endpoint (12): otbr-agent and
     # zigbeed.  The kernel's socket tables do not show the zigbee container's
     # connection reliably from here.
+    if [ -S "${RADIO_RELAY_SOCKET:-/run/remote-radios/cpc/relay.sock}" ]; then
+        # zigbeed runs on the workstation next to cpcd; its EZSP link to
+        # ZigbeeCore is checked from the remote-zigbee container.
+        pass "zigbeed on the radio" "Runs on the workstation (see remote-radios.service there)"
+        return
+    fi
     local cpcd_log="${CPCD_LOG:-/tmp/cpcd.log}" clients
     clients=$(sed -n 's/.*Endpoint socket #12: Client [a-z]*\. \([0-9]*\) connection.*/\1/p' \
         "$cpcd_log" 2>/dev/null | tail -1)

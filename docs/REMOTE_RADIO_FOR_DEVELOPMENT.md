@@ -18,15 +18,15 @@ remote-radios container on the dev server:
 
 | Radio | Purpose | Transport |
 |---|---|---|
-| Silicon Labs Zigbee/Thread radio (e.g. BRD2703 xG24) | Thread (otbr-agent) and Zigbee (zigbeed/ZigbeeCore) | serial-over-SSH tunnel to a per-user UNIX socket |
+| Silicon Labs Zigbee/Thread radio (e.g. BRD2703 xG24) | Thread (otbr-agent) and Zigbee (zigbeed/ZigbeeCore) | cpcd and zigbeed run on the workstation; their client connections are relayed over SSH |
 | Dedicated Bluetooth USB dongle (e.g. TP-Link UB500) | BLE for Matter commissioning (Matter SDK ↔ BlueZ) | usb-ip, reverse-tunnelled over SSH |
 
 ```
-  WORKSTATION (your desk)                       DEV SERVER                       remote-radios container (privileged)
-  ─────────────────────                         ───────────────                  ───────────────────────────────────
-  Silabs radio ──serial──▶ remote-serial.py ──ssh -R──▶ ~/.remote-radios/radios/silabs.sock ──(bind mount)──▶ socat → /dev/ttyRadio → cpcd ─┬─▶ otbr-agent (Thread)
-                                                                                                                                       └─▶ remote-zigbee container: zigbeed → ZigbeeCore (Zigbee)
-  BT dongle ───usb-ip────▶ usbipd/usbip bind ─ssh -R─▶ ~/.remote-radios/usbip/usbipd.sock ──▶ usbip attach (host netns) ─▶ hciX ─▶ dev server's bluetoothd ─▶ org.bluez
+  WORKSTATION (your desk)                              DEV SERVER
+  ───────────────────────                              ──────────
+  Silabs radio ─serial─▶ cpcd ─┬─▶ zigbeed ─▶ radio-relay ezsp ─ssh -R─▶ ~/.remote-radios/zigbee/ezsp.sock ─▶ remote-zigbee container: ZigbeeCore (Zigbee)
+                               └─▶ radio-relay agent ─────────ssh -R─▶ ~/.remote-radios/cpc/relay.sock ──▶ remote-radios container: radio-relay proxy ─▶ otbr-agent (Thread)
+  BT dongle ─usb-ip─▶ usbipd/usbip bind ──────────────────────ssh -R─▶ ~/.remote-radios/usbip/usbipd.sock ─▶ usbip attach (host netns) ─▶ hciX ─▶ dev server's bluetoothd ─▶ org.bluez
 ```
 
 Key properties:
@@ -37,6 +37,13 @@ Key properties:
   BlueZ (`org.bluez`) both live on the dev server's system bus, because Matter
   requires both on the same bus. Your border router registers there under a
   name unique to you, `io.openthread.BorderRouter.wpan<uid>`.
+- **The radio runs on the workstation.** cpcd and zigbeed run next to the
+  radio, because Zigbee's MAC timing (beacon replies during an active scan, for
+  example) cannot tolerate a round trip to the server: forwarding the raw serial
+  port made Zigbee devices unable to join over a high-latency link. Only cpcd's
+  client connections (for otbr-agent) and EZSP (for ZigbeeCore) cross the
+  tunnel, and neither is timing-critical. otbr-agent and ZigbeeCore stay on the
+  dev server.
 - **Per-user isolation.** Your radio sockets are in your own `~/.remote-radios`
   (mode `0700`), your Thread interface is named after your uid, and your radios
   container sits on a Docker network that only your containers join. Developers
@@ -46,8 +53,8 @@ Key properties:
 
 | Container | Runs | Provides |
 |---|---|---|
-| `remote-radios` (one per user) | cpcd, otbr-agent, mdnsd, socat, usbip attach | Thread + CPC, and your dongle attached as an HCI adapter |
-| `remote-zigbee` (one per user, from ZigbeeCore) | zigbeed, ZigbeeCore, socat | Zigbee, using the radios container's cpcd |
+| `remote-radios` (one per user) | radio-relay proxy (stands in for cpcd), otbr-agent, mdnsd, usbip attach | Thread, and your dongle attached as an HCI adapter |
+| `remote-zigbee` (one per user, from ZigbeeCore) | ZigbeeCore, socat | Zigbee, through the workstation's zigbeed |
 | `barton` (devcontainer, one per workspace) | Barton application code, Matter SDK | Consumes Thread and BLE over the dev server's D-Bus, and Zigbee from `remote-zigbee` |
 
 The radios stack belongs to **you**, not to a workspace: the radio sockets in
@@ -78,7 +85,8 @@ Everything this creates on the dev server is named after you:
 The volume is mounted in parts. Its `ble/` directory appears at
 `/var/run/remote-radios-dbus` and carries `ble_adapter_id` from the radios
 container to each of your barton containers. Its `cpcd/` directory appears at
-`/dev/shm/cpcd` and holds cpcd's sockets. These mounts need Docker Engine 26 and
+`/dev/shm/cpcd` and holds the cpcd sockets the radio relay recreates for
+otbr-agent. These mounts need Docker Engine 26 and
 Compose 2.23 or later.
 
 ### How Thread and Matter find your border router
@@ -147,9 +155,9 @@ other stacks do not each attach the hardware themselves.
 | Consumer | Gets Thread/Zigbee via | Gets Bluetooth via |
 |---|---|---|
 | `barton` devcontainer | your otbr-agent, over the dev server's D-Bus | BlueZ, over the dev server's D-Bus |
-| ZigbeeCore (`remote-zigbee` container) | the radios container's cpcd, shared with Thread | BlueZ, over the dev server's D-Bus |
+| ZigbeeCore (`remote-zigbee` container) | the workstation's zigbeed, which shares cpcd with Thread | BlueZ, over the dev server's D-Bus |
 | zilker | BartonCore's device service | BartonCore's device service |
-| HH4 (QEMU guest) | the Silabs socket directly, under a claim | attaches the dongle itself over usb-ip |
+| HH4 (QEMU guest) | the raw serial port, under a claim | attaches the dongle itself over usb-ip |
 
 Everything that runs on the dev server shares its kernel, so it can consume the
 radios container concurrently over sockets and D-Bus. A **VM guest cannot**: it has its own
@@ -158,12 +166,14 @@ kernel and its own BlueZ, so it needs the devices themselves.
 Both radios are therefore exclusive, and consumers take turns rather than
 compete:
 
-- **Silabs radio** — the workstation relay serves one client at a time. A
-  consumer that wants it creates `~/.remote-radios/claims/silabs.claim`. The
-  container watches that file, stops cpcd and its socat bridge while it exists,
-  and reclaims the radio once it is removed. HH4's `hh4-run.sh` takes this
-  claim and releases it on exit, including on interrupt, so handover needs no
-  manual steps. Zigbee does not need it: it shares the radios container's cpcd.
+- **Silabs radio** — an HH4 guest runs its own cpcd, so it needs the radio's
+  raw serial port rather than a share of the workstation's cpcd. `hh4-run.sh`
+  creates `~/.remote-radios/claims/silabs.claim` while it runs. Within about
+  30 seconds the workstation stops cpcd and zigbeed and forwards the serial port
+  instead, and the radios container releases otbr-agent's link. When the claim
+  is removed (also on interrupt) the workstation switches back. Thread and
+  Zigbee are unavailable while an HH4 guest has the radio; the handover needs no
+  manual steps.
 - **Bluetooth dongle** — a usb-ip device can be attached by one host only, and
   the kernel grants exclusive access per `hciN` (a second stack binding it gets
   `-EBUSY` or `-EUSERS`). When an HH4 guest attaches the dongle the container
@@ -259,7 +269,7 @@ entry point works.
 The script:
 
 1. **Installs its runtime** to `~/.config/remote-radios/bin/`
-   (`remote-radios-setup.sh` and `remote-serial.py`), copying from a checkout
+   (`remote-radios-setup.sh`, `radio-relay.py` and `remote-serial.py`), copying from a checkout
    when run from one and downloading them otherwise. The service always runs
    the installed copy, so the workstation never needs a checkout and nothing
    breaks if one is moved or deleted later. These run as you, never as root —
@@ -282,8 +292,18 @@ The script:
 6. **Installs and starts `remote-radios.service`.** One user unit owns the
    whole workstation side: it runs `usbipd` and keeps the dongle exported
    (re-binding it if anything hands it back to the kernel's own driver), runs
-   both SSH tunnels, and writes `~/.remote-radios/radios.env` on the dev server
-   for `docker/setupDockerEnv.sh` to source.
+   the radio (cpcd, zigbeed and their relays), runs the SSH tunnels, and writes
+   `~/.remote-radios/radios.env` on the dev server for
+   `docker/setupDockerEnv.sh` to source.
+
+   The service copies cpcd, libcpc and zigbeed from the dev server's ZigbeeCore
+   checkout each time it starts, so they always match the ZigbeeCore there (see
+   [Zigbee](#zigbee)). They run on the workstation as built, so the C library on
+   the machine ZigbeeCore is built on must not be newer than the workstation's.
+   cpcd keeps its sockets, and zigbeed its tokens file, in
+   `~/.local/state/remote-radios/`; no root is needed. Until ZigbeeCore is set
+   up, the service forwards the radio's serial port instead, which gives Thread
+   but not Zigbee.
 
 The service is wanted by `default.target`, so it **starts at login and stops at
 logout**. Nothing is left running on the workstation when you are not logged
@@ -348,37 +368,10 @@ Re-run the setup on each to update it.
 
 ### Windows workstations
 
-`remote-radios-setup.sh` is a Bash script and needs systemd and the in-tree
-usb-ip tools, so it does not run on Windows. Use `remote-serial.py` directly
-instead — it is the same forwarder core the setup script drives, and it is
-cross-platform:
-
-```powershell
-# Install the prerequisites once.
-pip install pyserial
-winget install usbipd
-
-# Share the Bluetooth dongle (admin shell, once per dongle).
-usbipd list                  # note the BUSID
-usbipd bind --busid 2-4
-
-# Forward both radios.
-python remote-serial.py <user>@<devserver> --usbip
-```
-
-Differences from the Linux path:
-
-- **Binding is explicit.** On Linux the setup script installs a privileged
-  helper that binds the dongle and re-binds it if the kernel takes it back. On
-  Windows `usbipd bind` is a one-time administrator action that persists, so
-  `remote-serial.py` performs it when needed and no helper is installed.
-- **No service is installed.** Keep the terminal open while you work; the
-  script tears the tunnels down when you stop it.
-- **Serial ports are named `COMn`.** Auto-detection handles this; override with
-  `--port COM3` if several radios are attached.
-
-`--usbip` on its own auto-selects the dongle; pass `--usbip <BUSID>` to choose
-explicitly, or `--no-serial` to forward only Bluetooth.
+The workstation side needs Linux: it runs systemd, the in-kernel usb-ip tools,
+cpcd and zigbeed. On Windows, use a WSL2 distribution with the radio and dongle
+attached to it (for example with `usbipd attach --wsl`). This has not been
+validated yet.
 
 ### Prerequisites
 
@@ -462,13 +455,9 @@ sudo usermod -aG remote-radios <user>
 state per-user and is idempotent. Delete `~/.config/remote-radios/config` to
 force re-detection.
 
-Under the hood it invokes `scripts/remote-radios/remote-serial.py`, which can
-also be run standalone:
-
-```bash
-python3 scripts/remote-radios/remote-serial.py <user>@<devserver> \
-    [--port /dev/ttyACM0] [--socket ~/.remote-radios/radios/silabs.sock]
-```
+The service runs the radio with `scripts/remote-radios/radio-relay.py`, and
+uses `scripts/remote-radios/remote-serial.py` to forward the raw serial port
+while an HH4 guest holds the radio, or before ZigbeeCore is set up.
 
 ---
 
@@ -499,16 +488,25 @@ Barton. Run the full validator for more detail.
 
 ### Zigbee
 
-Zigbee comes from ZigbeeCore's `remote-zigbee` container, which runs zigbeed and
-ZigbeeCore against the radios container's cpcd. The multi-PAN radio serves both
-networks at once: otbr-agent uses spinel interface 2 and zigbeed interface 1,
-on the same channel. Set it up once from a ZigbeeCore checkout (see "Remote
-radios" in its README):
+Zigbee is split between the workstation and ZigbeeCore's `remote-zigbee`
+container. zigbeed runs on the workstation against the same cpcd as Thread; the
+multi-PAN radio serves both networks at once, with otbr-agent on spinel
+interface 2 and zigbeed on interface 1, on the same channel. ZigbeeCore runs in
+the container and talks EZSP to zigbeed through the tunnel. Set it up once from
+a ZigbeeCore checkout (see "Remote radios" in its README):
 
 ```bash
 ./dockerw ./build.sh             # in ZigbeeCore
-scripts/remote-zigbee.sh up      # zigbeed and ZigbeeCore
+scripts/remote-zigbee.sh up      # ZigbeeCore
 ```
+
+The workstation picks up zigbeed, cpcd and libcpc from that checkout the next
+time `remote-radios.service` starts there.
+
+zigbeed's tokens file is stored on the workstation, in
+`~/.local/state/remote-radios/host_token.nvm`, but it is populated by
+ZigbeeCore: the network blob ZigbeeCore manages comes with the network init
+request.
 
 That records the checkout in `~/.remote-radios/zigbee.env`. From then on
 `./dockerw -T` starts the container whenever it is not running, and points
@@ -601,14 +599,13 @@ It also runs directly inside the `remote-radios` container. It does **not** run
 from the Barton devcontainer: that container has neither the Docker CLI nor the
 Docker socket, so it cannot reach the radio container to re-exec into it.
 
-It checks the dev server's D-Bus, the Silabs socket/socat/`/dev/ttyRadio`/cpcd
-chain, otbr-agent and its registration on the shared bus, `mdnsd` and the
+It checks the dev server's D-Bus, the radio link (the radio relay, or the
+forwarded serial port and its local cpcd), otbr-agent and its registration on the shared bus, `mdnsd` and the
 border router's MeshCoP advertisement, and (when a dongle is configured) usb-ip
 reachability, the imported device, the dongle's HCI adapter, the dev server's
 `bluetoothd`, `ble_adapter_id`, and a BLE scan that must see at least one
 device. When the `remote-zigbee` container is running it also checks that
-zigbeed is attached to the radio and that otbr-agent is on the other spinel
-interface.
+otbr-agent is on the other spinel interface from zigbeed.
 
 ### Manual BLE verification
 
@@ -683,17 +680,21 @@ a workstation forwards them, whether that is the same one or another of yours.
 - **`./dockerw -T` says no Bluetooth dongle is forwarded** — remote radios
   require one. Plug it in on the workstation and re-run
   `remote-radios-setup.sh` there.
-- **The Silabs radio is connected but silent** — cpcd sends, nothing comes
-  back. This is usually the wrong RTS/CTS mode: some USB-serial adapters do not
-  drive the hardware flow-control lines, so requesting flow control leaves RTS
-  deasserted and the radio never transmits. `remote-serial.py` detects the
-  signature (bytes flowing one way only) and flips the mode once automatically,
-  logging `flipping RTS/CTS flow control`. To skip the six-second detection
-  window, pass `--rtscts` or `--no-rtscts` explicitly.
-- **cpcd keeps stopping, or the log says "Silabs radio claimed via ..."** — this
-  is the claim protocol working. An `hh4-run.sh` guest is using the radio, so
-  the container released it
-  and is waiting. It reclaims the radio automatically once that run exits. If a
+- **Thread or Zigbee is down and the radios container waits for the radio
+  link** — check the workstation: `systemctl --user status remote-radios.service`
+  and its logs in `$XDG_RUNTIME_DIR/remote-radios-$(id -u)/` (`cpcd.log`,
+  `zigbeed.log`, `cpc-tunnel.log`). The service log says which radio mode it is
+  in; "serial" means an HH4 guest holds the radio or ZigbeeCore's binaries could
+  not be fetched.
+- **The Silabs radio is connected but silent in serial mode** — the forwarder
+  sends, nothing comes back. This is usually the wrong RTS/CTS mode: some
+  USB-serial adapters do not drive the hardware flow-control lines.
+  `remote-serial.py` detects the signature and flips the mode once
+  automatically, logging `flipping RTS/CTS flow control`.
+- **Thread and Zigbee stop, or the log says "Silabs radio claimed via ..."** —
+  this is the claim protocol working. An `hh4-run.sh` guest is using the radio,
+  so the workstation forwards its serial port to the guest and the container is
+  waiting. Both switch back automatically once that run exits. If a
   stale claim is left behind after a crash, delete
   `~/.remote-radios/claims/silabs.claim`.
 - **The reference app stops after "Using defaults" and prints nothing more** —

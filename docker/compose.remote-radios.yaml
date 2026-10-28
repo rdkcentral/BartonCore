@@ -162,6 +162,11 @@ services:
             # Bind-mount the entrypoint for development iteration without
             # rebuilding the Docker image.
             - ./remote-radios-entrypoint.sh:/entrypoint.sh:ro
+            # The radio normally runs on the workstation; its cpcd's client
+            # sockets arrive relayed through this directory, and radio-relay.py
+            # recreates them here for otbr-agent.
+            - ${RADIO_RELAY_DIR_HOST:-/run/remote-radios/cpc}:${RADIO_RELAY_DIR:-/run/remote-radios/cpc}
+            - ../scripts/remote-radios/radio-relay.py:/usr/local/bin/radio-relay.py:ro
         extra_hosts:
             # Allow the container to reach the workstation for the usb-ip
             # reverse tunnel (bluetooth dongle).
@@ -180,6 +185,7 @@ services:
             - BACKBONE_IF=${BACKBONE_IF:-}
             # Where to look for radio claim files (see the entrypoint).
             - RADIO_CLAIM_DIR=${RADIO_CLAIM_DIR:-/run/remote-radios/claims}
+            - RADIO_RELAY_SOCKET=${RADIO_RELAY_DIR:-/run/remote-radios/cpc}/relay.sock
             # The dev server's shared bluetoothd owns every adapter; this is
             # where the container reaches it.  See BT_DBUS_ADDRESS in the
             # entrypoint for why a single shared daemon is required.
