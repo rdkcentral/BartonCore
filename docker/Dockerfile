@@ -126,10 +126,10 @@ RUN cd /tmp && \
 
 # Create a symlink for the versioned dist-packages directory so the container can determine
 # the correct PYTHONPATH at runtime
-RUN bash -c "set -o pipefail && \
-    PYTHON_VERSION=$(python3 --version | awk '{print $2}' | awk -F. '{print $1"."$2}') && \
+RUN PYTHON_VERSION="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')" && \
     mkdir -p /usr/local/lib/python3.x && \
-    ln -s /usr/local/lib/python${PYTHON_VERSION}/dist-packages /usr/local/lib/python3.x/dist-packages"
+    ln -sfn "/usr/local/lib/python${PYTHON_VERSION}/dist-packages" /usr/local/lib/python3.x/dist-packages && \
+    test -d /usr/local/lib/python3.x/dist-packages/
 
 ###############################################################################
 # Third party build stage

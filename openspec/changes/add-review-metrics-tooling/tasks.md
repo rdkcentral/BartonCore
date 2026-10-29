@@ -48,4 +48,4 @@
 
 ## 8. Integration verification (Docker required)
 
-- [ ] 8.1 From a clean clone, run `./dockerw ./build.sh`, `ctest`, `testing/py_test.sh`, and `./dockerw scripts/quality/all.sh`; verify default build/tests unchanged and every check reports a status in `build/reports/` (≤ 3h)
+- [x] 8.1 From a clean clone, run `./dockerw ./build.sh`, `ctest`, `testing/py_test.sh`, and `./dockerw scripts/quality/all.sh`; verify default build/tests unchanged and every check reports a status in `build/reports/` (≤ 3h)
