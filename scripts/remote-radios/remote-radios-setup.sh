@@ -1162,10 +1162,25 @@ EOF
         --link "${STATE_DIR}/ttyZigbeeNCP" --listen "127.0.0.1:${EZSP_RELAY_PORT}"
     # zigbeed keeps the Zigbee network's tokens in its working directory, so
     # the network follows this workstation.  It waits for cpcd and its tty.
+    # zigbeed opens the tty once, so if the EZSP relay restarts (with a new
+    # tty) zigbeed would be left on the old one; restart it when that happens.
     run_supervised zigbeed sh -c "
-        until [ -S '${CPC_SOCKET_DIR}/ctrl.cpcd.sock' ] && [ -e '${STATE_DIR}/ttyZigbeeNCP' ]; do sleep 1; done
-        cd '$RADIO_DIR' && LD_LIBRARY_PATH='$INSTALL_DIR' exec '${INSTALL_DIR}/zigbeed' \
-            -r 'spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0' -d 2 -p '${STATE_DIR}/ttyZigbeeNCP'"
+        link='${STATE_DIR}/ttyZigbeeNCP'
+        until [ -S '${CPC_SOCKET_DIR}/ctrl.cpcd.sock' ] && [ -e \"\$link\" ]; do sleep 1; done
+        tty=\$(readlink \"\$link\")
+        cd '$RADIO_DIR' || exit 1
+        LD_LIBRARY_PATH='$INSTALL_DIR' '${INSTALL_DIR}/zigbeed' \
+            -r 'spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0' -d 2 -p \"\$link\" &
+        pid=\$!
+        trap 'kill \$pid 2>/dev/null' EXIT TERM
+        while kill -0 \$pid 2>/dev/null; do
+            sleep 2
+            if [ \"\$(readlink \"\$link\" 2>/dev/null)\" != \"\$tty\" ]; then
+                echo 'EZSP relay restarted; restarting zigbeed on its new tty.'
+                exit 1
+            fi
+        done
+        wait \$pid"
     # ZigbeeCore learns that the network's configuration changed by watching
     # zigbeed's tokens file, which is here rather than beside it.  Mirror each
     # change as a marker of the same name in its directory on the dev server;
