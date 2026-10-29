@@ -38,6 +38,7 @@ function(bcore_add_cpp_test)
 
         add_executable(${BCORE_ADD_CPP_TEST_NAME} ${BCORE_ADD_CPP_TEST_SOURCES})
         target_link_libraries(${BCORE_ADD_CPP_TEST_NAME} gtest gmock gmock_main ${BCORE_ADD_CPP_TEST_LIBS})
+        target_link_libraries(${BCORE_ADD_CPP_TEST_NAME} $<BUILD_INTERFACE:bCoreWarnings>)
         target_include_directories(${BCORE_ADD_CPP_TEST_NAME} PRIVATE ${BCORE_ADD_CPP_TEST_INCLUDES})
         set_target_properties(${BCORE_ADD_CPP_TEST_NAME} PROPERTIES
                                                       SKIP_BUILD_RPATH false

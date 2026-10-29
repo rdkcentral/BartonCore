@@ -178,7 +178,7 @@ if (BCORE_MATTER)
         LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/api/c/public
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${BCORE_MATTER_INSTALL_DIR}/include/matter
                  ${PROJECT_SOURCE_DIR}/core
     )
 
@@ -188,7 +188,7 @@ if (BCORE_MATTER)
         LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/api/c/public
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${BCORE_MATTER_INSTALL_DIR}/include/matter
                  ${PROJECT_SOURCE_DIR}/core
     )
 

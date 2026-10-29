@@ -26,9 +26,11 @@
 set -e
 
 help() {
-    echo "Usage: $0 [-h] [-c <dir>] [-s] [-a] [-t]"
+    echo "Usage: $0 [-h] [-c <dir>] [-i <dir>] [-s] [-a] [-t]"
     echo "  -h  Display help"
     echo "  -c  Matter configuration directory"
+    echo "  -i  Matter install directory (default: <repo>/build/matter-install). The Matter"
+    echo "      source/build directory is created next to it as 'matter'."
     echo "  -s  Build with stack smash protection"
     echo "  -a  Build with address sanitizer"
     echo "  -t  Build with Matter message tracing support (developer feature)"
@@ -49,7 +51,7 @@ MATTER_CONF_DIR=""
 # Prevent building Java bits which we don't need/use. I couldn't find a better way.
 unset JAVA_HOME
 
-while getopts ":hc:sat" option; do
+while getopts ":hc:i:sat" option; do
     case $option in
     h)
         help
@@ -57,6 +59,11 @@ while getopts ":hc:sat" option; do
         ;;
     c)
         MATTER_CONF_DIR="$OPTARG"
+        ;;
+    i)
+        MATTER_INSTALL_DIR=$(realpath -m "$OPTARG")
+        BUILD_DIR=$(dirname "${MATTER_INSTALL_DIR}")
+        MATTER_BUILD_DIR=${BUILD_DIR}/matter
         ;;
     s)
         BUILD_WITH_STACK_SMASH_PROTECTION="-s"
@@ -70,7 +77,11 @@ while getopts ":hc:sat" option; do
     esac
 done
 
-if [ -e ${MATTER_BUILD_DIR} ]; then
+if [ -e ${MATTER_BUILD_DIR} ] && [ ! -d ${MATTER_INSTALL_DIR} ]; then
+    echo "Matter build dir ${MATTER_BUILD_DIR} exists but install dir ${MATTER_INSTALL_DIR} does not." >&2
+    echo "Each install dir needs its own parent directory (the source/build tree is <parent>/matter). Delete ${MATTER_BUILD_DIR} or choose another install dir." >&2
+    exit 1
+elif [ -e ${MATTER_BUILD_DIR} ]; then
     echo "Matter build dir already exists at: ${MATTER_BUILD_DIR}. Delete it if you want to rebuild Matter."
 else
     rm -rf ${MATTER_INSTALL_DIR}
@@ -88,7 +99,7 @@ else
     ./scripts/checkout_submodules.py --shallow --platform linux
 
     git am ${MY_DIR}/third_party/matter/barton-library/patches/*.patch || (git am --abort && git reset --hard ${MATTER_COMMIT} && exit 1)
-    ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER} ${BUILD_WITH_MESSAGE_TRACING}
+    CHIP_ROOT=${MATTER_BUILD_DIR} ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER} ${BUILD_WITH_MESSAGE_TRACING}
 
     cd ${MATTER_BUILD_DIR}
     git reset --hard ${MATTER_COMMIT}

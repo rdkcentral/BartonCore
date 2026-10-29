@@ -25,6 +25,8 @@ cmake_minimum_required(VERSION 3.16.5)
 #TODO: project version (snag from git tag)
 project(barton-core)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 execute_process(
                 COMMAND git describe --tags --match [0-9]*.[0-9]*.[0-9]*
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -101,13 +103,39 @@ if (BCORE_BUILD_WITH_SSP)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong")
 endif()
 
-if (BCORE_BUILD_WITH_ASAN)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=address")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+if (BCORE_BUILD_WITH_TSAN AND BCORE_BUILD_WITH_ASAN)
+    message(FATAL_ERROR "BCORE_BUILD_WITH_TSAN cannot be combined with BCORE_BUILD_WITH_ASAN")
 endif()
+
+set(BCORE_SANITIZERS "")
+if (BCORE_BUILD_WITH_ASAN)
+    list(APPEND BCORE_SANITIZERS address)
+endif()
+if (BCORE_BUILD_WITH_UBSAN)
+    list(APPEND BCORE_SANITIZERS undefined)
+endif()
+if (BCORE_BUILD_WITH_TSAN)
+    list(APPEND BCORE_SANITIZERS thread)
+endif()
+
+if (BCORE_SANITIZERS)
+    list(JOIN BCORE_SANITIZERS "," _bcoreSanList)
+    set(_bcoreSanFlags "-fsanitize=${_bcoreSanList} -fno-omit-frame-pointer")
+    if (BCORE_BUILD_WITH_UBSAN)
+        string(APPEND _bcoreSanFlags " -fno-sanitize-recover=undefined")
+        # C executables (reference app, g-ir-scanner dump) link libBartonCore with
+        # the C driver, which omits clang's C++ UBSan runtime required by vptr.
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            string(APPEND _bcoreSanFlags " -fno-sanitize=vptr")
+        endif()
+    endif()
+    foreach (_var CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_EXE_LINKER_FLAGS)
+        set(${_var} "${${_var}} ${_bcoreSanFlags}")
+    endforeach()
+endif()
+
+include(BCoreWarnings)
+include(BCoreCppcheck)
 
 add_subdirectory(libs)
 

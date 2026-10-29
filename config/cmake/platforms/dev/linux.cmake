@@ -29,8 +29,10 @@ set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type")
 
 set(BCORE_BUILD_WITH_SSP ON CACHE BOOL "Build with SSP")
 set(BCORE_BUILD_WITH_ASAN ON CACHE BOOL "Build with ASAN")
+set(BCORE_EXTRA_WARNINGS ON CACHE BOOL "Internal: enable -Wall -Wextra on first-party targets")
 
-set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to Matter installation")
+set(BCORE_MATTER_INSTALL_DIR "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Matter SDK install directory")
+set(CMAKE_PREFIX_PATH "${BCORE_MATTER_INSTALL_DIR}" CACHE PATH "Path to Matter installation")
 
 set(BCORE_GEN_GIR ON CACHE BOOL "Gir generation")
 

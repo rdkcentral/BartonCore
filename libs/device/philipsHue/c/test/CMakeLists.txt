@@ -42,6 +42,7 @@ add_executable(testDevicePhilipsHueLib EXCLUDE_FROM_ALL ${SOURCES})
 
 # add library dependencies for this test-binary
 target_link_libraries(testDevicePhilipsHueLib xhPhilipsHue pthread)
+target_link_libraries(testDevicePhilipsHueLib $<BUILD_INTERFACE:bCoreWarnings>)
 target_include_directories(testDevicePhilipsHueLib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # NOTE: commented out the 'add_test' since this is really more of an interactive

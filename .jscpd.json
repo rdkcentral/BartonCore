@@ -1,0 +1,8 @@
+{
+  "minTokens": 70,
+  "reporters": ["json", "console"],
+  "output": "build/reports/jscpd",
+  "ignore": ["build/**", "third_party/**", "**/test/**", "**/tests/**", "**/testing/**", "**/*.pb.*", "**/zap-generated/**", "**/gen/**", "**/node_modules/**", ".worktrees/**"],
+  "format": ["c", "cpp", "python", "javascript"],
+  "gitignore": true
+}

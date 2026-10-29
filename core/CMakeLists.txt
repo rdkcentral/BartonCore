@@ -212,7 +212,7 @@ if (BCORE_MATTER)
     list(APPEND XTRA_INCLUDES ${CMAKE_CURRENT_BINARY_DIR}/src)
 
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
-    link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
+    link_directories(${BCORE_MATTER_INSTALL_DIR}/lib)
 
     # SBMD specification validation
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
@@ -309,6 +309,7 @@ set(BARTON_PUBLIC_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public)
 # statice/shared libraries.
 add_library(bCoreObject OBJECT ${SOURCES} ${B_CORE_API_SOURCES})
 target_link_libraries(bCoreObject ${bCoreLinkLibraries})
+target_link_libraries(bCoreObject $<BUILD_INTERFACE:bCoreWarnings>)
 target_include_directories(bCoreObject PRIVATE
                             ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC

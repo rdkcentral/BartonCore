@@ -88,6 +88,7 @@ function(bcore_add_cmocka_test)
                                 cmocka
                                 ${XTRA_LIBS}
                                 -Wl,--whole-archive ${BCORE_ADD_CMOCKA_TEST_LINK_LIBRARIES_WHOLE} -Wl,--no-whole-archive)
+        target_link_libraries(${BCORE_ADD_CMOCKA_TEST_NAME} $<BUILD_INTERFACE:bCoreWarnings>)
 
         set_target_properties(${BCORE_ADD_CMOCKA_TEST_NAME} PROPERTIES
                               SKIP_BUILD_RPATH false
