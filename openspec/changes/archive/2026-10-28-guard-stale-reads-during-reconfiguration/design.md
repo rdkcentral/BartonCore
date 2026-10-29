@@ -196,9 +196,12 @@ progress, waiting for one under the same mutex (within the same 120 s budget as 
 pass), so `READY_FOR_DEVICE_OPERATION` is never sent after shutdown has begun; a notification on
 shutdown's own thread (a ready-event handler that stops the service) isn't waited for. The flag is
 claimed atomically, so a second stop, or one made while another is in progress, returns without
-repeating any of shutdown. Because the subsystem manager can deliver readiness from within
+repeating any of shutdown (overlapping stops are otherwise not supported; see the follow-up on
+serializing stop). Because the subsystem manager can deliver readiness from within
 `deviceServiceStart()` (when everything is already ready as drivers finish starting), a ready-event
 handler can stop the service before start returns; start then returns false rather than carry on.
+Readiness reported from a subsystem's own thread while start is still running isn't covered: a stop
+from there runs alongside the rest of start, which is not supported.
 `deviceServiceIsReadyForDeviceOperation()` also checks the shutting-down flag, so readiness ends the
 moment shutdown begins rather than when shutdown later clears the flags. A
 ready callback that arrives after shutdown has begun (e.g. a subsystem finishing a delayed
@@ -221,7 +224,11 @@ left to that reconfiguration and runs only if that doesn't succeed. A removal wa
 synchronization already running (within its 60-second wait), and so does a reconfiguration task before
 it rebuilds the device (up to 60 s), so a driver is never asked to synchronize a device while it is
 being removed or rebuilt. A synchronization on the removing thread itself (a driver removing the
-device from within its own synchronization) isn't waited for. A removal registers before it stops a
+device from within its own synchronization) isn't waited for. Conversely, a reconfiguration waiting for
+a synchronization gives up, finishing as failed without rebuilding the device, as soon as a removal of
+the device or shutdown begins (both wake it): either may be running within that synchronization (for
+example a client handler of an event it sent) and waiting for the reconfiguration, which would
+otherwise leave both waiting until the 60-second bound. A removal registers before it stops a
 reconfiguration, so a fallback that reconfiguration's failure queues always sees the removal.
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem

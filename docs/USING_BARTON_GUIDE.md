@@ -98,6 +98,12 @@ a handler that removes the device can also wait up to 60 seconds for the other e
 `b_core_client_stop` lets a reconfiguration that is still running finish, and likewise a startup pass
 that is still deciding which devices to reconfigure. Each wait lasts up to 120 seconds, so stopping can
 take up to 240 seconds longer than usual. If your host ends the process sooner, the interrupted reconfiguration is
-retried the next time Barton starts. Calling `b_core_client_stop` again does nothing. If you stop the client from a
-status-changed handler while `b_core_client_start` is still running, `b_core_client_start` returns `FALSE`.
+retried the next time Barton starts. Calling `b_core_client_stop` again after it has returned does nothing; don't
+make overlapping calls, or call it from another thread while `b_core_client_start` is still running. Readiness can be
+reported from within `b_core_client_start` itself; if a status-changed handler running then stops the client,
+`b_core_client_start` returns `FALSE`.
+
+`b_core_client_remove_device` waits for a reconfiguration of the device that is already running, and likewise for a
+synchronization of it that is already running (which happens shortly after start), for up to 60 seconds in all, before
+removing the device. So it can take that long, and shouldn't be called from a handler that such work is waiting for.
 

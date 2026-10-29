@@ -133,6 +133,10 @@ static bool passReleased;
 static bool readyEventReached;
 static bool syncReached;
 static void (*syncHook)(void);
+static bool removedInsideSync;
+static bool poolTaskOnThread;     // run the next pool task on its own thread, as a real pool does, rather than inline
+static GThread *poolTaskThread;   // ...that thread
+static gint64 actInsideSyncUsecs; // how long the removal or stop made inside the synchronization took
 static bool readyDuringStart; // deliver readiness from within start, as the subsystem manager can
 static int commFailShutdownCount;
 static void (*readyEventHook)(void);
@@ -437,11 +441,50 @@ uint32_t __wrap_scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCa
     return handle;
 }
 
+typedef struct
+{
+    threadPoolTask task;
+    void *arg;
+    threadPoolTaskArgFreeFunc argFreeFunc;
+} PoolTask;
+
+static gpointer RunPoolTask(gpointer data)
+{
+    PoolTask *poolTask = data;
+
+    poolTask->task(poolTask->arg);
+
+    if (poolTask->argFreeFunc != NULL)
+    {
+        poolTask->argFreeFunc(poolTask->arg);
+    }
+    else
+    {
+        free(poolTask->arg);
+    }
+
+    g_free(poolTask);
+
+    return NULL;
+}
+
 // Run inline, so every synchronization a startup pass queues has finished when the pass returns. With
-// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does.
+// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does. With poolTaskOnThread, run the next
+// task on its own thread instead (inline, it would run under the lock the device service holds while queueing).
 bool __wrap_threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threadPoolTaskArgFreeFunc argFreeFunc)
 {
     (void) pool;
+
+    if (failThreadPoolAdd == false && poolTaskOnThread == true)
+    {
+        poolTaskOnThread = false;
+
+        PoolTask *poolTask = g_new(PoolTask, 1);
+        *poolTask = (PoolTask) {.task = task, .arg = arg, .argFreeFunc = argFreeFunc};
+        poolTaskThread = g_thread_new("pool", RunPoolTask, poolTask);
+
+        return true;
+    }
 
     if (failThreadPoolAdd == false)
     {
@@ -938,6 +981,10 @@ static void ResetFakes(void)
     readyEventReached = false;
     syncReached = false;
     syncHook = NULL;
+    removedInsideSync = false;
+    poolTaskOnThread = false;
+    poolTaskThread = NULL;
+    actInsideSyncUsecs = 0;
     readyDuringStart = false;
     commFailShutdownCount = 0;
     readyEventHook = NULL;
@@ -1196,6 +1243,60 @@ static void HoldSyncUntilReleased(void)
     g_mutex_unlock(&fakeLock);
 }
 
+static gpointer RunFirstScheduledTask(gpointer data);
+static void ReleasePass(void);
+
+// Synchronization hooks: once released, remove the device, or stop the client, from within its synchronization (as a
+// handler of an event the synchronization sends might), timing how long that takes.
+static void RemoveDeviceInsideSync(void)
+{
+    HoldSyncUntilReleased();
+
+    gint64 start = g_get_monotonic_time();
+    bool removed = deviceServiceRemoveDevice("current");
+
+    g_mutex_lock(&fakeLock);
+    removedInsideSync = removed;
+    actInsideSyncUsecs = g_get_monotonic_time() - start;
+    g_mutex_unlock(&fakeLock);
+}
+
+static void StopClientInsideSync(void)
+{
+    HoldSyncUntilReleased();
+
+    gint64 start = g_get_monotonic_time();
+    StopClientAsHandler();
+
+    g_mutex_lock(&fakeLock);
+    actInsideSyncUsecs = g_get_monotonic_time() - start;
+    g_mutex_unlock(&fakeLock);
+}
+
+// Starts a synchronization of "current" with the given hook and, while it is held, a reconfiguration of the device that
+// waits for it; then releases the synchronization. Returns the threads to join.
+static void RunReconfigurationWaitingForSync(void (*hook)(void), GThread **passThread, GThread **taskThread)
+{
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    syncHook = hook;
+    *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
+
+    g_mutex_lock(&fakeLock);
+    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
+    g_mutex_unlock(&fakeLock);
+
+    deviceServiceReconfigureDevice("current", 0, NULL, false);
+    assert_int_equal(GetScheduledCount(), 1);
+    *taskThread = g_thread_new("task", RunFirstScheduledTask, NULL);
+
+    // Gives the task time to start waiting for the synchronization (it can't get past that while the sync is held).
+    g_mutex_lock(&fakeLock);
+    assert_false(WaitLocked(IsFinishedEventSent, BLOCKED_PROBE_USECS));
+    g_mutex_unlock(&fakeLock);
+
+    ReleasePass();
+}
+
 // Class version hook: a reconfiguration of the device is requested after the pass checked it for a pending one.
 static void RequestReconfigurationOfCurrent(void)
 {
@@ -1334,6 +1435,48 @@ static void test_reconfigurationWaitsForRunningSynchronization(void **state)
     assert_true(reached);
     assert_false(finishedDuringSync);
     assert_int_equal(finishedEventCount, 1);
+}
+
+// A removal made from within the synchronization a reconfiguration waits for doesn't wait for that reconfiguration's
+// full timeout: the reconfiguration gives up (as failed, with its event before device-removed), and the removal goes
+// on.
+static void test_removalInsideSynchronizationDoesNotWaitForWaitingReconfiguration(void **state)
+{
+    (void) state;
+
+    GThread *passThread = NULL;
+    GThread *taskThread = NULL;
+    RunReconfigurationWaitingForSync(RemoveDeviceInsideSync, &passThread, &taskThread);
+    g_thread_join(passThread);
+    g_thread_join(taskThread);
+
+    assert_true(removedInsideSync);
+    assert_true(actInsideSyncUsecs < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(finishedEventSucceeded);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(finishedEventsWhenRemoved, 1);
+    assert_false(deviceServiceIsReconfigurationPending("current"));
+}
+
+// Likewise a stop made from within that synchronization, which runs on a pool thread: the reconfiguration gives up, and
+// the stop goes on.
+static void test_stopInsideSynchronizationDoesNotWaitForWaitingReconfiguration(void **state)
+{
+    Fixture *fixture = *state;
+
+    GThread *passThread = NULL;
+    GThread *taskThread = NULL;
+    poolTaskOnThread = true;
+    RunReconfigurationWaitingForSync(StopClientInsideSync, &passThread, &taskThread);
+    g_thread_join(passThread);
+    g_thread_join(taskThread);
+    g_thread_join(poolTaskThread);
+    fixture->stopped = stopCalledFromHandler;
+
+    assert_true(stopReturnedFromHandler);
+    assert_true(actInsideSyncUsecs < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    assert_int_equal(finishedEventCount, 0);
 }
 
 // A synchronization whose device became pending reconfiguration after it was queued is left to that reconfiguration,
@@ -2147,6 +2290,10 @@ int main(int argc, const char **argv)
             test_reconfigurationWaitsForRunningSynchronization, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_synchronizationDeferredToReconfigurationRequestedMeanwhile, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_removalInsideSynchronizationDoesNotWaitForWaitingReconfiguration, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_stopInsideSynchronizationDoesNotWaitForWaitingReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_cancelledReconfigurationSynchronizesAfterFailedRemoval, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(

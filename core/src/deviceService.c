@@ -228,7 +228,7 @@ static void EndSynchronization(const char *deviceUuid);
 
 static bool IsSynchronizingElsewhereLocked(const char *deviceUuid);
 
-static void WaitForSynchronization(const char *deviceUuid);
+static bool WaitForSynchronization(const char *deviceUuid);
 
 static void BeginDeviceRemoval(const char *deviceUuid);
 
@@ -2252,6 +2252,12 @@ void deviceServiceShutdown()
         return;
     }
 
+    // Wakes a reconfiguration waiting for a synchronization (see WaitForSynchronization()), which checks the flag under
+    // this lock, so it can't miss it.
+    mutexLock(&reconfigurationControlMutex);
+    pthread_cond_broadcast(ReconfigurationControlCond());
+    mutexUnlock(&reconfigurationControlMutex);
+
     deviceEventHandlerShutdown();
 
     deviceStorageMonitorStop();
@@ -4038,11 +4044,19 @@ static void reconfigureDeviceTask(void *arg)
     scoped_generic char *deviceUuid = strdup(ctx->deviceUuid);
     mutexUnlock(&ctx->mtx);
 
-    // None starts while this is pending; let one already running finish rather than rebuild the device under it.
-    WaitForSynchronization(deviceUuid);
-
     // set the metadata if not already set
     setMetadata(deviceUuid, NULL, COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED, "true");
+
+    // None starts while this is pending; let one already running finish rather than rebuild the device under it. If a
+    // removal or shutdown begins meanwhile, give up instead: it may be running within that synchronization, waiting for
+    // this reconfiguration.
+    if (WaitForSynchronization(deviceUuid) == false)
+    {
+        scoped_icDevice *waitedFor = deviceServiceGetDevice(deviceUuid);
+        FinishReconfiguration(ctx, deviceUuid, waitedFor != NULL ? waitedFor->deviceClass : NULL, false);
+
+        return;
+    }
 
     DeviceDriver *driver = NULL;
     scoped_icDevice *device = deviceServiceGetDevice(deviceUuid);
@@ -5620,16 +5634,31 @@ static bool IsSynchronizingElsewhereLocked(const char *deviceUuid)
 }
 
 // For a reconfiguration about to run: waits, for up to PENDING_RECONFIGURATION_TIMEOUT_SEC, for a synchronization of
-// the device already running. (None starts while the reconfiguration is pending.)
-static void WaitForSynchronization(const char *deviceUuid)
+// the device already running. (None starts while the reconfiguration is pending.) Returns false, without waiting
+// further, if a removal of the device or shutdown begins while it waits: that may be running within the
+// synchronization, and waits for this reconfiguration, so the reconfiguration gives up rather than leave both waiting.
+// Removal and shutdown wake this wait when they begin.
+static bool WaitForSynchronization(const char *deviceUuid)
 {
     struct timespec start, now;
+    bool proceed = true;
 
     getCurrentTime(&start, supportMonotonic());
     mutexLock(&reconfigurationControlMutex);
 
     while (IsSynchronizingElsewhereLocked(deviceUuid) == true)
     {
+        if (deviceServiceIsShuttingDown() == true ||
+            (devicesBeingRemoved != NULL && g_hash_table_contains(devicesBeingRemoved, deviceUuid) == TRUE))
+        {
+            icLogInfo(LOG_TAG,
+                      "%s: device %s is being removed or the service is stopping; not reconfiguring it",
+                      __FUNCTION__,
+                      deviceUuid);
+            proceed = false;
+            break;
+        }
+
         getCurrentTime(&now, supportMonotonic());
 
         long elapsedSecs = now.tv_sec - start.tv_sec;
@@ -5648,6 +5677,8 @@ static void WaitForSynchronization(const char *deviceUuid)
     }
 
     mutexUnlock(&reconfigurationControlMutex);
+
+    return proceed;
 }
 
 // For a startup pass: if a reconfiguration of the device is pending, it covers the device (its synchronization too,
@@ -5693,6 +5724,8 @@ static void BeginDeviceRemoval(const char *deviceUuid)
         removal->removals++;
     }
 
+    // Wakes a reconfiguration waiting for a synchronization of the device (see WaitForSynchronization()).
+    pthread_cond_broadcast(ReconfigurationControlCond());
     mutexUnlock(&reconfigurationControlMutex);
 }
 
