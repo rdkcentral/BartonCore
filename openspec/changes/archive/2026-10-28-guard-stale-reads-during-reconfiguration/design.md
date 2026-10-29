@@ -221,15 +221,24 @@ queued, since a removal or reconfiguration can begin in between. Under the contr
 registers as running, or doesn't run: if the device is being removed, it is recorded on the removal
 and runs only if every removal of the device fails; if the device has a reconfiguration pending, it is
 left to that reconfiguration and runs only if that doesn't succeed. A removal waits for a
-synchronization already running (within its 60-second wait), and so does a reconfiguration task before
-it rebuilds the device (up to 60 s), so a driver is never asked to synchronize a device while it is
-being removed or rebuilt. A synchronization on the removing thread itself (a driver removing the
-device from within its own synchronization) isn't waited for. Conversely, a reconfiguration waiting for
-a synchronization gives up, finishing as failed without rebuilding the device, as soon as a removal of
-the device or shutdown begins (both wake it): either may be running within that synchronization (for
-example a client handler of an event it sent) and waiting for the reconfiguration, which would
-otherwise leave both waiting until the 60-second bound. A removal registers before it stops a
-reconfiguration, so a fallback that reconfiguration's failure queues always sees the removal.
+synchronization already running (within its 60-second wait); a synchronization on the removing thread
+itself (a driver or client handler removing the device from within it) isn't waited for. A removal
+registers before it stops a reconfiguration, so a fallback that reconfiguration's failure queues always
+sees the removal.
+
+A reconfiguration task that finds a synchronization of its device running neither rebuilds the device
+under it nor waits for it: it reschedules itself (`DeferForSynchronization()`), every 2 s, staying
+pending so no new synchronization starts, and reconfigures once the synchronization has ended (or after
+5 minutes of retries, so a synchronization that never returns can't leave the device pending forever).
+Between retries it is a reconfiguration that hasn't started, which a removal or shutdown cancels rather
+than waits for. This is deliberate: an earlier version blocked the task on the synchronization, and
+since client handlers and driver callbacks can run inside a synchronization, a removal or stop made
+there waited for the task while the task waited for the synchronization. Making the task give up when a
+removal or shutdown began broke that loop but sent a configuration event from the give-up path, whose
+handlers could close the loop again. A task that never blocks removes the edge both loops relied on. A
+removal or shutdown can still catch a retry in the moment it runs (its cancel fails); the retry then
+sees the removal or shutdown and withdraws the reconfiguration as cancelled, without an event, so that
+wait lasts at most one retry interval. See "Risks of deferring reconfiguration" below.
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
@@ -394,6 +403,35 @@ clears it:
   context, distinguishable by session discovery type `B_CORE_DISCOVERY_TYPE_NONE`.
 
 ## Risks / Trade-offs
+
+### Risks of deferring reconfiguration while a device is synchronized
+- [Rescheduling reuses the task-handle and cancellation paths] → Each retry stores a new handle on the
+  context under `ctx->mtx`, taking its own context reference, exactly as the first scheduling does, so a
+  canceller always sees either the running task (and waits) or the not-started retry (and cancels it).
+  This is where earlier lifecycle bugs (a task-handle use-after-free, cancels that didn't take effect)
+  lived, so it is covered by unit tests: deferral and retry, removal and stop from within the
+  synchronization cancelling the deferred task, a removal that catches a retry running, and a retry that
+  can't be scheduled.
+- [Reconfiguration delayed by synchronization] → The device stays pending (gated reads refused) for as
+  long as a synchronization runs, up to 5 minutes; a Matter synchronization of an unreachable device can
+  take about 3 minutes. Previously the wait was capped at 60 s, after which the device was rebuilt under
+  a synchronization still running. Synchronization happens at startup, so this mostly lengthens a
+  post-restart reconfiguration.
+- [Synchronization that outlasts the 5-minute cap] → The device is then reconfigured while the driver is
+  still synchronizing it, as before this change but later. Tracked with the other bounded waits that
+  give up (follow-up ticket 2). The cap is not unit tested: the fake scheduler can't advance time.
+- [Deferred reconfiguration cancelled by a removal that fails] → The cancelled request is not requested
+  again, like any other reconfiguration a removal cancels; the device keeps its old model until the next
+  start (follow-up ticket 4). A synchronization it owed is not lost: it runs if the removal fails.
+- [A canceller racing a retry] → A removal or stop that catches a retry while it is running waits for up
+  to one retry interval (2 s) for it to withdraw.
+- [Not cycle-free] → Removal still waits for a running synchronization and for running reconfigurations,
+  and shutdown for reconfigurations, the startup pass and readiness notifications. Loops through those
+  waits require a client handler to block on a thread that is removing the device or stopping the
+  client, which the guide tells clients not to do; the guide also says handlers can run within a
+  synchronization, so clients can tell when that applies.
+
+### Other risks
 
 - [Breaking API/ABI change] → Major version bump via a conventional commit with a `BREAKING CHANGE:`
   footer and a `!` in the PR title (cocogitto generates the CHANGELOG entry and the `SOVERSION`

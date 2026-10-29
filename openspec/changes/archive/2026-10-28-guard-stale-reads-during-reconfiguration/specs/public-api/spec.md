@@ -49,7 +49,9 @@ that finishes after the service has begun shutting down, or for a device that no
 (for example because saving the rebuilt device failed). A failure to save the rebuilt device SHALL NOT
 be reported as success. If the device is removed while its reconfiguration is running or finishing,
 the event SHALL be emitted before `device-removed`, provided the reconfiguration finishes within the
-removal's 60-second wait and the removal is not made from that event's own handler. For a
+removal's 60-second wait and the removal is not made from that event's own handler. No event SHALL be emitted
+for a reconfiguration withdrawn before it rebuilds the device: one cancelled before it started, or one deferred
+while the device was being synchronized and then withdrawn because a removal of the device or shutdown began. For a
 reconfiguration started during startup, the event MAY be emitted before `READY_FOR_DEVICE_OPERATION`;
 a client that waits for readiness and then queries the device observes the reconfigured data.
 

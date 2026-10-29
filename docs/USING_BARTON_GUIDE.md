@@ -62,11 +62,14 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   finishes, so they are also the cue to re-read a device you have cached. Connect to these signals
   before querying, so a reconfiguration that finishes in between is not missed. If the device is
   removed while it is being reconfigured, its configuration event arrives before `device-removed`,
-  unless the reconfiguration takes longer than the removal's 60-second wait or you remove the device
-  from that event's own handler. Removing the device or stopping the client waits for these
-  events' handlers to return, so don't block in a handler on a thread that is doing either. No
+  unless the reconfiguration takes longer than the removal's 60-second wait, you remove the device
+  from that event's own handler, or the reconfiguration hadn't started rebuilding the device (then no
+  event is sent; see below). Removing the device or stopping the client waits for these
+  events' handlers to return, so don't block in a handler on a thread that is doing either. Handlers
+  can also run within a synchronization of a device (for example `resource-updated` events a driver
+  sends while synchronizing it after start), which a removal of that device waits for. No
   event is sent if the reconfiguration could not be scheduled, the device was removed before its
-  reconfiguration started, the device's record is gone when it finishes (for example because saving
+  reconfiguration started (including while it was waiting for a synchronization of the device), the device's record is gone when it finishes (for example because saving
   the rebuilt device failed), or the service is shutting down, so also retry with a bounded backoff
   rather than waiting only for the event.
 
@@ -81,7 +84,8 @@ treat a device missing from one list as removed: rely on `device-removed` for th
 How long a device stays in reconfiguration depends on why it is being rebuilt. After a firmware
 upgrade the drivers wait about 60 seconds for the device to restart before reconfiguring it. A
 battery-powered ("sleepy") Zigbee device is only reconfigured when it next checks in, which can take
-up to 30 minutes. If a reconfiguration cannot start at all, the device stays in this state until it is
+up to 30 minutes. If the device is being synchronized when its reconfiguration is due (shortly after
+start), the reconfiguration waits for that to finish, for up to 5 minutes. If a reconfiguration cannot start at all, the device stays in this state until it is
 removed or Barton restarts. Size your retries accordingly.
 
 Signal handlers are callers like any other: a handler that looks a device or endpoint up with one of
