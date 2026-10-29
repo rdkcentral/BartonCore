@@ -67,7 +67,8 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   event is sent; see below). Removing the device or stopping the client waits for these
   events' handlers to return, so don't block in a handler on a thread that is doing either. Handlers
   can also run within a synchronization of a device (for example `resource-updated` events a driver
-  sends while synchronizing it after start), which a removal of that device waits for. No
+  sends while synchronizing it after start, or after its reconfiguration failed), which a removal of
+  that device waits for. No
   event is sent if the reconfiguration could not be scheduled, the device was removed before its
   reconfiguration started (including while it was waiting for a synchronization of the device), the device's record is gone when it finishes (for example because saving
   the rebuilt device failed), or the service is shutting down, so also retry with a bounded backoff

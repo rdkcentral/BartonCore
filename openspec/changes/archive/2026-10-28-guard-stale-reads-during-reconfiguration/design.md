@@ -238,7 +238,8 @@ removal or shutdown began broke that loop but sent a configuration event from th
 handlers could close the loop again. A task that never blocks removes the edge both loops relied on. A
 removal or shutdown can still catch a retry in the moment it runs (its cancel fails); the retry then
 sees the removal or shutdown and withdraws the reconfiguration as cancelled, without an event, so that
-wait lasts at most one retry interval. See "Risks of deferring reconfiguration" below.
+wait usually lasts at most one retry interval (see "Risks of deferring reconfiguration" below for the
+exception).
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
@@ -279,8 +280,14 @@ discovery session.
   event's own handler doesn't wait for that event, and a removal still waits at most 60 s in total.
   Because removal and shutdown wait for the event, a client handler that blocks on the thread doing the
   removal or stop holds that thread for up to 60 s or 120 s. The finishing steps (completion callback
-  while still pending → move to the finishing list → event → leave the finishing list) live in one
-  helper, `FinishReconfiguration()`, which makes that ordering explicit.
+  while still pending → move to the finishing list → event → queue any synchronization a failure owes
+  → leave the finishing list) live in one helper, `FinishReconfiguration()`, which makes that ordering
+  explicit. The owed synchronization is queued after the event, not before: a removal made from the
+  event's handlers has then already happened or registered, so the synchronization defers to it.
+  Queued before the event, it could run while such a handler's removal waited for it, and a removal
+  made within it (for example from another client handler) would wait for this reconfiguration to
+  finish sending the event, so the two waited on each other until the 60-second bound. Queued after,
+  a removal made within it only waits for the reconfiguration's last step, which waits for nothing.
 - Skipped for any reconfiguration that finishes after shutdown has begun (shutdown only ever waits for
   an event that was already being sent), and when the device record no longer exists at the time of
   sending, checked against the database rather than the task's snapshot. A failed save of the rebuilt
@@ -423,13 +430,28 @@ clears it:
 - [Deferred reconfiguration cancelled by a removal that fails] → The cancelled request is not requested
   again, like any other reconfiguration a removal cancels; the device keeps its old model until the next
   start (follow-up ticket 4). A synchronization it owed is not lost: it runs if the removal fails.
-- [A canceller racing a retry] → A removal or stop that catches a retry while it is running waits for up
-  to one retry interval (2 s) for it to withdraw.
+- [A canceller racing a retry] → A removal or stop that catches a retry while it is running usually waits
+  for up to one retry interval (2 s) for it to withdraw. If that retry instead finds the synchronization
+  just ended, it reconfigures, and the canceller waits for that as for any running reconfiguration
+  (bounded at 60 s for a removal, 120 s for shutdown).
+- [Sleepy devices that check in while deferred] → A sleepy Zigbee device that checks in while its
+  reconfiguration is deferred is put into fast poll, and the reconfiguration is signalled; the signal is
+  kept, so the later retry doesn't wait for a new check-in. If that retry runs after the fast-poll window
+  (about 10 s) has closed, the reconfiguration can fail, and the device keeps its old model until the
+  next start (follow-up ticket 4). Before this change the window was at most 60 s, and before the
+  synchronization coordination it didn't exist. It needs a sleepy device being synchronized when its
+  reconfiguration is due, and can't be confirmed without hardware, so the code is unchanged: discarding a
+  stale check-in signal when a retry reschedules would change how sleepy devices wait, unverified.
 - [Not cycle-free] → Removal still waits for a running synchronization and for running reconfigurations,
   and shutdown for reconfigurations, the startup pass and readiness notifications. Loops through those
   waits require a client handler to block on a thread that is removing the device or stopping the
   client, which the guide tells clients not to do; the guide also says handlers can run within a
-  synchronization, so clients can tell when that applies.
+  synchronization (after start, and after a failed reconfiguration), so clients can tell when that
+  applies. One loop doesn't need a blocking handler of that kind: a synchronization from another source
+  (for example a repeated startup pass) can start while a reconfiguration is sending its completion
+  event, and a removal made within it and another made from that event's handler then wait on each other
+  until the 60-second bound. That needs two removals of the same device at once and a repeated pass;
+  it is tracked with the other bounded waits (follow-up ticket 2).
 
 ### Other risks
 

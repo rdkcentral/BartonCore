@@ -4183,9 +4183,9 @@ static void reconfigureDeviceTask(void *arg)
 /*
  * Completion order matters: the callback runs while the device is still pending, the device then stops being pending
  * (so a listener can query it as soon as it hears the event, and a new reconfiguration can be requested), clients are
- * notified, and only then does the task stop counting as finishing. Removal and shutdown wait for finishing tasks, so
- * they can't emit device-removed or tear down the event producer before the event is sent. Nothing is sent during
- * shutdown or for a device whose record no longer exists.
+ * notified, then any synchronization a failure owes is queued, and only then does the task stop counting as finishing.
+ * Removal and shutdown wait for finishing tasks, so they can't emit device-removed or tear down the event producer
+ * before the event is sent. Nothing is sent during shutdown or for a device whose record no longer exists.
  */
 static void
 FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, const char *deviceClass, bool result)
@@ -4199,15 +4199,20 @@ FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, con
         ctx->reconfigurationCompleted(result, ctx->deviceUuid);
     }
 
-    // A startup reconfiguration, or one this device's synchronization was left to, failed.
-    if (BeginFinishingReconfiguration(ctx) == true && result == false)
-    {
-        FallBackToSynchronization(deviceUuid, true);
-    }
+    bool synchronizationOwed = BeginFinishingReconfiguration(ctx);
 
     if (deviceClass != NULL && deviceServiceIsShuttingDown() == false && jsonDatabaseIsDeviceKnown(deviceUuid) == true)
     {
         sendDeviceReconfigurationFinishedEvent(deviceClass, deviceUuid, result);
+    }
+
+    // A startup reconfiguration, or one this device's synchronization was left to, failed. Queued after the event, so a
+    // removal made from its handlers has already happened (or registered) and the synchronization defers to it, rather
+    // than running while those handlers wait for it; a removal made within the synchronization then only waits for this
+    // task's last step below. Still before that step, so shutdown waits for it if it runs inline.
+    if (synchronizationOwed == true && result == false)
+    {
+        FallBackToSynchronization(deviceUuid, true);
     }
 
     EndFinishingReconfiguration(ctx);
