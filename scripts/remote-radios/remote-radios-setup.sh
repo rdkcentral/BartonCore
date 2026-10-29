@@ -1172,7 +1172,11 @@ EOF
     # it then reads the configuration from zigbeed itself.  The marker's
     # contents are irrelevant, but writing them (rather than touching it) is
     # what ZigbeeCore's inotify watch reacts to.
-    run_supervised tokens-notify python3 "$relay" notify \
+    # Each report makes ZigbeeCore read every token from zigbeed over EZSP,
+    # dozens of round trips through the tunnel; over a slow link that blocks it
+    # for many seconds.  A join writes the tokens several times in quick
+    # succession, so wait for a minute of quiet, by which time pairing is over.
+    run_supervised tokens-notify python3 "$relay" notify --settle 60 \
         --file "${RADIO_DIR}/host_token.nvm" -- \
         ssh -o BatchMode=yes -o ClearAllForwardings=yes -o ConnectTimeout=8 "$SSH_TARGET" \
         "date +%s%N > ${ZIGBEE_TOKENS_REMOTE}"
