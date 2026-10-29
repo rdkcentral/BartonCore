@@ -64,6 +64,7 @@
 #include "events/barton-core-zigbee-remote-cli-command-response-received-event.h"
 #include "icLog/logging.h"
 #include <device-driver/device-driver.h>
+#include <device/icDevice.h>
 #include <device/icDeviceEndpoint.h>
 #include <device/icDeviceResource.h>
 #include <deviceService.h>
@@ -561,58 +562,40 @@ void sendDeviceDiscoveryCompletedEvent(icDevice *device, bool forRecovery)
 
 void sendDeviceAddedEvent(const char *uuid)
 {
-    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(service, uuid);
+    g_return_if_fail(uuid != NULL);
+
+    // Internal lookup: service-originated events must not be subject to the public API's readiness gate.
+    scoped_icDevice *device = deviceServiceGetDevice(uuid);
 
     if (device)
     {
-        g_autofree gchar *uri = NULL;
-        g_autofree gchar *deviceClass = NULL;
-        guint deviceClassVersion = 0;
-
-        g_object_get(device,
-                     B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_URI],
-                     &uri,
-                     B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS],
-                     &deviceClass,
-                     B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS_VERSION],
-                     &deviceClassVersion,
-                     NULL);
+        guint deviceClassVersion = device->deviceClassVersion;
 
         g_autoptr(BCoreDeviceAddedEvent) event = b_core_device_added_event_new();
-        g_object_set(
-            event,
-            B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_UUID],
-            uuid,
-            B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_URI],
-            uri,
-            B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS],
-            deviceClass,
-            B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES
-                [B_CORE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS_VERSION],
-            deviceClassVersion,
-            NULL);
+        g_object_set(event,
+                     B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_UUID],
+                     uuid,
+                     B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_URI],
+                     device->uri,
+                     B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS],
+                     device->deviceClass,
+                     B_CORE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS_VERSION],
+                     deviceClassVersion,
+                     NULL);
         g_signal_emit(service, signals[SIGNAL_DEVICE_ADDED], 0, event);
     }
 }
 
 void sendDeviceRecoveredEvent(const char *uuid)
 {
-    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(service, uuid);
+    g_return_if_fail(uuid != NULL);
+
+    // Internal lookup: service-originated events must not be subject to the public API's readiness gate.
+    scoped_icDevice *device = deviceServiceGetDevice(uuid);
 
     if (device)
     {
-        g_autofree gchar *uri = NULL;
-        g_autofree gchar *deviceClass = NULL;
-        guint deviceClassVersion = 0;
-
-        g_object_get(device,
-                     B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_URI],
-                     &uri,
-                     B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS],
-                     &deviceClass,
-                     B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS_VERSION],
-                     &deviceClassVersion,
-                     NULL);
+        guint deviceClassVersion = device->deviceClassVersion;
 
         g_autoptr(BCoreDeviceRecoveredEvent) event = b_core_device_recovered_event_new();
         g_object_set(
@@ -620,12 +603,10 @@ void sendDeviceRecoveredEvent(const char *uuid)
             B_CORE_DEVICE_RECOVERED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_RECOVERED_EVENT_PROP_UUID],
             uuid,
             B_CORE_DEVICE_RECOVERED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_RECOVERED_EVENT_PROP_URI],
-            uri,
-            B_CORE_DEVICE_RECOVERED_EVENT_PROPERTY_NAMES
-                [B_CORE_DEVICE_RECOVERED_EVENT_PROP_DEVICE_CLASS],
-            deviceClass,
-            B_CORE_DEVICE_RECOVERED_EVENT_PROPERTY_NAMES
-                [B_CORE_DEVICE_RECOVERED_EVENT_PROP_DEVICE_CLASS_VERSION],
+            device->uri,
+            B_CORE_DEVICE_RECOVERED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_RECOVERED_EVENT_PROP_DEVICE_CLASS],
+            device->deviceClass,
+            B_CORE_DEVICE_RECOVERED_EVENT_PROPERTY_NAMES[B_CORE_DEVICE_RECOVERED_EVENT_PROP_DEVICE_CLASS_VERSION],
             deviceClassVersion,
             NULL);
         g_signal_emit(service, signals[SIGNAL_DEVICE_RECOVERED], 0, event);
@@ -785,13 +766,11 @@ void sendZigbeeRemoteCliCommandResponseReceivedEvent(const char *uuid, const cha
     g_signal_emit(service, signals[SIGNAL_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED], 0, event);
 }
 
-void sendDeviceConfigureStartedEvent(const char *deviceClass, const char *uuid, bool forRecovery)
+static void SetDeviceConfigurationEventProperties(GObject *event,
+                                                  const char *deviceClass,
+                                                  const char *uuid,
+                                                  BCoreDiscoveryType discoveryType)
 {
-    g_autoptr(BCoreDeviceConfigurationStartedEvent) event =
-        b_core_device_configuration_started_event_new();
-    BCoreDiscoveryType discoveryType =
-        forRecovery ? B_CORE_DISCOVERY_TYPE_RECOVERY : B_CORE_DISCOVERY_TYPE_DISCOVERY;
-
     g_object_set(event,
                  B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES
                      [B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_DEVICE_CLASS],
@@ -803,6 +782,18 @@ void sendDeviceConfigureStartedEvent(const char *deviceClass, const char *uuid, 
                      [B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROP_SESSION_DISCOVERY_TYPE],
                  discoveryType,
                  NULL);
+}
+
+static BCoreDiscoveryType DiscoveryTypeForConfiguration(bool forRecovery)
+{
+    return forRecovery ? B_CORE_DISCOVERY_TYPE_RECOVERY : B_CORE_DISCOVERY_TYPE_DISCOVERY;
+}
+
+void sendDeviceConfigureStartedEvent(const char *deviceClass, const char *uuid, bool forRecovery)
+{
+    g_autoptr(BCoreDeviceConfigurationStartedEvent) event = b_core_device_configuration_started_event_new();
+    SetDeviceConfigurationEventProperties(
+        G_OBJECT(event), deviceClass, uuid, DiscoveryTypeForConfiguration(forRecovery));
 
     g_signal_emit(service, signals[SIGNAL_DEVICE_CONFIGURATION_STARTED], 0, event);
 }
@@ -811,20 +802,8 @@ void sendDeviceConfigureCompletedEvent(const char *deviceClass, const char *uuid
 {
     g_autoptr(BCoreDeviceConfigurationCompletedEvent) event =
         b_core_device_configuration_completed_event_new();
-    BCoreDiscoveryType discoveryType =
-        forRecovery ? B_CORE_DISCOVERY_TYPE_RECOVERY : B_CORE_DISCOVERY_TYPE_DISCOVERY;
-
-    g_object_set(event,
-                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES
-                     [B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_DEVICE_CLASS],
-                 deviceClass,
-                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES
-                     [B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_UUID],
-                 uuid,
-                 B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROPERTY_NAMES
-                     [B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROP_SESSION_DISCOVERY_TYPE],
-                 discoveryType,
-                 NULL);
+    SetDeviceConfigurationEventProperties(
+        G_OBJECT(event), deviceClass, uuid, DiscoveryTypeForConfiguration(forRecovery));
 
     g_signal_emit(service, signals[SIGNAL_DEVICE_CONFIGURATION_COMPLETED], 0, event);
 }
@@ -833,22 +812,29 @@ void sendDeviceConfigureFailedEvent(const char *deviceClass, const char *uuid, b
 {
     g_autoptr(BCoreDeviceConfigurationFailedEvent) event =
         b_core_device_configuration_failed_event_new();
-    BCoreDiscoveryType discoveryType =
-        forRecovery ? B_CORE_DISCOVERY_TYPE_RECOVERY : B_CORE_DISCOVERY_TYPE_DISCOVERY;
-
-    g_object_set(event,
-                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES
-                     [B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_DEVICE_CLASS],
-                 deviceClass,
-                 B_CORE_DEVICE_CONFIGURATION_EVENT_PROPERTY_NAMES
-                     [B_CORE_DEVICE_CONFIGURATION_EVENT_PROP_UUID],
-                 uuid,
-                 B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROPERTY_NAMES
-                     [B_CORE_DISCOVERY_SESSION_INFO_EVENT_PROP_SESSION_DISCOVERY_TYPE],
-                 discoveryType,
-                 NULL);
+    SetDeviceConfigurationEventProperties(
+        G_OBJECT(event), deviceClass, uuid, DiscoveryTypeForConfiguration(forRecovery));
 
     g_signal_emit(service, signals[SIGNAL_DEVICE_CONFIGURATION_FAILED], 0, event);
+}
+
+void sendDeviceReconfigurationFinishedEvent(const char *deviceClass, const char *uuid, bool succeeded)
+{
+    g_return_if_fail(deviceClass != NULL);
+    g_return_if_fail(uuid != NULL);
+
+    if (succeeded)
+    {
+        g_autoptr(BCoreDeviceConfigurationCompletedEvent) event = b_core_device_configuration_completed_event_new();
+        SetDeviceConfigurationEventProperties(G_OBJECT(event), deviceClass, uuid, B_CORE_DISCOVERY_TYPE_NONE);
+        g_signal_emit(service, signals[SIGNAL_DEVICE_CONFIGURATION_COMPLETED], 0, event);
+    }
+    else
+    {
+        g_autoptr(BCoreDeviceConfigurationFailedEvent) event = b_core_device_configuration_failed_event_new();
+        SetDeviceConfigurationEventProperties(G_OBJECT(event), deviceClass, uuid, B_CORE_DISCOVERY_TYPE_NONE);
+        g_signal_emit(service, signals[SIGNAL_DEVICE_CONFIGURATION_FAILED], 0, event);
+    }
 }
 
 void sendStorageChangedEvent(GFileMonitorEvent whatChanged)

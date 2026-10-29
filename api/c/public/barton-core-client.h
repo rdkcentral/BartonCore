@@ -54,6 +54,7 @@ G_DECLARE_FINAL_TYPE(BCoreClient, b_core_client, B_CORE, CLIENT, GObject)
 // - BCoreReadResourceError: 1-99
 // - BCoreZigbeeChannelChangeError: 100-199
 // - BCoreReadMetadataError: 200-299
+// - BCoreServiceStateError: 300-399
 
 // TODO: We need to redefine the error codes with proper namespace prefixing (eg.
 // B_CORE_READ_RESOURCE_ERROR_NOT_READABLE = 1, etc.). This is, of course, a breaking change, so it should be scheduled
@@ -100,6 +101,20 @@ typedef enum
     METADATA_NOT_ACCESSIBLE = 200 // The metadata is not accessible
 } BCoreReadMetadataError;
 
+/**
+ * BCoreServiceStateError:
+ * @B_CORE_SERVICE_STATE_ERROR_NOT_READY: The service is not yet ready for device operation
+ * @B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING: The targeted device is undergoing reconfiguration
+ *
+ * Error codes reported when the service or a targeted device is in a state that cannot
+ * safely serve a request. Callers may retry once the condition clears.
+ */
+typedef enum
+{
+    B_CORE_SERVICE_STATE_ERROR_NOT_READY = 300,
+    B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING = 301
+} BCoreServiceStateError;
+
 GQuark b_core_client_error_quark(void);
 
 /****************** Error Sets End **********************************/
@@ -108,6 +123,8 @@ GQuark b_core_client_error_quark(void);
 
 #define B_CORE_CLIENT_SIGNAL_NAME_STATUS_CHANGED                 "status-changed"
 // signal handler args: BCoreStatusEvent *event
+// Stopping the client waits for the handlers of the event that reports readiness for device operations to return
+// (unless it is stopped from one of them), so a handler must not block on a thread that may be stopping the client.
 #define B_CORE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED              "discovery-started"
 // signal handler args: BCoreDiscoveryStartedEvent *event
 #define B_CORE_CLIENT_SIGNAL_NAME_RECOVERY_STARTED               "recovery-started"
@@ -122,8 +139,13 @@ GQuark b_core_client_error_quark(void);
 // signal handler args: BCoreDeviceConfigurationStartedEvent *event
 #define B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED "device-configuration-completed"
 // signal handler args: BCoreDeviceConfigurationCompletedEvent *event
+// (also sent with session discovery type NONE when an existing device finishes reconfiguring; for
+// reconfigurations started during startup this may arrive before the status-changed READY event)
 #define B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_FAILED    "device-configuration-failed"
 // signal handler args: BCoreDeviceConfigurationFailedEvent *event
+// (also sent with session discovery type NONE when an existing device's reconfiguration fails)
+// Removing that device or stopping the client waits for these reconfiguration events' handlers to return, so a
+// handler must not block on a thread that may be doing either.
 #define B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED                   "device-added"
 // signal handler args: BCoreDeviceAddedEvent *event
 #define B_CORE_CLIENT_SIGNAL_NAME_DEVICE_RECOVERED               "device-recovered"
@@ -204,6 +226,9 @@ BCoreInitializeParamsContainer *b_core_client_get_initialize_params(BCoreClient 
  *
  * Call @see b_core_client_stop() to stop the service.
  *
+ * Readiness can be reported from within this call. If a handler of that status-changed event stops the client, this
+ * call returns FALSE.
+ *
  * Returns: gboolean - TRUE if the service was started successfully.
  */
 gboolean b_core_client_start(BCoreClient *self);
@@ -213,6 +238,17 @@ gboolean b_core_client_start(BCoreClient *self);
  * @self: the BCoreClient instance.
  *
  * @brief Stop the BCoreClient. This will stop the service and its internal systems.
+ *
+ * Reconfigurations that have not started are cancelled. One that is already running is asked to stop, and this call
+ * then waits up to 120 seconds for it to finish (including delivery of its completion event) before stopping drivers
+ * and subsystems. It likewise waits, up to 120 seconds, for a startup pass that is in progress, including delivery of
+ * its readiness event. These waits are in addition to the time the drivers and subsystems themselves take to stop.
+ * Calling this again after it has returned does nothing. Overlapping calls are not supported, nor is calling it from
+ * another thread while @see b_core_client_start() is still running.
+ *
+ * A host that ends the process before this call returns does not lose the device being reconfigured: its
+ * reconfiguration is retried the next time the service starts. The exception is the brief moment in which the
+ * reconfiguration replaces the device's stored record, which is equally exposed to a crash or power loss.
  */
 void b_core_client_stop(BCoreClient *self);
 
@@ -371,12 +407,14 @@ GList *b_core_client_get_devices(BCoreClient *self);
  * b_core_client_get_device_by_id
  * @self: the BCoreClient instance.
  * @id: the device id to search for.
+ * @err: a GError to store any error that occurs.
  *
  * @brief Get a device by its id.
  *
- * Returns: (transfer full): BCoreDevice* - the device with the given id, or NULL if not found.
+ * Returns: (transfer full): BCoreDevice* - the device with the given id, or NULL if not found or on error.
+ * On error, @err is set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  */
-BCoreDevice *b_core_client_get_device_by_id(BCoreClient *self, const gchar *id);
+BCoreDevice *b_core_client_get_device_by_id(BCoreClient *self, const gchar *id, GError **err);
 
 /**
  * b_core_client_get_endpoints_by_profile
@@ -395,23 +433,28 @@ GList *b_core_client_get_endpoints_by_profile(BCoreClient *self, const gchar *pr
  * @self: the BCoreClient instance.
  * @deviceId: the endpoint's owning device id
  * @endpointId: the endpoint id to search for.
+ * @err: a GError to store any error that occurs.
  *
  * @brief Retrieve an endpoint from the system by id.
  *
- * Returns: (transfer full): BCoreEndpoint* - the endpoint with the given id, or NULL if not found.
+ * Returns: (transfer full): BCoreEndpoint* - the endpoint with the given id, or NULL if not found or on error.
+ * On error, @err is set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  */
-BCoreEndpoint *b_core_client_get_endpoint_by_id(BCoreClient *self, const gchar *deviceId, const gchar *endpointId);
+BCoreEndpoint *
+b_core_client_get_endpoint_by_id(BCoreClient *self, const gchar *deviceId, const gchar *endpointId, GError **err);
 
 /**
  * b_core_client_get_endpoint_by_uri
  * @self: the BCoreClient instance.
  * @uri: the endpoint's uri
+ * @err: a GError to store any error that occurs.
  *
  * @brief Retrieve an endpoint from the system by the endpoint's uri.
  *
- * Returns: (transfer full): BCoreEndpoint* - the endpoint with the given uri, or NULL if not found.
+ * Returns: (transfer full): BCoreEndpoint* - the endpoint with the given uri, or NULL if not found or on error.
+ * On error, @err is set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  */
-BCoreEndpoint *b_core_client_get_endpoint_by_uri(BCoreClient *self, const gchar *uri);
+BCoreEndpoint *b_core_client_get_endpoint_by_uri(BCoreClient *self, const gchar *uri, GError **err);
 
 /**
  * b_core_client_change_zigbee_channel
@@ -444,6 +487,10 @@ GList *b_core_client_get_devices_by_device_class(BCoreClient *self, const gchar 
  * @uuid: the device id to remove.
  *
  * @brief Remove a device from the system by id.
+ *
+ * A reconfiguration of the device that has not started is cancelled. One that is already running, and a
+ * synchronization of the device that is already running, are waited for, for up to 60 seconds in all, before the device
+ * is removed.
  *
  * Returns: gboolean - TRUE if the device was removed successfully.
  */
@@ -515,7 +562,9 @@ GList *b_core_client_get_devices_by_subsystem(BCoreClient *self, const gchar *su
  *
  * @brief Read a resource from a device or endpoint by URI.
  *
- * Returns: gchar* - A string representing the resource value
+ * Returns: gchar* - A string representing the resource value, or NULL on error. In addition to
+ * BCoreReadResourceError codes, @err may be set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or
+ * B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  */
 gchar *b_core_client_read_resource(BCoreClient *self, const gchar *uri, GError **err);
 
@@ -523,23 +572,27 @@ gchar *b_core_client_read_resource(BCoreClient *self, const gchar *uri, GError *
  * b_core_client_get_device_by_uri
  * @self: the BCoreClient instance.
  * @uri: the device uri to search for.
+ * @err: a GError to store any error that occurs.
  *
  * @brief Get a device by its uri.
  *
- * Returns: (transfer full): BCoreDevice* - the device with the given uri, or NULL if not found.
+ * Returns: (transfer full): BCoreDevice* - the device with the given uri, or NULL if not found or on error.
+ * On error, @err is set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  */
-BCoreDevice *b_core_client_get_device_by_uri(BCoreClient *self, const gchar *uri);
+BCoreDevice *b_core_client_get_device_by_uri(BCoreClient *self, const gchar *uri, GError **err);
 
 /**
  * b_core_client_get_resource_by_uri
  * @self: the BCoreClient instance.
  * @uri: the URI of the resource.
+ * @err: a GError to store any error that occurs.
  *
  * @brief Get resource by its uri.
  *
- * Returns: (transfer full): BCoreResource* - the resource with the given uri, or NULL if not found.
+ * Returns: (transfer full): BCoreResource* - the resource with the given uri, or NULL if not found or on error.
+ * On error, @err is set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  */
-BCoreResource *b_core_client_get_resource_by_uri(BCoreClient *self, const gchar *uri);
+BCoreResource *b_core_client_get_resource_by_uri(BCoreClient *self, const gchar *uri, GError **err);
 
 /**
  * b_core_client_get_system_property
@@ -570,12 +623,15 @@ gboolean b_core_client_set_system_property(BCoreClient *self, const gchar *name,
  * @self: the BCoreClient instance.
  * @uri: the URI of the device or endpoint.
  * @value: the value to write to the resource's metadata.
+ * @err: a GError to store any error that occurs.
  *
  * @brief Write metadata to a device or endpoint
  *
- * Returns: gboolean - TRUE if the resource was written successfully, otherwise FALSE.
+ * Returns: gboolean - TRUE if the metadata was written successfully, otherwise FALSE. When the write is refused
+ * because of service state, @err is set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or
+ * B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  */
-gboolean b_core_client_write_metadata(BCoreClient *self, const gchar *uri, const gchar *value);
+gboolean b_core_client_write_metadata(BCoreClient *self, const gchar *uri, const gchar *value, GError **err);
 
 /**
  * b_core_client_get_metadata_by_uri
@@ -596,7 +652,9 @@ GList *b_core_client_get_metadata_by_uri(BCoreClient *self, gchar *uriPattern);
  *
  * @brief Get the value of a metadata item at the provided URI.
  *
- * Returns: gchar* - the value of the metadata if successful and NULL on failure.
+ * Returns: gchar* - the value of the metadata if successful and NULL on failure. In addition to
+ * BCoreReadMetadataError codes, @err may be set to B_CORE_SERVICE_STATE_ERROR_NOT_READY or
+ * B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING.
  *
  */
 gchar *b_core_client_read_metadata(BCoreClient *self, const gchar *uri, GError **err);

@@ -25,6 +25,7 @@
  */
 
 #include "deviceServicePrivate.h"
+#include "deviceUri.h"
 #include <device-driver/device-driver.h>
 #include <device/icDevice.h>
 #include <device/icDeviceMetadata.h>
@@ -380,4 +381,17 @@ bool deviceUriIsValid(const char *deviceUri, const char *deviceUuid)
         }
     }
     return retValue;
+}
+
+char *deviceUriGetDeviceUuid(const char *uri)
+{
+    if (uri == NULL || uri[0] != '/' || uri[1] == '\0' || uri[1] == '/')
+    {
+        return NULL;
+    }
+
+    const char *start = uri + 1;
+    const char *end = strchr(start, '/');
+
+    return (end != NULL) ? strndup(start, end - start) : strdup(start);
 }
