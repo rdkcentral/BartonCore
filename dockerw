@@ -38,8 +38,11 @@ COMPOSE_INTERACTIVE_FLAGS=""
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
 HOST_NETWORK=""
+USE_REMOTE_RADIOS=false
 
-while getopts ":ne:dH" opt; do
+DIR=$(pwd)
+
+while getopts ":ne:dHT" opt; do
     case ${opt} in
     n) # process option n
         COMPOSE_INTERACTIVE_FLAGS="--no-TTY"
@@ -53,20 +56,44 @@ while getopts ":ne:dH" opt; do
     H) # use host networking (useful for Matter device access)
         HOST_NETWORK="1"
         ;;
+    T) # spin up the remote-radios container (Silabs Zigbee/Thread + Bluetooth dongle)
+        USE_REMOTE_RADIOS=true
+        ;;
     esac
 done
 shift "$(($OPTIND - 1))"
 
-DIR=$(pwd)
+# Host networking puts the container in the dev server's own network namespace,
+# where Matter's mDNS reaches every developer's Docker networks — including
+# their border routers — and the per-user radios network is bypassed.
+if [ "$USE_REMOTE_RADIOS" = true ] && [ -n "$HOST_NETWORK" ]; then
+    echo "dockerw: -T (remote radios) cannot be combined with -H (host networking)." >&2
+    echo "dockerw: host networking would expose other developers' Thread devices to Matter discovery." >&2
+    exit 1
+fi
 
 # generate the `docker/.env` file and ensure the network/image is created
-$DIR/docker/setupDockerEnv.sh
+REMOTE_RADIOS_REQUESTED="$USE_REMOTE_RADIOS" $DIR/docker/setupDockerEnv.sh
 
+# The remote-radios container lives in its own Compose project, deliberately
+# separate from the barton one.  It is long-lived and shared by several
+# projects, whereas the overlay that defines it is only layered in for `-T`.
+# Were it part of the barton project, every plain `./dockerw` would report it as
+# an orphan and invite `--remove-orphans`, which would tear the radios out from
+# under BartonCore, ZigbeeCore and zilker at once.
+#
+# The project is per user, not per workspace: the radio sockets it consumes are
+# per user, so all of a user's BartonCore workspaces share one radios stack.
+RADIOS_PROJECT="$(. "${DIR}/docker/.env" >/dev/null 2>&1; \
+    printf '%s-remote-radios' "${BUILDER_USER}")"
+
+COMPOSE_FILES=(-f "${DIR}/docker/compose.yaml")
+if [ "$USE_REMOTE_RADIOS" = true ]; then
+    COMPOSE_FILES+=(-f "${DIR}/docker/compose.remote-radios.yaml")
+fi
 # `docker compose run` has no `--network` flag, so host networking is applied by
 # layering the host-network override compose file (which sets network_mode: host
 # and resets the base network) rather than passing a flag to the run command.
-COMPOSE_FILES=(-f "${DIR}/docker/compose.yaml")
-
 if [ -n "$HOST_NETWORK" ]; then
     COMPOSE_FILES+=(-f "${DIR}/docker/compose.host-network.yaml")
 fi
@@ -76,17 +103,151 @@ EXTRA_VOLUMES="${DEV_VOL}"
 VOLUMES_ARGS="-v $HOME:$HOME
              $EXTRA_VOLUMES"
 
+# If the -T flag was given, build and start the remote-radios container in the
+# background before opening the barton shell.  The container runs cpcd and
+# otbr-agent.
+#
+# Barton reaches both Bluetooth and Thread over the dev server's own system
+# bus: org.bluez comes from the server's shared bluetoothd, and this
+# developer's border router registers there under its own interface name.  See
+# docs/REMOTE_RADIO_FOR_DEVELOPMENT.md.
+if [ "$USE_REMOTE_RADIOS" = true ]; then
+    # Start the user's radios stack if it is not already running, but never
+    # recreate a running one.  Another of the user's workspaces may own it, and
+    # its compose files can differ from this workspace's, which would otherwise
+    # make Compose tear down working radios to "update" them.
+    radiosId="$(docker compose -p "$RADIOS_PROJECT" "${COMPOSE_FILES[@]}" ps -q remote-radios 2>/dev/null)"
+    if [ -n "$radiosId" ] && [ "$(docker inspect -f '{{.State.Running}}' "$radiosId" 2>/dev/null)" = true ]; then
+        notice "Using running remote-radios container ($(docker inspect -f '{{.Name}}' "$radiosId" | sed 's#^/##'))."
+    else
+        notice "Starting remote-radios container (cpcd + otbr-agent)..."
+        docker compose -p "$RADIOS_PROJECT" "${COMPOSE_FILES[@]}" up -d --no-recreate remote-radios
+        notice "remote-radios container started in the background."
+        radiosId="$(docker compose -p "$RADIOS_PROJECT" "${COMPOSE_FILES[@]}" ps -q remote-radios 2>/dev/null)"
+    fi
+
+    EXTRA_ENV="${EXTRA_ENV} -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/host-dbus/system_bus_socket"
+
+    # Zigbee comes from ZigbeeCore's remote-zigbee container, set up from a
+    # ZigbeeCore checkout with scripts/remote-zigbee.sh, which records where
+    # that checkout is.  Start the container if it is not running, and point
+    # Barton at it.
+    ZIGBEE_HINT="${HOME}/.remote-radios/zigbee.env"
+    zigbeeContainer="$(id -un)-remote-zigbee"
+    if [ -f "$ZIGBEE_HINT" ]; then
+        zigbeeDir="$(sed -n 's/^ZIGBEECORE_DIR=//p' "$ZIGBEE_HINT")"
+        zigbeeRun="$(sed -n 's/^RUN_ZIGBEECORE=//p' "$ZIGBEE_HINT")"
+        if [ "$(docker inspect -f '{{.State.Running}}' "$zigbeeContainer" 2>/dev/null)" = true ]; then
+            notice "Using running remote-zigbee container (${zigbeeContainer})."
+        elif [ -x "${zigbeeDir}/scripts/remote-zigbee.sh" ]; then
+            notice "Starting remote-zigbee container from ${zigbeeDir}..."
+            if [ "$zigbeeRun" = 0 ]; then
+                "${zigbeeDir}/scripts/remote-zigbee.sh" up --dev >/dev/null
+            else
+                "${zigbeeDir}/scripts/remote-zigbee.sh" up >/dev/null
+            fi
+        else
+            notice "Zigbee unavailable: ${ZIGBEE_HINT} names ${zigbeeDir}, which has no scripts/remote-zigbee.sh."
+        fi
+        # ZigbeeCore's container is on its own network, which Barton joins as
+        # its client (compose.remote-zigbee-client.yaml).  Barton accepts only a
+        # numeric address for ZigbeeCore (it trusts events by comparing their
+        # source to it), so pass the container's address there.  If the
+        # container is recreated with a new address, restart Barton's container.
+        zigbeeNetwork="$(. "${DIR}/docker/.env" >/dev/null 2>&1; printf '%s-remote-zigbee' "${BUILDER_USER}")"
+        zigbeeIp="$(docker inspect -f "{{with index .NetworkSettings.Networks \"${zigbeeNetwork}\"}}{{.IPAddress}}{{end}}" \
+            "$zigbeeContainer" 2>/dev/null)"
+        if [ -n "$zigbeeIp" ]; then
+            notice "ZigbeeCore is at ${zigbeeIp} on ${zigbeeNetwork}."
+            EXTRA_ENV="${EXTRA_ENV} -e ZIGBEE_CORE_IP=${zigbeeIp}"
+            COMPOSE_FILES+=(-f "${DIR}/docker/compose.remote-zigbee-client.yaml")
+        else
+            notice "Zigbee unavailable: ${zigbeeContainer} has no address on ${zigbeeNetwork}; run Barton with -z."
+        fi
+    else
+        notice "Zigbee is not set up; run Barton with -z, or set it up from a ZigbeeCore checkout:"
+        notice "    scripts/remote-zigbee.sh up"
+    fi
+
+    # Fail early: remote radios mean Thread, Zigbee and Bluetooth together, so
+    # do not start Barton unless the stack is actually working.  Barton would
+    # otherwise start without a radio, or on a Bluetooth adapter that on a
+    # shared dev server may be another developer's.
+    btSocket="$(. "${DIR}/docker/.env" >/dev/null 2>&1; printf '%s' "${BT_USBIP_SOCKET_HOST:-}")"
+    if [ -z "$btSocket" ]; then
+        echo "dockerw: remote radios need a Bluetooth dongle forwarded from your workstation, and none is." >&2
+        echo "dockerw: Plug one in and re-run remote-radios-setup.sh there, or run without -T." >&2
+        exit 1
+    fi
+    # The stack may have just started: otbr-agent takes about a minute to
+    # register, and zigbeed to attach.  Wait for the validator's quick checks.
+    radiosWait="${REMOTE_RADIOS_READY_WAIT_SECONDS:-120}"
+    [[ "$radiosWait" =~ ^[0-9]+$ ]] || radiosWait=120
+    radiosDeadline=$((SECONDS + radiosWait))
+    radiosWaitNoticed=false
+    while ! radiosCheck="$("${DIR}/scripts/remote-radios/validate.sh" --quick 2>&1)"; do
+        if [ "$SECONDS" -ge "$radiosDeadline" ]; then
+            echo "dockerw: the remote radios are not working; not starting Barton." >&2
+            if printf '%s\n' "$radiosCheck" | grep -q 'Failed checks:'; then
+                printf '%s\n' "$radiosCheck" | sed -n '/Failed checks:/,$p' >&2
+            else
+                # The validator could not run its checks at all.
+                printf '%s\n' "$radiosCheck" | tail -n 5 >&2
+            fi
+            echo "dockerw: Full check: scripts/remote-radios/validate.sh   Logs: docker logs $(id -un)-remote-radios" >&2
+            exit 1
+        fi
+        if [ "$radiosWaitNoticed" = false ]; then
+            notice "Waiting up to ${radiosWait}s for the remote radios to be ready..."
+            radiosWaitNoticed=true
+        fi
+        sleep 3
+    done
+    # Say which workstation is forwarding: with more than one, the radios in use
+    # may not be the ones next to you.
+    radiosHost="$(sed -n 's/^host=//p' "${HOME}/.remote-radios/owner" 2>/dev/null)"
+    notice "Remote radios are ready${radiosHost:+ (forwarded from ${radiosHost})}."
+fi
+
 # create a unique container name prefixed with the user id, useful when on a shared machine
 USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
+# With remote radios, install the route to this developer's Thread network
+# before running the requested command (bash by default).  The VS Code
+# devcontainer does the same from its postStartCommand.
+RUN_CMD=("$@")
+if [ "$USE_REMOTE_RADIOS" = true ]; then
+    [ ${#RUN_CMD[@]} -gt 0 ] || RUN_CMD=(bash)
+    # The radios container publishes which Bluetooth adapter is this
+    # developer's; hand it to Barton unless the caller chose one.
+    RUN_CMD=(bash -c 'docker/setup-thread-routes.sh >&2 || true
+        f=/var/run/remote-radios-dbus/ble_adapter_id
+        if [ -z "${BARTON_BLE_ADAPTER_ID:-}" ]; then
+            [ -r "$f" ] && BARTON_BLE_ADAPTER_ID="$(tr -d "[:space:]" < "$f")"
+            if [ -z "${BARTON_BLE_ADAPTER_ID:-}" ]; then
+                # Never let Barton fall back to hci0 here: on a shared dev
+                # server it may be another developer'"'"'s adapter.
+                echo "dockerw: ERROR: the radios container has not published your Bluetooth adapter ($f)." >&2
+                echo "dockerw: Check your workstation tunnel and the logs of your <user>-remote-radios container." >&2
+                exit 1
+            fi
+            export BARTON_BLE_ADAPTER_ID
+        fi
+        exec "$@"' dockerw "${RUN_CMD[@]}")
+fi
+
+# --use-aliases: `run` otherwise ignores the service's network aliases, and
+# ZigbeeCore's remote-zigbee container reaches Barton by its alias,
+# zigbee-client.
 docker compose "${COMPOSE_FILES[@]}" run \
     --rm \
+    --use-aliases \
     --name ${CONTAINER_NAME} \
     ${COMPOSE_INTERACTIVE_FLAGS} \
     --workdir "${DIR}" \
     ${VOLUMES_ARGS} \
     ${EXTRA_ENV} \
     barton \
-    $*
+    "${RUN_CMD[@]}"

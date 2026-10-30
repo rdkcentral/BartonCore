@@ -36,6 +36,8 @@
 
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.c")
+# *UnitTest.c files are cmocka tests with their own main, registered by the parent
+list(FILTER SOURCES EXCLUDE REGEX "UnitTest\\.c$")
 
 # build as an executable, but NOT part of the "make all" sequence
 add_executable(testZhalLib EXCLUDE_FROM_ALL ${SOURCES})

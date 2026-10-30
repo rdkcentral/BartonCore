@@ -29,11 +29,13 @@
 
 #include "otbr/dbus/common/types.hpp"
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <otbr/dbus/client/thread_api_dbus.hpp>
 #include <stdbool.h>
+#include <thread>
 
 namespace barton
 {
@@ -41,7 +43,13 @@ namespace barton
     {
     public:
         OpenThreadClient(const std::function<void(void)> &configChangedCallback) :
-            ready(false), configChangedCallback(configChangedCallback) { Connect(); }
+            ready(false), configChangedCallback(configChangedCallback)
+        {
+            StartCallbackWorker();
+            Connect();
+        }
+
+        ~OpenThreadClient();
 
         enum DeviceRole
         {
@@ -181,9 +189,29 @@ namespace barton
         std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> dbusConnection;
         std::unique_ptr<otbr::DBus::ThreadApiDBus> threadApiBus;
         std::atomic_bool ready;
-        std::function<void(void)>  configChangedCallback;
+        std::function<void(void)> configChangedCallback;
+        uint64_t connectionGeneration = 0; // guarded by dbusConnectionGuard
+        std::mutex connectGuard;
+        std::atomic_bool serviceAvailable {true};
+        std::atomic_bool connectFailureLogged {false};
+        std::atomic_bool stopping {false};
+
+        // Wakes the dispatch thread early on reconnect or shutdown. Used with dbusConnectionGuard.
+        std::condition_variable dispatchWake;
+        std::thread dispatchThread; // guarded by connectGuard
+
+        // Property change signals are coalesced and delivered on one worker thread, which the destructor joins.
+        std::mutex callbackGuard;
+        std::condition_variable callbackWake;
+        bool callbackPending = false; // guarded by callbackGuard
+        std::thread callbackThread;
+
+        void StartCallbackWorker();
+        void NotifyConfigChanged();
 
         void Connect();
+        bool EnsureConnected(bool requireService = false);
+        bool BorderRouterServiceAvailable();
 
         static void ReleaseDBusConnection(DBusConnection *connection);
         static DeviceRole TranslateOTBRDeviceRole(otbr::DBus::DeviceRole role);

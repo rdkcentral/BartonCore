@@ -1,0 +1,136 @@
+From 0fc86a38a304bb5e149a5611d4a5d06885cbbd92 Mon Sep 17 00:00:00 2001
+From: Thomas Lea <thomas_lea@comcast.com>
+Date: Mon, 19 Oct 2026 13:22:10 +0000
+Subject: [PATCH] platform/Linux: make the OpenThread Border Router interface
+ configurable
+
+ThreadStackManagerImpl talks to otbr-agent over D-Bus at a service name and
+object path that hardcode the "wpan0" interface. otbr-agent derives both from
+the interface it is started with (-I), so a host running more than one border
+router - each on its own Thread interface - cannot point the Matter stack at
+any but the one named wpan0.
+
+Add SetThreadInterfaceName(), called before InitThreadStack(), which derives
+the service name and object path from the given interface. The defaults are
+unchanged, so callers that never call it behave exactly as before. This
+mirrors ConnectivityManagerImpl::SetWiFiIfName for the Wi-Fi interface.
+
+CHIP_DEVICE_LAYER_LINUX_HAS_SET_THREAD_INTERFACE_NAME is defined alongside it,
+so code built against both patched and unpatched copies of the SDK can tell
+whether the setter is available.
+---
+ src/platform/Linux/ThreadStackManagerImpl.cpp | 37 ++++++++++++++++---
+ src/platform/Linux/ThreadStackManagerImpl.h   | 21 ++++++++++-
+ 2 files changed, 51 insertions(+), 7 deletions(-)
+
+diff --git a/src/platform/Linux/ThreadStackManagerImpl.cpp b/src/platform/Linux/ThreadStackManagerImpl.cpp
+index fd42cf4e..661d7db5 100644
+--- a/src/platform/Linux/ThreadStackManagerImpl.cpp
++++ b/src/platform/Linux/ThreadStackManagerImpl.cpp
+@@ -18,6 +18,10 @@
+ #include <platform/internal/CHIPDeviceLayerInternal.h>
+ #include <platform/internal/DeviceNetworkInfo.h>
+ 
++#include <cctype>
++#include <cstdio>
++#include <cstring>
++
+ #include <lib/support/CodeUtils.h>
+ #include <lib/support/logging/CHIPLogging.h>
+ #include <platform/GLibTypeDeleter.h>
+@@ -36,8 +40,8 @@ namespace DeviceLayer {
+ 
+ ThreadStackManagerImpl ThreadStackManagerImpl::sInstance;
+ 
+-constexpr char ThreadStackManagerImpl::kDBusOpenThreadService[];
+-constexpr char ThreadStackManagerImpl::kDBusOpenThreadObjectPath[];
++constexpr char ThreadStackManagerImpl::kDBusOpenThreadServicePrefix[];
++constexpr char ThreadStackManagerImpl::kDBusOpenThreadObjectPathPrefix[];
+ 
+ constexpr char ThreadStackManagerImpl::kOpenthreadDeviceRoleDisabled[];
+ constexpr char ThreadStackManagerImpl::kOpenthreadDeviceRoleDetached[];
+@@ -75,6 +79,29 @@ CHIP_ERROR GLibMatterContextSetActiveDataset(SetActiveDatasetContext * context)
+ 
+ ThreadStackManagerImpl::ThreadStackManagerImpl() : mAttached(false) {}
+ 
++CHIP_ERROR ThreadStackManagerImpl::SetThreadInterfaceName(const char * ifName)
++{
++    VerifyOrReturnError(ifName != nullptr, CHIP_ERROR_INVALID_ARGUMENT);
++    VerifyOrReturnError(mProxy == nullptr, CHIP_ERROR_INCORRECT_STATE);
++
++    // The name becomes one element of a D-Bus bus name and of an object path,
++    // so it must be non-empty, fit a Linux interface name, use only
++    // [A-Za-z0-9_] and not begin with a digit.
++    const size_t len = strlen(ifName);
++    VerifyOrReturnError(len > 0 && len < kMaxThreadInterfaceNameSize, CHIP_ERROR_INVALID_ARGUMENT);
++    VerifyOrReturnError(!isdigit(static_cast<unsigned char>(ifName[0])), CHIP_ERROR_INVALID_ARGUMENT);
++    for (size_t i = 0; i < len; i++)
++    {
++        const unsigned char c = static_cast<unsigned char>(ifName[i]);
++        VerifyOrReturnError(isalnum(c) || c == '_', CHIP_ERROR_INVALID_ARGUMENT);
++    }
++
++    snprintf(mDBusOpenThreadService, sizeof(mDBusOpenThreadService), "%s%s", kDBusOpenThreadServicePrefix, ifName);
++    snprintf(mDBusOpenThreadObjectPath, sizeof(mDBusOpenThreadObjectPath), "%s%s", kDBusOpenThreadObjectPathPrefix, ifName);
++
++    return CHIP_NO_ERROR;
++}
++
+ CHIP_ERROR ThreadStackManagerImpl::GLibMatterContextInitThreadStack(ThreadStackManagerImpl * self)
+ {
+     // When creating D-Bus proxy object, the thread default context must be initialized. Otherwise,
+@@ -82,9 +109,9 @@ CHIP_ERROR ThreadStackManagerImpl::GLibMatterContextInitThreadStack(ThreadStackM
+     VerifyOrDie(g_main_context_get_thread_default() != nullptr);
+ 
+     GAutoPtr<GError> err;
+-    self->mProxy.reset(openthread_border_router_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM, G_DBUS_PROXY_FLAGS_NONE,
+-                                                                       kDBusOpenThreadService, kDBusOpenThreadObjectPath, nullptr,
+-                                                                       &err.GetReceiver()));
++    self->mProxy.reset(
++        openthread_border_router_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM, G_DBUS_PROXY_FLAGS_NONE, self->mDBusOpenThreadService,
++                                                        self->mDBusOpenThreadObjectPath, nullptr, &err.GetReceiver()));
+     VerifyOrReturnError(
+         self->mProxy != nullptr, CHIP_ERROR_INTERNAL,
+         ChipLogError(DeviceLayer, "openthread: failed to create openthread dbus proxy %s", err ? err->message : "unknown error"));
+diff --git a/src/platform/Linux/ThreadStackManagerImpl.h b/src/platform/Linux/ThreadStackManagerImpl.h
+index c2e04ab1..e6f25a00 100755
+--- a/src/platform/Linux/ThreadStackManagerImpl.h
++++ b/src/platform/Linux/ThreadStackManagerImpl.h
+@@ -52,6 +52,16 @@ public:
+     CHIP_ERROR _InitThreadStack();
+     void _ProcessThreadActivity();
+ 
++    /**
++     * Select which OpenThread Border Router to use by its Thread network
++     * interface name, as passed to otbr-agent with -I. The border router's
++     * D-Bus service name and object path are derived from it.
++     *
++     * Must be called before InitThreadStack(). Defaults to "wpan0".
++     */
++    CHIP_ERROR SetThreadInterfaceName(const char * ifName);
++#define CHIP_DEVICE_LAYER_LINUX_HAS_SET_THREAD_INTERFACE_NAME 1
++
+     CHIP_ERROR _StartThreadTask() { return CHIP_NO_ERROR; } // Intentionally left blank
+     void _LockThreadStack() {}                              // Intentionally left blank
+     bool _TryLockThreadStack() { return false; }            // Intentionally left blank
+@@ -115,8 +125,15 @@ public:
+     static ThreadStackManagerImpl sInstance;
+ 
+ private:
+-    static constexpr char kDBusOpenThreadService[]    = "io.openthread.BorderRouter.wpan0";
+-    static constexpr char kDBusOpenThreadObjectPath[] = "/io/openthread/BorderRouter/wpan0";
++    static constexpr char kDBusOpenThreadServicePrefix[]    = "io.openthread.BorderRouter.";
++    static constexpr char kDBusOpenThreadObjectPathPrefix[] = "/io/openthread/BorderRouter/";
++    // Longest Linux interface name (IFNAMSIZ - 1) plus its terminator.
++    static constexpr size_t kMaxThreadInterfaceNameSize = 16;
++
++    char mDBusOpenThreadService[sizeof(kDBusOpenThreadServicePrefix) + kMaxThreadInterfaceNameSize - 1] =
++        "io.openthread.BorderRouter.wpan0";
++    char mDBusOpenThreadObjectPath[sizeof(kDBusOpenThreadObjectPathPrefix) + kMaxThreadInterfaceNameSize - 1] =
++        "/io/openthread/BorderRouter/wpan0";
+ 
+     static constexpr char kOpenthreadDeviceRoleDisabled[] = "disabled";
+     static constexpr char kOpenthreadDeviceRoleDetached[] = "detached";
+-- 
+2.53.0
+

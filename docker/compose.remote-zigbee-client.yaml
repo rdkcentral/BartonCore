@@ -1,0 +1,44 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2026 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Makes Barton a client of ZigbeeCore's remote-zigbee container.  Layered by
+# dockerw -T, after compose.remote-radios.yaml, when ZigbeeCore has been set up
+# for remote radios (~/.remote-radios/zigbee.env exists).
+#
+# ZigbeeCore owns the per-user network <user>-remote-zigbee (created by its
+# scripts/remote-zigbee.sh), where it is reachable as remote-zigbee.  Barton
+# joins it under the alias zigbee-client, to which ZigbeeCore sends its events.
+#
+
+services:
+    barton:
+        networks:
+            remote-zigbee:
+                aliases:
+                    - zigbee-client
+
+networks:
+    remote-zigbee:
+        name: $BUILDER_USER-remote-zigbee
+        external: true
