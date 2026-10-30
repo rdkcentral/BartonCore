@@ -158,7 +158,8 @@
 #define FRAME_COUNTER_INCREMENT_AMOUNT                     0x1000
 
 #define MAX_NETWORK_INIT_RETRIES                           3
-#define NETWORK_INITIALIZATION_TIMEOUT_SECS                (MAX_NETWORK_INIT_RETRIES * 30)
+// Matches zhal's networkInit request timeout
+#define NETWORK_INITIALIZATION_TIMEOUT_SECS                (MAX_NETWORK_INIT_RETRIES * 120)
 #define MAX_INITIAL_ZIGBEECORE_RESTARTS                    3
 
 #define WILDCARD_EUI64                                     0xFFFFFFFFFFFFFFFF
