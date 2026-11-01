@@ -278,6 +278,17 @@ discovery session.
   a device that already has a reconfiguration pending, goes through the same insert, so one made during a
   removal is always deferred rather than dropped as a duplicate. A removal or shutdown started from the
   event's own handler doesn't wait for that event, and a removal still waits at most 60 s in total.
+  The same goes for any event a running task sends on its own thread, such as the `metadata-updated`
+  event when it first marks the device as needing reconfiguration: each context records the thread
+  running its task, and removal and shutdown don't wait for a task running on their own thread (it
+  can't finish until they return to it). The task then checks whether the device is gone or shutdown
+  has begun and, if so, withdraws without an event rather than carry on against a removed device or a
+  torn-down service. Separately, removal and shutdown leave a terminate request on a running task that
+  a driver's check-in signal can't clear, and the task checks it, and whether the device is gone, just
+  before replacing the record: a task asked to terminate finishes as failed instead, so it never saves
+  back a device a removal is deleting (or has deleted after giving up its wait). A startup request that
+  finds another reconfiguration already pending (requested after the pass checked) records the
+  device's synchronization against that one, under the insert's lock, as the pass would have.
   Because removal and shutdown wait for the event, a client handler that blocks on the thread doing the
   removal or stop holds that thread for up to 60 s or 120 s. The finishing steps (completion callback
   while still pending → move to the finishing list → event → queue any synchronization a failure owes

@@ -81,6 +81,7 @@ bcore_add_cmocka_test(
         sendDeviceRemovedEvent
         sendEndpointRemovedEvent
         jsonDatabaseRemoveDeviceById
+        jsonDatabaseAddDevice
         jsonDatabaseIsDeviceKnown
         sendMetadataUpdatedEvent
         threadPoolAddTask

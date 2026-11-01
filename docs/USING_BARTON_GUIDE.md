@@ -70,7 +70,8 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   sends while synchronizing it after start, or after its reconfiguration failed), which a removal of
   that device waits for. No
   event is sent if the reconfiguration could not be scheduled, the device was removed before its
-  reconfiguration started (including while it was waiting for a synchronization of the device), the device's record is gone when it finishes (for example because saving
+  reconfiguration started (including while it was waiting for a synchronization of the device, or
+  when you remove it from a `metadata-updated` handler as its reconfiguration begins), the device's record is gone when it finishes (for example because saving
   the rebuilt device failed), or the service is shutting down, so also retry with a bounded backoff
   rather than waiting only for the event.
 

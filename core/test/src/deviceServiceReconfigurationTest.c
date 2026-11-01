@@ -41,10 +41,12 @@
 
 #include "barton-core-client.h"
 #include "barton-core-initialize-params-container.h"
+#include "commonDeviceDefs.h"
 #include "database/jsonDatabase.h"
 #include "device-driver/device-driver.h"
 #include "device/deviceModelHelper.h"
 #include "deviceService.h"
+#include "deviceService/resourceModes.h"
 #include "deviceServicePrivate.h"
 #include "event/deviceEventProducer.h"
 #include "icConcurrent/delayedTask.h"
@@ -52,6 +54,7 @@
 #include "icTypes/icLinkedList.h"
 #include "icUtil/stringUtils.h"
 #include "observability/observabilityMetrics.h"
+#include "resourceTypes.h"
 #include "subsystemManager.h"
 
 #define FAKE_DRIVER_NAME      "fakeDriver"
@@ -134,6 +137,14 @@ static bool readyEventReached;
 static bool syncReached;
 static void (*syncHook)(void);
 static bool removedInsideSync;
+static void (*metadataHook)(const char *uuid); // run once from the next metadata-updated event, as a client handler
+static bool removedFromMetadataHandler;
+static gint64 actFromMetadataHandlerUsecs;
+static bool failDeviceSave;         // saving a device record fails, as a storage failure would
+static int configureCount;          // calls of the fake driver's configureDevice()
+static void (*configureHook)(void); // run once from the next configureDevice()
+static int completionCount;         // calls of RecordCompletion()
+static bool completionResult;
 static bool poolTaskOnThread;     // run the next pool task on its own thread, as a real pool does, rather than inline
 static GThread *poolTaskThread;   // ...that thread
 static gint64 actInsideSyncUsecs; // how long the removal or stop made inside the synchronization took
@@ -260,6 +271,46 @@ static bool FakeGetDeviceClassVersion(void *ctx, const char *deviceClass, uint8_
     }
 
     *version = CURRENT_CLASS_VERSION;
+
+    return true;
+}
+
+// The configuration steps of a reconfiguration; they succeed, so a device with the common resources (see
+// AddCompleteDevice()) is rebuilt and saved.
+static bool FakeConfigureDevice(void *ctx, icDevice *device, DeviceDescriptor *descriptor)
+{
+    (void) ctx;
+    (void) device;
+    (void) descriptor;
+
+    g_mutex_lock(&fakeLock);
+    configureCount++;
+    void (*hook)(void) = configureHook;
+    configureHook = NULL;
+    g_mutex_unlock(&fakeLock);
+
+    if (hook != NULL)
+    {
+        hook();
+    }
+
+    return true;
+}
+
+static bool FakeFetchInitialResourceValues(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues)
+{
+    (void) ctx;
+    (void) device;
+    (void) initialResourceValues;
+
+    return true;
+}
+
+static bool FakeRegisterResources(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues)
+{
+    (void) ctx;
+    (void) device;
+    (void) initialResourceValues;
 
     return true;
 }
@@ -656,7 +707,28 @@ void __wrap_sendEndpointRemovedEvent(icDeviceEndpoint *endpoint, const char *dev
 
 void __wrap_sendMetadataUpdatedEvent(icDeviceMetadata *metadata)
 {
-    (void) metadata;
+    g_mutex_lock(&fakeLock);
+    void (*hook)(const char *) = metadataHook;
+    metadataHook = NULL;
+    g_mutex_unlock(&fakeLock);
+
+    // Runs as a client's metadata-updated handler would: on the thread that set the metadata.
+    if (hook != NULL)
+    {
+        hook(metadata->deviceUuid);
+    }
+}
+
+bool __real_jsonDatabaseAddDevice(icDevice *device);
+
+bool __wrap_jsonDatabaseAddDevice(icDevice *device)
+{
+    if (failDeviceSave == true)
+    {
+        return false;
+    }
+
+    return __real_jsonDatabaseAddDevice(device);
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
@@ -681,6 +753,45 @@ static void AddDevice(const char *uuid, uint8_t classVersion)
 
     assert_true(jsonDatabaseAddDevice(device));
     deviceDestroy(device);
+}
+
+// With the manufacturer/model/version resources, so a reconfiguration of it goes through driver configuration and
+// replaces its record.
+static void AddCompleteDevice(const char *uuid, uint8_t classVersion)
+{
+    icDevice *device = createDevice(uuid, FAKE_DEVICE_CLASS, classVersion, FAKE_DRIVER_NAME, NULL);
+    device->uri = stringBuilder("/%s", uuid);
+
+    const char *resources[][2] = {
+        {    COMMON_DEVICE_RESOURCE_MANUFACTURER, "maker"},
+        {           COMMON_DEVICE_RESOURCE_MODEL, "model"},
+        {COMMON_DEVICE_RESOURCE_HARDWARE_VERSION,     "1"},
+        {COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION,     "1"}
+    };
+
+    for (size_t i = 0; i < G_N_ELEMENTS(resources); i++)
+    {
+        icDeviceResource *resource = createDeviceResource(device,
+                                                          resources[i][0],
+                                                          resources[i][1],
+                                                          RESOURCE_TYPE_STRING,
+                                                          RESOURCE_MODE_READABLE,
+                                                          CACHING_POLICY_ALWAYS);
+        resource->uri = stringBuilder("%s/r/%s", device->uri, resources[i][0]);
+    }
+
+    assert_true(jsonDatabaseAddDevice(device));
+    deviceDestroy(device);
+}
+
+static uint8_t GetStoredClassVersion(const char *uuid)
+{
+    icDevice *device = jsonDatabaseGetDeviceById(uuid);
+    assert_non_null(device);
+    uint8_t version = device->deviceClassVersion;
+    deviceDestroy(device);
+
+    return version;
 }
 
 static int GetSyncCount(const char *uuid)
@@ -977,6 +1088,14 @@ static void ResetFakes(void)
     syncReached = false;
     syncHook = NULL;
     removedInsideSync = false;
+    metadataHook = NULL;
+    removedFromMetadataHandler = false;
+    actFromMetadataHandlerUsecs = 0;
+    failDeviceSave = false;
+    completionCount = 0;
+    configureCount = 0;
+    configureHook = NULL;
+    completionResult = false;
     poolTaskOnThread = false;
     poolTaskThread = NULL;
     actInsideSyncUsecs = 0;
@@ -1012,6 +1131,9 @@ static int SetupClient(void **state, bool start)
     fakeDriver.driverName = FAKE_DRIVER_NAME;
     fakeDriver.getDeviceClassVersion = FakeGetDeviceClassVersion;
     fakeDriver.synchronizeDevice = FakeSynchronizeDevice;
+    fakeDriver.configureDevice = FakeConfigureDevice;
+    fakeDriver.fetchInitialResourceValues = FakeFetchInitialResourceValues;
+    fakeDriver.registerResources = FakeRegisterResources;
 
     Fixture *fixture = g_new0(Fixture, 1);
     fixture->storageDir = g_dir_make_tmp("deviceServiceReconfigurationTestXXXXXX", NULL);
@@ -1625,6 +1747,190 @@ static void test_deferredReconfigurationWithdrawnWhenRescheduleFails(void **stat
 
     ReleasePass();
     g_thread_join(passThread);
+}
+
+// Metadata-updated hooks: remove the device, or stop the client, from the handler of the metadata-updated event a
+// running reconfiguration sends (on its own thread), timing how long that takes.
+static void RemoveDeviceFromMetadataHandler(const char *uuid)
+{
+    gint64 start = g_get_monotonic_time();
+    bool removed = deviceServiceRemoveDevice(uuid);
+
+    g_mutex_lock(&fakeLock);
+    removedFromMetadataHandler = removed;
+    actFromMetadataHandlerUsecs = g_get_monotonic_time() - start;
+    g_mutex_unlock(&fakeLock);
+}
+
+static void StopClientFromMetadataHandler(const char *uuid)
+{
+    (void) uuid;
+
+    gint64 start = g_get_monotonic_time();
+    StopClientAsHandler();
+
+    g_mutex_lock(&fakeLock);
+    actFromMetadataHandlerUsecs = g_get_monotonic_time() - start;
+    g_mutex_unlock(&fakeLock);
+}
+
+// A reconfiguration completion callback that records its result.
+static void RecordCompletion(bool result, const char *deviceUuid)
+{
+    (void) deviceUuid;
+
+    g_mutex_lock(&fakeLock);
+    completionCount++;
+    completionResult = result;
+    g_mutex_unlock(&fakeLock);
+}
+
+// A successful reconfiguration replaces the device's record and reports success once it is no longer pending.
+static void test_reconfigurationReplacesDeviceAndReportsSuccess(void **state)
+{
+    (void) state;
+
+    AddCompleteDevice("complete", STALE_CLASS_VERSION);
+    deviceServiceReconfigureDevice("complete", 0, RecordCompletion, false);
+    readyForDevices();
+    assert_int_equal(GetScheduledCount(), 1);
+
+    RunScheduledTask(0);
+
+    assert_int_equal(completionCount, 1);
+    assert_true(completionResult);
+    assert_int_equal(finishedEventCount, 1);
+    assert_true(finishedEventSucceeded);
+    assert_false(pendingWhenFinishedEventSent);
+    assert_false(deviceServiceIsReconfigurationPending("complete"));
+    assert_int_equal(GetStoredClassVersion("complete"), CURRENT_CLASS_VERSION);
+    assert_int_equal(GetSyncCount("complete"), 0);
+}
+
+// A reconfiguration whose rebuilt device can't be saved is reported as a failure, sends no success event, and doesn't
+// leave the device pending.
+static void test_reconfigurationSaveFailureNotReportedAsSuccess(void **state)
+{
+    (void) state;
+
+    AddCompleteDevice("complete", STALE_CLASS_VERSION);
+    deviceServiceReconfigureDevice("complete", 0, RecordCompletion, false);
+    readyForDevices();
+    failDeviceSave = true;
+
+    RunScheduledTask(0);
+
+    assert_int_equal(completionCount, 1);
+    assert_false(completionResult);
+    assert_false(finishedEventCount > 0 && finishedEventSucceeded == true);
+    assert_false(deviceServiceIsReconfigurationPending("complete"));
+}
+
+// A removal made from a handler of the metadata-updated event a running reconfiguration sends doesn't wait for that
+// reconfiguration (it can't finish until the handler returns), and the reconfiguration then stops without saving the
+// removed device back or sending a configuration event.
+static void test_removalFromRunningReconfigurationsMetadataHandler(void **state)
+{
+    (void) state;
+
+    AddCompleteDevice("complete", STALE_CLASS_VERSION);
+    readyForDevices();
+    metadataHook = RemoveDeviceFromMetadataHandler;
+
+    RunScheduledTask(0);
+
+    assert_true(removedFromMetadataHandler);
+    assert_true(actFromMetadataHandlerUsecs < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(finishedEventCount, 0);
+    assert_int_equal(configureCount, 0);
+    assert_false(deviceServiceIsReconfigurationPending("complete"));
+    assert_false(jsonDatabaseIsDeviceKnown("complete"));
+}
+
+// Likewise a stop made from that handler: it doesn't wait for the reconfiguration, which then stops without going on.
+static void test_stopFromRunningReconfigurationsMetadataHandler(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddCompleteDevice("complete", STALE_CLASS_VERSION);
+    readyForDevices();
+    metadataHook = StopClientFromMetadataHandler;
+
+    RunScheduledTask(0);
+    fixture->stopped = stopCalledFromHandler;
+
+    assert_true(stopReturnedFromHandler);
+    assert_true(actFromMetadataHandlerUsecs < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    assert_int_equal(finishedEventCount, 0);
+    assert_int_equal(configureCount, 0);
+}
+
+static GThread *configureRemoveThread;
+
+// Configure hook: a removal of the device begins on another thread while the driver is configuring it, and has asked
+// the reconfiguration to terminate (it can't cancel a running task) by the time configuration returns.
+static void RemoveCompleteDeviceElsewhereDuringConfigure(void)
+{
+    configureRemoveThread = g_thread_new("remove", RemoveDevice, "complete");
+
+    g_mutex_lock(&fakeLock);
+    WaitLocked(IsCancelAttempted, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+
+    // The terminate request follows the failed cancel at once.
+    g_usleep(200 * G_TIME_SPAN_MILLISECOND);
+}
+
+// A running reconfiguration that a removal has asked to terminate doesn't go on to replace the device's record: it
+// finishes as failed, and its event comes before device-removed.
+static void test_runningReconfigurationAskedToTerminateDoesNotReplaceRecord(void **state)
+{
+    (void) state;
+
+    AddCompleteDevice("complete", STALE_CLASS_VERSION);
+    deviceServiceReconfigureDevice("complete", 0, RecordCompletion, false);
+    readyForDevices();
+    cancelSucceeds = false;
+    configureHook = RemoveCompleteDeviceElsewhereDuringConfigure;
+
+    RunScheduledTask(0);
+    g_thread_join(configureRemoveThread);
+
+    assert_int_equal(configureCount, 1);
+    assert_int_equal(completionCount, 1);
+    assert_false(completionResult);
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(finishedEventSucceeded);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(finishedEventsWhenRemoved, 1);
+    assert_false(jsonDatabaseIsDeviceKnown("complete"));
+}
+
+// Class version hook: another reconfiguration of the stale device is requested after the startup pass checked it for a
+// pending one, so the pass's own (startup) request finds it pending.
+static void RequestReconfigurationOfStale(void)
+{
+    deviceServiceReconfigureDevice("stale", 60, NULL, false);
+}
+
+// A startup request that finds another reconfiguration already pending leaves the device's synchronization to it: it
+// runs when that reconfiguration fails.
+static void test_startupRequestFindingAnotherPendingLeavesSynchronizationToIt(void **state)
+{
+    (void) state;
+
+    AddDevice("stale", STALE_CLASS_VERSION);
+    classVersionHook = RequestReconfigurationOfStale;
+
+    readyForDevices();
+    assert_int_equal(GetScheduledCount(), 1);
+    assert_int_equal(GetSyncCount("stale"), 0);
+
+    RunScheduledTask(0);
+
+    assert_false(finishedEventSucceeded);
+    assert_int_equal(GetSyncCount("stale"), 1);
 }
 
 // A synchronization whose device became pending reconfiguration after it was queued is left to that reconfiguration,
@@ -2440,6 +2746,18 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(test_reconfigurationDeferredWhileSynchronizing, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_synchronizationDeferredToReconfigurationRequestedMeanwhile, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationReplacesDeviceAndReportsSuccess, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationSaveFailureNotReportedAsSuccess, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_removalFromRunningReconfigurationsMetadataHandler, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_stopFromRunningReconfigurationsMetadataHandler, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_runningReconfigurationAskedToTerminateDoesNotReplaceRecord, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_startupRequestFindingAnotherPendingLeavesSynchronizationToIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_removalInsideSynchronizationCancelsDeferredReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(

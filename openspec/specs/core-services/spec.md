@@ -59,6 +59,11 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 #### Scenario: Reconfiguration starts as it is being cancelled
 - **WHEN** a removal or shutdown tries to cancel a reconfiguration whose task has already started
 - **THEN** the device SHALL remain reported as pending until that task's work is done, the task SHALL be asked to terminate, and a removal SHALL wait for the task to finish, including sending any completion event, for up to 60 seconds
+- **AND** a task that has been asked to terminate SHALL NOT replace the device's stored record; it SHALL finish as failed
+
+#### Scenario: Removal or stop from a running reconfiguration's own handler
+- **WHEN** a handler of an event a running reconfiguration task sends on its own thread (such as `metadata-updated` when it marks the device as needing reconfiguration) removes the device or stops the client
+- **THEN** the removal or shutdown SHALL NOT wait for that task, and the task SHALL then stop without rebuilding the device, saving a removed device back, or sending a configuration event
 
 #### Scenario: Same reconfiguration cancelled twice
 - **WHEN** two cancellers (for example a removal racing shutdown) both try to cancel the same not-yet-started reconfiguration
@@ -86,7 +91,7 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 
 #### Scenario: Shutdown with a reconfiguration in progress
 - **WHEN** shutdown begins while a reconfiguration task is running
-- **THEN** shutdown SHALL ask it to terminate and block (not poll) until it finishes, including any completion event already being sent, or 120 seconds pass, before stopping drivers and subsystems. A shutdown started from that task's own completion event handler SHALL NOT wait for the task
+- **THEN** shutdown SHALL ask it to terminate and block (not poll) until it finishes, including any completion event already being sent, or 120 seconds pass, before stopping drivers and subsystems. A shutdown started from a handler of an event that task sends on its own thread (its completion event, or a `metadata-updated` event) SHALL NOT wait for the task
 
 #### Scenario: Running reconfiguration finishes as a removal starts waiting
 - **WHEN** a removal must wait for a running reconfiguration and that reconfiguration finishes before the removal begins waiting
@@ -95,6 +100,10 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 #### Scenario: Repeated startup pass after a reconfiguration finished
 - **WHEN** the startup pass runs again and a device it saw as needing reconfiguration was already reconfigured by an earlier pass
 - **THEN** that device SHALL NOT be reconfigured again
+
+#### Scenario: Startup request finds another reconfiguration pending
+- **WHEN** the startup pass requests a device's reconfiguration, but another reconfiguration of that device was requested after the pass checked for one
+- **THEN** the startup request SHALL NOT be scheduled, and the device's synchronization SHALL be left to the pending reconfiguration, running if that doesn't succeed
 
 #### Scenario: Startup pass while a reconfiguration is pending
 - **WHEN** a startup pass (the first or a repeated one) finds a device with a reconfiguration pending, whether from an earlier pass or requested for another reason
