@@ -118,7 +118,7 @@ static void PublishReadinessForDevices(void);
 
 static pthread_cond_t *ReadyCallbacksCond(void);
 
-static void WaitForReadinessLocked(const struct timespec *start, bool (*busy)(void), const char *what);
+static void WaitForStartupPassesLocked(void);
 
 static bool IsReadyCallbackRunningElsewhereLocked(void);
 
@@ -2224,9 +2224,6 @@ void deviceServiceShutdown()
 {
     icLogDebug(LOG_TAG, "%s: shutting down", __FUNCTION__);
 
-    struct timespec readinessWaitStart;
-    getCurrentTime(&readinessWaitStart, supportMonotonic());
-
     // Claimed once: stopping again, or while another stop is in progress, does nothing.
     bool claimed = g_atomic_int_compare_and_exchange(&shuttingDown, FALSE, TRUE);
 
@@ -2249,7 +2246,7 @@ void deviceServiceShutdown()
 
     // A startup pass in progress uses drivers and the thread pool; it stops at its next device now that shutdown has
     // begun, so let it finish before tearing those down.
-    WaitForReadinessLocked(&readinessWaitStart, IsReadyCallbackRunningElsewhereLocked, "Startup pass");
+    WaitForStartupPassesLocked();
     mutexUnlock(&subsystemsAreReadyMutex);
 
     mutexLock(&deviceDescriptorsListLatestMutex);
@@ -3618,21 +3615,24 @@ static pthread_cond_t *ReadyCallbacksCond(void)
     return &readyCallbacksCond;
 }
 
-// For shutdown, which holds subsystemsAreReadyMutex. Waits while busy() (checked under that mutex) holds, for up to
-// SHUTDOWN_RECONFIGURATION_WAIT_SEC from start, like the wait for running reconfigurations.
-static void WaitForReadinessLocked(const struct timespec *start, bool (*busy)(void), const char *what)
+// For shutdown, which holds subsystemsAreReadyMutex. Waits for startup passes running on other threads, for up to
+// SHUTDOWN_RECONFIGURATION_WAIT_SEC, like the wait for running reconfigurations.
+static void WaitForStartupPassesLocked(void)
 {
-    struct timespec now;
+    struct timespec start, now;
 
-    while (busy() == true)
+    getCurrentTime(&start, supportMonotonic());
+
+    while (IsReadyCallbackRunningElsewhereLocked() == true)
     {
         getCurrentTime(&now, supportMonotonic());
 
-        long elapsedSecs = now.tv_sec - start->tv_sec;
+        long elapsedSecs = now.tv_sec - start.tv_sec;
 
         if (elapsedSecs >= SHUTDOWN_RECONFIGURATION_WAIT_SEC)
         {
-            icWarn("%s still running after %d seconds; continuing shutdown", what, SHUTDOWN_RECONFIGURATION_WAIT_SEC);
+            icWarn("Startup pass still running after %d seconds; continuing shutdown",
+                   SHUTDOWN_RECONFIGURATION_WAIT_SEC);
             break;
         }
 
@@ -4119,8 +4119,10 @@ static void RunReconfiguration(ReconfigureDeviceContext *ctx)
                 }
                 else if (IsDeviceGoneOrStopping(deviceUuid) == true)
                 {
-                    // Never save back a device whose record is gone (removed from a handler on this thread, or by a
-                    // removal that gave up waiting for this task), nor replace a record during shutdown.
+                    // Don't save back a device whose record is gone (removed from a handler on this thread, or by a
+                    // removal that gave up waiting for this task), nor replace a record during shutdown. A removal that
+                    // gives up between this check and the swap below is still undone (see the follow-up on bounded
+                    // waits).
                     icWarn("device %s was removed or the service is stopping; not persisting its reconfiguration",
                            deviceUuid);
                 }
@@ -4281,8 +4283,8 @@ static bool DeviceNeedsReconfiguring(const icDevice *device)
 static void reconfigurationCompletedCallback(bool result, const char *deviceUuid)
 {
     // A failed startup reconfiguration falls back to synchronization. Run here, on the reconfiguration's thread while
-    // the device is still pending, as it always was: a removal or shutdown then waits for it as for the reconfiguration
-    // itself, rather than overlapping it. Gated reads stay refused until it has run.
+    // the device is still pending, so a removal or shutdown waits for it as for the reconfiguration itself rather than
+    // overlapping it. Gated reads stay refused until it has run.
     if (result == false && SubsystemsAreReadyForDevices() == true)
     {
         g_autofree char *uuid = g_strdup(deviceUuid);
@@ -5194,8 +5196,9 @@ static void destroyReconfigureDeviceContext(ReconfigureDeviceContext *ctx)
  * Cancels the device's pending reconfiguration, or asks a running one to terminate and waits for it, including for its
  * completion event. New requests are refused while the device is being removed (see BeginDeviceRemoval()); the loop
  * re-checks anyway, so a reconfiguration that is pending for any other reason doesn't outlive the removal. A removal
- * made from a handler of an event a reconfiguration task sends on its own thread (its completion event, or a
- * metadata-updated event) doesn't wait for that task.
+ * made on a reconfiguration task's own thread (from a handler of an event it sends, such as its completion event or a
+ * metadata-updated event, including one a driver sends during a driver call the task is making) doesn't wait for that
+ * task; in the last case it goes ahead underneath that driver call.
  */
 static void waitForOrCancelPendingReconfiguration(const char *uuid)
 {
@@ -5399,7 +5402,8 @@ static bool IsReconfigurationContextPendingLocked(const ReconfigureDeviceContext
 }
 
 // Caller holds reconfigurationControlMutex. Whether ctx's task is running on this thread, so this thread (in a handler
-// of an event that task sends) must not wait for it: the task resumes only once this thread returns to it.
+// of an event that task, or a driver call it is making, sends) must not wait for it: the task resumes only once this
+// thread returns to it.
 static bool IsRunningOnThisThreadLocked(const ReconfigureDeviceContext *ctx)
 {
     return ctx != NULL && ctx->running == true && pthread_equal(ctx->runningThread, pthread_self()) != 0;
@@ -5439,8 +5443,9 @@ static uint16_t CountBlockingReconfigurationsLocked(void)
 {
     uint16_t count = 0;
 
-    // Not one running on this thread: shutdown is then made from a handler of an event that task sends, and the task
-    // stops itself once this thread returns to it (see RunReconfiguration()).
+    // Not one running on this thread: shutdown is then made from a handler of an event that task (or a driver call it
+    // is making) sends, and the task stops itself once this thread returns to it (see RunReconfiguration()); a driver
+    // call in progress carries on underneath shutdown.
     icHashMapIterator *pendingIt = hashMapIteratorCreate(pendingReconfiguration);
     while (hashMapIteratorHasNext(pendingIt))
     {

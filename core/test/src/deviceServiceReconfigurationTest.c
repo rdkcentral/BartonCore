@@ -125,7 +125,6 @@ static GHashTable *syncCounts; // uuid -> number of synchronizeDevice() calls
 
 static void (*classVersionHook)(void);
 
-static bool failThreadPoolAdd;
 static bool dropPoolTasks;           // accept pool tasks but never run them
 static bool pendingWhenSynchronized; // whether the device was pending reconfiguration when last synchronized
 
@@ -467,14 +466,13 @@ uint32_t __wrap_scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCa
     return handle;
 }
 
-// Run inline, so every synchronization a startup pass queues has finished when the pass returns. With
-// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does; with dropPoolTasks, accept it but
-// never run it.
+// Run inline, so every synchronization a startup pass queues has finished when the pass returns. With dropPoolTasks,
+// accept the task but never run it.
 bool __wrap_threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threadPoolTaskArgFreeFunc argFreeFunc)
 {
     (void) pool;
 
-    if (failThreadPoolAdd == false && dropPoolTasks == false)
+    if (dropPoolTasks == false)
     {
         task(arg);
     }
@@ -488,7 +486,7 @@ bool __wrap_threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg
         free(arg);
     }
 
-    return failThreadPoolAdd == false;
+    return true;
 }
 
 ObservabilityGauge *__real_observabilityGaugeCreate(const char *name, const char *description, const char *unit);
@@ -1023,7 +1021,6 @@ static void ResetFakes(void)
     finishedEventsWhenRemoved = -1;
     g_hash_table_remove_all(syncCounts);
     classVersionHook = NULL;
-    failThreadPoolAdd = false;
     dropPoolTasks = false;
     pendingWhenSynchronized = false;
     pauseShutdown = false;
@@ -2157,8 +2154,8 @@ static void test_failedStartupReconfigurationToleratesDriverWithoutSynchronize(v
     assert_int_equal(GetSyncCount("stale"), 0);
 }
 
-// A failed startup reconfiguration's fallback synchronization runs on the reconfiguration's own thread while the device
-// is still pending (not through the thread pool), so a removal or shutdown waits for it as for the reconfiguration.
+// A failed startup reconfiguration's fallback synchronization runs before the device stops being pending, and not
+// through the thread pool (the pool here accepts tasks but never runs them).
 static void test_failedStartupReconfigurationSynchronizesBeforeUnpending(void **state)
 {
     (void) state;
