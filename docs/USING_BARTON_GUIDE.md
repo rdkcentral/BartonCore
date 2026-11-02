@@ -69,7 +69,8 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   event is sent if the reconfiguration could not be scheduled, the device was removed before its
   reconfiguration started (including when you remove it from a `metadata-updated` handler as its
   reconfiguration begins), the device's record is gone when it finishes (for example because saving
-  the rebuilt device failed), or the service is shutting down, so also retry with a bounded backoff
+  the rebuilt device failed), or the service is shutting down (though one already on its way when you
+  stop the client can still arrive), so also retry with a bounded backoff
   rather than waiting only for the event.
 
 Treat both as "try again later", not "not found", and pass a `GError **` rather than `NULL` so you can

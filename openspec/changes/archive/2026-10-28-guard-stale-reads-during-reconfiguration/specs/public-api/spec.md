@@ -45,7 +45,7 @@ When a reconfiguration of an existing device finishes, the service SHALL emit
 device's UUID and device class and a session discovery type of `B_CORE_DISCOVERY_TYPE_NONE`, so that
 clients holding data about the device know to re-query it. The event SHALL be emitted only after the
 device is no longer reported as reconfiguring, and SHALL NOT be emitted for a reconfiguration
-that finishes after the service has begun shutting down, or for a device that no longer has a stored record
+that finishes after the service has begun shutting down (except one whose sending had already been decided when shutdown began, which shutdown then waits for), or for a device that no longer has a stored record
 (for example because saving the rebuilt device failed). A failure to save the rebuilt device SHALL NOT
 be reported as success. If the device is removed while its reconfiguration is running or finishing,
 the event SHALL be emitted before `device-removed`, provided the reconfiguration finishes within the

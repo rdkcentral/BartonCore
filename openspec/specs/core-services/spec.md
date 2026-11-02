@@ -58,7 +58,7 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 - **WHEN** a removal or shutdown tries to cancel a reconfiguration whose task has already started
 - **THEN** the device SHALL remain reported as pending until that task's work is done, the task SHALL be asked to terminate, and a removal SHALL wait for the task to finish, including sending any completion event, for up to 60 seconds
 - **AND** a running task whose device's record is gone, or whose service has begun shutting down, by the time it would replace that record SHALL NOT replace it; it SHALL finish as failed. A removal still waiting on another thread does not stop it: the task finishes, then the removal deletes the device
-- **AND** the request to terminate is honoured only by a task waiting for a sleepy device to check in, and it stays in force if the removal then fails, so such a task SHALL then fail without being requested again
+- **AND** the request to terminate is honoured only by a task waiting for a sleepy device to check in; if the removal then fails, such a task MAY still fail because of it, without being requested again, unless a later check-in signal has replaced the request
 
 #### Scenario: Removal during shutdown
 - **WHEN** a device removal is made after shutdown has begun, or shutdown begins while it waits for a reconfiguration of the device
@@ -66,7 +66,7 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 
 #### Scenario: Removal or stop from a running reconfiguration's own handler
 - **WHEN** a handler of an event a running reconfiguration task sends on its own thread (such as `metadata-updated` when it marks the device as needing reconfiguration) removes the device or stops the client
-- **THEN** the removal or shutdown SHALL NOT wait for that task; if the removal succeeded, or the client was stopped, the task SHALL then stop without replacing the device's stored record or sending a configuration event, and if the removal failed the task SHALL go on, subject only to the removal's request to terminate (which only a sleepy device's check-in wait honours)
+- **THEN** the removal or shutdown SHALL NOT wait for that task; if the removal succeeded, or the client was stopped, the task SHALL then stop without replacing the device's stored record or sending a configuration event, and if the removal failed the task SHALL go on, subject only to the removal's request to terminate (which only a sleepy device's check-in wait honours, and a later check-in signal can replace)
 
 #### Scenario: Same reconfiguration cancelled twice
 - **WHEN** two cancellers (for example a removal racing shutdown) both try to cancel the same not-yet-started reconfiguration

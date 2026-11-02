@@ -272,8 +272,9 @@ discovery session.
   removal or stop holds that thread for up to 60 s or 120 s. The finishing steps (completion callback
   while still pending → move to the finishing list → event → leave the finishing list) live in one
   helper, `FinishReconfiguration()`, which makes that ordering explicit.
-- Skipped for any reconfiguration that finishes after shutdown has begun (shutdown only ever waits for
-  an event that was already being sent), and when the device record no longer exists at the time of
+- Skipped for any reconfiguration that finishes after shutdown has begun. The check isn't atomic with
+  shutdown starting: an event decided just before shutdown began can still be sent just after, and
+  shutdown waits for it (the task is still on the finishing list), so it is delivered before teardown, and when the device record no longer exists at the time of
   sending, checked against the database rather than the task's snapshot. A failed save of the rebuilt
   device removes the record and makes the reconfiguration a failure (`finalizeNewDevice()`'s result is
   used), so it is never reported as success.
@@ -402,10 +403,11 @@ clears it:
   base code. (The startup reconfiguration's fallback synchronization runs while still pending, so a
   removal waits for it.) A
   coordinated version was tried and dropped (see D6); follow-up ticket 8 covers it.
-- [A removal's terminate request outlives a failed removal] → A removal asks a running
-  reconfiguration to terminate. Only a sleepy device's check-in wait honours that, and the request
-  stays in force if the removal then fails, so that reconfiguration fails and isn't requested again
-  (as before this change; follow-up ticket 4).
+- [A removal's terminate request can outlive a failed removal] → A removal asks a running
+  reconfiguration to terminate. Only a sleepy device's check-in wait honours that. If the removal then
+  fails, the request can still stop that reconfiguration (it then fails and isn't requested again),
+  unless a later check-in signal has replaced it first, since each signal overwrites the last (as
+  before this change; follow-up ticket 4).
 - [Not cycle-free] → Removal waits for running reconfigurations, and shutdown for reconfigurations
   and the startup pass. Loops through those waits require a client handler to block on a thread that
   is removing the device or stopping the client, which the guide tells clients not to do; a removal or
