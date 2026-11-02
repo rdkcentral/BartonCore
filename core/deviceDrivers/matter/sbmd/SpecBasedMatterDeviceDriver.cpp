@@ -565,16 +565,21 @@ SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionInte
 {
     icDebug();
 
-    // reporting is only populated while the driver is activated; fall back to the base default
-    // rather than returning zeroed intervals if this is ever queried while inactive.
-    if (!driver->IsActivated())
+    // Activation and deactivation replace the registration under the JS mutex. reporting is only
+    // populated while the driver is activated; fall back to the base default rather than returning
+    // zeroed intervals if this is queried while inactive.
     {
-        return MatterDeviceDriver::GetDesiredSubscriptionIntervalSecs();
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+
+        if (driver->IsActivated())
+        {
+            const auto &r = driver->GetRegistration().reporting;
+
+            return {r.minSecs, r.maxSecs};
+        }
     }
 
-    const auto &r = driver->GetRegistration().reporting;
-
-    return {r.minSecs, r.maxSecs};
+    return MatterDeviceDriver::GetDesiredSubscriptionIntervalSecs();
 }
 
 void SpecBasedMatterDeviceDriver::DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,

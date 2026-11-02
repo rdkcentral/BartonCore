@@ -101,6 +101,14 @@ namespace barton
 
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
+        /**
+         * Publish the true count of currently-activated SBMD drivers to the active-driver gauge,
+         * replacing the live count. Only SbmdFactory calls this, once after startup registration and
+         * before any bind can run, so the gauge reflects actual driver state (0 when all drivers
+         * are loaded inactive), not just runtime activation deltas.
+         */
+        static void SyncActiveDriverCount(int64_t activeCount);
+
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
@@ -149,14 +157,6 @@ namespace barton
 
         // Process-wide count of currently-activated SBMD drivers, for observability.
         static std::atomic<int64_t> activeDriverCount;
-
-        /**
-         * Publish the true count of currently-activated SBMD drivers to the active-driver gauge,
-         * replacing the live count. Only SbmdFactory calls this, once after startup registration and
-         * before any bind can run, so the gauge reflects actual driver state (0 when all drivers
-         * are loaded inactive), not just runtime activation deltas.
-         */
-        static void SyncActiveDriverCount(int64_t activeCount);
 
         // Number of binds currently executing in AddDevice. A bind activates the driver before it
         // inserts into the device map, so OnLastDeviceRemoved must not deactivate while this is
@@ -457,6 +457,5 @@ namespace barton
         uint64_t nextPendingId = 1;
 
         friend class TestableSpecBasedMatterDeviceDriver;
-        friend class SbmdFactory;
     };
 } // namespace barton
