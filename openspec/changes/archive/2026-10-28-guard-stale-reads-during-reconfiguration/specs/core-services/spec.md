@@ -8,7 +8,7 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 - **THEN** the device SHALL no longer be reported as pending, and the reconfiguration context SHALL be released
 
 #### Scenario: Startup reconfiguration fails
-- **WHEN** a reconfiguration scheduled by the startup pass fails
+- **WHEN** a reconfiguration scheduled by the startup pass fails, and shutdown has not begun
 - **THEN** the device SHALL be synchronized instead, on the reconfiguration's own thread before it stops being reported as pending, so a removal or shutdown waits for that synchronization as for the reconfiguration
 
 #### Scenario: Task finishes before scheduling returns

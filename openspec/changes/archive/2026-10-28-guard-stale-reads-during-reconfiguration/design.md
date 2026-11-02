@@ -410,6 +410,13 @@ clears it:
   and the startup pass. Loops through those waits require a client handler to block on a thread that
   is removing the device or stopping the client, which the guide tells clients not to do; a removal or
   stop made from a handler on the reconfiguration's own thread doesn't wait for it.
+- [A removal or stop made underneath a driver call] → A client handler of an event a driver sends
+  during `configureDevice()` or the startup fallback's `synchronizeDevice()` runs on the
+  reconfiguration's thread, inside that driver call. A removal or stop made there goes ahead without
+  waiting for it (it can't finish first), and when the handler returns, the driver carries on against
+  a removed device or a stopped service. The base code does the same, after a removal first waits up to
+  60 s on itself; this change removes that self-wait, and keeps the reconfiguration from saving such a
+  device back. Follow-up tickets 2 (stop) and 8 (removal).
 
 ### Other risks
 
