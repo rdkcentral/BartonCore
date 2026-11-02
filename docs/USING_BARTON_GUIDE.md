@@ -65,14 +65,10 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   unless the reconfiguration takes longer than the removal's 60-second wait, you remove the device
   from that event's own handler, or the reconfiguration hadn't started rebuilding the device (then no
   event is sent; see below). Removing the device or stopping the client waits for these
-  events' handlers to return, so don't block in a handler on a thread that is doing either. Handlers
-  can also run within a synchronization of a device (for example `resource-updated` events a driver
-  sends while synchronizing it after start, or after its reconfiguration failed), which a removal of
-  that device waits for, and a reconfiguration's `metadata-updated` handler can run while such a
-  synchronization is still running. No
+  events' handlers to return, so don't block in a handler on a thread that is doing either. No
   event is sent if the reconfiguration could not be scheduled, the device was removed before its
-  reconfiguration started (including while it was waiting for a synchronization of the device, or
-  when you remove it from a `metadata-updated` handler as its reconfiguration begins), the device's record is gone when it finishes (for example because saving
+  reconfiguration started (including when you remove it from a `metadata-updated` handler as its
+  reconfiguration begins), the device's record is gone when it finishes (for example because saving
   the rebuilt device failed), or the service is shutting down, so also retry with a bounded backoff
   rather than waiting only for the event.
 
@@ -87,8 +83,7 @@ treat a device missing from one list as removed: rely on `device-removed` for th
 How long a device stays in reconfiguration depends on why it is being rebuilt. After a firmware
 upgrade the drivers wait about 60 seconds for the device to restart before reconfiguring it. A
 battery-powered ("sleepy") Zigbee device is only reconfigured when it next checks in, which can take
-up to 30 minutes. If the device is being synchronized when its reconfiguration is due (shortly after
-start), the reconfiguration waits for that to finish, for up to 5 minutes. If a reconfiguration cannot start at all, the device stays in this state until it is
+up to 30 minutes. If a reconfiguration cannot start at all, the device stays in this state until it is
 removed or Barton restarts. Size your retries accordingly.
 
 Signal handlers are callers like any other: a handler that looks a device or endpoint up with one of
@@ -104,15 +99,16 @@ a handler that removes the device can also wait up to 60 seconds for the other e
 
 `b_core_client_stop` asks a reconfiguration that is still running to stop (it fails unless it has
 already replaced the device's record) and waits for it, and likewise waits for a startup pass that is
-still deciding which devices to reconfigure. Each wait lasts up to 120 seconds, so stopping can
-take up to 240 seconds longer than usual. If your host ends the process sooner, the interrupted reconfiguration is
-retried the next time Barton starts. Once stopping has begun, `b_core_client_remove_device` does nothing and
-returns `FALSE`. Calling `b_core_client_stop` again after it has returned does nothing; don't
-make overlapping calls, or call it from another thread while `b_core_client_start` is still running. Readiness can be
-reported from within `b_core_client_start` itself; if a status-changed handler running then stops the client,
-`b_core_client_start` returns `FALSE`.
+still deciding which devices to reconfigure. Each wait lasts up to 120 seconds, so stopping can take
+up to 240 seconds longer than usual. If your host ends the process sooner, the interrupted
+reconfiguration is retried the next time Barton starts. Once stopping has begun,
+`b_core_client_remove_device` does nothing and returns `FALSE`. Calling `b_core_client_stop` again
+after it has returned does nothing; don't make overlapping calls, or call it from another thread while
+`b_core_client_start` is still running. Readiness can be reported from within `b_core_client_start`
+itself; if a status-changed handler running then stops the client, `b_core_client_start` returns
+`FALSE`.
 
-`b_core_client_remove_device` waits for a reconfiguration of the device that is already running, and likewise for a
-synchronization of it that is already running (which happens shortly after start), for up to 60 seconds in all, before
-removing the device. So it can take that long, and shouldn't be called from a handler that such work is waiting for.
+`b_core_client_remove_device` waits for a reconfiguration of the device that is already running, for
+up to 60 seconds, before removing the device. So it can take that long, and shouldn't be called from
+a handler that the reconfiguration is waiting for.
 

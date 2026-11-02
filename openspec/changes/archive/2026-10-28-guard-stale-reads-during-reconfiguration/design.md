@@ -145,18 +145,12 @@ unset with `NULL`/`FALSE` means not found or failed.
 ### D6: Close the startup window
 Readiness is split into two flags under `subsystemsAreReadyMutex`:
 - `subsystemsReadyForDevices` (internal): subsystems can serve devices. Set first, and used by the
-  synchronization fallback, which can run during the pass. A startup reconfiguration, or one a
-  device's synchronization was left to, owes the device that synchronization unless it succeeds: if it
-  fails, or is withdrawn without running (cancelled by a removal, or never scheduled), the fallback
-  queues the normal `DeviceSynchronizationTask()` once the device has stopped being pending, instead
-  of calling the driver itself, so the device stops being pending without waiting for the
-  synchronization, and drivers that don't implement `synchronizeDevice()` are skipped as they are on
-  every other synchronization path. If the thread pool won't take the task (its queue is full), a
-  fallback on a reconfiguration task (which shutdown waits for) runs the synchronization inline rather
-  than drop it, since a dropped fallback would leave the device serving pre-restart data. Any other
-  fallback (after a failed removal, or for a reconfiguration that couldn't be scheduled) is only ever
-  queued: it would otherwise run on the caller's thread (possibly the event thread), which shutdown
-  doesn't wait for. If the queue is full, it is left to the next start.
+  startup reconfiguration's failure fallback, which can run during the pass. That fallback queues the
+  normal `DeviceSynchronizationTask()` instead of calling the driver itself, so the device stops being
+  pending without waiting for the synchronization, and drivers that don't implement
+  `synchronizeDevice()` are skipped as they are on every other synchronization path. If the thread
+  pool won't take the task (its queue is full), the fallback runs the synchronization inline rather
+  than drop it, since a dropped fallback would leave the device serving pre-restart data.
 - `deviceOperationsReady` (published): what `deviceServiceIsReadyForDeviceOperation()` returns, and
   therefore the client gate, the status's `isReadyForDeviceOperation`/`isReadyForPairing`, and
   discovery's driver filtering.
@@ -168,10 +162,8 @@ set subsystemsReadyForDevices = true
 startDeviceInitialization()        <-- marks every device needing reconfiguration pending (synchronously)
 if not shutting down (checked under subsystemsAreReadyMutex):
     set deviceOperationsReady = true    <-- readiness becomes observable here, and only here
-    count a readiness notification in flight
     notifyDriversForServiceStatusChange()
     sendDeviceServiceStatusEvent(ReadyForDeviceOperation)
-    stop counting it
 ```
 
 No observer can see "ready" while a device awaiting startup reconfiguration is unflagged, whether it
@@ -190,12 +182,12 @@ forwards to.
 Shutdown can begin while the pass is running (a stop during startup). The pass stops scheduling once
 `deviceServiceIsShuttingDown()` is true, and readiness is published only if shutdown has not begun.
 That check runs under `subsystemsAreReadyMutex`, and shutdown sets its flag before clearing both
-readiness flags under the same mutex, so readiness is never re-published after shutdown clears it.
-Shutdown also sets its flag only once no readiness notification counted on another thread is in
-progress, waiting for one under the same mutex (within the same 120 s budget as the wait for the
-pass), so `READY_FOR_DEVICE_OPERATION` is never sent after shutdown has begun; a notification on
-shutdown's own thread (a ready-event handler that stops the service) isn't waited for. The flag is
-claimed atomically, so a second stop, or one made while another is in progress, returns without
+readiness flags under the same mutex, so readiness is never re-published after shutdown clears it. A
+readiness notification that had already started before shutdown began (to drivers and with
+`READY_FOR_DEVICE_OPERATION`) can still be delivered after it; shutdown waits for it as part of the
+startup pass. Holding shutdown back until such a notification had been delivered was tried and
+dropped: it added a wait for little benefit, since readiness already reads false once shutdown has
+begun. The flag is claimed atomically, so a second stop, or one made while another is in progress, returns without
 repeating any of shutdown (overlapping stops are otherwise not supported; see the follow-up on
 serializing stop). Because the subsystem manager can deliver readiness from within
 `deviceServiceStart()` (when everything is already ready as drivers finish starting), a ready-event
@@ -210,36 +202,16 @@ the pass now runs on the ready-callback thread rather than the initializer threa
 destruction shutdown already waited for), shutdown counts ready callbacks in flight and waits for them
 (up to 120 s, like the reconfiguration wait) before tearing down the thread pool and drivers they use.
 A callback on shutdown's own thread (a ready-event handler that stops the service) is not waited for.
-A pass skips any device that already has a reconfiguration pending, whatever its snapshot says, so a
-device pending for another reason (for example after a firmware upgrade) isn't synchronized underneath
-that reconfiguration. The skip is recorded in the same locked step that checks the pending state; if
-that reconfiguration then fails or is withdrawn, the device is synchronized as the pass would have
-done (once, whether or not it is also a startup reconfiguration).
 
-Every synchronization is also checked when it is about to call the driver, not just when it is
-queued, since a removal or reconfiguration can begin in between. Under the control lock it either
-registers as running, or doesn't run: if the device is being removed, it is recorded on the removal
-and runs only if every removal of the device fails; if the device has a reconfiguration pending, it is
-left to that reconfiguration and runs only if that doesn't succeed. A removal waits for a
-synchronization already running (within its 60-second wait); a synchronization on the removing thread
-itself (a driver or client handler removing the device from within it) isn't waited for. A removal
-registers before it stops a reconfiguration, so a fallback that reconfiguration's failure queues always
-sees the removal.
-
-A reconfiguration task that finds a synchronization of its device running neither rebuilds the device
-under it nor waits for it: it reschedules itself (`DeferForSynchronization()`), every 2 s, staying
-pending so no new synchronization starts, and reconfigures once the synchronization has ended (or after
-5 minutes of retries, so a synchronization that never returns can't leave the device pending forever).
-Between retries it is a reconfiguration that hasn't started, which a removal or shutdown cancels rather
-than waits for. This is deliberate: an earlier version blocked the task on the synchronization, and
-since client handlers and driver callbacks can run inside a synchronization, a removal or stop made
-there waited for the task while the task waited for the synchronization. Making the task give up when a
-removal or shutdown began broke that loop but sent a configuration event from the give-up path, whose
-handlers could close the loop again. A task that never blocks removes the edge both loops relied on. A
-removal or shutdown can still catch a retry in the moment it runs (its cancel fails); the retry then
-sees the removal or shutdown and withdraws the reconfiguration as cancelled, without an event, so that
-wait usually lasts at most one retry interval (see "Risks of deferring reconfiguration" below for the
-exception).
+Synchronization is not coordinated with removal or reconfiguration, as before this change: a
+synchronization (from the startup pass, or the startup reconfiguration's fallback) can still run while
+the device is being removed, or while another reconfiguration of it (for example after a firmware
+upgrade) is pending or running. Coordinating them (deferring a synchronization during a removal or
+reconfiguration, removal waiting for a running synchronization, deferring a reconfiguration while a
+synchronization runs, and handing a skipped synchronization on when a reconfiguration fails, is
+cancelled or can't be scheduled) was tried and dropped: each hand-off depended on the order in which
+the parties finished, and each fix for one order broke another. This is left to a follow-up that
+gives each device one lifecycle record with explicit transitions (follow-up ticket 8).
 
 The subsystem manager can invoke the ready callback more than once (from both subsystem
 initialization and "all drivers started", and again if a subsystem re-initializes). That is
@@ -270,8 +242,9 @@ discovery session.
   `device-removed` ahead of this event and shutdown can't tear down the event producer while it is being
   sent. For the whole of a device's removal, new reconfigurations of it are refused, and the removal
   loops until none is pending or finishing, so none can run after it and re-save the device. A request
-  refused this way is kept and requested again if the removal fails, unless the removal gave up (after
-  its 60-second wait) on a reconfiguration that is still running. Reconfigurations of a device with no
+  refused this way is kept and requested again if the removal fails, unless a reconfiguration of the
+  device is still running then (the removal gave up on it after its 60-second wait, or was made from a
+  handler on its thread). Reconfigurations of a device with no
   stored record are refused: the record is checked before the insert, and again right after it (outside
   the control lock, see Risks) with the insert backed out, so only a device deleted while the request is
   being made can show as reconfiguring, and only until it is backed out. Every request, including one for
@@ -292,21 +265,13 @@ discovery session.
   removal asked it to stop was tried and dropped: when that removal then failed, the reconfiguration
   was lost, and requesting it again needed hand-offs in both orders between the removal and the task,
   each of which had gaps (merged flags, retries between deferrals, repeated failures). A removal made
-  once shutdown has begun, or still waiting when shutdown clears its tables (shutdown wakes it),
-  returns without deleting the device, telling its driver or sending `device-removed`, since those
-  are being torn down. A startup request that finds another reconfiguration already pending (requested
-  after the pass checked) records the device's synchronization against that one, under the insert's
-  lock, as the pass would have.
+  once shutdown has begun, or that finds shutdown has begun once it has finished waiting, returns
+  without deleting the device, telling its driver or sending `device-removed`, since those are being
+  torn down.
   Because removal and shutdown wait for the event, a client handler that blocks on the thread doing the
   removal or stop holds that thread for up to 60 s or 120 s. The finishing steps (completion callback
-  while still pending → move to the finishing list → event → queue any synchronization a failure owes
-  → leave the finishing list) live in one helper, `FinishReconfiguration()`, which makes that ordering
-  explicit. The owed synchronization is queued after the event, not before: a removal made from the
-  event's handlers has then already happened or registered, so the synchronization defers to it.
-  Queued before the event, it could run while such a handler's removal waited for it, and a removal
-  made within it (for example from another client handler) would wait for this reconfiguration to
-  finish sending the event, so the two waited on each other until the 60-second bound. Queued after,
-  a removal made within it only waits for the reconfiguration's last step, which waits for nothing.
+  while still pending → move to the finishing list → event → leave the finishing list) live in one
+  helper, `FinishReconfiguration()`, which makes that ordering explicit.
 - Skipped for any reconfiguration that finishes after shutdown has begun (shutdown only ever waits for
   an event that was already being sent), and when the device record no longer exists at the time of
   sending, checked against the database rather than the task's snapshot. A failed save of the rebuilt
@@ -365,9 +330,10 @@ clears it:
   refused before the insert, after reading the record once more in case it reappeared meanwhile (a swap
   that finished), or backed out after the insert if the device was deleted meanwhile. A request without a
   device UUID is refused outright. A duplicate or shutdown refusal is benign and logged at debug level; a
-  deferral or an unknown device is logged at info level. If a removal that gave up waiting for a
-  still-running reconfiguration (after its 60-second wait) then fails, a request deferred during it is
-  dropped with a warning rather than re-issued, since it would only duplicate the running one.
+  deferral or an unknown device is logged at info level. If a removal fails while a reconfiguration of
+  the device is still running (one it gave up waiting for after its 60-second wait, or one on whose
+  thread it was made), a request deferred during it is dropped with a warning rather than re-issued,
+  since it would only duplicate the running one (follow-up ticket 2).
 - Visibility: a `device.reconfiguration.pending` gauge (observability metrics, no labels) reports the
   number of pending reconfigurations (scheduled or running), so a device stuck pending (e.g. the
   thread-start limitation above) shows up in telemetry rather than only as refused reads.
@@ -430,50 +396,18 @@ clears it:
 
 ## Risks / Trade-offs
 
-### Risks of deferring reconfiguration while a device is synchronized
-- [Rescheduling reuses the task-handle and cancellation paths] → Each retry stores a new handle on the
-  context under `ctx->mtx`, taking its own context reference, exactly as the first scheduling does, so a
-  canceller always sees either the running task (and waits) or the not-started retry (and cancels it).
-  This is where earlier lifecycle bugs (a task-handle use-after-free, cancels that didn't take effect)
-  lived, so it is covered by unit tests: deferral and retry, removal and stop from within the
-  synchronization cancelling the deferred task, a removal that catches a retry running, and a retry that
-  can't be scheduled.
-- [Reconfiguration delayed by synchronization] → The device stays pending (gated reads refused) for as
-  long as a synchronization runs, up to 5 minutes; a Matter synchronization of an unreachable device can
-  take about 3 minutes. Previously the wait was capped at 60 s, after which the device was rebuilt under
-  a synchronization still running. Synchronization happens at startup, so this mostly lengthens a
-  post-restart reconfiguration.
-- [Synchronization that outlasts the 5-minute cap] → The device is then reconfigured while the driver is
-  still synchronizing it, as before this change but later. Tracked with the other bounded waits that
-  give up (follow-up ticket 2). The cap is not unit tested: the fake scheduler can't advance time.
-- [Deferred reconfiguration cancelled by a removal that fails] → The cancelled request is not requested
-  again, like any other reconfiguration a removal cancels; the device keeps its old model until the next
-  start (follow-up ticket 4). A synchronization it owed is not lost: it runs if the removal fails.
-- [A canceller racing a retry] → A removal or stop that catches a retry while it is running usually waits
-  for up to one retry interval (2 s) for it to withdraw. If that retry instead finds the synchronization
-  just ended, it reconfigures, and the canceller waits for that as for any running reconfiguration
-  (bounded at 60 s for a removal, 120 s for shutdown).
-- [Sleepy devices that check in while deferred] → A sleepy Zigbee device that checks in while its
-  reconfiguration is deferred is put into fast poll, and the reconfiguration is signalled; the signal is
-  kept, so the later retry doesn't wait for a new check-in. If that retry runs after the fast-poll window
-  (about 10 s) has closed, the reconfiguration can fail, and the device keeps its old model until the
-  next start (follow-up ticket 4). Before this change the window was at most 60 s, and before the
-  synchronization coordination it didn't exist. It needs a sleepy device being synchronized when its
-  reconfiguration is due, and can't be confirmed without hardware, so the code is unchanged: discarding a
-  stale check-in signal when a retry reschedules would change how sleepy devices wait, unverified.
-- [Not cycle-free] → Removal still waits for a running synchronization and for running reconfigurations,
-  and shutdown for reconfigurations, the startup pass and readiness notifications. Loops through those
-  waits require a client handler to block on a thread that is removing the device or stopping the
-  client, which the guide tells clients not to do; the guide also says handlers can run within a
-  synchronization (after start, and after a failed reconfiguration), so clients can tell when that
-  applies. Two loops don't need a blocking handler of that kind, only two removals of the same device at
-  once, and end at the 60-second bound (follow-up ticket 2): a synchronization from another source (for
-  example a repeated startup pass) can start while a reconfiguration is sending its completion event,
-  and a removal made within it and another made from that event's handler wait on each other; and a
-  synchronization already running when a reconfiguration's first run sets its metadata, with the device
-  removed both from that `metadata-updated` handler and from within the synchronization. A stop made
-  from that handler instead doesn't stall: shutdown wakes a removal still waiting once it has cleared
-  its tables, and that removal then gives up without removing anything.
+### Risks of the lifecycle coordination this change keeps
+- [Synchronization isn't coordinated] → A synchronization can still run while its device is being
+  removed, or while another reconfiguration of it is pending or running, as before this change. A
+  coordinated version was tried and dropped (see D6); follow-up ticket 8 covers it.
+- [A removal's terminate request outlives a failed removal] → A removal asks a running
+  reconfiguration to terminate. Only a sleepy device's check-in wait honours that, and the request
+  stays in force if the removal then fails, so that reconfiguration fails and isn't requested again
+  (as before this change; follow-up ticket 4).
+- [Not cycle-free] → Removal waits for running reconfigurations, and shutdown for reconfigurations
+  and the startup pass. Loops through those waits require a client handler to block on a thread that
+  is removing the device or stopping the client, which the guide tells clients not to do; a removal or
+  stop made from a handler on the reconfiguration's own thread doesn't wait for it.
 
 ### Other risks
 

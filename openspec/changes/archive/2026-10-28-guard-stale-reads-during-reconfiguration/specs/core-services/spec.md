@@ -6,7 +6,6 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 #### Scenario: Scheduling fails
 - **WHEN** a reconfiguration is requested but the task scheduler reports that its task could not be scheduled
 - **THEN** the device SHALL no longer be reported as pending, and the reconfiguration context SHALL be released
-- **AND** if it was a startup reconfiguration, or one a device's synchronization was left to, the device SHALL be synchronized instead, and no configuration event SHALL be sent
 
 #### Scenario: Task finishes before scheduling returns
 - **WHEN** a reconfiguration is scheduled with no delay and its task finishes before the scheduling call returns
@@ -19,15 +18,15 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 #### Scenario: Pending reconfiguration cancelled
 - **WHEN** a reconfiguration that has not started yet is cancelled (device removal or shutdown)
 - **THEN** the device SHALL no longer be reported as pending, and the reference held for the cancelled task SHALL be released
-- **AND** if a removal cancelled a startup reconfiguration, or one a device's synchronization was left to, and that removal fails, the device SHALL then be synchronized
 
 #### Scenario: Reconfiguration starts as it is being cancelled
 - **WHEN** a removal or shutdown tries to cancel a reconfiguration whose task has already started
 - **THEN** the device SHALL remain reported as pending until that task's work is done, the task SHALL be asked to terminate, and a removal SHALL wait for the task to finish, including sending any completion event, for up to 60 seconds
 - **AND** a running task whose device's record is gone, or whose service has begun shutting down, by the time it would replace that record SHALL NOT replace it; it SHALL finish as failed. A removal still waiting on another thread does not stop it: the task finishes, then the removal deletes the device
+- **AND** the request to terminate is honoured only by a task waiting for a sleepy device to check in, and it stays in force if the removal then fails, so such a task SHALL then fail without being requested again
 
 #### Scenario: Removal during shutdown
-- **WHEN** a device removal is made after shutdown has begun, or is still waiting when shutdown clears its reconfiguration state
+- **WHEN** a device removal is made after shutdown has begun, or shutdown begins while it waits for a reconfiguration of the device
 - **THEN** it SHALL return without deleting the device, notifying its driver, or sending `device-removed`
 
 #### Scenario: Removal or stop from a running reconfiguration's own handler
@@ -48,7 +47,7 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 
 #### Scenario: Reconfiguration requested while the device is being removed
 - **WHEN** a reconfiguration of a device is requested while a removal of that device is in progress
-- **THEN** it SHALL NOT be scheduled while the removal is in progress; if the removal fails and the device still exists, it SHALL then be scheduled, provided the removal did not give up waiting (after 60 seconds) for a reconfiguration of the device that is still running
+- **THEN** it SHALL NOT be scheduled while the removal is in progress; if the removal fails and the device still exists, it SHALL then be scheduled, provided no reconfiguration of the device is still running then (one the removal gave up waiting for after 60 seconds, or one on whose thread the removal was made, from a handler of an event it sent)
 
 #### Scenario: Reconfiguration requested for an unknown device
 - **WHEN** a reconfiguration is requested for a device that has no stored record
@@ -70,29 +69,9 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 - **WHEN** the startup pass runs again and a device it saw as needing reconfiguration was already reconfigured by an earlier pass
 - **THEN** that device SHALL NOT be reconfigured again
 
-#### Scenario: Startup request finds another reconfiguration pending
-- **WHEN** the startup pass requests a device's reconfiguration, but another reconfiguration of that device was requested after the pass checked for one
-- **THEN** the startup request SHALL NOT be scheduled, and the device's synchronization SHALL be left to the pending reconfiguration, running if that doesn't succeed
-
-#### Scenario: Startup pass while a reconfiguration is pending
-- **WHEN** a startup pass (the first or a repeated one) finds a device with a reconfiguration pending, whether from an earlier pass or requested for another reason
-- **THEN** that device SHALL be neither reconfigured again nor synchronized by this pass, whatever its stored class and profile versions
-- **AND** if that pending reconfiguration then fails or is withdrawn without running, the device SHALL be synchronized as the pass would otherwise have done; if the device is being removed, only once that removal fails, and if a reconfiguration of the device is pending by then, only if that reconfiguration doesn't succeed either
-
-#### Scenario: Synchronization while a device is being removed or reconfigured
-- **WHEN** a synchronization of a device is about to call its driver while that device is being removed or has a reconfiguration pending
-- **THEN** it SHALL NOT run then; it SHALL run once the removal fails, or once that reconfiguration doesn't succeed, and not at all if the device is removed or successfully reconfigured
-
-#### Scenario: Removal while a synchronization is running
-- **WHEN** a device is removed while a synchronization of that device is calling its driver
-- **THEN** the removal SHALL wait for that synchronization to finish, within its existing 60-second wait, before removing the device, unless the removal is made from within that synchronization
-
-#### Scenario: Reconfiguration due while a synchronization is running
-- **WHEN** a reconfiguration task of a device runs while a synchronization of that device is calling its driver
-- **THEN** the task SHALL neither rebuild the device nor wait for the synchronization; the device SHALL remain pending, and the task SHALL be retried every 2 seconds until the synchronization has ended, then reconfigure the device, or after 5 minutes of retries reconfigure it anyway
-- **AND** between retries it SHALL be cancelled by a removal or shutdown as a reconfiguration that has not started; a retry that finds a removal of the device or shutdown begun SHALL withdraw it as cancelled, and in neither case SHALL a configuration event be sent
-- **AND** if a retry can't be scheduled, the reconfiguration SHALL be withdrawn as if it couldn't be scheduled
-
+#### Scenario: Repeated startup pass while a reconfiguration is running
+- **WHEN** the startup pass runs again and a device it saw as needing reconfiguration is still pending reconfiguration by an earlier pass
+- **THEN** that device SHALL be neither reconfigured again nor synchronized by this pass
 ### Requirement: Pending reconfiguration metric
 The device service SHALL record a `device.reconfiguration.pending` gauge (unit `1`, no attributes) through the observability metrics API, holding the number of devices with a pending or in-progress reconfiguration. It SHALL be recorded as 0 when the service starts and updated whenever a reconfiguration becomes or stops being pending.
 
@@ -128,10 +107,6 @@ The `deviceService` SHALL orchestrate the complete service lifecycle in two phas
 #### Scenario: Stop called again
 - **WHEN** `b_core_client_stop()` is called again after a stop has returned
 - **THEN** it SHALL return at once without repeating any part of shutdown; a call that overlaps another stop SHALL NOT repeat any part of shutdown either, but overlapping calls are otherwise not supported
-
-#### Scenario: Readiness being notified when shutdown is requested
-- **WHEN** shutdown is requested on one thread while readiness for device operation is being notified (to drivers and with `READY_FOR_DEVICE_OPERATION`) on another
-- **THEN** shutdown SHALL NOT begin until that notification has been delivered, waiting for up to 120 seconds (shared with the wait for the startup pass), so `READY_FOR_DEVICE_OPERATION` is never emitted after shutdown has begun
 
 #### Scenario: Stopped while starting
 - **WHEN** readiness is published from within `b_core_client_start()` and a handler of the ready event stops the client

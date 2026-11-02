@@ -133,10 +133,6 @@ static bool shutdownBegan;
 static bool commFailShutdownCalled; // shutdown got past waiting for reconfigurations
 static bool passReachedDevice;
 static bool passReleased;
-static bool readyEventReached;
-static bool syncReached;
-static void (*syncHook)(void);
-static bool removedInsideSync;
 static void (*metadataHook)(const char *uuid); // run once from the next metadata-updated event, as a client handler
 static bool removedFromMetadataHandler;
 static gint64 actFromMetadataHandlerUsecs;
@@ -146,9 +142,6 @@ static void (*configureHook)(void); // run once from the next configureDevice()
 static int deviceSaveCount; // calls of jsonDatabaseAddDevice() since the last reset (see ResetDeviceSaveCount())
 static int completionCount;         // calls of RecordCompletion()
 static bool completionResult;
-static bool poolTaskOnThread;     // run the next pool task on its own thread, as a real pool does, rather than inline
-static GThread *poolTaskThread;   // ...that thread
-static gint64 actInsideSyncUsecs; // how long the removal or stop made inside the synchronization took
 static bool readyDuringStart; // deliver readiness from within start, as the subsystem manager can
 static int commFailShutdownCount;
 static void (*readyEventHook)(void);
@@ -226,16 +219,6 @@ static bool IsPassAtDevice(void)
 static bool IsDeviceRemovedEventSent(void)
 {
     return removedEventCount > 0;
-}
-
-static bool IsReadyEventReached(void)
-{
-    return readyEventReached;
-}
-
-static bool IsSyncReached(void)
-{
-    return syncReached;
 }
 
 static bool IsRequestReturned(void)
@@ -319,16 +302,6 @@ static bool FakeRegisterResources(void *ctx, icDevice *device, icInitialResource
 static void FakeSynchronizeDevice(void *ctx, icDevice *device)
 {
     (void) ctx;
-
-    g_mutex_lock(&fakeLock);
-    void (*hook)(void) = syncHook;
-    syncHook = NULL;
-    g_mutex_unlock(&fakeLock);
-
-    if (hook != NULL)
-    {
-        hook();
-    }
 
     g_mutex_lock(&fakeLock);
     gpointer count = g_hash_table_lookup(syncCounts, device->uuid);
@@ -488,50 +461,11 @@ uint32_t __wrap_scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCa
     return handle;
 }
 
-typedef struct
-{
-    threadPoolTask task;
-    void *arg;
-    threadPoolTaskArgFreeFunc argFreeFunc;
-} PoolTask;
-
-static gpointer RunPoolTask(gpointer data)
-{
-    PoolTask *poolTask = data;
-
-    poolTask->task(poolTask->arg);
-
-    if (poolTask->argFreeFunc != NULL)
-    {
-        poolTask->argFreeFunc(poolTask->arg);
-    }
-    else
-    {
-        free(poolTask->arg);
-    }
-
-    g_free(poolTask);
-
-    return NULL;
-}
-
 // Run inline, so every synchronization a startup pass queues has finished when the pass returns. With
-// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does. With poolTaskOnThread, run the next
-// task on its own thread instead (inline, it would run under the lock the device service holds while queueing).
+// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does.
 bool __wrap_threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threadPoolTaskArgFreeFunc argFreeFunc)
 {
     (void) pool;
-
-    if (failThreadPoolAdd == false && poolTaskOnThread == true)
-    {
-        poolTaskOnThread = false;
-
-        PoolTask *poolTask = g_new(PoolTask, 1);
-        *poolTask = (PoolTask) {.task = task, .arg = arg, .argFreeFunc = argFreeFunc};
-        poolTaskThread = g_thread_new("pool", RunPoolTask, poolTask);
-
-        return true;
-    }
 
     if (failThreadPoolAdd == false)
     {
@@ -1089,10 +1023,6 @@ static void ResetFakes(void)
     commFailShutdownCalled = false;
     passReachedDevice = false;
     passReleased = false;
-    readyEventReached = false;
-    syncReached = false;
-    syncHook = NULL;
-    removedInsideSync = false;
     metadataHook = NULL;
     removedFromMetadataHandler = false;
     actFromMetadataHandlerUsecs = 0;
@@ -1101,9 +1031,6 @@ static void ResetFakes(void)
     configureCount = 0;
     configureHook = NULL;
     completionResult = false;
-    poolTaskOnThread = false;
-    poolTaskThread = NULL;
-    actInsideSyncUsecs = 0;
     readyDuringStart = false;
     commFailShutdownCount = 0;
     readyEventHook = NULL;
@@ -1345,95 +1272,6 @@ static void test_stopAgainAfterStopFromEventLoop(void **state)
     b_core_client_stop(fixture->client);
 }
 
-// Ready-event hook: holds the readiness notification until the test releases it.
-static void HoldReadyEventUntilReleased(void)
-{
-    g_mutex_lock(&fakeLock);
-    readyEventReached = true;
-    g_cond_broadcast(&fakeCond);
-    WaitLocked(IsPassReleased, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    g_mutex_unlock(&fakeLock);
-}
-
-// Synchronization hook: holds the driver's synchronization until the test releases it.
-static void HoldSyncUntilReleased(void)
-{
-    g_mutex_lock(&fakeLock);
-    syncReached = true;
-    g_cond_broadcast(&fakeCond);
-    WaitLocked(IsPassReleased, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    g_mutex_unlock(&fakeLock);
-}
-
-static void ReleasePass(void);
-
-// Synchronization hooks: once released, remove the device, or stop the client, from within its synchronization (as a
-// handler of an event the synchronization sends might), timing how long that takes.
-static void RemoveDeviceInsideSync(void)
-{
-    HoldSyncUntilReleased();
-
-    gint64 start = g_get_monotonic_time();
-    bool removed = deviceServiceRemoveDevice("current");
-
-    g_mutex_lock(&fakeLock);
-    removedInsideSync = removed;
-    actInsideSyncUsecs = g_get_monotonic_time() - start;
-    g_mutex_unlock(&fakeLock);
-}
-
-static void StopClientInsideSync(void)
-{
-    HoldSyncUntilReleased();
-
-    gint64 start = g_get_monotonic_time();
-    StopClientAsHandler();
-
-    g_mutex_lock(&fakeLock);
-    actInsideSyncUsecs = g_get_monotonic_time() - start;
-    g_mutex_unlock(&fakeLock);
-}
-
-// Starts a synchronization of "current" with the given hook and, while it is held, runs a reconfiguration of the
-// device, which is deferred (rescheduled, still pending) rather than waiting for it; then releases the synchronization.
-// Returns the thread running the synchronization's startup pass, to join.
-static GThread *RunReconfigurationDeferredBySync(void (*hook)(void))
-{
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    syncHook = hook;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
-    g_mutex_unlock(&fakeLock);
-
-    deviceServiceReconfigureDevice("current", 0, NULL, false);
-    RunScheduledTask(0);
-
-    assert_int_equal(GetScheduledCount(), 2);
-    assert_int_equal(scheduledTasks[1].delay, 2);
-    assert_true(deviceServiceIsReconfigurationPending("current"));
-    assert_int_equal(finishedEventCount, 0);
-
-    ReleasePass();
-
-    return passThread;
-}
-
-// Class version hook: a reconfiguration of the device is requested after the pass checked it for a pending one.
-static void RequestReconfigurationOfCurrent(void)
-{
-    deviceServiceReconfigureDevice("current", 60, NULL, false);
-}
-
-static void ReleasePass(void)
-{
-    g_mutex_lock(&fakeLock);
-    passReleased = true;
-    g_cond_broadcast(&fakeCond);
-    g_mutex_unlock(&fakeLock);
-}
-
 // Stopping a stopped client does nothing: teardown isn't repeated.
 static void test_secondStopDoesNothing(void **state)
 {
@@ -1461,297 +1299,6 @@ static void test_stopFromReadyHandlerDuringStart(void **state)
     assert_true(stopReturnedFromHandler);
     assert_false(started);
     assert_int_equal(readyEventCount, 1);
-}
-
-// Shutdown lets a readiness notification in progress finish before it begins, so the ready event is never sent after
-// shutdown has begun.
-static void test_shutdownWaitsForReadinessNotificationInProgress(void **state)
-{
-    Fixture *fixture = *state;
-
-    readyEventHook = HoldReadyEventUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    bool reached = WaitLocked(IsReadyEventReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    g_mutex_unlock(&fakeLock);
-
-    GThread *stopThread = g_thread_new("stop", StopClient, fixture->client);
-
-    g_mutex_lock(&fakeLock);
-    bool begunDuringEvent = WaitLocked(IsShutdownBegun, BLOCKED_PROBE_USECS);
-    g_mutex_unlock(&fakeLock);
-
-    ReleasePass();
-    g_thread_join(passThread);
-    g_thread_join(stopThread);
-    fixture->stopped = true;
-
-    assert_true(reached);
-    assert_false(begunDuringEvent);
-    assert_int_equal(readyEventCount, 1);
-}
-
-// A removal waits for a synchronization of the device already running before removing it.
-static void test_removalWaitsForRunningSynchronization(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    syncHook = HoldSyncUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    bool reached = WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    g_mutex_unlock(&fakeLock);
-
-    GThread *removeThread = g_thread_new("remove", RemoveDevice, "current");
-
-    g_mutex_lock(&fakeLock);
-    bool removedDuringSync = WaitLocked(IsDeviceRemovedEventSent, BLOCKED_PROBE_USECS);
-    g_mutex_unlock(&fakeLock);
-
-    ReleasePass();
-    g_thread_join(passThread);
-    g_thread_join(removeThread);
-
-    assert_true(reached);
-    assert_false(removedDuringSync);
-    assert_int_equal(removedEventCount, 1);
-    assert_int_equal(GetSyncCount("current"), 1);
-}
-
-// A reconfiguration whose device is being synchronized doesn't rebuild it under that synchronization, nor wait for it:
-// it is retried (staying pending) until the synchronization ends, then reconfigures.
-static void test_reconfigurationDeferredWhileSynchronizing(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    syncHook = HoldSyncUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    bool reached = WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    g_mutex_unlock(&fakeLock);
-
-    deviceServiceReconfigureDevice("current", 0, NULL, false);
-    RunScheduledTask(0);
-    RunScheduledTask(1);
-
-    assert_int_equal(GetScheduledCount(), 3);
-    assert_true(deviceServiceIsReconfigurationPending("current"));
-    assert_int_equal(finishedEventCount, 0);
-
-    ReleasePass();
-    g_thread_join(passThread);
-    RunScheduledTask(2);
-
-    assert_true(reached);
-    assert_int_equal(GetScheduledCount(), 3);
-    assert_int_equal(finishedEventCount, 1);
-    assert_false(deviceServiceIsReconfigurationPending("current"));
-}
-
-// A removal made from within the synchronization a reconfiguration is deferred for cancels that reconfiguration (it
-// hasn't started) rather than waiting for it, and sends no configuration event whose handlers could wait on the
-// removal.
-static void test_removalInsideSynchronizationCancelsDeferredReconfiguration(void **state)
-{
-    (void) state;
-
-    GThread *passThread = RunReconfigurationDeferredBySync(RemoveDeviceInsideSync);
-    g_thread_join(passThread);
-
-    assert_true(removedInsideSync);
-    assert_true(actInsideSyncUsecs < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    assert_int_equal(finishedEventCount, 0);
-    assert_int_equal(removedEventCount, 1);
-    assert_false(deviceServiceIsReconfigurationPending("current"));
-}
-
-// Likewise a stop made from within that synchronization, which runs on a pool thread.
-static void test_stopInsideSynchronizationCancelsDeferredReconfiguration(void **state)
-{
-    Fixture *fixture = *state;
-
-    poolTaskOnThread = true;
-    GThread *passThread = RunReconfigurationDeferredBySync(StopClientInsideSync);
-    g_thread_join(passThread);
-    g_thread_join(poolTaskThread);
-    fixture->stopped = stopCalledFromHandler;
-
-    assert_true(stopReturnedFromHandler);
-    assert_true(actInsideSyncUsecs < WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    assert_int_equal(finishedEventCount, 0);
-}
-
-// Runs the deferred (second) reconfiguration run once a removal has tried, and failed, to cancel it, as when the
-// removal catches it in the moment it runs.
-static gpointer RunSecondScheduledTaskOnceCancelAttempted(gpointer data)
-{
-    (void) data;
-
-    g_mutex_lock(&fakeLock);
-    WaitLocked(IsCancelAttempted, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    g_mutex_unlock(&fakeLock);
-
-    RunScheduledTask(1);
-
-    return NULL;
-}
-
-// A deferred run that finds a removal of the device begun (one that couldn't cancel it) withdraws the reconfiguration
-// without a configuration event, so the removal goes on; it still waits for the running synchronization.
-static void test_deferredReconfigurationWithdrawnWhenRemovalCatchesItRunning(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    syncHook = HoldSyncUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
-    g_mutex_unlock(&fakeLock);
-
-    deviceServiceReconfigureDevice("current", 0, NULL, false);
-    RunScheduledTask(0);
-    assert_int_equal(GetScheduledCount(), 2);
-
-    g_mutex_lock(&fakeLock);
-    cancelSucceeds = false;
-    g_mutex_unlock(&fakeLock);
-
-    GThread *taskThread = g_thread_new("task", RunSecondScheduledTaskOnceCancelAttempted, NULL);
-    GThread *removeThread = g_thread_new("remove", RemoveDevice, "current");
-    g_thread_join(taskThread);
-
-    assert_false(deviceServiceIsReconfigurationPending("current"));
-    assert_int_equal(GetScheduledCount(), 2);
-    assert_int_equal(finishedEventCount, 0);
-
-    g_mutex_lock(&fakeLock);
-    bool removedDuringSync = WaitLocked(IsDeviceRemovedEventSent, BLOCKED_PROBE_USECS);
-    g_mutex_unlock(&fakeLock);
-
-    ReleasePass();
-    g_thread_join(removeThread);
-    g_thread_join(passThread);
-
-    assert_false(removedDuringSync);
-    assert_int_equal(removedEventCount, 1);
-}
-
-// A deferred run that finds shutdown begun withdraws the reconfiguration, without a configuration event or another
-// retry.
-static void test_deferredReconfigurationWithdrawnWhenShutdownBegins(void **state)
-{
-    Fixture *fixture = *state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    syncHook = HoldSyncUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
-    g_mutex_unlock(&fakeLock);
-
-    deviceServiceReconfigureDevice("current", 0, NULL, false);
-    RunScheduledTask(0);
-    int deferredCount = GetScheduledCount();
-
-    pauseShutdown = true;
-    GThread *stopThread = g_thread_new("stop", StopClient, fixture->client);
-
-    g_mutex_lock(&fakeLock);
-    bool began = WaitLocked(IsShutdownBegun, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
-    g_mutex_unlock(&fakeLock);
-
-    // Observed while shutdown is paused, before it cancels anything itself; asserted once it is released.
-    RunScheduledTask(1);
-    bool pending = deviceServiceIsReconfigurationPending("current");
-    int scheduled = GetScheduledCount();
-    int finished = finishedEventCount;
-
-    ReleasePass();
-    g_thread_join(passThread);
-
-    g_mutex_lock(&fakeLock);
-    shutdownReleased = true;
-    g_cond_broadcast(&fakeCond);
-    g_mutex_unlock(&fakeLock);
-
-    g_thread_join(stopThread);
-    fixture->stopped = true;
-
-    assert_int_equal(deferredCount, 2);
-    assert_true(began);
-    assert_false(pending);
-    assert_int_equal(scheduled, 2);
-    assert_int_equal(finished, 0);
-}
-
-// A deferred reconfiguration that a synchronization was left to, withdrawn because a removal caught its retry running,
-// passes that synchronization on to the removal: it runs when the removal fails.
-static void test_withdrawnDeferredReconfigurationPassesOnOwedSynchronization(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    syncHook = HoldSyncUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
-    g_mutex_unlock(&fakeLock);
-
-    deviceServiceReconfigureDevice("current", 0, NULL, false);
-    readyForDevices(); // a repeated pass leaves the device's synchronization to the pending reconfiguration
-    RunScheduledTask(0);
-    assert_int_equal(GetScheduledCount(), 2);
-
-    g_mutex_lock(&fakeLock);
-    cancelSucceeds = false;
-    failDeviceRemoval = true;
-    g_mutex_unlock(&fakeLock);
-
-    GThread *taskThread = g_thread_new("task", RunSecondScheduledTaskOnceCancelAttempted, NULL);
-    GThread *removeThread = g_thread_new("remove", RemoveDevice, "current");
-    g_thread_join(taskThread);
-
-    ReleasePass();
-    g_thread_join(removeThread);
-    g_thread_join(passThread);
-
-    assert_false(deviceServiceIsReconfigurationPending("current"));
-    assert_int_equal(finishedEventCount, 0);
-    assert_true(jsonDatabaseIsDeviceKnown("current"));
-    assert_int_equal(GetSyncCount("current"), 2);
-}
-
-// A deferred reconfiguration that can't be rescheduled is withdrawn, without a configuration event.
-static void test_deferredReconfigurationWithdrawnWhenRescheduleFails(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    syncHook = HoldSyncUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
-
-    g_mutex_lock(&fakeLock);
-    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
-    g_mutex_unlock(&fakeLock);
-
-    deviceServiceReconfigureDevice("current", 0, NULL, false);
-    failScheduling = true;
-    RunScheduledTask(0);
-
-    assert_false(deviceServiceIsReconfigurationPending("current"));
-    assert_int_equal(finishedEventCount, 0);
-
-    ReleasePass();
-    g_thread_join(passThread);
 }
 
 // Metadata-updated hooks: remove the device, or stop the client, from the handler of the metadata-updated event a
@@ -2036,38 +1583,46 @@ static void test_removalAfterStopReturnsFalse(void **state)
     assert_int_equal(removedEventCount, 0);
 }
 
-// A removal still waiting when shutdown clears its tables (here for a running synchronization) gives up without
-// removing the device, rather than deleting it and notifying its driver and clients while shutdown tears them down.
+// A removal still waiting for a running reconfiguration when shutdown begins doesn't then remove the device while
+// shutdown tears down its driver and the event producer.
 static void test_removalWaitingWhenShutdownBeginsDoesNotRemove(void **state)
 {
     Fixture *fixture = *state;
 
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    poolTaskOnThread = true;
-    syncHook = HoldSyncUntilReleased;
-    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
+    AddDevice("stale", STALE_CLASS_VERSION);
+    readyForDevices();
+    cancelSucceeds = false;
+    GThread *removeThread = g_thread_new("remove", RemoveDevice, "stale");
 
     g_mutex_lock(&fakeLock);
-    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
+    assert_true(WaitLocked(IsCancelAttempted, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
+    pauseShutdown = true;
     g_mutex_unlock(&fakeLock);
 
-    GThread *removeThread = g_thread_new("remove", RemoveDevice, "current");
+    GThread *stopThread = g_thread_new("stop", StopClient, fixture->client);
 
     g_mutex_lock(&fakeLock);
-    bool removedDuringSync = WaitLocked(IsDeviceRemovedEventSent, BLOCKED_PROBE_USECS);
+    assert_true(WaitLocked(IsShutdownBegun, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
     g_mutex_unlock(&fakeLock);
 
-    b_core_client_stop(fixture->client);
-    fixture->stopped = true;
+    // The reconfiguration the removal waits for runs now, and ends (shutdown has begun); the removal then goes on.
+    RunScheduledTask(0);
     g_thread_join(removeThread);
+
+    // Observed while shutdown is held, before it cleans up the database; asserted once it is released.
     int removedEvents = removedEventCount;
+    bool stillKnown = jsonDatabaseIsDeviceKnown("stale");
 
-    ReleasePass();
-    g_thread_join(poolTaskThread);
-    g_thread_join(passThread);
+    g_mutex_lock(&fakeLock);
+    shutdownReleased = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
 
-    assert_false(removedDuringSync);
+    g_thread_join(stopThread);
+    fixture->stopped = true;
+
     assert_int_equal(removedEvents, 0);
+    assert_true(stillKnown);
 }
 
 // A running reconfiguration doesn't save back a device whose record was deleted meanwhile.
@@ -2082,89 +1637,6 @@ static void test_runningReconfigurationDoesNotSaveBackDeletedDevice(void **state
     assert_int_equal(deviceSaveCount, 0);
     assert_false(completionResult);
     assert_false(jsonDatabaseIsDeviceKnown("complete"));
-    assert_int_equal(finishedEventCount, 0);
-}
-
-// Class version hook: another reconfiguration of the stale device is requested after the startup pass checked it for a
-// pending one, so the pass's own (startup) request finds it pending.
-static void RequestReconfigurationOfStale(void)
-{
-    deviceServiceReconfigureDevice("stale", 60, NULL, false);
-}
-
-// A startup request that finds another reconfiguration already pending leaves the device's synchronization to it: it
-// runs when that reconfiguration fails.
-static void test_startupRequestFindingAnotherPendingLeavesSynchronizationToIt(void **state)
-{
-    (void) state;
-
-    AddDevice("stale", STALE_CLASS_VERSION);
-    classVersionHook = RequestReconfigurationOfStale;
-
-    readyForDevices();
-    assert_int_equal(GetScheduledCount(), 1);
-    assert_int_equal(GetSyncCount("stale"), 0);
-
-    RunScheduledTask(0);
-
-    assert_false(finishedEventSucceeded);
-    assert_int_equal(GetSyncCount("stale"), 1);
-}
-
-// A synchronization whose device became pending reconfiguration after it was queued is left to that reconfiguration,
-// and runs when it fails.
-static void test_synchronizationDeferredToReconfigurationRequestedMeanwhile(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    classVersionHook = RequestReconfigurationOfCurrent;
-
-    readyForDevices();
-
-    assert_true(deviceServiceIsReconfigurationPending("current"));
-    assert_int_equal(GetSyncCount("current"), 0);
-
-    RunScheduledTask(0);
-
-    assert_false(finishedEventSucceeded);
-    assert_int_equal(GetSyncCount("current"), 1);
-}
-
-// A synchronization owed by a reconfiguration that a removal cancels before it starts (a startup reconfiguration, or
-// one a startup pass left a synchronization to) runs if the removal fails.
-static void test_cancelledReconfigurationSynchronizesAfterFailedRemoval(void **state)
-{
-    (void) state;
-
-    AddDevice("stale", STALE_CLASS_VERSION);
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    deviceServiceReconfigureDevice("current", 60, NULL, false);
-    readyForDevices();
-    assert_int_equal(GetScheduledCount(), 2);
-    failDeviceRemoval = true;
-
-    assert_false(deviceServiceRemoveDevice("stale"));
-    assert_false(deviceServiceRemoveDevice("current"));
-
-    assert_false(deviceServiceIsReconfigurationPending("stale"));
-    assert_false(deviceServiceIsReconfigurationPending("current"));
-    assert_int_equal(GetSyncCount("stale"), 1);
-    assert_int_equal(GetSyncCount("current"), 1);
-}
-
-// A startup reconfiguration that can't be scheduled falls back to synchronization, without a configuration event.
-static void test_unscheduledStartupReconfigurationSynchronizes(void **state)
-{
-    (void) state;
-
-    AddDevice("stale", STALE_CLASS_VERSION);
-    failScheduling = true;
-
-    readyForDevices();
-
-    assert_false(deviceServiceIsReconfigurationPending("stale"));
-    assert_int_equal(GetSyncCount("stale"), 1);
     assert_int_equal(finishedEventCount, 0);
 }
 
@@ -2297,8 +1769,7 @@ static void test_removalCancelsNotYetStartedReconfiguration(void **state)
 }
 
 // A reconfiguration that already started can't be cancelled; removal blocks until it finishes, then proceeds
-// promptly rather than at its 60 second timeout. The failed startup reconfiguration doesn't fall back to synchronizing
-// the device being removed.
+// promptly rather than at its 60 second timeout.
 static void test_removalWaitsForRunningReconfiguration(void **state)
 {
     (void) state;
@@ -2322,28 +1793,6 @@ static void test_removalWaitsForRunningReconfiguration(void **state)
     assert_int_equal(finishedEventsWhenRemoved, 1);
     assert_false(deviceServiceIsReconfigurationPending("stale"));
     assert_null(jsonDatabaseGetDeviceById("stale"));
-    assert_int_equal(GetSyncCount("stale"), 0);
-}
-
-// Nor does a failed reconfiguration a startup pass skipped the device for, when a removal is what it was waiting on.
-static void test_skippedDeviceNotSynchronizedWhileBeingRemoved(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    deviceServiceReconfigureDevice("current", 60, NULL, false);
-    readyForDevices();
-    cancelSucceeds = false;
-
-    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
-
-    assert_true(deviceServiceRemoveDevice("current"));
-    g_thread_join(taskThread);
-
-    assert_int_equal(finishedEventCount, 1);
-    assert_false(finishedEventSucceeded);
-    assert_int_equal(removedEventCount, 1);
-    assert_int_equal(GetSyncCount("current"), 0);
 }
 
 // A removal that starts while the completion event is being sent (after the device stopped being reported as
@@ -2366,9 +1815,7 @@ static void test_removalDuringCompletionEventWaitsForIt(void **state)
     assert_null(jsonDatabaseGetDeviceById("stale"));
 }
 
-// A client may remove the device from its completion handler; that removal must not wait for the event it is in. The
-// failed startup reconfiguration's fallback synchronization is queued only after the event, so it finds the device
-// removed rather than running while the handler's removal waits for it.
+// A client may remove the device from its completion handler; that removal must not wait for the event it is in.
 static void test_removalFromCompletionHandlerDoesNotWaitForItself(void **state)
 {
     (void) state;
@@ -2384,7 +1831,6 @@ static void test_removalFromCompletionHandlerDoesNotWaitForItself(void **state)
     assert_int_equal(removedEventCount, 1);
     assert_false(deviceServiceIsReconfigurationPending("stale"));
     assert_null(jsonDatabaseGetDeviceById("stale"));
-    assert_int_equal(GetSyncCount("stale"), 0);
 }
 
 // A reconfiguration requested while the previous one is sending its completion event is scheduled, not dropped.
@@ -2443,50 +1889,8 @@ static void test_reconfigurationRequestedDuringRemovalIsRefused(void **state)
     assert_null(jsonDatabaseGetDeviceById("stale"));
 }
 
-// A fallback synchronization skipped because the device was being removed runs once that removal fails.
-static void test_synchronizationSkippedByFailedRemovalRunsAfterIt(void **state)
-{
-    (void) state;
-
-    AddDevice("stale", STALE_CLASS_VERSION);
-    readyForDevices();
-    cancelSucceeds = false;
-    failDeviceRemoval = true;
-
-    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
-
-    assert_false(deviceServiceRemoveDevice("stale"));
-    g_thread_join(taskThread);
-
-    assert_false(finishedEventSucceeded);
-    assert_true(jsonDatabaseIsDeviceKnown("stale"));
-    assert_false(deviceServiceIsReconfigurationPending("stale"));
-    assert_int_equal(GetSyncCount("stale"), 1);
-}
-
-// When the thread pool won't take that synchronization, it is left to the next start rather than run on the thread that
-// called for the removal, which shutdown doesn't wait for.
-static void test_synchronizationSkippedByFailedRemovalNotRunInline(void **state)
-{
-    (void) state;
-
-    AddDevice("stale", STALE_CLASS_VERSION);
-    readyForDevices();
-    cancelSucceeds = false;
-    failDeviceRemoval = true;
-    failThreadPoolAdd = true;
-
-    GThread *taskThread = g_thread_new("task", RunFirstScheduledTaskOnceCancelAttempted, NULL);
-
-    assert_false(deviceServiceRemoveDevice("stale"));
-    g_thread_join(taskThread);
-
-    assert_true(jsonDatabaseIsDeviceKnown("stale"));
-    assert_int_equal(GetSyncCount("stale"), 0);
-}
-
 // A reconfiguration refused because the device was being removed is requested again if that removal fails, so it isn't
-// lost. The synchronization skipped during the removal is left to that reconfiguration, and runs if it fails.
+// lost.
 static void test_reconfigurationRefusedByFailedRemovalIsRequestedAgain(void **state)
 {
     (void) state;
@@ -2505,13 +1909,6 @@ static void test_reconfigurationRefusedByFailedRemovalIsRequestedAgain(void **st
     assert_int_equal(GetScheduledCount(), 2);
     assert_true(deviceServiceIsReconfigurationPending("stale"));
     assert_true(jsonDatabaseIsDeviceKnown("stale"));
-    assert_int_equal(GetSyncCount("stale"), 0);
-
-    finishedEventHook = NULL;
-    RunScheduledTask(1);
-
-    assert_false(deviceServiceIsReconfigurationPending("stale"));
-    assert_int_equal(GetSyncCount("stale"), 1);
 }
 
 // A request made while a removal waits for the device's still-pending reconfiguration is deferred like any other made
@@ -2804,46 +2201,6 @@ static void test_repeatedStartupPassSkipsFailingStartupReconfigurationOnce(void 
     assert_int_equal(GetSyncCount("stale"), 1);
 }
 
-// A repeated pass leaves alone a device whose record is current but that has a reconfiguration pending for another
-// reason (here, as after a firmware upgrade): it is neither synchronized under that reconfiguration nor reconfigured
-// again.
-static void test_repeatedStartupPassSkipsDevicePendingForOtherReason(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    readyForDevices();
-    assert_int_equal(GetSyncCount("current"), 1);
-
-    deviceServiceReconfigureDevice("current", 60, NULL, false);
-    assert_int_equal(GetScheduledCount(), 1);
-
-    readyForDevices();
-
-    assert_int_equal(GetScheduledCount(), 1);
-    assert_int_equal(GetSyncCount("current"), 1);
-}
-
-// A device a startup pass skipped because a reconfiguration of it was pending for another reason is still synchronized
-// if that reconfiguration fails.
-static void test_skippedDeviceSynchronizedWhenPendingReconfigurationFails(void **state)
-{
-    (void) state;
-
-    AddDevice("current", CURRENT_CLASS_VERSION);
-    deviceServiceReconfigureDevice("current", 60, NULL, false);
-    assert_int_equal(GetScheduledCount(), 1);
-
-    readyForDevices();
-    assert_int_equal(GetSyncCount("current"), 0);
-
-    RunScheduledTask(0);
-
-    assert_int_equal(finishedEventCount, 1);
-    assert_false(finishedEventSucceeded);
-    assert_int_equal(GetSyncCount("current"), 1);
-}
-
 static void test_repeatedStartupPassRechecksCurrentRecord(void **state)
 {
     (void) state;
@@ -2919,12 +2276,6 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(test_secondStopDoesNothing, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_stopFromReadyHandlerDuringStart, SetupServiceUnstarted, TeardownService),
         cmocka_unit_test_setup_teardown(
-            test_shutdownWaitsForReadinessNotificationInProgress, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(test_removalWaitsForRunningSynchronization, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(test_reconfigurationDeferredWhileSynchronizing, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_synchronizationDeferredToReconfigurationRequestedMeanwhile, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
             test_reconfigurationReplacesDeviceAndReportsSuccess, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_reconfigurationSaveFailureNotReportedAsSuccess, SetupService, TeardownService),
@@ -2946,34 +2297,10 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(
             test_removalWaitingWhenShutdownBeginsDoesNotRemove, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
-            test_startupRequestFindingAnotherPendingLeavesSynchronizationToIt, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_removalInsideSynchronizationCancelsDeferredReconfiguration, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_stopInsideSynchronizationCancelsDeferredReconfiguration, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_deferredReconfigurationWithdrawnWhenRemovalCatchesItRunning, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_deferredReconfigurationWithdrawnWhenRescheduleFails, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_deferredReconfigurationWithdrawnWhenShutdownBegins, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_withdrawnDeferredReconfigurationPassesOnOwedSynchronization, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_cancelledReconfigurationSynchronizesAfterFailedRemoval, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_unscheduledStartupReconfigurationSynchronizes, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
             test_reconfigurationFinishUnpendsBeforeNotifying, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_schedulingFailureLeavesDeviceNotPending, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalCancelsNotYetStartedReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalWaitsForRunningReconfiguration, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_skippedDeviceNotSynchronizedWhileBeingRemoved, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_synchronizationSkippedByFailedRemovalRunsAfterIt, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_synchronizationSkippedByFailedRemovalNotRunInline, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_removalDuringCompletionEventWaitsForIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_removalFromCompletionHandlerDoesNotWaitForItself, SetupService, TeardownService),
@@ -3005,10 +2332,6 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(test_shutdownWaitsForRunningReconfiguration, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_repeatedStartupPassSkipsPendingDevice, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(test_repeatedStartupPassRechecksCurrentRecord, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_repeatedStartupPassSkipsDevicePendingForOtherReason, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_skippedDeviceSynchronizedWhenPendingReconfigurationFails, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_repeatedStartupPassSkipsFailingStartupReconfigurationOnce, SetupService, TeardownService),
 #ifdef OBSERVABILITY_BACKEND_RECORDS_GAUGES
