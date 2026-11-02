@@ -489,9 +489,10 @@ GList *b_core_client_get_devices_by_device_class(BCoreClient *self, const gchar 
  *
  * @brief Remove a device from the system by id.
  *
- * A reconfiguration of the device that has not started is cancelled. One that is already running is waited for, for up
- * to 60 seconds, before the device is removed. Once the client has begun stopping, this returns FALSE without removing
- * the device.
+ * A reconfiguration of the device that has not started is cancelled. One that is already running is asked to stop
+ * (only a sleepy device's wait for its check-in honours that, and the request stays in force if this removal fails),
+ * and is waited for, for up to 60 seconds, before the device is removed. Once the client has begun stopping, this
+ * returns FALSE without removing the device.
  *
  * Returns: gboolean - TRUE if the device was removed successfully.
  */

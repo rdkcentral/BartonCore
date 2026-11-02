@@ -83,8 +83,9 @@ treat a device missing from one list as removed: rely on `device-removed` for th
 How long a device stays in reconfiguration depends on why it is being rebuilt. After a firmware
 upgrade the drivers wait about 60 seconds for the device to restart before reconfiguring it. A
 battery-powered ("sleepy") Zigbee device is only reconfigured when it next checks in, which can take
-up to 30 minutes. If a reconfiguration cannot start at all, the device stays in this state until it is
-removed or Barton restarts. Size your retries accordingly.
+up to 30 minutes. If a reconfiguration made at startup fails, the device stays in this state until it
+has been synchronized instead. If a reconfiguration cannot start at all, the device stays in this state
+until it is removed or Barton restarts. Size your retries accordingly.
 
 Signal handlers are callers like any other: a handler that looks a device or endpoint up with one of
 the functions above (for example to add details to a `resource-updated` event) gets the same errors.

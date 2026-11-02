@@ -145,12 +145,13 @@ unset with `NULL`/`FALSE` means not found or failed.
 ### D6: Close the startup window
 Readiness is split into two flags under `subsystemsAreReadyMutex`:
 - `subsystemsReadyForDevices` (internal): subsystems can serve devices. Set first, and used by the
-  startup reconfiguration's failure fallback, which can run during the pass. That fallback queues the
-  normal `DeviceSynchronizationTask()` instead of calling the driver itself, so the device stops being
-  pending without waiting for the synchronization, and drivers that don't implement
-  `synchronizeDevice()` are skipped as they are on every other synchronization path. If the thread
-  pool won't take the task (its queue is full), the fallback runs the synchronization inline rather
-  than drop it, since a dropped fallback would leave the device serving pre-restart data.
+  startup reconfiguration's failure fallback, which can run during the pass. That fallback runs the
+  normal `DeviceSynchronizationTask()` (so drivers that don't implement `synchronizeDevice()` are
+  skipped, as on every other synchronization path) on the reconfiguration's own thread while the device
+  is still pending, as before this change, so a removal or shutdown waits for it as for the
+  reconfiguration, and gated reads stay refused until it has run. Queuing it instead, so the device
+  stopped being pending sooner, was tried and dropped: a removal could then delete the device while
+  the driver was still synchronizing it, and re-create driver state for it.
 - `deviceOperationsReady` (published): what `deviceServiceIsReadyForDeviceOperation()` returns, and
   therefore the client gate, the status's `isReadyForDeviceOperation`/`isReadyForPairing`, and
   discovery's driver filtering.
@@ -203,10 +204,9 @@ destruction shutdown already waited for), shutdown counts ready callbacks in fli
 (up to 120 s, like the reconfiguration wait) before tearing down the thread pool and drivers they use.
 A callback on shutdown's own thread (a ready-event handler that stops the service) is not waited for.
 
-Synchronization is not coordinated with removal or reconfiguration, as before this change: a
-synchronization (from the startup pass, or the startup reconfiguration's fallback) can still run while
-the device is being removed, or while another reconfiguration of it (for example after a firmware
-upgrade) is pending or running. Coordinating them (deferring a synchronization during a removal or
+Other synchronizations are not coordinated with removal or reconfiguration, as on the base code: a
+synchronization from the startup pass can still run while the device is being removed, or while
+another reconfiguration of it (for example after a firmware upgrade) is pending or running. Coordinating them (deferring a synchronization during a removal or
 reconfiguration, removal waiting for a running synchronization, deferring a reconfiguration while a
 synchronization runs, and handing a skipped synchronization on when a reconfiguration fails, is
 cancelled or can't be scheduled) was tried and dropped: each hand-off depended on the order in which
@@ -397,8 +397,10 @@ clears it:
 ## Risks / Trade-offs
 
 ### Risks of the lifecycle coordination this change keeps
-- [Synchronization isn't coordinated] → A synchronization can still run while its device is being
-  removed, or while another reconfiguration of it is pending or running, as before this change. A
+- [Synchronization isn't coordinated] → A startup pass's synchronization can still run while its
+  device is being removed, or while another reconfiguration of it is pending or running, as on the
+  base code. (The startup reconfiguration's fallback synchronization runs while still pending, so a
+  removal waits for it.) A
   coordinated version was tried and dropped (see D6); follow-up ticket 8 covers it.
 - [A removal's terminate request outlives a failed removal] → A removal asks a running
   reconfiguration to terminate. Only a sleepy device's check-in wait honours that, and the request
@@ -426,7 +428,8 @@ clears it:
 - [Pending can last well beyond the database swap] → A device is "pending" from the moment
   reconfiguration is scheduled until it finishes: this includes post-OTA scheduling delays (60s) and,
   for sleepy Zigbee devices, waiting up to `RECONFIGURATION_TIMEOUT_SEC` (30 min) for a poll
-  check-in. For that whole period the gated reads and `write_metadata` return
+  check-in, and, if a startup reconfiguration fails, the synchronization that replaces it. For that
+  whole period the gated reads and `write_metadata` return
   `B_CORE_SERVICE_STATE_ERROR_DEVICE_RECONFIGURING`; list getters still include the device (D4,
   except in the instant the swap replaces its record),
   commands and resource writes still work (D5), and the D7 event tells clients when to retry.

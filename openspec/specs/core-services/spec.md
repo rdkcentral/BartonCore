@@ -38,6 +38,10 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 - **WHEN** a reconfiguration is requested but the task scheduler reports that its task could not be scheduled
 - **THEN** the device SHALL no longer be reported as pending, and the reconfiguration context SHALL be released
 
+#### Scenario: Startup reconfiguration fails
+- **WHEN** a reconfiguration scheduled by the startup pass fails
+- **THEN** the device SHALL be synchronized instead, on the reconfiguration's own thread before it stops being reported as pending, so a removal or shutdown waits for that synchronization as for the reconfiguration
+
 #### Scenario: Task finishes before scheduling returns
 - **WHEN** a reconfiguration is scheduled with no delay and its task finishes before the scheduling call returns
 - **THEN** the scheduling call SHALL NOT access the released reconfiguration context
@@ -62,7 +66,7 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 
 #### Scenario: Removal or stop from a running reconfiguration's own handler
 - **WHEN** a handler of an event a running reconfiguration task sends on its own thread (such as `metadata-updated` when it marks the device as needing reconfiguration) removes the device or stops the client
-- **THEN** the removal or shutdown SHALL NOT wait for that task; if the removal succeeded, or the client was stopped, the task SHALL then stop without replacing the device's stored record or sending a configuration event, and if the removal failed the task SHALL go on as if it hadn't been made
+- **THEN** the removal or shutdown SHALL NOT wait for that task; if the removal succeeded, or the client was stopped, the task SHALL then stop without replacing the device's stored record or sending a configuration event, and if the removal failed the task SHALL go on, subject only to the removal's request to terminate (which only a sleepy device's check-in wait honours)
 
 #### Scenario: Same reconfiguration cancelled twice
 - **WHEN** two cancellers (for example a removal racing shutdown) both try to cancel the same not-yet-started reconfiguration

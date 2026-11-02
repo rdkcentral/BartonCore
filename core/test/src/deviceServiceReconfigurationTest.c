@@ -126,6 +126,8 @@ static GHashTable *syncCounts; // uuid -> number of synchronizeDevice() calls
 static void (*classVersionHook)(void);
 
 static bool failThreadPoolAdd;
+static bool dropPoolTasks;           // accept pool tasks but never run them
+static bool pendingWhenSynchronized; // whether the device was pending reconfiguration when last synchronized
 
 static bool pauseShutdown; // pause shutdown just after it sets its shutting-down flag, until shutdownReleased
 static bool shutdownReleased;
@@ -303,7 +305,11 @@ static void FakeSynchronizeDevice(void *ctx, icDevice *device)
 {
     (void) ctx;
 
+    // Before taking fakeLock: the gauge wrapper takes fakeLock under the reconfiguration lock this check takes.
+    bool pending = deviceServiceIsReconfigurationPending(device->uuid);
+
     g_mutex_lock(&fakeLock);
+    pendingWhenSynchronized = pending;
     gpointer count = g_hash_table_lookup(syncCounts, device->uuid);
     g_hash_table_insert(syncCounts, g_strdup(device->uuid), GINT_TO_POINTER(GPOINTER_TO_INT(count) + 1));
     g_cond_broadcast(&fakeCond);
@@ -462,12 +468,13 @@ uint32_t __wrap_scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCa
 }
 
 // Run inline, so every synchronization a startup pass queues has finished when the pass returns. With
-// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does.
+// failThreadPoolAdd, reject the task (freeing its argument) as a full queue does; with dropPoolTasks, accept it but
+// never run it.
 bool __wrap_threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threadPoolTaskArgFreeFunc argFreeFunc)
 {
     (void) pool;
 
-    if (failThreadPoolAdd == false)
+    if (failThreadPoolAdd == false && dropPoolTasks == false)
     {
         task(arg);
     }
@@ -1017,6 +1024,8 @@ static void ResetFakes(void)
     g_hash_table_remove_all(syncCounts);
     classVersionHook = NULL;
     failThreadPoolAdd = false;
+    dropPoolTasks = false;
+    pendingWhenSynchronized = false;
     pauseShutdown = false;
     shutdownReleased = false;
     shutdownBegan = false;
@@ -2148,21 +2157,23 @@ static void test_failedStartupReconfigurationToleratesDriverWithoutSynchronize(v
     assert_int_equal(GetSyncCount("stale"), 0);
 }
 
-// A failed startup reconfiguration's fallback synchronization still runs when the thread pool won't take it.
-static void test_failedStartupReconfigurationSynchronizesWhenPoolRejectsTask(void **state)
+// A failed startup reconfiguration's fallback synchronization runs on the reconfiguration's own thread while the device
+// is still pending (not through the thread pool), so a removal or shutdown waits for it as for the reconfiguration.
+static void test_failedStartupReconfigurationSynchronizesBeforeUnpending(void **state)
 {
     (void) state;
 
     AddDevice("stale", STALE_CLASS_VERSION);
     readyForDevices();
-    failThreadPoolAdd = true;
+    dropPoolTasks = true;
 
     RunScheduledTask(0);
 
+    assert_int_equal(GetSyncCount("stale"), 1);
+    assert_true(pendingWhenSynchronized);
     assert_int_equal(finishedEventCount, 1);
     assert_false(finishedEventSucceeded);
     assert_false(deviceServiceIsReconfigurationPending("stale"));
-    assert_int_equal(GetSyncCount("stale"), 1);
 }
 
 static void test_repeatedStartupPassSkipsPendingDevice(void **state)
@@ -2342,7 +2353,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(
             test_failedStartupReconfigurationToleratesDriverWithoutSynchronize, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
-            test_failedStartupReconfigurationSynchronizesWhenPoolRejectsTask, SetupService, TeardownService),
+            test_failedStartupReconfigurationSynchronizesBeforeUnpending, SetupService, TeardownService),
     };
 
     int result = cmocka_run_group_tests(tests, NULL, NULL);

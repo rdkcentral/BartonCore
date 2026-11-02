@@ -339,8 +339,8 @@ typedef struct
     int removals; // removals of this device in progress
     bool anyRemovalSucceeded;
     // Reconfigurations refused while removing, merged into one and requested again once the removals end if none of
-    // them succeeded (the device still exists), unless a reconfiguration a removal gave up waiting for is still
-    // running (see EndDeviceRemoval()).
+    // them succeeded (the device still exists), unless a reconfiguration of the device is still running then (one a
+    // removal gave up waiting for, or one on whose thread a removal was made; see EndDeviceRemoval()).
     bool hasRefusedRequest;
     uint32_t refusedDelaySeconds;
     reconfigurationCompleteCallback refusedCompleted;
@@ -4280,13 +4280,11 @@ static bool DeviceNeedsReconfiguring(const icDevice *device)
 
 static void reconfigurationCompletedCallback(bool result, const char *deviceUuid)
 {
-    // A failed startup reconfiguration falls back to synchronization. It is queued so the device stops being pending
-    // without waiting for it; if the queue is full it runs here instead, since dropping it would leave the device
-    // serving the stale data the reconfiguration was meant to replace.
-    if (result == false && SubsystemsAreReadyForDevices() == true && QueueDeviceSynchronization(deviceUuid) == false)
+    // A failed startup reconfiguration falls back to synchronization. Run here, on the reconfiguration's thread while
+    // the device is still pending, as it always was: a removal or shutdown then waits for it as for the reconfiguration
+    // itself, rather than overlapping it. Gated reads stay refused until it has run.
+    if (result == false && SubsystemsAreReadyForDevices() == true)
     {
-        icLogWarn(LOG_TAG, "%s: could not queue synchronization of %s; running it now", __FUNCTION__, deviceUuid);
-
         g_autofree char *uuid = g_strdup(deviceUuid);
         DeviceSynchronizationTask(uuid);
     }
@@ -4307,7 +4305,7 @@ static bool QueueDeviceSynchronization(const char *deviceUuid)
     return result;
 }
 
-// Also the fallback for a failed startup reconfiguration (reconfigurationCompletedCallback()).
+// Also the fallback for a failed startup reconfiguration (reconfigurationCompletedCallback()), run inline there.
 static void DeviceSynchronizationTask(void *arg)
 {
     char *uuid = (char *) arg;
@@ -5543,8 +5541,9 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
     {
         if (deviceServiceIsReconfigurationPending(deviceUuid) == true)
         {
-            // Usually a reconfiguration the removal gave up waiting for that is still running; possibly a newer request
-            // that got in first. Either way the deferred request would only be dropped as a duplicate of it.
+            // Usually a reconfiguration still running (one the removal gave up waiting for, or one on whose thread the
+            // removal was made); possibly a newer request that got in first. Either way the deferred request would
+            // only be dropped as a duplicate of it.
             icWarn("Removal of device %s failed while a reconfiguration of it is pending; dropping the reconfiguration "
                    "requested during the removal",
                    deviceUuid);
