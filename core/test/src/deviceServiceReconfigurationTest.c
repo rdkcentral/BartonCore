@@ -1874,15 +1874,7 @@ static void test_stopFromRunningReconfigurationsMetadataHandler(void **state)
 static GThread *configureRemoveThread;
 
 // Configure hooks, each run while the driver is configuring the device:
-// - the reconfiguration is asked to terminate, then a driver check-in signal follows (which doesn't clear the request);
-static void TerminateThenCheckInDuringConfigure(void)
-{
-    deviceServiceSendReconfigurationSignal("complete", true);
-    deviceServiceSendReconfigurationSignal("complete", false);
-}
-
-// - a removal of the device begins on another thread and, unable to cancel the running task, has asked it to terminate
-//   (sent here too, so the request is in place deterministically when configuration returns);
+// - a removal of the device begins on another thread and, unable to cancel the running task, waits for it;
 static void RemoveCompleteDeviceElsewhereDuringConfigure(void)
 {
     configureRemoveThread = g_thread_new("remove", RemoveDevice, "complete");
@@ -1890,8 +1882,6 @@ static void RemoveCompleteDeviceElsewhereDuringConfigure(void)
     g_mutex_lock(&fakeLock);
     WaitLocked(IsCancelAttempted, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     g_mutex_unlock(&fakeLock);
-
-    deviceServiceSendReconfigurationSignal("complete", true);
 }
 
 // - the client is stopped on the task's own thread (as from a handler of an event the driver sends while configuring);
@@ -1936,49 +1926,26 @@ static void PrepareReconfigurationReachingConfigure(void (*hook)(void))
     g_mutex_unlock(&fakeLock);
 }
 
-// A running reconfiguration asked to terminate before it replaces the device's record doesn't replace it, even if a
-// driver check-in signal follows the request: it finishes as failed.
-static void test_runningReconfigurationAskedToTerminateDoesNotReplaceRecord(void **state)
-{
-    (void) state;
-
-    PrepareReconfigurationReachingConfigure(TerminateThenCheckInDuringConfigure);
-
-    RunScheduledTask(0);
-
-    assert_int_equal(configureCount, 1);
-    assert_int_equal(deviceSaveCount, 0);
-    assert_int_equal(completionCount, 1);
-    assert_false(completionResult);
-    assert_int_equal(finishedEventCount, 1);
-    assert_false(finishedEventSucceeded);
-    assert_int_equal(GetStoredClassVersion("complete"), STALE_CLASS_VERSION);
-}
-
-// A running reconfiguration that a removal asked to stop is requested again if that removal fails, and its failure
-// event comes before the removal's outcome.
-static void test_reconfigurationStoppedByFailedRemovalIsRequestedAgain(void **state)
+// A removal on another thread that catches a reconfiguration running lets it finish (replacing the record and reporting
+// success before device-removed), then removes the device; it isn't saved back.
+static void test_removalLetsRunningReconfigurationFinishThenRemovesDevice(void **state)
 {
     (void) state;
 
     PrepareReconfigurationReachingConfigure(RemoveCompleteDeviceElsewhereDuringConfigure);
     cancelSucceeds = false;
-    failDeviceRemoval = true;
 
     RunScheduledTask(0);
     g_thread_join(configureRemoveThread);
 
-    g_mutex_lock(&fakeLock);
-    cancelSucceeds = true; // so teardown can cancel the re-requested one
-    g_mutex_unlock(&fakeLock);
-
-    assert_int_equal(deviceSaveCount, 0);
-    assert_false(completionResult);
+    assert_int_equal(deviceSaveCount, 1);
+    assert_true(completionResult);
     assert_int_equal(finishedEventCount, 1);
-    assert_false(finishedEventSucceeded);
-    assert_true(jsonDatabaseIsDeviceKnown("complete"));
-    assert_int_equal(GetScheduledCount(), 2);
-    assert_true(deviceServiceIsReconfigurationPending("complete"));
+    assert_true(finishedEventSucceeded);
+    assert_int_equal(removedEventCount, 1);
+    assert_int_equal(finishedEventsWhenRemoved, 1);
+    assert_false(jsonDatabaseIsDeviceKnown("complete"));
+    assert_false(deviceServiceIsReconfigurationPending("complete"));
 }
 
 // A running reconfiguration doesn't replace the record once the service has been stopped (here from its own thread),
@@ -2025,32 +1992,48 @@ static void test_runningReconfigurationNotPersistedOnceShutdownBegins(void **sta
     assert_int_equal(finished, 0);
 }
 
-// A removal made from a running reconfiguration's own metadata-updated handler that fails (after asking it to stop, and
-// before it reaches its replacement) has that reconfiguration requested again once it fails.
-static void test_reconfigurationStoppedByFailedOwnHandlerRemovalIsRequestedAgain(void **state)
+// Metadata-updated hook: a removal from the handler whose delete fails (as a storage failure would); later deletes
+// work.
+static void RemoveDeviceFailingFromMetadataHandler(const char *uuid)
+{
+    failDeviceRemoval = true;
+    RemoveDeviceFromMetadataHandler(uuid);
+    failDeviceRemoval = false;
+}
+
+// A removal made from a running reconfiguration's own metadata-updated handler that fails leaves the device in place,
+// and the reconfiguration goes on to replace its record and report success.
+static void test_failedRemovalFromOwnHandlerLetsReconfigurationFinish(void **state)
 {
     (void) state;
 
     AddCompleteDevice("complete", STALE_CLASS_VERSION);
     deviceServiceReconfigureDevice("complete", 0, RecordCompletion, false);
     readyForDevices();
-    metadataHook = RemoveDeviceFromMetadataHandler;
-    failDeviceRemoval = true;
-
-    g_mutex_lock(&fakeLock);
-    deviceSaveCount = 0;
-    g_mutex_unlock(&fakeLock);
+    metadataHook = RemoveDeviceFailingFromMetadataHandler;
 
     RunScheduledTask(0);
 
     assert_false(removedFromMetadataHandler);
-    assert_int_equal(deviceSaveCount, 0);
-    assert_false(completionResult);
+    assert_true(completionResult);
     assert_int_equal(finishedEventCount, 1);
-    assert_false(finishedEventSucceeded);
-    assert_true(jsonDatabaseIsDeviceKnown("complete"));
-    assert_int_equal(GetScheduledCount(), 2);
-    assert_true(deviceServiceIsReconfigurationPending("complete"));
+    assert_true(finishedEventSucceeded);
+    assert_int_equal(GetStoredClassVersion("complete"), CURRENT_CLASS_VERSION);
+    assert_int_equal(GetScheduledCount(), 1);
+    assert_false(deviceServiceIsReconfigurationPending("complete"));
+}
+
+// Once the client has been stopped, a removal returns false without removing anything.
+static void test_removalAfterStopReturnsFalse(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    b_core_client_stop(fixture->client);
+    fixture->stopped = true;
+
+    assert_false(deviceServiceRemoveDevice("current"));
+    assert_int_equal(removedEventCount, 0);
 }
 
 // A removal still waiting when shutdown clears its tables (here for a running synchronization) gives up without
@@ -2950,9 +2933,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(
             test_stopFromRunningReconfigurationsMetadataHandler, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
-            test_runningReconfigurationAskedToTerminateDoesNotReplaceRecord, SetupService, TeardownService),
-        cmocka_unit_test_setup_teardown(
-            test_reconfigurationStoppedByFailedRemovalIsRequestedAgain, SetupService, TeardownService),
+            test_removalLetsRunningReconfigurationFinishThenRemovesDevice, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_runningReconfigurationNotPersistedAfterStop, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
@@ -2960,7 +2941,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test_setup_teardown(
             test_runningReconfigurationNotPersistedOnceShutdownBegins, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
-            test_reconfigurationStoppedByFailedOwnHandlerRemovalIsRequestedAgain, SetupService, TeardownService),
+            test_failedRemovalFromOwnHandlerLetsReconfigurationFinish, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(test_removalAfterStopReturnsFalse, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_removalWaitingWhenShutdownBeginsDoesNotRemove, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(

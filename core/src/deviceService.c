@@ -208,11 +208,9 @@ static bool IsFinishingElsewhereLocked(const char *deviceUuid);
 
 static bool IsRunningOnThisThreadLocked(const ReconfigureDeviceContext *ctx);
 
-static bool IsReconfigurationInterrupted(ReconfigureDeviceContext *ctx, const char *deviceUuid);
+static bool IsDeviceGoneOrStopping(const char *deviceUuid);
 
 static void RunReconfiguration(ReconfigureDeviceContext *ctx);
-
-static void RequestAgainIfRemovalFails(ReconfigureDeviceContext *ctx);
 
 static uint16_t CountBlockingReconfigurationsLocked(void);
 
@@ -323,8 +321,6 @@ struct ReconfigureDeviceContext
     bool isSignaled;         // boolean predicate for conditional variable
     bool isAllowedAsap;      // indicates if reconfiguration allowed as soon as possible
     bool shouldTerminate;    // set to true only while signaling waiting reconfiguration tasks to terminate
-    bool terminateRequested; // asked to terminate (by a removal, shutdown or a driver); unlike shouldTerminate, never
-                             // cleared
     uint32_t timeoutSeconds; // timeout to wait for reconfiguration signal
     reconfigurationCompleteCallback
         reconfigurationCompleted; // optional callback, triggered once reconfiguration task completes
@@ -340,13 +336,6 @@ struct ReconfigureDeviceContext
     // that thread (from a handler of an event the task sends) doesn't wait for it; see IsRunningOnThisThreadLocked().
     pthread_t runningThread;
     bool running;
-
-    // Set (under reconfigurationControlMutex) when every removal of the device failed while this was running, having
-    // asked it to stop: request it again if it fails, with any request refused during those removals merged in.
-    bool requestAgainIfFails;
-    uint32_t againDelaySeconds;
-    reconfigurationCompleteCallback againCompleted;
-    bool againAllowAsap;
 };
 
 static inline void releaseReconfigureDeviceContext(ReconfigureDeviceContext *ctx);
@@ -1192,6 +1181,13 @@ bool deviceServiceRemoveDevice(const char *uuid)
 {
     bool result = false;
 
+    // Nothing is removed once shutdown has begun: the driver, the event producer and the database are being torn down.
+    if (deviceServiceIsShuttingDown() == true)
+    {
+        icLogWarn(LOG_TAG, "Not removing device %s: the service is stopping", stringCoalesce(uuid));
+        return false;
+    }
+
     icDevice *device = jsonDatabaseGetDeviceById(uuid);
 
     if (device != NULL)
@@ -1202,8 +1198,8 @@ bool deviceServiceRemoveDevice(const char *uuid)
         BeginDeviceRemoval(uuid);
         waitForOrCancelPendingReconfiguration(uuid);
 
-        // Shutdown ends the waits above once it has cleared its tables; don't then delete the device, tell its driver
-        // and send device-removed while shutdown is stopping drivers and the event producer.
+        // Shutdown may have begun since the check above, and ends the waits above once it has cleared its tables;
+        // don't then delete the device, tell its driver and send device-removed while those are torn down.
         if (deviceServiceIsShuttingDown() == true)
         {
             icLogWarn(LOG_TAG, "Not removing device %s: the service is stopping", uuid);
@@ -4113,7 +4109,7 @@ static void RunReconfiguration(ReconfigureDeviceContext *ctx)
         // the service, neither waiting for this task. Nothing has been rebuilt yet, so withdraw as a cancelled
         // reconfiguration would be, without an event, rather than rely on the lookups below finding nothing after
         // teardown. (A removal waiting on another thread is handled before the swap.)
-        if (deviceServiceIsShuttingDown() == true || jsonDatabaseIsDeviceKnown(deviceUuid) == false)
+        if (IsDeviceGoneOrStopping(deviceUuid) == true)
         {
             icLogInfo(LOG_TAG,
                       "%s: device %s was removed or the service stopped; withdrawing its reconfiguration",
@@ -4209,14 +4205,12 @@ static void RunReconfiguration(ReconfigureDeviceContext *ctx)
                 {
                     icError("failed to register resources for reconfiguration");
                 }
-                else if (IsReconfigurationInterrupted(ctx, deviceUuid) == true)
+                else if (IsDeviceGoneOrStopping(deviceUuid) == true)
                 {
-                    // Never replace the record of a device being (or already) removed, nor during shutdown.
-                    icWarn("reconfiguration of device %s asked to terminate, removed, or stopping; not persisting it",
+                    // Never save back a device whose record is gone (removed from a handler on this thread, or by a
+                    // removal that gave up waiting for this task), nor replace a record during shutdown.
+                    icWarn("device %s was removed or the service is stopping; not persisting its reconfiguration",
                            deviceUuid);
-
-                    // If a removal asked it to stop and then fails, the device still needs this reconfiguration.
-                    RequestAgainIfRemovalFails(ctx);
                 }
                 else
                 {
@@ -4283,21 +4277,6 @@ FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, con
     if (deviceClass != NULL && deviceServiceIsShuttingDown() == false && jsonDatabaseIsDeviceKnown(deviceUuid) == true)
     {
         sendDeviceReconfigurationFinishedEvent(deviceClass, deviceUuid, result);
-    }
-
-    // Every removal of the device failed after asking this to stop (see EndDeviceRemoval()): request it again. Before
-    // any owed synchronization is queued, so that synchronization is left to the new request.
-    mutexLock(&reconfigurationControlMutex);
-    bool requestAgain = result == false && ctx->requestAgainIfFails == true;
-    uint32_t againDelaySeconds = ctx->againDelaySeconds;
-    reconfigurationCompleteCallback againCompleted = ctx->againCompleted;
-    bool againAllowAsap = ctx->againAllowAsap;
-    mutexUnlock(&reconfigurationControlMutex);
-
-    if (requestAgain == true)
-    {
-        icInfo("Removal of device %s failed after stopping its reconfiguration; requesting it again", deviceUuid);
-        deviceServiceReconfigureDevice(deviceUuid, againDelaySeconds, againCompleted, againAllowAsap);
     }
 
     // A startup reconfiguration, or one this device's synchronization was left to, failed. Queued after the event, so a
@@ -5564,31 +5543,13 @@ static bool IsRunningOnThisThreadLocked(const ReconfigureDeviceContext *ctx)
     return ctx != NULL && ctx->running == true && pthread_equal(ctx->runningThread, pthread_self()) != 0;
 }
 
-// For a running reconfiguration that stops short because a removal of the device asked it to: record it on that
-// removal like a request refused during it, so it is requested again if every removal of the device fails. Its
-// completion callback has reported this failure, so isn't passed on. Does nothing if no removal is in progress.
-static void RequestAgainIfRemovalFails(ReconfigureDeviceContext *ctx)
+// For a running reconfiguration: whether its device's record is gone (removed from a handler of an event it sent on
+// its own thread, which didn't wait for it, or by a removal that gave up waiting for it) or shutdown has begun, so it
+// must not go on to save the device back or use services shutdown tears down. A removal on another thread that is still
+// waiting doesn't stop it: the reconfiguration finishes, and the removal then deletes the device.
+static bool IsDeviceGoneOrStopping(const char *deviceUuid)
 {
-    mutexLock(&reconfigurationControlMutex);
-    DeferIfBeingRemovedLocked(ctx->deviceUuid, 0, NULL, ctx->isAllowedAsap);
-    mutexUnlock(&reconfigurationControlMutex);
-}
-
-// For a running reconfiguration: whether a removal of the device or shutdown has asked it to stop, or already
-// happened (made from a handler on its own thread, which didn't wait for it), so it must not go on to replace the
-// device's record or use services shutdown tears down.
-static bool IsReconfigurationInterrupted(ReconfigureDeviceContext *ctx, const char *deviceUuid)
-{
-    if (deviceServiceIsShuttingDown() == true)
-    {
-        return true;
-    }
-
-    mutexLock(&ctx->mtx);
-    bool terminateRequested = ctx->terminateRequested;
-    mutexUnlock(&ctx->mtx);
-
-    return terminateRequested == true || jsonDatabaseIsDeviceKnown(deviceUuid) == false;
+    return deviceServiceIsShuttingDown() == true || jsonDatabaseIsDeviceKnown(deviceUuid) == false;
 }
 
 // Whether a reconfiguration of the device, other than one the calling thread is finishing, is still sending its
@@ -5953,37 +5914,6 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
         {
             refused = *removal;
             g_hash_table_remove(devicesBeingRemoved, deviceUuid);
-
-            // The device remains, and a reconfiguration of it still running (one these removals asked to stop: made
-            // from its own handler, or that a removal gave up waiting for) may stop short because of them. Have it
-            // requested again if it fails, together with any request refused during the removals.
-            ReconfigureDeviceContext *running =
-                refused.anyRemovalSucceeded == false && pendingReconfiguration != NULL
-                    ? hashMapGet(pendingReconfiguration, (void *) deviceUuid, (uint16_t) (strlen(deviceUuid) + 1))
-                    : NULL;
-
-            if (running != NULL && running->running == true)
-            {
-                if (running->requestAgainIfFails == false)
-                {
-                    running->requestAgainIfFails = true;
-                    running->againDelaySeconds = refused.refusedDelaySeconds;
-                    running->againCompleted = refused.refusedCompleted;
-                    running->againAllowAsap = refused.refusedAllowAsap;
-                }
-                else
-                {
-                    running->againDelaySeconds = MAX(running->againDelaySeconds, refused.refusedDelaySeconds);
-                    running->againAllowAsap |= refused.refusedAllowAsap;
-
-                    if (running->againCompleted == NULL)
-                    {
-                        running->againCompleted = refused.refusedCompleted;
-                    }
-                }
-
-                refused.hasRefusedRequest = false;
-            }
         }
     }
 
@@ -5993,8 +5923,8 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
     {
         if (deviceServiceIsReconfigurationPending(deviceUuid) == true)
         {
-            // A reconfiguration requested after the removal ended got in first; the deferred request would only be
-            // dropped as a duplicate of it. (One still running from before was handed the request above.)
+            // Usually a reconfiguration the removal gave up waiting for that is still running; possibly a newer request
+            // that got in first. Either way the deferred request would only be dropped as a duplicate of it.
             icWarn("Removal of device %s failed while a reconfiguration of it is pending; dropping the reconfiguration "
                    "requested during the removal",
                    deviceUuid);
@@ -6221,7 +6151,6 @@ static bool sendReconfigurationSignal(ReconfigureDeviceContext *ctx, bool should
         mutexLock(&ctx->mtx);
         ctx->isSignaled = true;
         ctx->shouldTerminate = shouldTerminate;
-        ctx->terminateRequested |= shouldTerminate;
         pthread_cond_signal(&ctx->cond);
         mutexUnlock(&ctx->mtx);
         result = true;

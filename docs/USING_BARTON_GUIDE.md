@@ -61,10 +61,7 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   session discovery type `B_CORE_DISCOVERY_TYPE_NONE`. Those events are sent whenever a reconfiguration
   finishes, so they are also the cue to re-read a device you have cached. Connect to these signals
   before querying, so a reconfiguration that finishes in between is not missed. If the device is
-  removed while it is being reconfigured, its configuration event arrives before `device-removed` (as a
-  failure, since the removal asks the reconfiguration to stop; if the removal then fails, the
-  reconfiguration is requested again; and a removal made while the client is stopping does nothing
-  and returns `FALSE`),
+  removed while it is being reconfigured, its configuration event arrives before `device-removed`,
   unless the reconfiguration takes longer than the removal's 60-second wait, you remove the device
   from that event's own handler, or the reconfiguration hadn't started rebuilding the device (then no
   event is sent; see below). Removing the device or stopping the client waits for these
@@ -109,7 +106,8 @@ a handler that removes the device can also wait up to 60 seconds for the other e
 already replaced the device's record) and waits for it, and likewise waits for a startup pass that is
 still deciding which devices to reconfigure. Each wait lasts up to 120 seconds, so stopping can
 take up to 240 seconds longer than usual. If your host ends the process sooner, the interrupted reconfiguration is
-retried the next time Barton starts. Calling `b_core_client_stop` again after it has returned does nothing; don't
+retried the next time Barton starts. Once stopping has begun, `b_core_client_remove_device` does nothing and
+returns `FALSE`. Calling `b_core_client_stop` again after it has returned does nothing; don't
 make overlapping calls, or call it from another thread while `b_core_client_start` is still running. Readiness can be
 reported from within `b_core_client_start` itself; if a status-changed handler running then stops the client,
 `b_core_client_start` returns `FALSE`.

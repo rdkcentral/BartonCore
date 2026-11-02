@@ -283,28 +283,20 @@ discovery session.
   running its task, and removal and shutdown don't wait for a task running on their own thread (it
   can't finish until they return to it). The task then checks whether the device is gone or shutdown
   has begun and, if so, withdraws without an event rather than carry on against a removed device or a
-  torn-down service. Separately, removal and shutdown leave a terminate request on a running task that
-  a driver's check-in signal can't clear, and the task checks it, and whether the device is gone, just
-  before replacing the record: a task asked to terminate finishes as failed instead, so it doesn't save
-  back a device a removal is deleting (or has deleted after giving up its wait), except in the window
-  between that check and the swap (follow-up ticket 2). The terminate request is checked only up to
-  that point: one made after it lets the replacement go ahead and report success, and the removal then
-  deletes the device. When a removal's request is what stopped the task, the reconfiguration is
-  requested again if every removal of the device fails (its completion callback, which has reported
-  the failure, isn't carried over). Which side records that depends on the order: if the removal is
-  still in progress when the task stops, the task records itself on the removal like a request refused
-  during it; if the removal has already ended (made from the task's own handler, or after giving up its
-  wait), the removal marks the still-running task, with any request refused during it merged in, and
-  the task requests itself again if it fails, before queuing any synchronization it owes so that
-  synchronization is left to the new request. A request refused during the removal is no longer
-  dropped when a reconfiguration was still running; it is merged in this way. A mark set by a removal,
-  not the terminate request itself, triggers this: a driver can also ask a reconfiguration to stop
-  (for example a sleepy device it can't reach), and requesting that again would retry endlessly. A
-  removal made once shutdown has begun, or still waiting when shutdown clears its tables (shutdown
-  wakes it), returns without deleting the device, telling its driver or sending `device-removed`,
-  since those are being torn down. A startup request that
-  finds another reconfiguration already pending (requested after the pass checked) records the
-  device's synchronization against that one, under the insert's lock, as the pass would have.
+  torn-down service. The task makes the same check just before replacing the record, finishing as
+  failed instead, so it doesn't save back a device whose record is gone (removed from such a handler,
+  or by a removal that gave up its wait), except in the window between that check and the swap
+  (follow-up ticket 2), and doesn't replace a record once shutdown has begun. A removal still waiting
+  on another thread doesn't stop it: as before this change, the reconfiguration finishes (and is
+  reported as it went) and the removal then deletes the device. Failing a reconfiguration because a
+  removal asked it to stop was tried and dropped: when that removal then failed, the reconfiguration
+  was lost, and requesting it again needed hand-offs in both orders between the removal and the task,
+  each of which had gaps (merged flags, retries between deferrals, repeated failures). A removal made
+  once shutdown has begun, or still waiting when shutdown clears its tables (shutdown wakes it),
+  returns without deleting the device, telling its driver or sending `device-removed`, since those
+  are being torn down. A startup request that finds another reconfiguration already pending (requested
+  after the pass checked) records the device's synchronization against that one, under the insert's
+  lock, as the pass would have.
   Because removal and shutdown wait for the event, a client handler that blocks on the thread doing the
   removal or stop holds that thread for up to 60 s or 120 s. The finishing steps (completion callback
   while still pending → move to the finishing list → event → queue any synchronization a failure owes
@@ -529,8 +521,8 @@ clears it:
   forward it.
 - [Terminated reconfigurations report as failed] → Removing a device mid-reconfiguration, or a
   driver cancelling it (e.g. a sleepy Zigbee device without a poll-control endpoint), makes the
-  configure step return false, or stops the task just before it would replace the device's record,
-  so clients see `device-configuration-failed`. That is accurate (the
+  configure step return false (and shutdown beginning, or the device's record going, stops the task
+  just before it would replace that record), so clients see `device-configuration-failed`. That is accurate (the
   reconfiguration did not complete); for a removal it is followed by `device-removed`, unless the
   reconfiguration outlasts the removal's 60 s wait or the removal is made from that event's own handler.
 - [Determinism of the integration test] → `deviceServiceReconfigureDevice()` sets the
