@@ -290,8 +290,19 @@ discovery session.
   between that check and the swap (follow-up ticket 2). The terminate request is checked only up to
   that point: one made after it lets the replacement go ahead and report success, and the removal then
   deletes the device. When a removal's request is what stopped the task, the reconfiguration is
-  recorded on the removal like a request refused during it, so it is requested again if the removal
-  fails (its completion callback, which has reported the failure, isn't carried over). A startup request that
+  requested again if every removal of the device fails (its completion callback, which has reported
+  the failure, isn't carried over). Which side records that depends on the order: if the removal is
+  still in progress when the task stops, the task records itself on the removal like a request refused
+  during it; if the removal has already ended (made from the task's own handler, or after giving up its
+  wait), the removal marks the still-running task, with any request refused during it merged in, and
+  the task requests itself again if it fails, before queuing any synchronization it owes so that
+  synchronization is left to the new request. A request refused during the removal is no longer
+  dropped when a reconfiguration was still running; it is merged in this way. A mark set by a removal,
+  not the terminate request itself, triggers this: a driver can also ask a reconfiguration to stop
+  (for example a sleepy device it can't reach), and requesting that again would retry endlessly. A
+  removal made once shutdown has begun, or still waiting when shutdown clears its tables (shutdown
+  wakes it), returns without deleting the device, telling its driver or sending `device-removed`,
+  since those are being torn down. A startup request that
   finds another reconfiguration already pending (requested after the pass checked) records the
   device's synchronization against that one, under the insert's lock, as the pass would have.
   Because removal and shutdown wait for the event, a client handler that blocks on the thread doing the
@@ -470,7 +481,7 @@ clears it:
   synchronization already running when a reconfiguration's first run sets its metadata, with the device
   removed both from that `metadata-updated` handler and from within the synchronization. A stop made
   from that handler instead doesn't stall: shutdown wakes a removal still waiting once it has cleared
-  its tables, and that removal then goes on.
+  its tables, and that removal then gives up without removing anything.
 
 ### Other risks
 

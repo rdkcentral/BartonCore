@@ -340,6 +340,13 @@ struct ReconfigureDeviceContext
     // that thread (from a handler of an event the task sends) doesn't wait for it; see IsRunningOnThisThreadLocked().
     pthread_t runningThread;
     bool running;
+
+    // Set (under reconfigurationControlMutex) when every removal of the device failed while this was running, having
+    // asked it to stop: request it again if it fails, with any request refused during those removals merged in.
+    bool requestAgainIfFails;
+    uint32_t againDelaySeconds;
+    reconfigurationCompleteCallback againCompleted;
+    bool againAllowAsap;
 };
 
 static inline void releaseReconfigureDeviceContext(ReconfigureDeviceContext *ctx);
@@ -1194,6 +1201,16 @@ bool deviceServiceRemoveDevice(const char *uuid)
         // over.
         BeginDeviceRemoval(uuid);
         waitForOrCancelPendingReconfiguration(uuid);
+
+        // Shutdown ends the waits above once it has cleared its tables; don't then delete the device, tell its driver
+        // and send device-removed while shutdown is stopping drivers and the event producer.
+        if (deviceServiceIsShuttingDown() == true)
+        {
+            icLogWarn(LOG_TAG, "Not removing device %s: the service is stopping", uuid);
+            EndDeviceRemoval(uuid, false);
+            deviceDestroy(device);
+            return false;
+        }
 
         if (jsonDatabaseRemoveDeviceById(uuid) == false)
         {
@@ -2311,7 +2328,8 @@ void deviceServiceShutdown()
     g_clear_pointer(&devicesAwaitingSynchronization, g_hash_table_unref);
     g_clear_pointer(&activeSynchronizations, g_hash_table_unref);
     g_clear_pointer(&pendingReconfigurationGauge, observabilityGaugeRelease);
-    // A removal still waiting (on a thread shutdown doesn't wait for) re-checks against the cleared tables and goes on.
+    // A removal still waiting (on a thread shutdown doesn't wait for) re-checks against the cleared tables, sees that
+    // shutdown has begun, and gives up without removing anything (see deviceServiceRemoveDevice()).
     pthread_cond_broadcast(ReconfigurationControlCond());
     mutexUnlock(&reconfigurationControlMutex);
 
@@ -4267,6 +4285,21 @@ FinishReconfiguration(ReconfigureDeviceContext *ctx, const char *deviceUuid, con
         sendDeviceReconfigurationFinishedEvent(deviceClass, deviceUuid, result);
     }
 
+    // Every removal of the device failed after asking this to stop (see EndDeviceRemoval()): request it again. Before
+    // any owed synchronization is queued, so that synchronization is left to the new request.
+    mutexLock(&reconfigurationControlMutex);
+    bool requestAgain = result == false && ctx->requestAgainIfFails == true;
+    uint32_t againDelaySeconds = ctx->againDelaySeconds;
+    reconfigurationCompleteCallback againCompleted = ctx->againCompleted;
+    bool againAllowAsap = ctx->againAllowAsap;
+    mutexUnlock(&reconfigurationControlMutex);
+
+    if (requestAgain == true)
+    {
+        icInfo("Removal of device %s failed after stopping its reconfiguration; requesting it again", deviceUuid);
+        deviceServiceReconfigureDevice(deviceUuid, againDelaySeconds, againCompleted, againAllowAsap);
+    }
+
     // A startup reconfiguration, or one this device's synchronization was left to, failed. Queued after the event, so a
     // removal made from its handlers has already happened (or registered) and the synchronization defers to it, rather
     // than running while those handlers wait for it; a removal made within the synchronization then only waits for this
@@ -5920,6 +5953,37 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
         {
             refused = *removal;
             g_hash_table_remove(devicesBeingRemoved, deviceUuid);
+
+            // The device remains, and a reconfiguration of it still running (one these removals asked to stop: made
+            // from its own handler, or that a removal gave up waiting for) may stop short because of them. Have it
+            // requested again if it fails, together with any request refused during the removals.
+            ReconfigureDeviceContext *running =
+                refused.anyRemovalSucceeded == false && pendingReconfiguration != NULL
+                    ? hashMapGet(pendingReconfiguration, (void *) deviceUuid, (uint16_t) (strlen(deviceUuid) + 1))
+                    : NULL;
+
+            if (running != NULL && running->running == true)
+            {
+                if (running->requestAgainIfFails == false)
+                {
+                    running->requestAgainIfFails = true;
+                    running->againDelaySeconds = refused.refusedDelaySeconds;
+                    running->againCompleted = refused.refusedCompleted;
+                    running->againAllowAsap = refused.refusedAllowAsap;
+                }
+                else
+                {
+                    running->againDelaySeconds = MAX(running->againDelaySeconds, refused.refusedDelaySeconds);
+                    running->againAllowAsap |= refused.refusedAllowAsap;
+
+                    if (running->againCompleted == NULL)
+                    {
+                        running->againCompleted = refused.refusedCompleted;
+                    }
+                }
+
+                refused.hasRefusedRequest = false;
+            }
         }
     }
 
@@ -5929,8 +5993,8 @@ static void EndDeviceRemoval(const char *deviceUuid, bool removed)
     {
         if (deviceServiceIsReconfigurationPending(deviceUuid) == true)
         {
-            // Usually a reconfiguration the removal gave up waiting for that is still running; possibly a newer request
-            // that got in first. Either way the deferred request would only be dropped as a duplicate of it.
+            // A reconfiguration requested after the removal ended got in first; the deferred request would only be
+            // dropped as a duplicate of it. (One still running from before was handed the request above.)
             icWarn("Removal of device %s failed while a reconfiguration of it is pending; dropping the reconfiguration "
                    "requested during the removal",
                    deviceUuid);

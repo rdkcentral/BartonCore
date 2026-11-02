@@ -63,7 +63,8 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   before querying, so a reconfiguration that finishes in between is not missed. If the device is
   removed while it is being reconfigured, its configuration event arrives before `device-removed` (as a
   failure, since the removal asks the reconfiguration to stop; if the removal then fails, the
-  reconfiguration is requested again),
+  reconfiguration is requested again; and a removal made while the client is stopping does nothing
+  and returns `FALSE`),
   unless the reconfiguration takes longer than the removal's 60-second wait, you remove the device
   from that event's own handler, or the reconfiguration hadn't started rebuilding the device (then no
   event is sent; see below). Removing the device or stopping the client waits for these

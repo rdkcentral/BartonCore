@@ -2025,6 +2025,68 @@ static void test_runningReconfigurationNotPersistedOnceShutdownBegins(void **sta
     assert_int_equal(finished, 0);
 }
 
+// A removal made from a running reconfiguration's own metadata-updated handler that fails (after asking it to stop, and
+// before it reaches its replacement) has that reconfiguration requested again once it fails.
+static void test_reconfigurationStoppedByFailedOwnHandlerRemovalIsRequestedAgain(void **state)
+{
+    (void) state;
+
+    AddCompleteDevice("complete", STALE_CLASS_VERSION);
+    deviceServiceReconfigureDevice("complete", 0, RecordCompletion, false);
+    readyForDevices();
+    metadataHook = RemoveDeviceFromMetadataHandler;
+    failDeviceRemoval = true;
+
+    g_mutex_lock(&fakeLock);
+    deviceSaveCount = 0;
+    g_mutex_unlock(&fakeLock);
+
+    RunScheduledTask(0);
+
+    assert_false(removedFromMetadataHandler);
+    assert_int_equal(deviceSaveCount, 0);
+    assert_false(completionResult);
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(finishedEventSucceeded);
+    assert_true(jsonDatabaseIsDeviceKnown("complete"));
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_true(deviceServiceIsReconfigurationPending("complete"));
+}
+
+// A removal still waiting when shutdown clears its tables (here for a running synchronization) gives up without
+// removing the device, rather than deleting it and notifying its driver and clients while shutdown tears them down.
+static void test_removalWaitingWhenShutdownBeginsDoesNotRemove(void **state)
+{
+    Fixture *fixture = *state;
+
+    AddDevice("current", CURRENT_CLASS_VERSION);
+    poolTaskOnThread = true;
+    syncHook = HoldSyncUntilReleased;
+    GThread *passThread = g_thread_new("readyPass", RunReadyCallback, NULL);
+
+    g_mutex_lock(&fakeLock);
+    assert_true(WaitLocked(IsSyncReached, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND));
+    g_mutex_unlock(&fakeLock);
+
+    GThread *removeThread = g_thread_new("remove", RemoveDevice, "current");
+
+    g_mutex_lock(&fakeLock);
+    bool removedDuringSync = WaitLocked(IsDeviceRemovedEventSent, BLOCKED_PROBE_USECS);
+    g_mutex_unlock(&fakeLock);
+
+    b_core_client_stop(fixture->client);
+    fixture->stopped = true;
+    g_thread_join(removeThread);
+    int removedEvents = removedEventCount;
+
+    ReleasePass();
+    g_thread_join(poolTaskThread);
+    g_thread_join(passThread);
+
+    assert_false(removedDuringSync);
+    assert_int_equal(removedEvents, 0);
+}
+
 // A running reconfiguration doesn't save back a device whose record was deleted meanwhile.
 static void test_runningReconfigurationDoesNotSaveBackDeletedDevice(void **state)
 {
@@ -2897,6 +2959,10 @@ int main(int argc, const char **argv)
             test_runningReconfigurationDoesNotSaveBackDeletedDevice, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_runningReconfigurationNotPersistedOnceShutdownBegins, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationStoppedByFailedOwnHandlerRemovalIsRequestedAgain, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_removalWaitingWhenShutdownBeginsDoesNotRemove, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_startupRequestFindingAnotherPendingLeavesSynchronizationToIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(

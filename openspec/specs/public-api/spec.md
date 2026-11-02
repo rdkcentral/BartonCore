@@ -173,7 +173,9 @@ removal's 60-second wait and the removal is not made from that event's own handl
 for a reconfiguration withdrawn before it rebuilds the device: one cancelled before it started, or one deferred
 while the device was being synchronized and then withdrawn because a removal of the device or shutdown began, or
 one whose own `metadata-updated` handler removed the device or stopped the client. A reconfiguration asked to
-terminate by a removal SHALL NOT replace the device's record, and is reported as failed. For a
+terminate by a removal before it is about to replace the device's record SHALL NOT replace it, and is reported as
+failed; if every removal of the device then fails, it SHALL be requested again. `remove_device()` called once the
+service has begun stopping SHALL return `FALSE` without removing the device. For a
 reconfiguration started during startup, the event MAY be emitted before `READY_FOR_DEVICE_OPERATION`;
 a client that waits for readiness and then queries the device observes the reconfigured data.
 
