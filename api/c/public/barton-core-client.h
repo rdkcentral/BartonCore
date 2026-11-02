@@ -239,12 +239,13 @@ gboolean b_core_client_start(BCoreClient *self);
  *
  * @brief Stop the BCoreClient. This will stop the service and its internal systems.
  *
- * Reconfigurations that have not started are cancelled. One that is already running is asked to stop, and this call
- * then waits up to 120 seconds for it to finish (including delivery of its completion event) before stopping drivers
- * and subsystems. It likewise waits, up to 120 seconds, for a startup pass that is in progress, including delivery of
- * its readiness event. These waits are in addition to the time the drivers and subsystems themselves take to stop.
- * Calling this again after it has returned does nothing. Overlapping calls are not supported, nor is calling it from
- * another thread while @see b_core_client_start() is still running.
+ * Reconfigurations that have not started are cancelled. One that is already running is asked to stop (it fails unless
+ * it has already replaced the device's record), and this call then waits up to 120 seconds for it to finish (including
+ * delivery of its completion event) before stopping drivers and subsystems. It likewise waits, up to 120 seconds, for a
+ * startup pass that is in progress, including delivery of its readiness event. These waits are in addition to the time
+ * the drivers and subsystems themselves take to stop. Calling this again after it has returned does nothing.
+ * Overlapping calls are not supported, nor is calling it from another thread while @see b_core_client_start() is still
+ * running.
  *
  * A host that ends the process before this call returns does not lose the device being reconfigured: its
  * reconfiguration is retried the next time the service starts. The exception is the brief moment in which the
@@ -488,7 +489,8 @@ GList *b_core_client_get_devices_by_device_class(BCoreClient *self, const gchar 
  *
  * @brief Remove a device from the system by id.
  *
- * A reconfiguration of the device that has not started is cancelled. One that is already running, and a
+ * A reconfiguration of the device that has not started is cancelled. One that is already running is asked to stop (it
+ * fails unless it has already replaced the device's record, and is requested again if this removal fails). It, and a
  * synchronization of the device that is already running, are waited for, for up to 60 seconds in all, before the device
  * is removed.
  *

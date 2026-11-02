@@ -285,8 +285,13 @@ discovery session.
   has begun and, if so, withdraws without an event rather than carry on against a removed device or a
   torn-down service. Separately, removal and shutdown leave a terminate request on a running task that
   a driver's check-in signal can't clear, and the task checks it, and whether the device is gone, just
-  before replacing the record: a task asked to terminate finishes as failed instead, so it never saves
-  back a device a removal is deleting (or has deleted after giving up its wait). A startup request that
+  before replacing the record: a task asked to terminate finishes as failed instead, so it doesn't save
+  back a device a removal is deleting (or has deleted after giving up its wait), except in the window
+  between that check and the swap (follow-up ticket 2). The terminate request is checked only up to
+  that point: one made after it lets the replacement go ahead and report success, and the removal then
+  deletes the device. When a removal's request is what stopped the task, the reconfiguration is
+  recorded on the removal like a request refused during it, so it is requested again if the removal
+  fails (its completion callback, which has reported the failure, isn't carried over). A startup request that
   finds another reconfiguration already pending (requested after the pass checked) records the
   device's synchronization against that one, under the insert's lock, as the pass would have.
   Because removal and shutdown wait for the event, a client handler that blocks on the thread doing the
@@ -458,11 +463,14 @@ clears it:
   waits require a client handler to block on a thread that is removing the device or stopping the
   client, which the guide tells clients not to do; the guide also says handlers can run within a
   synchronization (after start, and after a failed reconfiguration), so clients can tell when that
-  applies. One loop doesn't need a blocking handler of that kind: a synchronization from another source
-  (for example a repeated startup pass) can start while a reconfiguration is sending its completion
-  event, and a removal made within it and another made from that event's handler then wait on each other
-  until the 60-second bound. That needs two removals of the same device at once and a repeated pass;
-  it is tracked with the other bounded waits (follow-up ticket 2).
+  applies. Two loops don't need a blocking handler of that kind, only two removals of the same device at
+  once, and end at the 60-second bound (follow-up ticket 2): a synchronization from another source (for
+  example a repeated startup pass) can start while a reconfiguration is sending its completion event,
+  and a removal made within it and another made from that event's handler wait on each other; and a
+  synchronization already running when a reconfiguration's first run sets its metadata, with the device
+  removed both from that `metadata-updated` handler and from within the synchronization. A stop made
+  from that handler instead doesn't stall: shutdown wakes a removal still waiting once it has cleared
+  its tables, and that removal then goes on.
 
 ### Other risks
 
@@ -510,7 +518,8 @@ clears it:
   forward it.
 - [Terminated reconfigurations report as failed] → Removing a device mid-reconfiguration, or a
   driver cancelling it (e.g. a sleepy Zigbee device without a poll-control endpoint), makes the
-  configure step return false, so clients see `device-configuration-failed`. That is accurate (the
+  configure step return false, or stops the task just before it would replace the device's record,
+  so clients see `device-configuration-failed`. That is accurate (the
   reconfiguration did not complete); for a removal it is followed by `device-removed`, unless the
   reconfiguration outlasts the removal's 60 s wait or the removal is made from that event's own handler.
 - [Determinism of the integration test] → `deviceServiceReconfigureDevice()` sets the

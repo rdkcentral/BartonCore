@@ -24,11 +24,11 @@ A device SHALL be reported as having a pending reconfiguration (`deviceServiceIs
 #### Scenario: Reconfiguration starts as it is being cancelled
 - **WHEN** a removal or shutdown tries to cancel a reconfiguration whose task has already started
 - **THEN** the device SHALL remain reported as pending until that task's work is done, the task SHALL be asked to terminate, and a removal SHALL wait for the task to finish, including sending any completion event, for up to 60 seconds
-- **AND** a task that has been asked to terminate SHALL NOT replace the device's stored record; it SHALL finish as failed
+- **AND** a task asked to terminate before it is about to replace the device's stored record SHALL NOT replace it, even if a driver signal follows the request; it SHALL finish as failed, and if a removal asked it and that removal fails, the reconfiguration SHALL be requested again
 
 #### Scenario: Removal or stop from a running reconfiguration's own handler
 - **WHEN** a handler of an event a running reconfiguration task sends on its own thread (such as `metadata-updated` when it marks the device as needing reconfiguration) removes the device or stops the client
-- **THEN** the removal or shutdown SHALL NOT wait for that task, and the task SHALL then stop without rebuilding the device, saving a removed device back, or sending a configuration event
+- **THEN** the removal or shutdown SHALL NOT wait for that task, and the task SHALL then stop without replacing the device's stored record or sending a configuration event
 
 #### Scenario: Same reconfiguration cancelled twice
 - **WHEN** two cancellers (for example a removal racing shutdown) both try to cancel the same not-yet-started reconfiguration

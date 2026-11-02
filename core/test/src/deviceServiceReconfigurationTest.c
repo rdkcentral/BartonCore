@@ -143,6 +143,7 @@ static gint64 actFromMetadataHandlerUsecs;
 static bool failDeviceSave;         // saving a device record fails, as a storage failure would
 static int configureCount;          // calls of the fake driver's configureDevice()
 static void (*configureHook)(void); // run once from the next configureDevice()
+static int deviceSaveCount; // calls of jsonDatabaseAddDevice() since the last reset (see ResetDeviceSaveCount())
 static int completionCount;         // calls of RecordCompletion()
 static bool completionResult;
 static bool poolTaskOnThread;     // run the next pool task on its own thread, as a real pool does, rather than inline
@@ -723,6 +724,10 @@ bool __real_jsonDatabaseAddDevice(icDevice *device);
 
 bool __wrap_jsonDatabaseAddDevice(icDevice *device)
 {
+    g_mutex_lock(&fakeLock);
+    deviceSaveCount++;
+    g_mutex_unlock(&fakeLock);
+
     if (failDeviceSave == true)
     {
         return false;
@@ -1822,7 +1827,7 @@ static void test_reconfigurationSaveFailureNotReportedAsSuccess(void **state)
 
     assert_int_equal(completionCount, 1);
     assert_false(completionResult);
-    assert_false(finishedEventCount > 0 && finishedEventSucceeded == true);
+    assert_int_equal(finishedEventCount, 0); // the failed save left no record, so no event at all
     assert_false(deviceServiceIsReconfigurationPending("complete"));
 }
 
@@ -1868,8 +1873,16 @@ static void test_stopFromRunningReconfigurationsMetadataHandler(void **state)
 
 static GThread *configureRemoveThread;
 
-// Configure hook: a removal of the device begins on another thread while the driver is configuring it, and has asked
-// the reconfiguration to terminate (it can't cancel a running task) by the time configuration returns.
+// Configure hooks, each run while the driver is configuring the device:
+// - the reconfiguration is asked to terminate, then a driver check-in signal follows (which doesn't clear the request);
+static void TerminateThenCheckInDuringConfigure(void)
+{
+    deviceServiceSendReconfigurationSignal("complete", true);
+    deviceServiceSendReconfigurationSignal("complete", false);
+}
+
+// - a removal of the device begins on another thread and, unable to cancel the running task, has asked it to terminate
+//   (sent here too, so the request is in place deterministically when configuration returns);
 static void RemoveCompleteDeviceElsewhereDuringConfigure(void)
 {
     configureRemoveThread = g_thread_new("remove", RemoveDevice, "complete");
@@ -1878,33 +1891,153 @@ static void RemoveCompleteDeviceElsewhereDuringConfigure(void)
     WaitLocked(IsCancelAttempted, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
     g_mutex_unlock(&fakeLock);
 
-    // The terminate request follows the failed cancel at once.
-    g_usleep(200 * G_TIME_SPAN_MILLISECOND);
+    deviceServiceSendReconfigurationSignal("complete", true);
 }
 
-// A running reconfiguration that a removal has asked to terminate doesn't go on to replace the device's record: it
-// finishes as failed, and its event comes before device-removed.
+// - the client is stopped on the task's own thread (as from a handler of an event the driver sends while configuring);
+static void StopClientDuringConfigure(void)
+{
+    StopClientAsHandler();
+}
+
+// - shutdown begins on another thread and is held just after it has begun (before it asks reconfigurations to stop or
+//   cleans up the database);
+static GThread *configureStopThread;
+
+static void BeginStopElsewhereDuringConfigure(void)
+{
+    g_mutex_lock(&fakeLock);
+    pauseShutdown = true;
+    g_mutex_unlock(&fakeLock);
+
+    configureStopThread = g_thread_new("stop", StopClient, testClient);
+
+    g_mutex_lock(&fakeLock);
+    WaitLocked(IsShutdownBegun, WAIT_TIMEOUT_SECS * G_TIME_SPAN_SECOND);
+    g_mutex_unlock(&fakeLock);
+}
+
+// - the device's record is deleted, as by a removal that gave up waiting for this reconfiguration.
+static void DeleteRecordDuringConfigure(void)
+{
+    __real_jsonDatabaseRemoveDeviceById("complete");
+}
+
+// Sets up a reconfiguration of a complete device that will reach driver configuration, with the given configure hook.
+static void PrepareReconfigurationReachingConfigure(void (*hook)(void))
+{
+    AddCompleteDevice("complete", STALE_CLASS_VERSION);
+    deviceServiceReconfigureDevice("complete", 0, RecordCompletion, false);
+    readyForDevices();
+    configureHook = hook;
+
+    g_mutex_lock(&fakeLock);
+    deviceSaveCount = 0;
+    g_mutex_unlock(&fakeLock);
+}
+
+// A running reconfiguration asked to terminate before it replaces the device's record doesn't replace it, even if a
+// driver check-in signal follows the request: it finishes as failed.
 static void test_runningReconfigurationAskedToTerminateDoesNotReplaceRecord(void **state)
 {
     (void) state;
 
-    AddCompleteDevice("complete", STALE_CLASS_VERSION);
-    deviceServiceReconfigureDevice("complete", 0, RecordCompletion, false);
-    readyForDevices();
-    cancelSucceeds = false;
-    configureHook = RemoveCompleteDeviceElsewhereDuringConfigure;
+    PrepareReconfigurationReachingConfigure(TerminateThenCheckInDuringConfigure);
 
     RunScheduledTask(0);
-    g_thread_join(configureRemoveThread);
 
     assert_int_equal(configureCount, 1);
+    assert_int_equal(deviceSaveCount, 0);
     assert_int_equal(completionCount, 1);
     assert_false(completionResult);
     assert_int_equal(finishedEventCount, 1);
     assert_false(finishedEventSucceeded);
-    assert_int_equal(removedEventCount, 1);
-    assert_int_equal(finishedEventsWhenRemoved, 1);
+    assert_int_equal(GetStoredClassVersion("complete"), STALE_CLASS_VERSION);
+}
+
+// A running reconfiguration that a removal asked to stop is requested again if that removal fails, and its failure
+// event comes before the removal's outcome.
+static void test_reconfigurationStoppedByFailedRemovalIsRequestedAgain(void **state)
+{
+    (void) state;
+
+    PrepareReconfigurationReachingConfigure(RemoveCompleteDeviceElsewhereDuringConfigure);
+    cancelSucceeds = false;
+    failDeviceRemoval = true;
+
+    RunScheduledTask(0);
+    g_thread_join(configureRemoveThread);
+
+    g_mutex_lock(&fakeLock);
+    cancelSucceeds = true; // so teardown can cancel the re-requested one
+    g_mutex_unlock(&fakeLock);
+
+    assert_int_equal(deviceSaveCount, 0);
+    assert_false(completionResult);
+    assert_int_equal(finishedEventCount, 1);
+    assert_false(finishedEventSucceeded);
+    assert_true(jsonDatabaseIsDeviceKnown("complete"));
+    assert_int_equal(GetScheduledCount(), 2);
+    assert_true(deviceServiceIsReconfigurationPending("complete"));
+}
+
+// A running reconfiguration doesn't replace the record once the service has been stopped (here from its own thread),
+// nor send an event.
+static void test_runningReconfigurationNotPersistedAfterStop(void **state)
+{
+    Fixture *fixture = *state;
+
+    PrepareReconfigurationReachingConfigure(StopClientDuringConfigure);
+
+    RunScheduledTask(0);
+    fixture->stopped = stopCalledFromHandler;
+
+    assert_true(stopReturnedFromHandler);
+    assert_int_equal(deviceSaveCount, 0);
+    assert_false(completionResult);
+    assert_int_equal(finishedEventCount, 0);
+}
+
+// A running reconfiguration doesn't replace the record once shutdown has begun, even before shutdown asks it to stop.
+static void test_runningReconfigurationNotPersistedOnceShutdownBegins(void **state)
+{
+    Fixture *fixture = *state;
+
+    PrepareReconfigurationReachingConfigure(BeginStopElsewhereDuringConfigure);
+
+    RunScheduledTask(0);
+
+    // Observed while shutdown is held; asserted once it is released.
+    int saves = deviceSaveCount;
+    bool result = completionResult;
+    int finished = finishedEventCount;
+
+    g_mutex_lock(&fakeLock);
+    shutdownReleased = true;
+    g_cond_broadcast(&fakeCond);
+    g_mutex_unlock(&fakeLock);
+
+    g_thread_join(configureStopThread);
+    fixture->stopped = true;
+
+    assert_int_equal(saves, 0);
+    assert_false(result);
+    assert_int_equal(finished, 0);
+}
+
+// A running reconfiguration doesn't save back a device whose record was deleted meanwhile.
+static void test_runningReconfigurationDoesNotSaveBackDeletedDevice(void **state)
+{
+    (void) state;
+
+    PrepareReconfigurationReachingConfigure(DeleteRecordDuringConfigure);
+
+    RunScheduledTask(0);
+
+    assert_int_equal(deviceSaveCount, 0);
+    assert_false(completionResult);
     assert_false(jsonDatabaseIsDeviceKnown("complete"));
+    assert_int_equal(finishedEventCount, 0);
 }
 
 // Class version hook: another reconfiguration of the stale device is requested after the startup pass checked it for a
@@ -2756,6 +2889,14 @@ int main(int argc, const char **argv)
             test_stopFromRunningReconfigurationsMetadataHandler, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_runningReconfigurationAskedToTerminateDoesNotReplaceRecord, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_reconfigurationStoppedByFailedRemovalIsRequestedAgain, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_runningReconfigurationNotPersistedAfterStop, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_runningReconfigurationDoesNotSaveBackDeletedDevice, SetupService, TeardownService),
+        cmocka_unit_test_setup_teardown(
+            test_runningReconfigurationNotPersistedOnceShutdownBegins, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(
             test_startupRequestFindingAnotherPendingLeavesSynchronizationToIt, SetupService, TeardownService),
         cmocka_unit_test_setup_teardown(

@@ -61,14 +61,17 @@ to change, the single-device read functions (`b_core_client_get_device_by_id`, `
   session discovery type `B_CORE_DISCOVERY_TYPE_NONE`. Those events are sent whenever a reconfiguration
   finishes, so they are also the cue to re-read a device you have cached. Connect to these signals
   before querying, so a reconfiguration that finishes in between is not missed. If the device is
-  removed while it is being reconfigured, its configuration event arrives before `device-removed`,
+  removed while it is being reconfigured, its configuration event arrives before `device-removed` (as a
+  failure, since the removal asks the reconfiguration to stop; if the removal then fails, the
+  reconfiguration is requested again),
   unless the reconfiguration takes longer than the removal's 60-second wait, you remove the device
   from that event's own handler, or the reconfiguration hadn't started rebuilding the device (then no
   event is sent; see below). Removing the device or stopping the client waits for these
   events' handlers to return, so don't block in a handler on a thread that is doing either. Handlers
   can also run within a synchronization of a device (for example `resource-updated` events a driver
   sends while synchronizing it after start, or after its reconfiguration failed), which a removal of
-  that device waits for. No
+  that device waits for, and a reconfiguration's `metadata-updated` handler can run while such a
+  synchronization is still running. No
   event is sent if the reconfiguration could not be scheduled, the device was removed before its
   reconfiguration started (including while it was waiting for a synchronization of the device, or
   when you remove it from a `metadata-updated` handler as its reconfiguration begins), the device's record is gone when it finishes (for example because saving
@@ -101,8 +104,9 @@ not at all, so treat each event as a cue to re-read the device (with a bounded r
 current state. In that case
 a handler that removes the device can also wait up to 60 seconds for the other event's handlers.
 
-`b_core_client_stop` lets a reconfiguration that is still running finish, and likewise a startup pass
-that is still deciding which devices to reconfigure. Each wait lasts up to 120 seconds, so stopping can
+`b_core_client_stop` asks a reconfiguration that is still running to stop (it fails unless it has
+already replaced the device's record) and waits for it, and likewise waits for a startup pass that is
+still deciding which devices to reconfigure. Each wait lasts up to 120 seconds, so stopping can
 take up to 240 seconds longer than usual. If your host ends the process sooner, the interrupted reconfiguration is
 retried the next time Barton starts. Calling `b_core_client_stop` again after it has returned does nothing; don't
 make overlapping calls, or call it from another thread while `b_core_client_start` is still running. Readiness can be
