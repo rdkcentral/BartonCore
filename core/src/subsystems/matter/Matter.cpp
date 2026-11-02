@@ -200,6 +200,15 @@ void Matter::RunWithStackLock(const std::function<void()> &work)
         return;
     }
 
+    // The stack lock is not recursive, so a caller that already holds it deadlocks below. Log it so
+    // the hang has a diagnostic. While the loop runs this check is exact; after the loop returns and
+    // before Stop() has joined its thread, the SDK reports every thread as holding the lock, so it can
+    // also log spuriously then.
+    if (chip::DeviceLayer::PlatformMgr().IsChipStackLockedByCurrentThread())
+    {
+        icError("RunWithStackLock() called by a thread that already holds the CHIP stack lock; this deadlocks");
+    }
+
     chip::DeviceLayer::StackLock stackLock;
     work();
 }
