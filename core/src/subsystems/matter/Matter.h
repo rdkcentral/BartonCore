@@ -219,8 +219,7 @@ namespace barton
          *
          * The caller must not hold a lock that a Matter-thread callback can block on, and work must
          * not wait on the Matter thread. A thread other than the event loop thread must not call this
-         * while it already holds the stack lock (via LockChipStack()); the lock is not recursive, so
-         * that deadlocks. Such a call logs an error first.
+         * while it already holds the stack lock (via LockChipStack()); the lock is not recursive.
          */
         static void RunWithStackLock(const std::function<void()> &work);
 
