@@ -22,7 +22,8 @@ All checks run inside the builder container. Every tool comes from the `quality_
 | `asan` | `dev` with ASAN (already the dev default) |
 | `ubsan` | `dev` with UBSan, ASAN off |
 | `tsan` | `dev` with TSan, ASAN off (TSan and ASAN cannot be combined) |
-| `tidy` | `dev` with clang-tidy run during compilation (IDE and ad hoc use) |
+| `tidy` | `dev` with clang-tidy run during compilation (IDE and ad hoc use), ASAN off |
+| `size` | `dev` as Release with ASAN and SSP off; used by `binary-size.sh` |
 
 ## Exit codes and reports
 

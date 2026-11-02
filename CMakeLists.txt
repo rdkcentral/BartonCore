@@ -25,7 +25,11 @@ cmake_minimum_required(VERSION 3.16.5)
 #TODO: project version (snag from git tag)
 project(barton-core)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Quality tooling (compile_commands.json, cppcheck target) only applies when
+# BartonCore is the top-level project, not when a consumer adds it as a subdirectory.
+if (CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
 
 execute_process(
                 COMMAND git describe --tags --match [0-9]*.[0-9]*.[0-9]*
@@ -135,7 +139,9 @@ if (BCORE_SANITIZERS)
 endif()
 
 include(BCoreWarnings)
-include(BCoreCppcheck)
+if (CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    include(BCoreCppcheck)
+endif()
 
 add_subdirectory(libs)
 

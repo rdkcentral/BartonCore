@@ -70,7 +70,7 @@ When cppcheck is available, the build system SHALL provide a `cppcheck` target t
 - **THEN** it SHALL analyze only C/C++ sources changed since the merge base with `QUALITY_BASE_REF` (default `origin/main`) plus sources including a changed header, and SHALL report `blocked` if the merge base cannot be resolved
 
 ### Requirement: CMake presets
-The repository SHALL provide `CMakePresets.json` (presets schema version 1, requiring CMake ≥ 3.19) with configure presets `dev-linux`, `dev` (inheriting `dev-linux` unchanged), and `coverage`, `asan`, `ubsan`, `tsan`, and `tidy` inheriting `dev`. `dev-linux` SHALL load `config/cmake/platforms/dev/linux.cmake` by setting the cache variable `CMAKE_PROJECT_barton-core_INCLUDE` to that file rather than duplicating its values. The top-level `CMakeLists.txt` SHALL NOT reference platforms or presets, the project's minimum CMake version SHALL remain 3.16.5, and `build.sh` SHALL remain supported.
+The repository SHALL provide `CMakePresets.json` (presets schema version 1, requiring CMake ≥ 3.19) with configure presets `dev-linux`, `dev` (inheriting `dev-linux` unchanged), and `coverage`, `asan`, `ubsan`, `tsan`, `tidy`, and `size` inheriting `dev`. `dev-linux` SHALL load `config/cmake/platforms/dev/linux.cmake` by setting the cache variable `CMAKE_PROJECT_barton-core_INCLUDE` to that file rather than duplicating its values. The top-level `CMakeLists.txt` SHALL NOT reference platforms or presets, the project's minimum CMake version SHALL remain 3.16.5, and `build.sh` SHALL remain supported.
 
 #### Scenario: Dev preset matches build.sh
 - **WHEN** `cmake --preset dev` runs

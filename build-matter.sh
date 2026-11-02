@@ -77,15 +77,34 @@ while getopts ":hc:i:sat" option; do
     esac
 done
 
-if [ -e ${MATTER_BUILD_DIR} ] && [ ! -d ${MATTER_INSTALL_DIR} ]; then
+# MATTER_INSTALL_DIR may come from -i (e.g. a CMake cache value) and is removed
+# below before a rebuild, so refuse paths that are obviously not a Matter install.
+case "${MATTER_INSTALL_DIR}" in
+    ""|/|"${HOME}"|"${HOME}/")
+        echo "Refusing to use '${MATTER_INSTALL_DIR}' as the Matter install directory." >&2
+        exit 1
+        ;;
+esac
+if [ "${BUILD_DIR}" = "/" ]; then
+    echo "Refusing to use '/' as the Matter build parent directory (from -i ${MATTER_INSTALL_DIR})." >&2
+    exit 1
+fi
+
+if [ -e "${MATTER_BUILD_DIR}" ] && [ ! -d "${MATTER_INSTALL_DIR}" ]; then
     echo "Matter build dir ${MATTER_BUILD_DIR} exists but install dir ${MATTER_INSTALL_DIR} does not." >&2
     echo "Each install dir needs its own parent directory (the source/build tree is <parent>/matter). Delete ${MATTER_BUILD_DIR} or choose another install dir." >&2
     exit 1
-elif [ -e ${MATTER_BUILD_DIR} ]; then
+elif [ -e "${MATTER_BUILD_DIR}" ]; then
     echo "Matter build dir already exists at: ${MATTER_BUILD_DIR}. Delete it if you want to rebuild Matter."
 else
-    rm -rf ${MATTER_INSTALL_DIR}
-    mkdir -p ${BUILD_DIR}
+    if [ -e "${MATTER_INSTALL_DIR}" ]; then
+        if [ ! -d "${MATTER_INSTALL_DIR}/include/matter" ]; then
+            echo "Refusing to delete ${MATTER_INSTALL_DIR}: it exists but does not look like a Matter install (no include/matter)." >&2
+            exit 1
+        fi
+        rm -rf "${MATTER_INSTALL_DIR}"
+    fi
+    mkdir -p "${BUILD_DIR}"
 
     cd ${BUILD_DIR}
     # Fetch by ref so MATTER_REF may be a tag, branch, or commit SHA (git clone --branch rejects SHAs).

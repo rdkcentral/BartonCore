@@ -22,17 +22,22 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-# Binary size of libBartonCore.so (dev preset) via bloaty, compared with the
-# committed .size-snapshot.json. Growth above 10% of vm_total is a finding.
+# Binary size of libBartonCore.so (uninstrumented Release `size` preset) via
+# bloaty, compared with the committed .size-snapshot.json. Growth above 10% of
+# vm_total is a finding. The snapshot tracks relative growth of this build; it
+# is not the size of any particular shipped product build.
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 quality_init binary-size "Usage: $0 [--update-baseline]
-Builds build/dev and measures libBartonCore.so; --update-baseline rewrites .size-snapshot.json." "$@"
+Builds build/size (Release, no sanitizers) and measures libBartonCore.so; --update-baseline rewrites .size-snapshot.json." "$@"
 
 quality_require_tool bloaty
 SNAPSHOT="${QUALITY_ROOT}/.size-snapshot.json"
-quality_preset_build dev --target BartonCore > "${REPORT_DIR}/build.log" 2>&1 \
-    || quality_finish error "dev preset build failed (see build.log)"
+if quality_update_requested "$@" && [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+    quality_finish error "refusing to update .size-snapshot.json from a dirty tree; commit first"
+fi
+quality_preset_build size --target BartonCore > "${REPORT_DIR}/build.log" 2>&1 \
+    || quality_finish error "size preset build failed (see build.log)"
 LIB="$(find "${PRESET_BUILD_DIR}/core" -maxdepth 1 -name 'libBartonCore.so' | head -1)"
 quality_require_file "${LIB:-/nonexistent}" "libBartonCore.so not found in ${PRESET_BUILD_DIR}/core"
 
@@ -54,7 +59,7 @@ with open(src) as f:
         if row["sections"] in (".text", ".rodata", ".data", ".bss"):
             sections[row["sections"]] = vm
 with open(dst, "w") as f:
-    json.dump({"artifact": "libBartonCore.so", "preset": "dev", "tool": "bloaty",
+    json.dump({"artifact": "libBartonCore.so", "preset": "size", "tool": "bloaty",
                "generated_from": describe,
                "sections": {k: sections.get(k, 0) for k in (".text", ".rodata", ".data", ".bss")},
                "vm_total": vm_total, "file_total": file_total}, f, indent=2)

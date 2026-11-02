@@ -392,7 +392,7 @@ output = "build/reports/pytest-cov/coverage.xml"
   `[tool.pytest.ini_options]` gains `markers = [...]` (every marker currently used under `testing/`, collected by grep during implementation) and `--strict-markers` in `addopts`.
 - `.jscpd.json`: `{"minTokens": 70, "reporters": ["json","console"], "output": "build/reports/jscpd", "ignore": ["build/**","third_party/**","**/test/**","**/tests/**","**/testing/**","**/*.pb.*","**/zap-generated/**","**/gen/**"], "format": ["c","cpp","python","javascript"]}`.
 - Lizard thresholds live in `scripts/quality/lizard.sh` (`-C 15 -L 1000 -a 10`) because lizard has no standard config file.
-- `.size-snapshot.json`: generated from a `dev` preset build of `libBartonCore.so` via bloaty, schema in Data Structures.
+- `.size-snapshot.json`: generated from a `size` preset build (Release, ASAN/SSP off) of `libBartonCore.so`, only from a clean committed tree, via bloaty, schema in Data Structures.
 - `.api/libBartonCore.abi`: abidw XML. Until generated from a release tag it is absent and `abi.sh` reports `BLOCKED: no baseline`; `.api/README.md` documents regeneration.
 - `config/quality/cppcheck-suppressions.txt` and `config/quality/clang-tidy-baseline.txt`: initial finding baselines.
 
@@ -454,7 +454,7 @@ EOF
 ```json
 {
   "artifact": "libBartonCore.so",
-  "preset": "dev",
+  "preset": "size",
   "tool": "bloaty",
   "generated_from": "<git describe>",
   "sections": { ".text": 0, ".rodata": 0, ".data": 0, ".bss": 0 },

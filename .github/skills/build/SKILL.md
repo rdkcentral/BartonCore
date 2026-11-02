@@ -98,7 +98,7 @@ Pass these with `-D` to cmake or appended to `./build.sh`:
 
 ### CMake Presets
 
-`CMakePresets.json` provides `dev-linux` (alias `dev`, same settings as `./build.sh`) plus `coverage`, `asan`, `ubsan`, `tsan`, and `tidy`, each building into `build/<preset>`:
+`CMakePresets.json` provides `dev-linux` (alias `dev`, same settings as `./build.sh`) plus `coverage`, `asan`, `ubsan`, `tsan`, `tidy`, and `size`, each building into `build/<preset>`:
 
 ```bash
 cmake --preset dev && cmake --build build/dev
