@@ -224,6 +224,7 @@ namespace
 
 SpecBasedMatterDeviceDriverMetrics SpecBasedMatterDeviceDriver::metrics;
 std::atomic<int64_t> SpecBasedMatterDeviceDriver::activeDriverCount {0};
+std::mutex SpecBasedMatterDeviceDriver::activationMutex;
 
 void SpecBasedMatterDeviceDriver::SyncActiveDriverCount(int64_t activeCount)
 {
@@ -455,6 +456,11 @@ bool SpecBasedMatterDeviceDriver::EnsureActivated(const std::string &deviceId)
     std::string specText;
     const bool specRead = SbmdDriver::ReadSpecFile(driver->GetSpecPath(), specText);
 
+    // Serialize activations from here through the commit, so the commit below never holds the stack
+    // lock while waiting for another driver's spec to evaluate. The read above stays outside, so a
+    // slow read does not hold up other drivers' activations.
+    std::lock_guard<std::mutex> activationLock(activationMutex);
+
     // Load and validate the re-read spec without holding the Matter stack lock: JS evaluation is the
     // slow part, and it does not touch the driver's state. Report dispatch for SBMD drivers still
     // waits on the JS mutex while the spec evaluates (bounded by the script deadline).
@@ -538,6 +544,9 @@ void SpecBasedMatterDeviceDriver::TeardownIfIdle()
     {
         return;
     }
+
+    // Wait for any activation in progress before taking the stack lock, not while holding it.
+    std::lock_guard<std::mutex> activationLock(activationMutex);
 
     Matter::RunWithStackLock([this] {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());

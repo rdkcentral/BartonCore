@@ -38,6 +38,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -158,19 +159,30 @@ namespace barton
         // Process-wide count of currently-activated SBMD drivers, for observability.
         static std::atomic<int64_t> activeDriverCount;
 
+        // Serializes SBMD driver activations (spec evaluation through commit) and failed-bind
+        // teardown, process-wide. A commit or teardown takes the CHIP stack lock and then the JS
+        // mutex; without this it could hold the stack lock, stalling the Matter event loop, while it
+        // waits for another driver's spec to finish evaluating. Taken only by binding threads, with
+        // no other lock held, before the stack lock and the JS mutex. Never take it on the Matter
+        // event loop thread or while holding either of those locks.
+        static std::mutex activationMutex;
+
         // Number of binds currently executing in AddDevice. A bind activates the driver before it
         // inserts into the device map, so OnLastDeviceRemoved must not deactivate while this is
         // non-zero or it could shed state out from under an in-flight bind.
         std::atomic<int> bindsInProgress {0};
 
         /**
-         * Activate the driver if it is not already active. Reads the spec file without holding any lock,
-         * evaluates and validates it (SbmdDriver::LoadForActivation()) under the JS mutex alone, then
-         * commits it under Matter::RunWithStackLock(), so report dispatch (which runs with the
-         * CHIP stack lock held and reads the registration and dispatch tables without the JS mutex) is
-         * excluded only for the swap itself; its handler calls still wait on the JS mutex while the spec
-         * evaluates. Records the activation metrics. The caller must not hold the JS mutex. Returns true if
-         * the driver is active on return.
+         * Activate the driver if it is not already active. Reads the spec file without holding any
+         * lock, then, holding activationMutex, evaluates and validates it
+         * (SbmdDriver::LoadForActivation()) under the JS mutex alone and commits it under
+         * Matter::RunWithStackLock(). Report dispatch (which runs with the CHIP stack lock held and
+         * reads the registration and dispatch tables without the JS mutex) is therefore excluded only
+         * for the swap itself, though its handler calls wait on the JS mutex while the spec evaluates.
+         * Because activations are serialized, the commit never holds the stack lock while another
+         * driver's spec evaluates. Records the activation metrics. The caller must not hold the JS
+         * mutex or the stack lock, and must not be the Matter event loop thread. Returns true if the
+         * driver is active on return.
          */
         bool EnsureActivated(const std::string &deviceId);
 
@@ -188,7 +200,8 @@ namespace barton
         /**
          * Tear the driver down if it is idle, from a bind's exit path. Deactivation clears the
          * dispatch tables that report dispatch reads, so this runs DeactivateIfIdle under
-         * Matter::RunWithStackLock().
+         * Matter::RunWithStackLock(), after taking activationMutex so it never holds the stack lock
+         * while another driver's spec evaluates.
          */
         void TeardownIfIdle();
 
