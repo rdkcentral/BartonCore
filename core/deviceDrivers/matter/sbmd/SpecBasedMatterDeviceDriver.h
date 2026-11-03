@@ -173,7 +173,7 @@ namespace barton
         std::atomic<int> bindsInProgress {0};
 
         /**
-         * Activate the driver if it is not already active. Reads the spec file without holding any
+         * Activate the driver if it is not already active. Reads the spec file without taking any
          * lock, then, holding activationMutex, evaluates and validates it
          * (SbmdDriver::LoadForActivation()) under the JS mutex alone and commits it under
          * Matter::RunWithStackLock(). Report dispatch (which runs with the CHIP stack lock held and
@@ -181,8 +181,9 @@ namespace barton
          * for the swap itself, though its handler calls wait on the JS mutex while the spec evaluates.
          * Because activations are serialized, the commit never holds the stack lock while another
          * driver's spec evaluates. Records the activation metrics. The caller must not hold the JS
-         * mutex or the stack lock, and must not be the Matter event loop thread. Returns true if the
-         * driver is active on return.
+         * mutex, the stack lock or devicesMutex, and must not be the Matter event loop thread (during
+         * commissioning it holds that commissioning's CommissioningOrchestrator mutex). Returns true
+         * if the driver is active on return.
          */
         bool EnsureActivated(const std::string &deviceId);
 
