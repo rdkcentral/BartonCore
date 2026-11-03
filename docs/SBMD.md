@@ -91,10 +91,10 @@ between Barton resource operations and Matter attribute/command interactions.
 > hang. A relative directory is resolved once, at startup, so later
 > working-directory changes in the host process do not affect it. Editing a spec
 > on disk without restarting is not a supported live-reload: if an edit changes
-> a claim-identity field (device class, device types, vendor/product IDs) or a
-> version field (device-class version, endpoint profile version, or the set of
-> endpoint profiles), subsequent binds to that driver are **rejected** until the
-> process restarts. Other edits (handler code, aliases, resources) are not
+> a claim-identity field (name, device class, device types, vendor/product IDs)
+> or a version field (device-class version, endpoint profile version, or the set
+> of endpoint profiles), subsequent binds to that driver are **rejected** until
+> the process restarts. Other edits (handler code, aliases, resources) are not
 > rejected: they take effect the next time that driver activates, while a driver
 > that is already active keeps the version it loaded. Restart after changing
 > specs rather than relying on this. Numeric claim/version fields are also

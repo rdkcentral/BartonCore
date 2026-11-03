@@ -51,7 +51,7 @@
 
 ## 6. Verification
 
-- [x] 6.1 Run the SBMD unit tests (`SbmdDriverTest`, `SbmdFactoryTest`, `SbmdDispatchTest`, `SbmdHandlerInvokerTest`, `sbmdPrerequisitesTest`, `SbmdObservabilityTest`) and fix regressions. (unit)
-- [x] 6.2 Run the SBMD integration tests to confirm claiming, endpoint resolution, resource binding, dispatch, and deferred operations are unaffected end-to-end. (integration, Docker) — full suite: 101 passed.
+- [x] 6.1 Run the SBMD unit tests (`SbmdDriverTest`, `SbmdFactoryTest`, `SbmdDispatchTest`, `SbmdHandlerInvokerTest`, `sbmdPrerequisitesTest`, `SbmdObservabilityTest`, `SbmdLifecycleTest`) and fix regressions. (unit)
+- [x] 6.2 Run the SBMD integration tests to confirm claiming, endpoint resolution, resource binding, dispatch, and deferred operations are unaffected end-to-end. (integration, Docker) — full suite: 104 passed.
 - [x] 6.3 Manually verify (or via test instrumentation) that at steady state with no matching devices, unused drivers hold only the claim metadata — no source text, registration, JSValues, or dispatch tables. (covered by `SbmdDriverTest` reduce/claim-metadata assertions)
 - [x] 6.4 Run `clang-format` on all changed C/C++ files and confirm the pre-commit hook passes.

@@ -71,7 +71,7 @@ namespace barton
     {
     public:
         /**
-         * Why Activate() failed.
+         * Why activation (Activate() or LoadForActivation()) failed.
          */
         enum class ActivationFailure
         {
@@ -118,7 +118,7 @@ namespace barton
          *
          * @param registration The extracted registration (takes ownership)
          * @param source The .sbmd.js file contents. Held only until ReduceToClaimMetadata() or
-         *               Deactivate() releases it; after that, Activate() re-reads the spec from
+         *               Deactivate() releases it; after that, activation re-reads the spec from
          *               the registration's filePath.
          */
         SbmdDriver(std::unique_ptr<SbmdRegistration> registration, std::string source);
