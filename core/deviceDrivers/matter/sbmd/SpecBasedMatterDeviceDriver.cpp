@@ -463,7 +463,8 @@ bool SpecBasedMatterDeviceDriver::EnsureActivated(const std::string &deviceId)
 
     // Load and validate the re-read spec without holding the Matter stack lock: JS evaluation is the
     // slow part, and it does not touch the driver's state. Report dispatch for SBMD drivers still
-    // waits on the JS mutex while the spec evaluates (bounded by the script deadline).
+    // waits on the JS mutex while the spec evaluates (bounded by the script deadline, except inside
+    // engine operations it cannot interrupt).
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
 
@@ -486,7 +487,8 @@ bool SpecBasedMatterDeviceDriver::EnsureActivated(const std::string &deviceId)
     }
 
     // Commit while excluding report dispatch, which reads the registration and dispatch tables that
-    // the commit replaces. A concurrent bind may have committed in between; then this one is unused.
+    // the commit replaces. activationMutex keeps any other bind from activating this driver since
+    // the check above; the IsActivated() check in the commit is a guard.
     bool activated = false;
 
     Matter::RunWithStackLock([this, &freshReg, &activated, loadCtx, activateStart] {

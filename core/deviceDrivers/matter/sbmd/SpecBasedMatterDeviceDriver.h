@@ -162,9 +162,9 @@ namespace barton
         // Serializes SBMD driver activations (spec evaluation through commit) and failed-bind
         // teardown, process-wide. A commit or teardown takes the CHIP stack lock and then the JS
         // mutex; without this it could hold the stack lock, stalling the Matter event loop, while it
-        // waits for another driver's spec to finish evaluating. Taken only by binding threads, with
-        // no other lock held, before the stack lock and the JS mutex. Never take it on the Matter
-        // event loop thread or while holding either of those locks.
+        // waits for another driver's spec to finish evaluating. Taken only on binding threads (from
+        // AddDevice()), before the stack lock and the JS mutex. Never take it on the Matter event
+        // loop thread or while holding the stack lock, the JS mutex or devicesMutex.
         static std::mutex activationMutex;
 
         // Number of binds currently executing in AddDevice. A bind activates the driver before it
