@@ -19,7 +19,7 @@ All checks run inside the builder container. Every tool comes from the `quality_
 | `dev-linux` | Loads `config/cmake/platforms/dev/linux.cmake` through `CMAKE_PROJECT_barton-core_INCLUDE`; same cache values as `./build.sh` |
 | `dev` | Alias of `dev-linux` |
 | `coverage` | `dev` with `BCORE_TEST_COVERAGE=ON`, ASAN off |
-| `asan` | `dev` with ASAN (already the dev default) |
+| `asan` | `dev` with ASAN (already the dev default; `sanitizers.sh asan` reuses `build/dev`) |
 | `ubsan` | `dev` with UBSan, ASAN off |
 | `tsan` | `dev` with TSan, ASAN off (TSan and ASAN cannot be combined) |
 | `tidy` | `dev` with clang-tidy run during compilation (IDE and ad hoc use), ASAN off |
@@ -45,14 +45,14 @@ Each check writes its native report(s) and a `summary.json` to `build/reports/<c
 | Build warnings | `build-warnings.sh` | clang-18, `-Wall -Wextra` on first-party targets | `build-warnings/warnings.txt` | `config/quality/build-warnings-baseline.txt` |
 | clang-tidy | `clang-tidy.sh` | clang-tidy-18 (`run-clang-tidy`), `.clang-tidy` | `clang-tidy/clang-tidy.txt` | `config/quality/clang-tidy-baseline.txt` |
 | cppcheck | `cppcheck.sh` | cppcheck via the `cppcheck` CMake target; by default only sources changed since the merge base with `QUALITY_BASE_REF` (default `origin/main`). `--full` analyzes the whole tree (CPU-hours) | `cppcheck/cppcheck.xml`, `cppcheck/analyzed-files.txt` | `config/quality/cppcheck-baseline.txt`, `config/quality/cppcheck-suppressions.txt` |
-| Complexity | `complexity.sh` | lizard (CCN 15, length 1000, 10 arguments) | `complexity/lizard.xml` | `config/quality/complexity-baseline.txt` |
+| Complexity | `complexity.sh` | lizard (CCN 15, length 1000, 10 arguments) | `complexity/lizard.csv` | `config/quality/complexity-baseline.txt` |
 | Duplication | `duplication.sh` | jscpd, `.jscpd.json` | `duplication/jscpd-report.json` | `config/quality/duplication-baseline.json` |
 | Python lint | `python-lint.sh` | ruff and mypy, `pyproject.toml` | `python-lint/ruff.json`, `python-lint/mypy.txt` | `config/quality/python-lint-baseline.txt` |
 | Dependency health | `dependency-health.sh` | pip-audit (needs network), syft | `dependency-health/pip-audit.json`, `dependency-health/sbom.spdx.json` | `config/quality/dependency-health-baseline.txt` |
 | Binary size | `binary-size.sh` | bloaty | `binary-size/bloaty.csv` | `.size-snapshot.json` (more than 10% `vm_total` growth is a finding) |
 | ABI | `abi.sh` | abidw and abidiff (libabigail) | `abi/abidiff.txt` | `.api/libBartonCore.abi` (see [.api/README.md](../.api/README.md)) |
 | Unit coverage | `coverage.sh` | lcov and gcovr (`coverage` preset) | `coverage/lcov.info`, `coverage/cobertura.xml` | None; reviewers compare against the merge-base |
-| Sanitizers | `sanitizers.sh <asan\|ubsan\|tsan>` | `<kind>` preset and ctest | `sanitizers-<kind>/ctest.xml`, `sanitizers-<kind>/findings.txt` | `config/quality/sanitizers-<kind>-baseline.txt` (report kind + first first-party frame, and failing tests); without a baseline any report fails |
+| Sanitizers | `sanitizers.sh <asan\|ubsan\|tsan>` | `<kind>` preset (`dev` for asan) and ctest | `sanitizers-<kind>/ctest.xml`, `sanitizers-<kind>/findings.txt` | `config/quality/sanitizers-<kind>-baseline.txt` (report kind + first first-party frame, and failing tests); without a baseline any report fails |
 | Integration coverage | `pytest-cov.sh` | pytest-cov via `testing/py_test.sh`; needs BartonCore installed in the same container first (`sudo cmake --build build --target install`, as in `scripts/ci/run_integration_tests.sh`), otherwise reports blocked | `pytest-cov/coverage.xml` | None |
 
 Integration tests (`testing/py_test.sh`) always write JUnit XML to `build/reports/pytest/junit.xml` unless `--junitxml` is passed. Use `--sanitizer=<asan|ubsan|tsan|none>` to match the build being tested (default `asan`).
@@ -69,6 +69,11 @@ Findings are compared against committed baselines so only new findings fail a ch
 ```
 
 Baseline updates must be called out in the pull request description with a reason.
+
+### Known limits
+
+- **Sanitizers:** each report becomes one key (`<tool>: <kind>: <first first-party frame>`) and keys are compared as a set, not by count, because the number of reports varies between runs. A second leak or race whose first first-party frame matches a baselined key is not reported as new, and only the first first-party frame of a report is keyed (for a TSan race, the second access stack is ignored). Failing tests are also keyed by name (`test-failed: <name>`), so a new race inside a test that already fails under the baseline is not reported separately. Read `sanitizers-<kind>/ctest.log` when touching code near baselined keys.
+- **Dependency health:** `pip-audit` audits the Python environment of the builder image (the integration-test and tooling packages), not BartonCore's C/C++ dependencies (glib, curl, openssl, mbedtls, Matter SDK, BartonCommon). The syft SBOM is generated for reference and is not scanned. Results come from the live PyPI/OSV advisory data, so the finding count can change with no code change; treat a new finding as a prompt to check whether an existing package gained an advisory.
 
 ## clang-tidy configuration
 

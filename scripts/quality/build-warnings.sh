@@ -32,9 +32,7 @@ Performs a clean rebuild of build/dev and collects compiler warnings." "$@"
 
 LOG="${REPORT_DIR}/build.log"
 : > "$LOG"
-if [[ ! -f "${BUILD_ROOT}/dev/CMakeCache.txt" ]]; then
-    cmake --preset dev >> "$LOG" 2>&1 || quality_finish error "dev preset configure failed (see build.log)"
-fi
+cmake --preset dev >> "$LOG" 2>&1 || quality_finish error "dev preset configure failed (see build.log)"
 if ! cmake --build "${BUILD_ROOT}/dev" --clean-first --parallel "$(nproc)" >> "$LOG" 2>&1; then
     grep -E ': error: ' "$LOG" > "${REPORT_DIR}/errors.txt" || true
     quality_finish findings "build failed: $(wc -l < "${REPORT_DIR}/errors.txt") errors (errors.txt, build.log)"

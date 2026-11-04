@@ -107,15 +107,14 @@ quality_require_file() {
 }
 
 # quality_preset_build <preset> [cmake --build args...]
-# Configures build/<preset> via CMakePresets.json if needed, then builds it.
-# Sets PRESET_BUILD_DIR. Returns non-zero on configure or build failure.
+# Configures build/<preset> from CMakePresets.json (always, so preset edits are
+# applied to existing caches), then builds it. Sets PRESET_BUILD_DIR. Returns
+# non-zero on configure or build failure.
 quality_preset_build() {
     local preset="$1"
     shift
     PRESET_BUILD_DIR="${BUILD_ROOT}/${preset}"
-    if [[ ! -f "${PRESET_BUILD_DIR}/CMakeCache.txt" ]]; then
-        cmake --preset "$preset" || return 1
-    fi
+    cmake --preset "$preset" || return 1
     cmake --build "${PRESET_BUILD_DIR}" --parallel "$(nproc)" "$@" || return 1
 }
 

@@ -27,7 +27,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 KIND="${1:-}"
 CHECK_USAGE="Usage: $0 <asan|ubsan|tsan> [--update-baseline]
-Builds build/<kind> from the matching CMake preset and runs ctest."
+Builds build/<kind> from the matching CMake preset (asan reuses build/dev) and runs ctest."
 case "$KIND" in
     asan|ubsan|tsan) ;;
     -h|--help) quality_init sanitizers "$CHECK_USAGE" --help ;;
@@ -36,7 +36,11 @@ esac
 quality_init "sanitizers-${KIND}" "$CHECK_USAGE" "$@"
 QUALITY_SCRIPT_ARGS="$KIND"
 
-quality_preset_build "$KIND" > "${REPORT_DIR}/build.log" 2>&1 \
+# The dev preset already builds with ASAN, so reuse build/dev rather than a
+# second identical tree.
+PRESET="$KIND"
+[[ "$KIND" == "asan" ]] && PRESET=dev
+quality_preset_build "$PRESET" > "${REPORT_DIR}/build.log" 2>&1 \
     || quality_finish error "${KIND} preset build failed (see build.log)"
 
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-print_stacktrace=1:halt_on_error=1}"

@@ -33,17 +33,20 @@ quality_require_tool lizard
 SRC=(api core libs reference)
 EXCLUDES=(-x "*/test/*" -x "*/tests/*" -x "*/zap-generated/*")
 
-lizard -C 15 -L 1000 -a 10 "${EXCLUDES[@]}" --xml "${SRC[@]}" > "${REPORT_DIR}/lizard.xml" \
+# One lizard pass; thresholds applied here match lizard -w (-C 15 -L 1000 -a 10).
+lizard "${EXCLUDES[@]}" --csv "${SRC[@]}" > "${REPORT_DIR}/lizard.csv" \
     || quality_finish error "lizard failed"
-set +e
-lizard -C 15 -L 1000 -a 10 "${EXCLUDES[@]}" -w "${SRC[@]}" > "${REPORT_DIR}/lizard-warnings.txt"
-rc=$?
-set -e
-[[ $rc -gt 1 ]] && quality_finish error "lizard -w exited $rc"
+# CSV columns: nloc, ccn, token, param, length, location, file, function, long_name, start, end
+python3 - "${REPORT_DIR}/lizard.csv" <<'PY' | LC_ALL=C sort > "${REPORT_DIR}/findings.txt"
+import csv
+import sys
 
-# Warning format: <file>:<line>: warning: <function> has <n> NLOC, <ccn> CCN, ...
-sed -nE 's|^([^:]+):[0-9]+: warning: ([^ ]+) has .*|\1: \2|p' "${REPORT_DIR}/lizard-warnings.txt" \
-    | LC_ALL=C sort > "${REPORT_DIR}/findings.txt"
+with open(sys.argv[1], newline="") as f:
+    for row in csv.reader(f):
+        ccn, params, length = int(row[1]), int(row[3]), int(row[4])
+        if ccn > 15 or length > 1000 or params > 10:
+            print(f"{row[6]}: {row[7]}")
+PY
 
 BASELINE="${BASELINE_DIR}/complexity-baseline.txt"
 if quality_update_requested "$@"; then

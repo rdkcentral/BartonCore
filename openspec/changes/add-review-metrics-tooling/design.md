@@ -475,7 +475,7 @@ EOF
 | `coverage.sh`         | lcov + gcovr (`coverage` preset)  | `build/reports/coverage/{lcov.info,cobertura.xml}` |
 | `pytest-cov.sh`       | pytest-cov via `testing/py_test.sh` | `build/reports/pytest-cov/coverage.xml`      |
 | `sanitizers.sh <asan\|ubsan\|tsan>` | preset build + ctest; reports reduced to keys by `sanitizer_reports.py`, compared with `config/quality/sanitizers-<kind>-baseline.txt` | `build/reports/sanitizers-<kind>/ctest.xml` |
-| `complexity.sh`       | lizard (CCN ≤ 15)                 | `build/reports/complexity/lizard.xml`          |
+| `complexity.sh`       | lizard (CCN ≤ 15)                 | `build/reports/complexity/lizard.csv`          |
 | `duplication.sh`      | jscpd                             | `build/reports/jscpd/jscpd-report.json`        |
 | `abi.sh`              | abidw + abidiff                   | `build/reports/abi/abidiff.txt`                |
 | `binary-size.sh`      | bloaty vs `.size-snapshot.json`   | `build/reports/binary-size/bloaty.csv`         |
