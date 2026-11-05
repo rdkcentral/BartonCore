@@ -490,6 +490,16 @@ static void test_b_core_property_provider_get_property_as_int32(void **state)
     valueTest = b_core_property_provider_get_property_as_int32(
         B_CORE_PROPERTY_PROVIDER(provider), name, defaultValue);
     assert_int_equal(valueTest, defaultValue);
+
+    value = "1garbage";
+    expect_function_call(__wrap_deviceServiceGetSystemProperty);
+    expect_string(__wrap_deviceServiceGetSystemProperty, name, name);
+    will_return(__wrap_deviceServiceGetSystemProperty, value);
+    will_return(__wrap_deviceServiceGetSystemProperty, true);
+
+    valueTest = b_core_property_provider_get_property_as_int32(
+        B_CORE_PROPERTY_PROVIDER(provider), name, defaultValue);
+    assert_int_equal(valueTest, defaultValue);
 }
 
 static void test_b_core_property_provider_get_property_as_int64(void **state)
@@ -752,6 +762,16 @@ static void test_b_core_property_provider_get_property_as_uint32(void **state)
     assert_int_equal(valueTest, defaultValue);
 
     value = "bar";
+    expect_function_call(__wrap_deviceServiceGetSystemProperty);
+    expect_string(__wrap_deviceServiceGetSystemProperty, name, name);
+    will_return(__wrap_deviceServiceGetSystemProperty, value);
+    will_return(__wrap_deviceServiceGetSystemProperty, true);
+
+    valueTest = b_core_property_provider_get_property_as_uint32(
+        B_CORE_PROPERTY_PROVIDER(provider), name, defaultValue);
+    assert_int_equal(valueTest, defaultValue);
+
+    value = "1garbage";
     expect_function_call(__wrap_deviceServiceGetSystemProperty);
     expect_string(__wrap_deviceServiceGetSystemProperty, name, name);
     will_return(__wrap_deviceServiceGetSystemProperty, value);

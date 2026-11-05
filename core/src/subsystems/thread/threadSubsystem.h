@@ -34,7 +34,20 @@ extern "C" {
 
 #include <stdbool.h>
 
-#define THREAD_SUBSYSTEM_NAME "thread"
+#define THREAD_SUBSYSTEM_NAME         "thread"
+#define THREAD_INTERFACE_NAME_DEFAULT "wpan0"
+
+/**
+ * Get the name of the Thread network interface, which also selects the
+ * OpenThread Border Router instance to talk to.
+ *
+ * Read once from the barton.thread.interfaceName property; defaults to "wpan0".
+ * Some development configurations run several border routers on one host and
+ * set the property to choose between them.
+ *
+ * @return the interface name; never NULL
+ */
+const char *threadSubsystemGetInterfaceName(void);
 
 /**
  * Retrieve current thread network information.
