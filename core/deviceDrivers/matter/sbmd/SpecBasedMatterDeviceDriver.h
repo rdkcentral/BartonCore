@@ -33,10 +33,12 @@
 #include "metrics/SpecBasedMatterDeviceDriverMetrics.h"
 #include "mquickjs/SbmdHandlerInvoker.h"
 #include "mquickjs/SbmdResultExecutor.h"
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -100,8 +102,18 @@ namespace barton
 
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
+        /**
+         * Publish the true count of currently-activated SBMD drivers to the active-driver gauge,
+         * replacing the live count. Only SbmdFactory calls this, once after startup registration and
+         * before any bind can run, so the gauge reflects actual driver state (0 when all drivers
+         * are loaded inactive), not just runtime activation deltas.
+         */
+        static void SyncActiveDriverCount(int64_t activeCount);
+
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
+
+        void OnLastDeviceRemoved() override;
 
         void DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,
                                const std::string &deviceId,
@@ -143,6 +155,57 @@ namespace barton
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
         static SpecBasedMatterDeviceDriverMetrics metrics;
+
+        // Process-wide count of currently-activated SBMD drivers, for observability.
+        static std::atomic<int64_t> activeDriverCount;
+
+        // Serializes SBMD driver activations (spec evaluation through commit) and failed-bind
+        // teardown, process-wide. A commit or teardown takes the CHIP stack lock and then the JS
+        // mutex; without this it could hold the stack lock, stalling the Matter event loop, while it
+        // waits for another driver's spec to finish evaluating. Taken only on binding threads (from
+        // AddDevice()), before the stack lock and the JS mutex. Never take it on the Matter event
+        // loop thread or while holding the stack lock, the JS mutex or devicesMutex.
+        static std::mutex activationMutex;
+
+        // Number of binds currently executing in AddDevice. A bind activates the driver before it
+        // inserts into the device map, so OnLastDeviceRemoved must not deactivate while this is
+        // non-zero or it could shed state out from under an in-flight bind.
+        std::atomic<int> bindsInProgress {0};
+
+        /**
+         * Activate the driver if it is not already active. Reads the spec file without taking any
+         * lock, then, holding activationMutex, evaluates and validates it
+         * (SbmdDriver::LoadForActivation()) under the JS mutex alone and commits it under
+         * Matter::RunWithStackLock(). Report dispatch (which runs with the CHIP stack lock held and
+         * reads the registration and dispatch tables without the JS mutex) is therefore excluded only
+         * for the swap itself, though its handler calls wait on the JS mutex while the spec evaluates.
+         * Because activations are serialized, the commit never holds the stack lock while another
+         * driver's spec evaluates. Records the activation metrics. The caller must not hold the JS
+         * mutex, the stack lock or devicesMutex, and must not be the Matter event loop thread (during
+         * commissioning it holds that commissioning's CommissioningOrchestrator mutex). Returns true
+         * if the driver is active on return.
+         */
+        bool EnsureActivated(const std::string &deviceId);
+
+        /**
+         * Deactivate the driver and shed its runtime state iff it is idle: still activated, no bind
+         * in flight, and no device still bound (rechecked under devicesMutex). This is the single
+         * serialized teardown point shared by the last-device-removed hook and a failed or
+         * last-exiting bind, so a stale empty-map observation, a rolled-back bind, or a device
+         * removed mid-bind can neither strand the driver active nor shed state a concurrent bind
+         * still relies on. The caller must hold the JS mutex and be serialized with report dispatch
+         * (on the Matter thread, or inside Matter::RunWithStackLock()).
+         */
+        void DeactivateIfIdle();
+
+        /**
+         * Tear the driver down if it is idle, from a bind's exit path. Deactivation clears the
+         * dispatch tables that report dispatch reads, so this runs DeactivateIfIdle under
+         * Matter::RunWithStackLock(), after taking activationMutex so it never holds the stack lock
+         * while another driver's spec evaluates.
+         */
+        void TeardownIfIdle();
+
         // Driver-based internal methods
         bool DoRegisterDriverResources(icDevice *device);
         void SeedInitialResourceValues(const std::string &deviceId);
@@ -252,6 +315,12 @@ namespace barton
          * Complete a pending operation — resolve the parking promise and clean up.
          */
         void CompletePendingOperation(uint64_t pendingId, bool success);
+
+        /**
+         * Complete every outstanding deferred operation as a failure, releasing their handler roots.
+         * Matter-thread-confined, like pendingOperations itself.
+         */
+        void CancelAllPendingOperations();
 
         /**
          * Release the held JS handler references for a pending operation.

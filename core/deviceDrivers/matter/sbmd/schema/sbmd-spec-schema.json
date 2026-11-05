@@ -9,8 +9,8 @@
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "const": "5.0",
-      "description": "Schema version. Must be '5.0'; see schema/CHANGELOG.md for the version history."
+      "const": "5.1",
+      "description": "Schema version. Must match the schema's current version (see the const above and schema/CHANGELOG.md for the version history)."
     },
     "driverVersion": {
       "oneOf": [
@@ -132,8 +132,10 @@
           "description": "Barton device class identifier."
         },
         "deviceClassVersion": {
-          "type": "number",
-          "description": "Version of the device class schema."
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Version of the device class schema. Must fit uint8 (0-255)."
         }
       }
     },
@@ -146,21 +148,25 @@
       "properties": {
         "deviceTypes": {
           "type": "array",
-          "items": { "type": "number" },
+          "items": { "type": "integer", "minimum": 0, "maximum": 65535 },
           "minItems": 1,
-          "description": "Matter device type IDs this driver handles."
+          "description": "Matter device type IDs this driver handles. Each must fit uint16 (0-65535)."
         },
         "revision": {
           "type": "number",
           "description": "Minimum Matter device type revision required."
         },
         "vendorId": {
-          "type": "number",
-          "description": "Matter vendor ID for vendor-specific matching."
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "Matter vendor ID for vendor-specific matching. Must fit uint16 (0-65535)."
         },
         "productId": {
-          "type": "number",
-          "description": "Matter product ID for vendor-specific matching. Requires vendorId."
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "Matter product ID for vendor-specific matching. Requires vendorId. Must fit uint16 (0-65535)."
         },
         "featureClusters": {
           "type": "array",
@@ -295,8 +301,10 @@
           "description": "Barton resource profile name."
         },
         "profileVersion": {
-          "type": "number",
-          "description": "Profile version."
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Profile version. Must fit uint8 (0-255)."
         },
         "resources": {
           "type": "object",

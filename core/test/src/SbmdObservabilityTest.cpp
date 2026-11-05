@@ -298,7 +298,7 @@ namespace
             driverVersion: 1,
             name: "test-driver",
             barton: { deviceClass: "light", deviceClassVersion: 1 },
-            matter: { deviceTypes: [0xFFF10001] },
+            matter: { deviceTypes: [0x0100] },
             aliases: {},
             endpoints: {
                 "1": {
