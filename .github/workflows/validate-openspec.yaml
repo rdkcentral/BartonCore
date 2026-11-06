@@ -1,0 +1,122 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2026 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+# The goal of this workflow is to enforce that every OpenSpec spec conforms to
+# the OpenSpec v4 structure by running `openspec validate --specs --strict`
+# inside the builder image (which provides the pinned openspec CLI), and that
+# pull requests do not leave OpenSpec changes unarchived.
+
+name: Validate OpenSpec Specs
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - 'openspec/**'
+            - '.github/workflows/validate-openspec.yaml'
+            - 'docker/Dockerfile'
+    pull_request:
+        # labeled/unlabeled re-evaluate the openspec-proposal override.
+        types: [opened, synchronize, reopened, labeled, unlabeled]
+        paths:
+            - 'openspec/**'
+            - '.github/workflows/validate-openspec.yaml'
+            - 'docker/Dockerfile'
+    workflow_dispatch:
+
+# Minimal token scope: checkout (contents) and pulling the builder image from
+# GHCR (packages). See docker/login-action below.
+permissions:
+    contents: read
+    packages: read
+
+jobs:
+    get-action-constants:
+        name: Get Action Constants
+        uses: ./.github/workflows/action-constants.yaml
+        secrets: inherit
+
+    validate_openspec_specs:
+        name: Validate OpenSpec Specs
+        runs-on: ubuntu-latest
+        needs: get-action-constants
+
+        steps:
+            -
+                name: Checkout code
+                uses: actions/checkout@v4
+                with:
+                    repository: ${{ github.repository }}
+                    fetch-depth: 0
+                    fetch-tags: true
+            -
+                name: Log in to GitHub Container Registry
+                uses: docker/login-action@v2
+                with:
+                    registry: ghcr.io
+                    username: ${{ github.actor }}
+                    password: ${{ secrets.GITHUB_TOKEN }}
+            -
+                name: Try to pull barton_builder Docker image
+                continue-on-error: true
+                run: |
+                    if docker pull ${{ needs.get-action-constants.outputs.image_repo }}:${{ needs.get-action-constants.outputs.image_tag }}; then
+                        echo "Image pulled successfully"
+                    else
+                        echo "Could not pull image, will build locally via dockerw"
+                    fi
+            -
+                name: Validate specs (strict)
+                run: ./dockerw -n openspec validate --specs --strict --no-interactive
+
+    check_unarchived_openspec_changes:
+        name: Check for Unarchived OpenSpec Changes
+        runs-on: ubuntu-latest
+        # Proposal-only PRs intentionally add an unarchived change; the
+        # openspec-proposal label opts them out of this check.
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'openspec-proposal')
+
+        steps:
+            -
+                name: Checkout code
+                uses: actions/checkout@v4
+                with:
+                    repository: ${{ github.repository }}
+                    fetch-depth: 0
+            -
+                name: Fail if the PR adds or modifies an unarchived change
+                env:
+                    BASE_SHA: ${{ github.event.pull_request.base.sha }}
+                    HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                run: |
+                    unarchived=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA" -- \
+                        'openspec/changes/' ':(exclude)openspec/changes/archive/')
+                    if [ -n "$unarchived" ]; then
+                        echo "::error::This PR adds or modifies OpenSpec changes that are not archived."
+                        echo "Archive them with 'openspec archive <change>' before merging, or apply the"
+                        echo "'openspec-proposal' label if this is a proposal-only PR."
+                        echo "$unarchived"
+                        exit 1
+                    fi
+                    echo "No unarchived OpenSpec changes in this PR."
