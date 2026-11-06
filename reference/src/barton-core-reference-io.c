@@ -511,3 +511,20 @@ void emitError(const char *format, ...)
     }
     va_end(args);
 }
+
+void emitLookupFailure(const GError *err, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    g_autofree gchar *what = g_strdup_vprintf(format, args);
+    va_end(args);
+
+    if (err != NULL)
+    {
+        emitError("%s unavailable: %s\n", what, err->message);
+    }
+    else
+    {
+        emitError("%s not found\n", what);
+    }
+}

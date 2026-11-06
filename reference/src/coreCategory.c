@@ -356,7 +356,15 @@ static bool printDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
 
-    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0]);
+    g_autoptr(GError) err = NULL;
+    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0], &err);
+
+    if (device == NULL)
+    {
+        emitLookupFailure(err, "Device '%s'", argv[0]);
+
+        return false;
+    }
 
     printDeviceEntry(device);
 
@@ -511,7 +519,7 @@ static bool readMetadataFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
 
-    g_autoptr(GError) err;
+    g_autoptr(GError) err = NULL;
     g_autofree gchar *value = b_core_client_read_metadata(client, argv[0], &err);
 
     if (err == NULL)
@@ -530,10 +538,18 @@ static bool writeMetadataFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1 || argc == 2, false);
 
-    bool result = b_core_client_write_metadata(client, argv[0], argc == 2 ? argv[1] : NULL);
+    g_autoptr(GError) err = NULL;
+    bool result = b_core_client_write_metadata(client, argv[0], argc == 2 ? argv[1] : NULL, &err);
     if (!result)
     {
-        emitError("Failed to write metadata\n");
+        if (err != NULL)
+        {
+            emitError("Failed to write metadata: %s\n", err->message);
+        }
+        else
+        {
+            emitError("Failed to write metadata\n");
+        }
     }
 
     return result;
@@ -719,7 +735,15 @@ static bool dumpDeviceFunc(BCoreClient *client, int argc, char **argv)
     (void) argc; // unused
     bool rc = false;
 
-    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0]);
+    g_autoptr(GError) err = NULL;
+    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0], &err);
+
+    if (device == NULL)
+    {
+        emitLookupFailure(err, "Device '%s'", argv[0]);
+
+        return false;
+    }
 
     g_autofree gchar *deviceUri = NULL;
     g_autofree gchar *deviceId = NULL;
@@ -819,7 +843,16 @@ static bool removeEndpointFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
     bool result = true;
-    g_autoptr(BCoreEndpoint) endpoint = b_core_client_get_endpoint_by_uri(client, argv[0]);
+    g_autoptr(GError) err = NULL;
+    g_autoptr(BCoreEndpoint) endpoint = b_core_client_get_endpoint_by_uri(client, argv[0], &err);
+
+    if (err != NULL)
+    {
+        emitLookupFailure(err, "Endpoint '%s'", argv[0]);
+
+        return false;
+    }
+
     if (endpoint)
     {
         g_autofree gchar *deviceUuid = NULL;

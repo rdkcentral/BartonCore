@@ -108,11 +108,13 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
          * NOTE: This lookup assumes Matter node IDs are used as device IDs.
          * If the internal mapping between Matter node IDs and Barton device IDs
          * changes, this lookup method may no longer be reliable. */
-        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdStr);
+        g_autoptr(GError) err = NULL;
+        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdStr, &err);
 
         if (device == NULL)
         {
-            emitError("No device with node id '%s' found\n", argv[0]);
+            emitLookupFailure(err, "Device with node id '%s'", argv[0]);
+
             return false;
         }
     }
