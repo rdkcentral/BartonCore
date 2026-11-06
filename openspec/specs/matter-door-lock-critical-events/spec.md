@@ -43,7 +43,7 @@ The door lock SBMD driver SHALL subscribe to and handle `LockOperation` events (
 - LockOperationType 0x04 (Unlatch) → `locked = "false"`, clear `tampered`, `invalidCodeEntryLimit`, and if OperationSource == 0x01 (Manual) also clear `jammed`
 - Other operation types → no-op
 
-The door lock driver SHALL retain the `attributeHandlers.handleLockState` live-update handler alongside the `LockOperation` event handler. Both update `locked`; because `LockOperation` is not CRITICAL for all operations (a Lock MAY be INFO) and `LockState` is the mandatory attribute, the attribute path is the reliable baseline. Duplicate resource-changed events are not produced because same-value resource updates are suppressed downstream. The `seed` handler establishes initial `locked` state at commission time.
+The door lock driver SHALL retain the `attributeHandlers.handleLockState` live-update handler alongside the `LockOperation` event handler. Both update `locked`; because `LockOperation` is not CRITICAL for all operations (a Lock MAY be INFO) and `LockState` is the mandatory attribute, the attribute path is the reliable baseline. Duplicate resource-changed events are not produced because same-value resource updates are suppressed downstream. The `seed` handler establishes the initial `locked` state at commission and re-establishes it from `LockState` on each synchronize/reconnect. Because `SeedInitialResourceValues` re-runs on every reconnect and `LockState` MAY be unavailable then (cold attribute cache), the seed SHALL preserve the existing `locked` value when `LockState` is unavailable rather than defaulting to `"false"`, so a physically locked door is never reported as unlocked; it falls back to `"false"` only at commission when no value exists yet.
 
 On a `LockOperation`, the driver SHALL attach `{ source, userId }` metadata to the `locked` resource update, mapping Matter `OperationSourceEnum` to the canonical `DOORLOCK_PROFILE_LOCKED_SOURCE_*` string and including `UserIndex` (TLV tag 2) when present.
 
@@ -66,12 +66,16 @@ On a `LockOperation`, the driver SHALL attach `{ source, userId }` metadata to t
 - **THEN** the `invalidCodeEntryLimit` resource SHALL be updated to `"false"`
 
 #### Scenario: Manual lock operation clears jammed
-- **WHEN** a `LockOperation` event is received and OperationSource == 0x01 (Manual)
+- **WHEN** a `LockOperation` event is received with LockOperationType in {0x00, 0x01, 0x04} and OperationSource == 0x01 (Manual)
 - **THEN** the `jammed` resource SHALL be updated to `"false"`
 
 #### Scenario: Non-manual lock operation does not clear jammed
 - **WHEN** a `LockOperation` event is received and OperationSource != 0x01 (Manual)
 - **THEN** the `jammed` resource SHALL NOT be updated
+
+#### Scenario: Cold-cache reconnect preserves locked state
+- **WHEN** the `locked` seed re-runs on a synchronize/reconnect, `locked` already has a value, and `LockState` is unavailable (cold attribute cache)
+- **THEN** the `locked` resource SHALL retain its existing value rather than being set to `"false"`
 
 ---
 

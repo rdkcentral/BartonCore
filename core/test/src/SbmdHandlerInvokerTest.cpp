@@ -689,12 +689,12 @@ namespace
     }
 
     // ================================================================
-    // Fault seed preserve-on-unknown (contact sensor / water leak).
-    // The faulted seed re-runs on every synchronize. If the StateValue
-    // attribute supplement is unavailable then (cold cache on reconnect),
-    // an already-set faulted value must be preserved rather than clobbered
-    // by the commission fail-safe default. Mirrors the seed handlers in
-    // contact-sensor.sbmd.js / water-leak-detector.sbmd.js.
+    // Generic preserve-on-unknown supplement plumbing.
+    // Exercises the invoker/supplement path for a seed-style handler that
+    // keeps an existing resource value when its attribute supplement is
+    // unavailable. This uses a representative handler string, NOT the shipped
+    // driver code: the production door-lock / contact-sensor / water-leak seed
+    // handlers are covered end-to-end in SbmdSeedHandlerTest.cpp.
     // ================================================================
 
     namespace

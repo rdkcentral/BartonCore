@@ -26,11 +26,13 @@
 //
 // Maps Matter Door Lock device type to Barton doorLock device class.
 // The locked resource is seeded from the cached LockState attribute at
-// commission time; live updates arrive via two paths: the LockState
-// attribute handler (the mandatory-attribute baseline) and the LockOperation
-// event handler (which also attaches source/userId metadata). DoorLockAlarm
-// events drive the jammed, tampered, and invalidCodeEntryLimit resources.
-// Lock/Unlock commands sent via execute handlers with optional PIN code.
+// commission and re-seeded on every synchronize/reconnect, preserving the
+// existing value when LockState is unavailable (cold cache); live updates
+// arrive via two paths: the LockState attribute handler (the
+// mandatory-attribute baseline) and the LockOperation event handler (which
+// also attaches source/userId metadata). DoorLockAlarm events drive the
+// jammed, tampered, and invalidCodeEntryLimit resources. Lock/Unlock
+// commands sent via execute handlers with optional PIN code.
 //
 
 SbmdDriver({
@@ -136,7 +138,8 @@ SbmdDriver({
                     prerequisites: [CL_DOOR_LOCK],
                     seed: {
                         supplements: {
-                            attributes: ['lockState']
+                            attributes: ['lockState'],
+                            resources: ['1/locked']
                         },
                         handler: seedLocked
                     }
@@ -195,20 +198,58 @@ SbmdDriver({
 // =============================================================================
 
 /**
+ * Returns the resource's own cached value when present, else the fallback. Seeds
+ * use this to preserve a live value on a cold-cache re-seed (see "Re-seed
+ * safety" in docs/SBMD.md), reading the value the seed declared via
+ * supplements.resources.
+ */
+function existingOr(args, key, fallback) {
+    var existing =
+        args.supplements && args.supplements.resources ? args.supplements.resources[key] : null;
+
+    return existing !== null && existing !== undefined ? existing : fallback;
+}
+
+/**
  * Seeds the Barton locked resource from the cached Matter LockState attribute
- * (cluster 0x0101). Defaults to unlocked when the attribute is not yet cached.
+ * (cluster 0x0101). This seed re-runs on every synchronize/reconnect, so when
+ * LockState is unavailable (cold cache) it preserves the existing locked value
+ * rather than reporting a locked door as unlocked, and defaults to "false"
+ * (unlocked) only at commission when no value exists yet.
+ *
+ * Deliberate security tradeoff: preserving means a door physically unlocked
+ * while Barton was offline can briefly report locked="true" until the first
+ * LockState report repopulates the cache. On a healthy reconnect that priming
+ * report lands within ~seconds, so the stale window is short; if the device is
+ * unreachable it can persist until the device returns. We accept a brief stale
+ * "locked" on purpose because the opposite error -- reporting a locked door as
+ * unlocked -- is the unsafe one.
  */
 function seedLocked(args) {
     var tlvBase64 = args.supplements.attributes.lockState;
     var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
 
-    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-    // If the attribute is not yet cached, defaults to false (unlocked).
-    var isLocked = value === 1;
+    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched.
+    var result = Sbmd.result();
+    var locked;
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
-        .success();
+    if (value === 1) {
+        locked = 'true';
+    } else if (value !== null && value !== undefined) {
+        locked = 'false';
+    } else {
+        var existing = args.supplements.resources['1/locked'];
+
+        if (existing !== null && existing !== undefined) {
+            locked = existing;
+            result.log('lockState unavailable on seed; preserving locked=' + locked);
+        } else {
+            locked = 'false';
+            result.log('lockState unavailable and no cached locked; defaulting to false');
+        }
+    }
+
+    return result.dataModel.updateResource(args.endpointId, RES_LOCKED, locked).success();
 }
 
 /**
@@ -223,9 +264,7 @@ function seedLocked(args) {
 function seedFalse(args) {
     var resourceId = args.resource.resourceId;
     var key = args.endpointId + '/' + resourceId;
-    var existing =
-        args.supplements && args.supplements.resources ? args.supplements.resources[key] : null;
-    var value = existing !== null && existing !== undefined ? existing : 'false';
+    var value = existingOr(args, key, 'false');
 
     return Sbmd.result().dataModel.updateResource(args.endpointId, resourceId, value).success();
 }

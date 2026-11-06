@@ -84,6 +84,7 @@ SbmdDriver({
                         handler: function (args) {
                             var tlvBase64 = args.supplements.attributes.stateValue;
                             var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
+                            var result = Sbmd.result();
                             var faulted;
 
                             if (value === true) {
@@ -95,14 +96,23 @@ SbmdDriver({
                                 // with a cold cache cannot clear a real leak; default to not-faulted
                                 // only at commission (no value yet) to avoid a false leak alarm.
                                 var existing = args.supplements.resources['1/faulted'];
-                                faulted =
-                                    existing !== null && existing !== undefined
-                                        ? existing
-                                        : 'false';
+
+                                if (existing !== null && existing !== undefined) {
+                                    faulted = existing;
+                                    result.log(
+                                        'stateValue unavailable on seed; preserving faulted=' +
+                                            faulted
+                                    );
+                                } else {
+                                    faulted = 'false';
+                                    result.log(
+                                        'stateValue unavailable and no cached faulted; defaulting to false'
+                                    );
+                                }
                             }
 
-                            return Sbmd.result()
-                                .dataModel.updateResource(args.endpointId, RES_FAULTED, faulted)
+                            return result.dataModel
+                                .updateResource(args.endpointId, RES_FAULTED, faulted)
                                 .success();
                         }
                     }
