@@ -36,6 +36,7 @@ file(GLOB SOURCES "src/*.c")
 
 add_library(xhPhilipsHue STATIC ${SOURCES})
 target_link_libraries(xhPhilipsHue BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil xhSsdp curl cjson m)
+target_link_libraries(xhPhilipsHue $<BUILD_INTERFACE:bCoreWarnings>)
 
 # export our 'public' folder so others can include our headers
 target_include_directories(xhPhilipsHue PUBLIC public)

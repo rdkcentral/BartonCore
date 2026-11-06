@@ -42,4 +42,5 @@ add_executable(testZhalLib EXCLUDE_FROM_ALL ${SOURCES})
 
 # add library dependencies for this test-binary
 target_link_libraries(testZhalLib zhal pthread)
+target_link_libraries(testZhalLib $<BUILD_INTERFACE:bCoreWarnings>)
 target_include_directories(testZhalLib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

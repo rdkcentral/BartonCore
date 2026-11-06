@@ -33,6 +33,7 @@ function(bcore_add_glib_test)
 
         add_executable(${BCORE_ADD_GLIB_TEST_NAME} ${BCORE_ADD_GLIB_TEST_SOURCES})
         target_link_libraries(${BCORE_ADD_GLIB_TEST_NAME} PRIVATE BartonCoreStatic ${BCORE_ADD_GLIB_TEST_LIBRARIES})
+        target_link_libraries(${BCORE_ADD_GLIB_TEST_NAME} PRIVATE $<BUILD_INTERFACE:bCoreWarnings>)
         target_compile_definitions(${BCORE_ADD_GLIB_TEST_NAME} PRIVATE G_LOG_DOMAIN="${BCORE_ADD_GLIB_TEST_GLOG_DOMAIN}")
         target_include_directories(${BCORE_ADD_GLIB_TEST_NAME} PRIVATE ${BCORE_ADD_GLIB_TEST_INCLUDE_DIRECTORIES})
 

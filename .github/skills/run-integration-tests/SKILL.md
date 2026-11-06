@@ -18,7 +18,7 @@ Run all integration tests:
 ./testing/py_test.sh testing/
 ```
 
-The `py_test.sh` wrapper handles Address Sanitizer (ASAN) `LD_PRELOAD` setup automatically. Always use it instead of calling `pytest` directly.
+The `py_test.sh` wrapper handles sanitizer runtime `LD_PRELOAD` setup (ASAN by default) and writes JUnit XML to `build/reports/pytest/junit.xml` unless `--junitxml=<path>` is passed. Always use it instead of calling `pytest` directly.
 
 ## Prerequisites
 
@@ -91,9 +91,15 @@ log_cli = true
 log_cli_level = "DEBUG"
 ```
 
-## ASAN Preloading
+## Sanitizer Preloading
 
-The dev build enables Address Sanitizer. `py_test.sh` automatically finds and preloads `libasan.so` so that ASAN-instrumented shared libraries work correctly when loaded by Python via GObject Introspection. Do not bypass this wrapper.
+The dev build enables Address Sanitizer. By default `py_test.sh` finds and preloads `libasan.so` so that ASAN-instrumented shared libraries work correctly when loaded by Python via GObject Introspection. Do not bypass this wrapper.
+
+When the library was built with a different sanitizer preset (for example `ubsan` or `tsan`) or without sanitizers (`coverage`), pass the matching runtime:
+
+```bash
+./testing/py_test.sh --sanitizer=asan|ubsan|tsan|none testing/
+```
 
 ## Error Recovery
 
