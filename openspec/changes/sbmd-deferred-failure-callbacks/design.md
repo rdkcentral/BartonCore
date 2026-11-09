@@ -1,8 +1,12 @@
 # Design: SBMD deferred failure callbacks (BARTON-412)
 
-Guarantee that a parked SBMD operation's `onError` runs exactly once on every failure path, including failures that occur before the command leaves the stack.
+Guarantee that the current hop's `onError` of a parked SBMD Transaction runs exactly once on every failure path, including failures that occur before the command leaves the stack.
 
 ## Context
+
+**Terminology:** An **SBMD Transaction** is the driver-level execution of one request (a resource read/write/execute or other handler invocation), from the initial handler invocation through every parked device operation (hop) and deferred `onResponse`/`onError` callback, to the terminal result. Today an SBMD Transaction is represented by a parked resource operation and its `PendingOperation` record; each `requestCommand`/`readAttribute` it parks on is a *hop*. A **DAL Transaction** is the separate data-access unit introduced by the BARTON-420 epic and is not used by this change. This change does not introduce any new type; the term is used so these documents line up with the epic.
+
+**Forward reference:** The BARTON-420 epic (`sbmd-transaction-orchestrator`, BARTON-423) will absorb the exactly-once failure delivery defined here into an `SbmdTransaction` object that holds the operation log, and BARTON-424 (`sbmd-transaction-failure-handler`) will add a driver-level `onTransactionFailure(args)` handler that runs once per failed SBMD Transaction after the failing hop's `onError`. The guarantee, error `type` vocabulary, and ordering defined here carry forward unchanged.
 
 The SBMD runtime (`core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp`) executes a handler's `ParsedResult` via `ExecuteTerminal`. Two terminals are *deferred*: `ResultTerminal::RequestCommand` (handled by `ExecuteRequestCommand`) and `ResultTerminal::ReadAttribute` (handled by `ExecuteReadAttribute`). A deferred `requestCommand` pushes a parking promise onto the caller's `std::forward_list<std::promise<bool>>`, records a `PendingOperation` in `pendingOperations` (a `std::map<uint64_t, PendingOperation>` confined to the Matter event-loop thread), moves the terminal's `onResponse`/`onError`/`context` `SafeJSValue`s into it under `MQuickJsRuntime`'s mutex, and calls `MatterDevice::SendCommandWithCallbacks` with lambdas that route to `HandleDeferredCommandResponse` / `HandleDeferredCommandError`. Those handlers invoke the JS callback via `SbmdHandlerInvoker::InvokeHandler`, run its ops, and either continue the chain (`ContinueDeferredChain`) or resolve the parking promise via `CompletePendingOperation(pendingId, success)`, which also releases the held callbacks (`ReleasePendingHandlers`) and erases the record.
 
@@ -53,7 +57,7 @@ No `docs/dev/architecture.md` exists in the project.
 
 **Non-Goals:**
 
-- BARTON-411 lost-update concurrency; BARTON-420..425 data access layer, staged writes, cleanup hooks.
+- BARTON-411 lost-update concurrency; BARTON-420 epic (BARTON-421..426): data access layer, staged writes, `SbmdTransaction` orchestrator, driver-level `onTransactionFailure`.
 - `onError` for non-deferred terminals (`sendCommand`, `writeAttribute`), including those returned from `onResponse`.
 - An independent overall-deadline timer.
 - Renaming `"commandFailed"`/`"readFailed"`.
@@ -593,4 +597,4 @@ In §5.1, replace the `args.error.type` description with the full vocabulary (`t
 
 **Risk:** `onResponse` → plain `sendCommand` pre-send failure still does not reach driver code.
 
-**Mitigation:** Documented; drivers needing rollback use `requestCommand`. BARTON-420 cleanup hooks will close it generally.
+**Mitigation:** Documented; drivers needing rollback use `requestCommand`. The BARTON-420 driver-level `onTransactionFailure` (BARTON-424) will close it generally, since it runs once per failed SBMD Transaction regardless of which hop failed.

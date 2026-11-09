@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Deferred operations
-`requestCommand` and `readAttribute` terminals SHALL park the resource operation and register pending response state. When a matching response arrives, the stored handler function SHALL be called with the response data and the original trigger context. The handler's result chain SHALL be executed to complete the parked operation. When a deferred operation fails for any reason after its handlers are supplied, the `onError` handler of the current hop SHALL be called as defined by "Deferred failure callback delivery".
+`requestCommand` and `readAttribute` terminals SHALL park the SBMD Transaction (the driver-level execution of the resource operation, from initial handler through every hop to the terminal result) and register pending response state. When a matching response arrives, the stored handler function SHALL be called with the response data and the original trigger context. The handler's result chain SHALL be executed to complete the parked operation. When a deferred operation fails for any reason after its handlers are supplied, the `onError` handler of the current hop SHALL be called as defined by "Deferred failure callback delivery".
 
 #### Scenario: requestCommand parks and completes on response
 - **WHEN** a handler returns `requestCommand` with `responseCommandId: 26` and later a command with ID 26 arrives on the matching cluster
