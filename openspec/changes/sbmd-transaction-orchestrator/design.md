@@ -8,7 +8,7 @@ The epic-wide decisions (D1–D10) and glossary are recorded in `openspec/change
 
 - **SBMD Transaction** — the driver-level execution of one request, from the initial handler invocation through every parked device operation and deferred callback, to the terminal result and, on failure, the failure handler. Code: `SbmdTransaction`.
 - **DAL Transaction** — the caller-agnostic data-access unit: per-key reads routed to plugins, staged writes, commit or abort. Code: `DalTransaction` (BARTON-421).
-- One SBMD Transaction owns exactly one data-access session. This change lands **first** in the epic (delivery order 412 fix → **423** → 421 → 426 → 422 → 424 → 425, epic D13), before any DAL exists, so the session is an `SbmdDataSession` obtained from the internal seam `SbmdDataAccess` (D11). This change ships `LegacySbmdDataAccess`, which wraps today's fetchers, setters, and `transientStore`. BARTON-421 + 426 later supply `DalSbmdDataAccess`, whose session wraps exactly one `DalTransaction`; from then on "one SBMD Transaction owns one DAL Transaction" holds literally. Nothing in the orchestrator changes when the implementation is swapped.
+- One SBMD Transaction owns exactly one data-access session. This change lands **first** in the epic (delivery order 412 fix → **423** → 421 → 430 → 422 → 424 → 425, epic D13), before any DAL exists, so the session is an `SbmdDataSession` obtained from the internal seam `SbmdDataAccess` (D11). This change ships `LegacySbmdDataAccess`, which wraps today's fetchers, setters, and `transientStore`. BARTON-421 + 430 later supply `DalSbmdDataAccess`, whose session wraps exactly one `DalTransaction`; from then on "one SBMD Transaction owns one DAL Transaction" holds literally. Nothing in the orchestrator changes when the implementation is swapped.
 
 ### Current execution path
 
@@ -35,7 +35,7 @@ BARTON-412 (`sbmd-deferred-failure-callbacks`) adds `FailPendingOperation(pendin
 | --- | --- | --- |
 | Caller | Any device-service API thread (IPC, client, or the main loop itself) | Blocks in `ConnectAndExecute` |
 | Main loop | Default `GMainContext`, run on `glibEvt` (`startMainLoop`, `core/src/deviceService.c`) | Device-service state; after BARTON-421, all DAL calls (via `DalSbmdDataAccess`) |
-| Matter | CHIP event loop | Matter stack, device data cache, JS invocation, `transientStore` (until BARTON-426 replaces it; `LegacySbmdDataAccess` reaches it only by scheduling onto this thread) |
+| Matter | CHIP event loop | Matter stack, device data cache, JS invocation, `transientStore` (until BARTON-430 replaces it; `LegacySbmdDataAccess` reaches it only by scheduling onto this thread) |
 
 ## References
 
@@ -54,7 +54,7 @@ BARTON-412 (`sbmd-deferred-failure-callbacks`) adds `FailPendingOperation(pendin
 **Goals:**
 
 - `SbmdTransaction` replaces `PendingOperation`; one object per SBMD request, owning one `SbmdDataSession` and an operation log.
-- Internal seam `SbmdDataAccess` (batched supplement fetch including sequence-allocation entries, stage, stage-conditional, commit, abort, attribute-write overlay hook, abort listener) with `LegacySbmdDataAccess` over today's data paths; no dependency on BARTON-421/426.
+- Internal seam `SbmdDataAccess` (batched supplement fetch including sequence-allocation entries, stage, stage-conditional, commit, abort, attribute-write overlay hook, abort listener) with `LegacySbmdDataAccess` over today's data paths; no dependency on BARTON-421/430.
 - `SbmdTransactionOrchestrator` drives every step from the caller thread with one batched data-access fetch per step.
 - `onResponse`/`onError` are no longer run inline on the Matter thread from SDK callbacks; outcomes are handed back to the orchestrator.
 - `SbmdWorker` orchestrates attribute/event/command handler dispatch.
@@ -67,7 +67,7 @@ BARTON-412 (`sbmd-deferred-failure-callbacks`) adds `FailPendingOperation(pendin
 
 **Non-Goals:**
 
-- DAL core, plugins, cross-plugin commit rollback, `DalSbmdDataAccess` (BARTON-421/426, delivered after this change).
+- DAL core, plugins, cross-plugin commit rollback, `DalSbmdDataAccess` (BARTON-421/430, delivered after this change).
 - Exposing sequence allocation or conditional writes to JavaScript (BARTON-422). The seam carries them so later changes need no orchestrator change.
 - `mergeTransientData`, `supplements` override option (BARTON-422).
 - `onTransactionFailure` (BARTON-424); only the hand-off point is defined here.
@@ -708,7 +708,7 @@ The orchestrator's response path updates the log (`MarkSucceeded` with the respo
 
 **Decision:** On success the orchestrator calls `SbmdDataSession::Commit(deadline)`. If commit returns an error, the transaction fails with `commitFailed` and the error's reason (`conditionFailed` for a conditional-write mismatch, epic D11; `pluginCommitFailed`/`writeFailed` otherwise). With `LegacySbmdDataAccess`, commit applies the staged writes in order with their thread affinity and has no cross-store rollback (D11); with `DalSbmdDataAccess`, commit is `DalTransaction::Commit` with epic D8 light rollback. Output slots (`readValue`, `executeResponse`) are written only after a successful commit.
 
-When a `writeAttribute` device operation succeeds, the orchestrator calls `SbmdDataSession::RecordAttributeWrite(endpoint, cluster, attribute, tlvBase64)` before continuing. The legacy session keeps the value in a per-transaction overlay map consulted when it reads attribute supplements; the DAL session forwards it to `DalTransaction::SetOverlay` on the device's attribute-plugin binding (BARTON-426). Either way, later reads of that attribute within the same SBMD Transaction return the written value. The overlay is discarded at transaction end; subscription reports remain the source of truth for the device data cache. There is no automatic undo of an attribute write.
+When a `writeAttribute` device operation succeeds, the orchestrator calls `SbmdDataSession::RecordAttributeWrite(endpoint, cluster, attribute, tlvBase64)` before continuing. The legacy session keeps the value in a per-transaction overlay map consulted when it reads attribute supplements; the DAL session forwards it to `DalTransaction::SetOverlay` on the device's attribute-plugin binding (BARTON-430). Either way, later reads of that attribute within the same SBMD Transaction return the written value. The overlay is discarded at transaction end; subscription reports remain the source of truth for the device data cache. There is no automatic undo of an attribute write.
 
 ```cpp
 // core/deviceDrivers/matter/sbmd/txn/SbmdTransactionOrchestrator.cpp
@@ -975,9 +975,9 @@ namespace barton
 | Abort | Clear staged list and overlay | Orchestrator |
 | Abort listener | Stored, never fired (no plugins); device removal, driver deactivation, and shutdown are signalled by the driver (D7) | — |
 
-This is legal under the wait-direction rule because only the orchestrator waits: the Matter-thread closures never wait on anything. It also needs no mutex on `transientStore`, which stays Matter-confined until BARTON-426 deletes it.
+This is legal under the wait-direction rule because only the orchestrator waits: the Matter-thread closures never wait on anything. It also needs no mutex on `transientStore`, which stays Matter-confined until BARTON-430 deletes it.
 
-BARTON-421 + 426 later provide `DalSbmdDataAccess`, whose session owns one `DalTransaction` and maps `Fetch` → `DalTransaction::Read` + `AllocateSequence`, `Stage` → `Stage`, `StageConditional` → `StageConditional`, `RecordAttributeWrite` → `SetOverlay`, `Commit`/`Abort` → `Commit`/`Abort`, each through `ThreadHop::OnMainLoop` (inline when the orchestrator owns the main loop), and fires the abort listener from plugin unregistration. After the switch to `DalSbmdDataAccess`, BARTON-426 deletes `LegacySbmdDataAccess` together with `transientStore`; there is no runtime fallback or feature flag selecting the legacy implementation.
+BARTON-421 + 430 later provide `DalSbmdDataAccess`, whose session owns one `DalTransaction` and maps `Fetch` → `DalTransaction::Read` + `AllocateSequence`, `Stage` → `Stage`, `StageConditional` → `StageConditional`, `RecordAttributeWrite` → `SetOverlay`, `Commit`/`Abort` → `Commit`/`Abort`, each through `ThreadHop::OnMainLoop` (inline when the orchestrator owns the main loop), and fires the abort listener from plugin unregistration. After the switch to `DalSbmdDataAccess`, BARTON-430 deletes `LegacySbmdDataAccess` together with `transientStore`; there is no runtime fallback or feature flag selecting the legacy implementation.
 
 **Alternative considered:** Land the DAL first (the previous delivery order). Rejected by epic D13 — the orchestrator would have to coexist with a DAL used from the Matter thread, which required interim locking of the transient store.
 
@@ -1047,7 +1047,7 @@ No public C API, GObject, signal, property, or GIR changes. Internal C++ interfa
     Commit: device-service writes inline; OnMatter(transient writes + CAS) ---->  transientStore
     Abort:  drop staged list (no hop)
 
-  With DalSbmdDataAccess (after BARTON-421/426): Fetch/Stage/Commit/Abort become OnMainLoop hops to the
+  With DalSbmdDataAccess (after BARTON-421/430): Fetch/Stage/Commit/Abort become OnMainLoop hops to the
   DalTransaction; the attribute and transient plugins hop main loop -> Matter by affinity.
 
   Allowed waits:  orchestrator -> main loop,  orchestrator -> Matter,  main loop -> Matter
@@ -1064,7 +1064,7 @@ Only the orchestrator waits on another thread in the legacy arrangement, which i
 - `HandleResourceOp` builds the `SbmdTransaction` and `SbmdStepTrigger::Initial`; the orchestrator runs it.
 - `DispatchToHandlers` posts to `SbmdWorker`.
 - `HandleCommand` first offers the command to armed `requestCommand` hops for the device (match on cluster + `responseCommandId`), then falls through to unsolicited dispatch.
-- `MakeAttrFetcher`/`MakeResFetcher`/`MakePersistFetcher`/`MakeTransientFetcher`/`MakeTransientSetter`, `SetTransientData`, `GetTransientData`, and `transientStore` move behind `LegacySbmdDataAccess` and are no longer called from handler paths directly. BARTON-421/426 delete them when `DalSbmdDataAccess` replaces the legacy implementation.
+- `MakeAttrFetcher`/`MakeResFetcher`/`MakePersistFetcher`/`MakeTransientFetcher`/`MakeTransientSetter`, `SetTransientData`, `GetTransientData`, and `transientStore` move behind `LegacySbmdDataAccess` and are no longer called from handler paths directly. BARTON-421/430 delete them when `DalSbmdDataAccess` replaces the legacy implementation.
 - Live-transaction registry, abort on `DeviceRemoved`, driver deactivation, and `Shutdown`.
 
 ### Metrics
@@ -1073,7 +1073,7 @@ Extend `SpecBasedMatterDeviceDriverMetrics` with: `sbmd.txn.started{driver,origi
 
 ## Migrations
 
-Delivery order across the epic (D13): BARTON-412 fix → **423** → 421 → 426 → 422 → 424 → 425. This change depends only on the 412 fix. Within this change:
+Delivery order across the epic (D13): BARTON-412 fix → **423** → 421 → 430 → 422 → 424 → 425. This change depends only on the 412 fix. Within this change:
 
 1. Introduce `ThreadHop`, `SbmdOperationLog`, `SbmdTransaction`, `SbmdDataAccess`, and `LegacySbmdDataAccess` with tests (no behavior change).
 2. Add `MatterDevice::InvokeCommand`/`WriteAttribute` outcome APIs.
@@ -1105,7 +1105,7 @@ With the existing `MatterDevice` test doubles, verify every terminal kind append
 
 ### `SbmdDataAccess` contract test suite
 
-423 owns a reusable contract suite, `core/test/src/SbmdDataAccessContractTest.h`, written as a GoogleTest typed test (`TYPED_TEST_SUITE_P` with `REGISTER_TYPED_TEST_SUITE_P`) over a fixture trait that creates an implementation, seeds data, and exposes the fake `ThreadHop`. Every `SbmdDataAccess` implementation must pass it unchanged. It covers: one fetch returns all requested keys with absent keys as empty; staged writes invisible to other sessions until commit and applied in staged order; abort discards staged writes and overlay and is idempotent; `RecordAttributeWrite` visible to later fetches in the same session only; sequence allocation unique under concurrent sessions and not rolled back on abort; conditional-write mismatch fails commit with reason `conditionFailed`; operations on an ended session return `Aborted`; missed deadlines return `Timeout` with no late side effects; the abort listener wakes the owner when the backing store aborts. Capabilities an implementation does not support (legacy: non-Transient sequences/conditionals) are declared by the trait and asserted to return `Unsupported` instead. 423 instantiates it for `LegacySbmdDataAccess`; BARTON-421/426 instantiate it for `DalSbmdDataAccess`, which must declare no unsupported capabilities.
+423 owns a reusable contract suite, `core/test/src/SbmdDataAccessContractTest.h`, written as a GoogleTest typed test (`TYPED_TEST_SUITE_P` with `REGISTER_TYPED_TEST_SUITE_P`) over a fixture trait that creates an implementation, seeds data, and exposes the fake `ThreadHop`. Every `SbmdDataAccess` implementation must pass it unchanged. It covers: one fetch returns all requested keys with absent keys as empty; staged writes invisible to other sessions until commit and applied in staged order; abort discards staged writes and overlay and is idempotent; `RecordAttributeWrite` visible to later fetches in the same session only; sequence allocation unique under concurrent sessions and not rolled back on abort; conditional-write mismatch fails commit with reason `conditionFailed`; operations on an ended session return `Aborted`; missed deadlines return `Timeout` with no late side effects; the abort listener wakes the owner when the backing store aborts. Capabilities an implementation does not support (legacy: non-Transient sequences/conditionals) are declared by the trait and asserted to return `Unsupported` instead. 423 instantiates it for `LegacySbmdDataAccess`; BARTON-421/430 instantiate it for `DalSbmdDataAccess`, which must declare no unsupported capabilities.
 
 ### LegacySbmdDataAccess
 
@@ -1165,7 +1165,7 @@ There is no `docs/dev/architecture.md` in this project; the architecture documen
 
 **Risk:** With fetch, JS, and commit on separate hops, two transactions on the same device can both read a value and both write a derived value (lost update, epic D11), even before any device operation.
 
-**Mitigation:** The seam carries sequence allocation and conditional writes; BARTON-421/426 implement them across stores and BARTON-422 exposes them to drivers. Until then the legacy implementation offers them only for the Transient namespace and drivers keep today's behavior. Documented limitation: an unconditional read-compute-write of one key can still lose an update.
+**Mitigation:** The seam carries sequence allocation and conditional writes; BARTON-421/430 implement them across stores and BARTON-422 exposes them to drivers. Until then the legacy implementation offers them only for the Transient namespace and drivers keep today's behavior. Documented limitation: an unconditional read-compute-write of one key can still lose an update.
 
 ### No cross-store rollback in the legacy commit
 

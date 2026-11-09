@@ -1,6 +1,6 @@
 ## 0. Prerequisites
 
-- [ ] 0.1 Confirm BARTON-412, BARTON-423, BARTON-421, BARTON-426, BARTON-422, and BARTON-424 are merged (delivery order 412 → 423 → 421 → 426 → 422 → 424 → 425)
+- [ ] 0.1 Confirm BARTON-412, BARTON-423, BARTON-421, BARTON-430, BARTON-422, and BARTON-424 are merged (delivery order 412 → 423 → 421 → 430 → 422 → 424 → 425)
 
 ## 1. Reproduction tests first (C++ unit)
 

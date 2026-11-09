@@ -11,7 +11,7 @@ Terminology (epic D1, see `openspec/changes/sbmd-dal-core/design.md`):
 
 BARTON-423 introduces `SbmdTransaction`, its operation log (`SbmdOperationLog`), the `SbmdTransactionOrchestrator` step loop, `SbmdWorker`, and a failure hand-off hook, `SpecBasedMatterDeviceDriver::OnTransactionFailed(txn)`, which in BARTON-423 only logs. The orchestrator calls it after (a) the failing hop's `onError` has run as a step (when the failure was delivered to an armed hop), and (b) the transaction's data session (`SbmdDataSession`; with `DalSbmdDataAccess`, its `DalTransaction`) has been aborted. It then unblocks the caller. Under epic D12, an `onError` whose non-`error` terminal is honored has recovered the transaction, so the hand-off is never reached for it. Failure types produced by BARTON-423 are `timeout`, `commandFailed`, `readFailed`, `transport`, `internal`, `aborted`, and `commitFailed`; `commitFailed` carries a reason, including `conditionFailed` for a conditional-write mismatch (epic D11).
 
-Delivery order (epic D13): BARTON-412 fix → 423 → 421 → 426 → 422 → **424** → 425. By the time this change lands, `DalSbmdDataAccess` has replaced the legacy data implementation. A handler's `error` terminal is classified as the type of the hop error it was handling (when returned from `onError`) or `internal`.
+Delivery order (epic D13): BARTON-412 fix → 423 → 421 → 430 → 422 → **424** → 425. By the time this change lands, `DalSbmdDataAccess` has replaced the legacy data implementation. A handler's `error` terminal is classified as the type of the hop error it was handling (when returned from `onError`) or `internal`.
 
 ### How drivers declare handlers today
 
@@ -552,7 +552,7 @@ If `ClearUser` fails, the compensation transaction fails, the failure is logged 
 
 ## Migrations
 
-Delivery order (epic D13): BARTON-412 fix → 423 → 421 → 426 → 422 → **424** → 425. `sbmd-v4-runtime` archive order: 423 → 422 → 424. The registration field is optional; no existing driver or schema-validated spec changes. The `sbmd-v4-runtime` delta restates "Registration object extraction" in full.
+Delivery order (epic D13): BARTON-412 fix → 423 → 421 → 430 → 422 → **424** → 425. `sbmd-v4-runtime` archive order: 423 → 422 → 424. The registration field is optional; no existing driver or schema-validated spec changes. The `sbmd-v4-runtime` delta restates "Registration object extraction" in full.
 
 ## Testing Philosophy
 

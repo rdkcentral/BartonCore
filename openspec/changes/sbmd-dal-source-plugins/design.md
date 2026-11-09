@@ -1,10 +1,10 @@
-# Design: SBMD DAL source plugins (BARTON-426)
+# Design: SBMD DAL source plugins (BARTON-430)
 
 Concrete `DataSourcePlugin` implementations for the store-less SBMD Data Access Layer. Epic-wide architecture, glossary (SBMD Transaction vs DAL Transaction), and decisions D1–D13 are in `openspec/changes/sbmd-dal-core/design.md`; this document references them by number.
 
 ## Context
 
-Delivery order is 412 fix → 423 → 421 → 426 → 422 → 424 → 425 (epic D13). When this change lands, BARTON-423 has delivered the orchestrator, which performs all SBMD data access through the `SbmdDataAccess` seam implemented by `LegacySbmdDataAccess` (wrapping the backends below and scheduling `transientStore` and attribute-cache reads onto the Matter thread). BARTON-421 has delivered the DAL core — routing batched reads, commits, sequence allocation, and conditional writes to plugins registered in `DalPluginRegistry` on the device-service main loop — and `DalSbmdDataAccess`, but no plugins. This change supplies the plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `transientStore` and `LegacySbmdDataAccess` entirely.
+Delivery order is 412 fix → 423 → 421 → 430 → 422 → 424 → 425 (epic D13). When this change lands, BARTON-423 has delivered the orchestrator, which performs all SBMD data access through the `SbmdDataAccess` seam implemented by `LegacySbmdDataAccess` (wrapping the backends below and scheduling `transientStore` and attribute-cache reads onto the Matter thread). BARTON-421 has delivered the DAL core — routing batched reads, commits, sequence allocation, and conditional writes to plugins registered in `DalPluginRegistry` on the device-service main loop — and `DalSbmdDataAccess`, but no plugins. This change supplies the plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `transientStore` and `LegacySbmdDataAccess` entirely.
 
 The backends below describe today's code; after 423 they are reached via `LegacySbmdDataAccess`.
 
@@ -243,7 +243,7 @@ Resource read must free: `icDeviceResource *r = deviceServiceGetResourceById(...
 
 ## Migrations
 
-Requires BARTON-423 and BARTON-421 to have landed. Order: `TransientDataStore` + plugin (with `Atomic`) → resources/metadata/properties plugins → Matter attribute plugin + `AddDevice`/`DeviceRemoved`/`Shutdown` hooks → `SbmdDalPlugins` → switch orchestrator to `DalSbmdDataAccess` → delete `transientStore` and `LegacySbmdDataAccess` entirely. Backward compatible; no driver-visible change. Delivery order: 412 fix → 423 → 421 → 426 → 422 → 424 → 425.
+Requires BARTON-423 and BARTON-421 to have landed. Order: `TransientDataStore` + plugin (with `Atomic`) → resources/metadata/properties plugins → Matter attribute plugin + `AddDevice`/`DeviceRemoved`/`Shutdown` hooks → `SbmdDalPlugins` → switch orchestrator to `DalSbmdDataAccess` → delete `transientStore` and `LegacySbmdDataAccess` entirely. Backward compatible; no driver-visible change. Delivery order: 412 fix → 423 → 421 → 430 → 422 → 424 → 425.
 
 ## Thread Safety
 

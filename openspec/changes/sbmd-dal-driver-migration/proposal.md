@@ -2,7 +2,7 @@
 
 Jira: **BARTON-425** (epic **BARTON-420** — "SBMD Data Access Layer: safe, consistent driver data access").
 
-**Depends on:** every other change in the epic and the standalone BARTON-412 fix: BARTON-412 (`sbmd-deferred-failure-callbacks`), BARTON-423 (`sbmd-transaction-orchestrator`), BARTON-421 (`sbmd-dal-core`), BARTON-426 (`sbmd-dal-source-plugins`), BARTON-422 (`sbmd-dal-driver-api`), BARTON-424 (`sbmd-transaction-failure-handler`). Delivery order (epic D13): 412 fix → 423 → 421 → 426 → 422 → 424 → 425; this change lands last. The epic architecture and glossary are in `openspec/changes/sbmd-dal-core/design.md`.
+**Depends on:** every other change in the epic and the standalone BARTON-412 fix: BARTON-412 (`sbmd-deferred-failure-callbacks`), BARTON-423 (`sbmd-transaction-orchestrator`), BARTON-421 (`sbmd-dal-core`), BARTON-430 (`sbmd-dal-source-plugins`), BARTON-422 (`sbmd-dal-driver-api`), BARTON-424 (`sbmd-transaction-failure-handler`). Delivery order (epic D13): 412 fix → 423 → 421 → 430 → 422 → 424 → 425; this change lands last. The epic architecture and glossary are in `openspec/changes/sbmd-dal-core/design.md`.
 
 **Terminology:** An **SBMD Transaction** is the driver-level execution of one request, from the initial handler through every parked device operation and deferred callback to the terminal result (and, on failure, the driver's `onTransactionFailure`). A **DAL Transaction** is the data-access unit (routed reads, staged writes, commit or abort) owned by it.
 
@@ -30,7 +30,7 @@ The DAL and orchestrator provide the mechanisms, but the reported defects stay r
 - New camera features or resource changes; the `camera-session-lifecycle` client contract is unchanged apart from the guarantees added here.
 - Adding user, credential, or schedule management to the production door-lock driver.
 - Changing non-camera driver behavior beyond the audit.
-- Runtime changes of any kind (BARTON-412, 421, 426, 423, 422, 424).
+- Runtime changes of any kind (BARTON-412, 421, 430, 423, 422, 424).
 
 ## Capabilities
 

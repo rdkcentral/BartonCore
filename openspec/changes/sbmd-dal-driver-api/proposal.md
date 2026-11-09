@@ -2,9 +2,9 @@
 
 Jira: **BARTON-422** (epic **BARTON-420** — "SBMD Data Access Layer: safe, consistent driver data access").
 
-**Depends on:** BARTON-423 (`openspec/changes/sbmd-transaction-orchestrator/`), BARTON-421 (`openspec/changes/sbmd-dal-core/`), and BARTON-426 (`openspec/changes/sbmd-dal-source-plugins/`). Epic delivery order: 412 fix → 423 → 421 → 426 → **422** → 424 → 425. The epic-wide architecture, glossary, and decisions (D1–D13) live in `openspec/changes/sbmd-dal-core/design.md` and are not repeated here.
+**Depends on:** BARTON-423 (`openspec/changes/sbmd-transaction-orchestrator/`), BARTON-421 (`openspec/changes/sbmd-dal-core/`), and BARTON-430 (`openspec/changes/sbmd-dal-source-plugins/`). Epic delivery order: 412 fix → 423 → 421 → 430 → **422** → 424 → 425. The epic-wide architecture, glossary, and decisions (D1–D13) live in `openspec/changes/sbmd-dal-core/design.md` and are not repeated here.
 
-**Terminology:** An **SBMD Transaction** is the driver-level execution of one request, from the initial handler invocation through every parked device operation and deferred callback, to the terminal result (and, on failure, the failure handler). A **DAL Transaction** is the caller-agnostic data-access unit (per-key reads routed to source plugins, staged writes, commit or abort). The orchestrator reaches data only through the BARTON-423 seam `SbmdDataAccess` / `SbmdDataSession` (`Fetch`, `Stage`, `StageConditional`, `RecordAttributeWrite`, `Commit`, `Abort`). When this change lands, the seam is implemented by `DalSbmdDataAccess` (BARTON-421/426), whose session owns one DAL Transaction.
+**Terminology:** An **SBMD Transaction** is the driver-level execution of one request, from the initial handler invocation through every parked device operation and deferred callback, to the terminal result (and, on failure, the failure handler). A **DAL Transaction** is the caller-agnostic data-access unit (per-key reads routed to source plugins, staged writes, commit or abort). The orchestrator reaches data only through the BARTON-423 seam `SbmdDataAccess` / `SbmdDataSession` (`Fetch`, `Stage`, `StageConditional`, `RecordAttributeWrite`, `Commit`, `Abort`). When this change lands, the seam is implemented by `DalSbmdDataAccess` (BARTON-421/430), whose session owns one DAL Transaction.
 
 BARTON-411 has driver-visible root causes that the runtime alone cannot fix:
 
@@ -26,7 +26,7 @@ BARTON-411 has driver-visible root causes that the runtime alone cannot fix:
 ### Non-goals
 
 - The orchestrator, `SbmdTransaction`, operation log, seam, and threading — BARTON-423.
-- DAL core, `AllocateSequence`/`StageConditional` implementation, commit rollback — BARTON-421; plugin implementations (including the transient plugin's `Atomic` capability) — BARTON-426.
+- DAL core, `AllocateSequence`/`StageConditional` implementation, commit rollback — BARTON-421; plugin implementations (including the transient plugin's `Atomic` capability) — BARTON-430.
 - `onTransactionFailure` semantics — BARTON-424.
 - Migrating `camera.sbmd.js` — BARTON-425.
 - Sequences or conditional writes on resources, metadata, or persistent data (transient keys only in this change).

@@ -1,6 +1,6 @@
 ## 0. Prerequisites
 
-- [ ] 0.1 Confirm BARTON-412, BARTON-423 (`sbmd-transaction-orchestrator`), BARTON-421 (`sbmd-dal-core`), and BARTON-426 (`sbmd-dal-source-plugins`) are merged, and `DalSbmdDataAccess` is the active seam implementation
+- [ ] 0.1 Confirm BARTON-412, BARTON-423 (`sbmd-transaction-orchestrator`), BARTON-421 (`sbmd-dal-core`), and BARTON-430 (`sbmd-dal-source-plugins`) are merged, and `DalSbmdDataAccess` is the active seam implementation
 
 ## 1. Driver API surface (JS contract)
 

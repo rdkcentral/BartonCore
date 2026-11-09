@@ -2,9 +2,9 @@
 
 Jira: **BARTON-423** (epic **BARTON-420** — "SBMD Data Access Layer: safe, consistent driver data access").
 
-**Delivery position:** first change in the epic. Epic delivery order (decision D13): BARTON-412 fix → **BARTON-423** → 421 → 426 → 422 → 424 → 425.
+**Delivery position:** first change in the epic. Epic delivery order (decision D13): BARTON-412 fix → **BARTON-423** → 421 → 430 → 422 → 424 → 425.
 
-**Depends on:** only the BARTON-412 fix (`sbmd-deferred-failure-callbacks`, branch `BARTON-412-deferred-failure-callbacks`) — exactly-once `onError` on every failure path. Its `FailPendingOperation` choke point, hop generations, and exactly-once delivery are absorbed into `SbmdTransaction`. This change does **not** depend on BARTON-421 (`sbmd-dal-core`) or BARTON-426 (`sbmd-dal-source-plugins`): it introduces an internal data-access seam, `SbmdDataAccess`, with a `LegacySbmdDataAccess` implementation over today's data paths. BARTON-421 + 426 later supply `DalSbmdDataAccess` and delete `transientStore`. The epic-wide architecture, glossary, and decision record live in `openspec/changes/sbmd-dal-core/design.md`.
+**Depends on:** only the BARTON-412 fix (`sbmd-deferred-failure-callbacks`, branch `BARTON-412-deferred-failure-callbacks`) — exactly-once `onError` on every failure path. Its `FailPendingOperation` choke point, hop generations, and exactly-once delivery are absorbed into `SbmdTransaction`. This change does **not** depend on BARTON-421 (`sbmd-dal-core`) or BARTON-430 (`sbmd-dal-source-plugins`): it introduces an internal data-access seam, `SbmdDataAccess`, with a `LegacySbmdDataAccess` implementation over today's data paths. BARTON-421 + 430 later supply `DalSbmdDataAccess` and delete `transientStore`. The epic-wide architecture, glossary, and decision record live in `openspec/changes/sbmd-dal-core/design.md`.
 
 **Archive order:** BARTON-422 (`sbmd-dal-driver-api`), BARTON-423 (this change), and BARTON-424 (`sbmd-transaction-failure-handler`) modify the same `sbmd-v4-runtime` requirements. They MUST be archived in the order **423 → 422 → 424**, and each later delta MUST restate the full requirement text as left by the earlier one.
 
@@ -34,7 +34,7 @@ Today an SBMD request is not a first-class object. A device-service API call ent
 
 ### Non-goals
 
-- **The DAL itself and its plugins** (`DalPluginRegistry`, `DalTransaction`, cross-plugin rollback, plugins, `DalSbmdDataAccess`). Owned by BARTON-421 and BARTON-426, delivered after this change.
+- **The DAL itself and its plugins** (`DalPluginRegistry`, `DalTransaction`, cross-plugin rollback, plugins, `DalSbmdDataAccess`). Owned by BARTON-421 and BARTON-430, delivered after this change.
 - **Driver-facing data API** (`storage.mergeTransientData`, `storage.setTransientDataIf`, sequence supplements, the `supplements` override option on deferred requests). Owned by BARTON-422. The seam already carries what those features need.
 - **Driver-level `onTransactionFailure`.** Owned by BARTON-424. This change defines the hand-off point and the operation log it consumes.
 - **Optimistic concurrency control or per-device serialization.** No read/write-set validation, no versions, no automatic retries, no `conflict` error type (epic D3 as restated by D11, D4). Interleaving safety comes from fresh reads plus atomic primitives (D11).

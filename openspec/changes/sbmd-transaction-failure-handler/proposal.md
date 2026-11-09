@@ -2,9 +2,9 @@
 
 Jira: **BARTON-424** (epic **BARTON-420** — "SBMD Data Access Layer: safe, consistent driver data access").
 
-**Delivery position:** epic delivery order (decision D13) is BARTON-412 fix → 423 → 421 → 426 → 422 → **424** → 425; this change lands after BARTON-422.
+**Delivery position:** epic delivery order (decision D13) is BARTON-412 fix → 423 → 421 → 430 → 422 → **424** → 425; this change lands after BARTON-422.
 
-**Depends on:** BARTON-423 (`sbmd-transaction-orchestrator` — `SbmdTransaction`, its operation log, the failure hand-off point, `SbmdWorker`, the `SbmdDataAccess` seam), BARTON-421/426 (DAL core and plugins, supplying `DalSbmdDataAccess` with `AllocateSequence`/`StageConditional`), BARTON-422 (`sbmd-dal-driver-api` — fresh supplements and the driver data API used by the handler). **Prerequisite (outside the epic):** BARTON-412 (`sbmd-deferred-failure-callbacks`) — failure types `transport` and `internal`. Epic architecture: `openspec/changes/sbmd-dal-core/design.md`.
+**Depends on:** BARTON-423 (`sbmd-transaction-orchestrator` — `SbmdTransaction`, its operation log, the failure hand-off point, `SbmdWorker`, the `SbmdDataAccess` seam), BARTON-421/430 (DAL core and plugins, supplying `DalSbmdDataAccess` with `AllocateSequence`/`StageConditional`), BARTON-422 (`sbmd-dal-driver-api` — fresh supplements and the driver data API used by the handler). **Prerequisite (outside the epic):** BARTON-412 (`sbmd-deferred-failure-callbacks`) — failure types `transport` and `internal`. Epic architecture: `openspec/changes/sbmd-dal-core/design.md`.
 
 **Archive order:** BARTON-422 (`sbmd-dal-driver-api`), BARTON-423 (`sbmd-transaction-orchestrator`), and this change modify `sbmd-v4-runtime` requirements. They MUST be archived in the order **423 → 422 → 424**, and each later delta MUST restate the full requirement text as left by the earlier one.
 

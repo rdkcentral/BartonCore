@@ -19,15 +19,15 @@ This change delivers the DAL core — plugin registry, plugin and binding interf
   - **Atomic primitives (D11)**: `DalTransaction::AllocateSequence(key)` — immediate atomic increment, never rolled back; `DalTransaction::StageConditional(key, expected, value)` — compare-and-set checked atomically at commit; a mismatch fails the commit with `commitFailed` reason `conditionFailed` and triggers D8 rollback.
   - `DalExecutor` — generic executor hop: the DAL runs a plugin's binding calls on the plugin's affinity executor and waits with a deadline. When the caller already owns the main loop (`g_main_context_is_owner`), DAL calls run inline.
   - `Dal` — façade marshaling each batched request onto the main loop (one hop per step).
-- **`DalSbmdDataAccess`**: implements BARTON-423's `SbmdDataAccess` seam on top of `Dal` (batched supplement fetch including sequences, staging of ops including conditional writes, attribute-write overlay, commit/abort, failure mapping). Built and tested here; BARTON-426 switches the orchestrator to it, replacing `LegacySbmdDataAccess`.
+- **`DalSbmdDataAccess`**: implements BARTON-423's `SbmdDataAccess` seam on top of `Dal` (batched supplement fetch including sequences, staging of ops including conditional writes, attribute-write overlay, commit/abort, failure mapping). Built and tested here; BARTON-430 switches the orchestrator to it, replacing `LegacySbmdDataAccess`.
 - **Tests**: unit tests with fake plugins covering routing, batching, staging, rollback, atomic primitives, abort-on-unregister, affinity hops, deadlines, inline execution, and `DalSbmdDataAccess` mapping.
-- **No driver-visible behavior change.** The orchestrator keeps using `LegacySbmdDataAccess` until BARTON-426.
+- **No driver-visible behavior change.** The orchestrator keeps using `LegacySbmdDataAccess` until BARTON-430.
 
 ### Non-goals
 
 - A DAL data store, cached values, per-key versions, ingress queues, live-update reconciliation, optimistic validation, or automatic conflict detection/retry (D3, D4).
 - Per-device serialization of SBMD Transactions (rejected in favor of D11).
-- Concrete plugins and the switch from `LegacySbmdDataAccess` to `DalSbmdDataAccess` — BARTON-426 (`sbmd-dal-source-plugins`).
+- Concrete plugins and the switch from `LegacySbmdDataAccess` to `DalSbmdDataAccess` — BARTON-430 (`sbmd-dal-source-plugins`).
 - `SbmdTransaction`, `SbmdTransactionOrchestrator`, `SbmdWorker`, operation log, the `SbmdDataAccess` seam and `LegacySbmdDataAccess` — BARTON-423 (`sbmd-transaction-orchestrator`).
 - JS exposure of sequences and conditional writes (`sequence` supplements, `storage.setTransientDataIf`), fresh supplements, `storage.mergeTransientData` — BARTON-422 (`sbmd-dal-driver-api`).
 - Driver-level `onTransactionFailure(args)` and the D12 recovery rule — BARTON-424 (`sbmd-transaction-failure-handler`).
@@ -50,6 +50,6 @@ None. `DalSbmdDataAccess` is not activated in this change, so `sbmd-v4-runtime` 
 - **Affected layers**: core device drivers (new component in `core/deviceDrivers/matter/sbmd/dal/`; `DalSbmdDataAccess` beside BARTON-423's `SbmdDataAccess`), core service (uses the device-service GLib main loop run on the `glibEvt` thread by `startMainLoop` in `core/src/deviceService.c`; no code change there). No subsystem changes. No public API (`api/c/public/`) changes; no GObject signals, properties, or GIR changes.
 - **Affected files (new)**: `core/deviceDrivers/matter/sbmd/dal/DataKey.h`, `DataSourcePlugin.h`, `DalTypes.h`, `DalExecutor.h/.cpp`, `DalPluginRegistry.h/.cpp`, `DalTransaction.h/.cpp`, `Dal.h/.cpp`, `DalSbmdDataAccess.h/.cpp`; tests `core/test/src/SbmdDal*Test.cpp`.
 - **Affected files (modified)**: the SBMD source list in `core/deviceDrivers/matter/CMakeLists.txt` (or the SBMD sub-list it includes), `core/test/CMakeLists.txt`, `docs/SBMD.md` (architecture section).
-- **CMake flags**: The DAL core itself has no Matter SDK dependency (GLib + C++17 only) and is built with the SBMD sources. `BCORE_MATTER` gating applies only to the Matter attribute plugin (BARTON-426), whose `MatterThread` executor depends on the Matter SDK. No new flags.
+- **CMake flags**: The DAL core itself has no Matter SDK dependency (GLib + C++17 only) and is built with the SBMD sources. `BCORE_MATTER` gating applies only to the Matter attribute plugin (BARTON-430), whose `MatterThread` executor depends on the Matter SDK. No new flags.
 - **Backward compatibility**: Fully backward compatible. Drivers, SBMD schema, and public API unchanged.
-- **Dependencies**: Depends on BARTON-423 (`sbmd-transaction-orchestrator`, for the `SbmdDataAccess` seam), which itself depends on the BARTON-412 fix. Delivery order: 412 fix → 423 → 421 → 426 → 422 → 424 → 425. BARTON-426, 422, 424, 425 depend on this change.
+- **Dependencies**: Depends on BARTON-423 (`sbmd-transaction-orchestrator`, for the `SbmdDataAccess` seam), which itself depends on the BARTON-412 fix. Delivery order: 412 fix → 423 → 421 → 430 → 422 → 424 → 425. BARTON-430, 422, 424, 425 depend on this change.

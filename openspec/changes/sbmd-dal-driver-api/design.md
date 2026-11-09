@@ -2,11 +2,11 @@
 
 ## Context
 
-Epic delivery order is 412 fix → 423 → 421 → 426 → **422** → 424 → 425 (epic D13). When this change lands:
+Epic delivery order is 412 fix → 423 → 421 → 430 → **422** → 424 → 425 (epic D13). When this change lands:
 
 - BARTON-423 has delivered `SbmdTransaction`, `SbmdTransactionOrchestrator`, `SbmdWorker`, and the internal data seam `SbmdDataAccess` / `SbmdDataSession` (`Fetch`, `Stage`, `StageConditional`, `RecordAttributeWrite`, `Commit`, `Abort`, `SetAbortListener`). The step loop is: (1) one batched `Fetch` for the step's supplements, including sequence entries; (2) JS on the Matter thread; (3) `log` ops immediately, data ops converted by `SbmdHandlerInvoker::ToSbmdWrites` and passed to `Stage`/`StageConditional`; (4) terminal; (5) `Commit` on success, `Abort` and failure hand-off on failure. Writes from a failed SBMD Transaction are already discarded. Recovery (epic D12): if a hop's `onError` returns a non-`error` terminal and BARTON-412 honors it (not for `timeout` or depth-limit), the transaction continues and the failure handler does not run.
 - BARTON-421 has delivered the DAL core including `DalTransaction::AllocateSequence(key)` and `DalTransaction::StageConditional(key, expected, value)`; a mismatched condition fails commit with `CommitFailed` reason `ConditionFailed`, surfaced to SBMD as `commitFailed` / `conditionFailed`.
-- BARTON-426 has delivered the source plugins and `DalSbmdDataAccess`, which replaced `LegacySbmdDataAccess` and deleted `transientStore`. The transient plugin declares the `Atomic` capability.
+- BARTON-430 has delivered the source plugins and `DalSbmdDataAccess`, which replaced `LegacySbmdDataAccess` and deleted `transientStore`. The transient plugin declares the `Atomic` capability.
 
 The seam already carries sequences (`SbmdFetchRequest::sequences`, `SbmdFetchResult::sequences`) and conditional writes (`SbmdConditionalWrite`), but no JS API reaches them, there is no merge write, and the supplement override and inheritance rules are not part of the driver contract. This change adds the driver-facing API.
 
@@ -37,7 +37,7 @@ No `docs/dev/architecture.md` exists in the project.
 
 **Non-Goals:**
 
-- Orchestrator, seam, and step loop (BARTON-423); DAL primitives (BARTON-421); plugins (BARTON-426); failure handler (BARTON-424); driver migration (BARTON-425).
+- Orchestrator, seam, and step loop (BARTON-423); DAL primitives (BARTON-421); plugins (BARTON-430); failure handler (BARTON-424); driver migration (BARTON-425).
 - Sequences or conditional writes on non-transient namespaces.
 - Automatic retry on `conditionFailed`.
 

@@ -1,6 +1,6 @@
 # Design: SBMD Data Access Layer — core (BARTON-421) and epic architecture (BARTON-420)
 
-This document holds the epic-wide architecture for BARTON-420 and the detailed design for the DAL core delivered by BARTON-421. Detailed designs for the other changes live in their own change directories: `sbmd-dal-source-plugins` (BARTON-426), `sbmd-transaction-orchestrator` (BARTON-423), `sbmd-dal-driver-api` (BARTON-422), `sbmd-transaction-failure-handler` (BARTON-424), `sbmd-dal-driver-migration` (BARTON-425).
+This document holds the epic-wide architecture for BARTON-420 and the detailed design for the DAL core delivered by BARTON-421. Detailed designs for the other changes live in their own change directories: `sbmd-dal-source-plugins` (BARTON-430), `sbmd-transaction-orchestrator` (BARTON-423), `sbmd-dal-driver-api` (BARTON-422), `sbmd-transaction-failure-handler` (BARTON-424), `sbmd-dal-driver-migration` (BARTON-425).
 
 ## Context
 
@@ -10,7 +10,7 @@ Today's threading: a device-service API call reaches `MatterDeviceDriver::Connec
 
 Two defects motivate the epic. BARTON-411 is a lost update: a deferred SBMD callback writes back a transient-data snapshot captured at park time, erasing concurrent changes. BARTON-412: failures before a command leaves the stack (~18 `FailOperation(promises)` sites in `SpecBasedMatterDeviceDriver.cpp`, and `CompletePendingOperation(pendingId, false)`) never invoke the driver's `onError`. BARTON-412 is fixed separately on `sbmd-deferred-failure-callbacks`; the epic depends on it.
 
-State when this change lands (D13): BARTON-423 (`sbmd-transaction-orchestrator`) has already delivered `SbmdTransaction`, `SbmdTransactionOrchestrator`, `SbmdWorker`, and `ThreadHop` (the shared thread-hop primitive the DAL reuses), and an internal data-access seam `SbmdDataAccess` / `SbmdDataSession` (`Fetch`, `Stage`, `StageConditional`, `RecordAttributeWrite`, `Commit`, `Abort`) implemented by `LegacySbmdDataAccess`, which wraps today's fetchers/setters and `transientStore` with correct thread affinity and holds staged writes in the `SbmdTransaction`. This change adds the DAL core and `DalSbmdDataAccess`, a DAL-backed implementation of that seam; BARTON-426 supplies the plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `transientStore` and `LegacySbmdDataAccess` entirely.
+State when this change lands (D13): BARTON-423 (`sbmd-transaction-orchestrator`) has already delivered `SbmdTransaction`, `SbmdTransactionOrchestrator`, `SbmdWorker`, and `ThreadHop` (the shared thread-hop primitive the DAL reuses), and an internal data-access seam `SbmdDataAccess` / `SbmdDataSession` (`Fetch`, `Stage`, `StageConditional`, `RecordAttributeWrite`, `Commit`, `Abort`) implemented by `LegacySbmdDataAccess`, which wraps today's fetchers/setters and `transientStore` with correct thread affinity and holds staged writes in the `SbmdTransaction`. This change adds the DAL core and `DalSbmdDataAccess`, a DAL-backed implementation of that seam; BARTON-430 supplies the plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `transientStore` and `LegacySbmdDataAccess` entirely.
 
 No `docs/dev/architecture.md` exists in the project. SBMD architecture is documented in `docs/SBMD.md`.
 
@@ -56,7 +56,7 @@ Normally one SBMD Transaction owns exactly one DAL Transaction. The DAL never re
 **Non-Goals:**
 
 - A data store, caches, versions, reconciliation, optimistic validation, conflicts (removed: D3, D4).
-- Concrete plugins (BARTON-426), orchestrator (BARTON-423), driver API (BARTON-422), failure handler (BARTON-424), migration (BARTON-425).
+- Concrete plugins (BARTON-430), orchestrator (BARTON-423), driver API (BARTON-422), failure handler (BARTON-424), migration (BARTON-425).
 - Two-phase commit.
 - Public API or GObject changes.
 
@@ -99,7 +99,7 @@ Normally one SBMD Transaction owns exactly one DAL Transaction. The DAL never re
 +--------------------------------------------------------------------+
 | core/src  deviceService (main loop, resources, metadata, props)    |
 +--------------------------------------------------------------------+
-        ^ plugin calls (BARTON-426)
+        ^ plugin calls (BARTON-430)
 +--------------------------------------------------------------------+
 | core/deviceDrivers/matter/sbmd/dal   (BARTON-421, this change)     |
 |   Dal  ->  DalTransaction  ->  PluginBinding  <-  DataSourcePlugin |
@@ -155,7 +155,7 @@ Normally one SBMD Transaction owns exactly one DAL Transaction. The DAL never re
 
 ### D4: No DAL data store, no versions
 
-**Decision:** The DAL holds only the plugin registry and each open DAL Transaction's bindings, staged writes, and attribute overlay (D10), all cleared when the transaction ends. Steady state retains no data. Reads always go to source plugins, which own their caches. Dropped: global `DataStore`, `VersionedValue`, per-key versions, `IngressQueue`, `sbmdDataObserver` reconciliation, post-park `TryMerge`, `"conflict"` error type. Transient data is owned by a DAL plugin (it is the data, not a cache) and replaces `transientStore` (BARTON-426).
+**Decision:** The DAL holds only the plugin registry and each open DAL Transaction's bindings, staged writes, and attribute overlay (D10), all cleared when the transaction ends. Steady state retains no data. Reads always go to source plugins, which own their caches. Dropped: global `DataStore`, `VersionedValue`, per-key versions, `IngressQueue`, `sbmdDataObserver` reconciliation, post-park `TryMerge`, `"conflict"` error type. Transient data is owned by a DAL plugin (it is the data, not a cache) and replaces `transientStore` (BARTON-430).
 
 **Rationale:** A second copy of every value would need reconciliation with every writer in the system (attribute reports, public API writes, other subsystems). Reading from the source eliminates that entire class of bugs.
 
@@ -189,7 +189,7 @@ Normally one SBMD Transaction owns exactly one DAL Transaction. The DAL never re
 
 **Decision:** `DalPluginRegistry` on the main loop; plugins implement `DataSourcePlugin` with `Scope()`, `Caps()`, `Affinity()`, and `Bind(DalTransactionId)` → `PluginBinding` (`Read(keys)` batched, `Commit(writes)`, `Release()`). `DataKey` = namespace + device ID + path; namespaces `Attribute`, `Resource`, `Metadata`, `Property`, `Transient`. `Register`/`Unregister` callable from any thread, marshaled to the main loop. The registerer unregisters; the DAL never guesses plugin lifetimes. A DAL Transaction binds per plugin on first touch; bindings are released at transaction end. Unregistering a plugin aborts every transaction bound to it with failure type `aborted`.
 
-Plugins (BARTON-426): device-service properties, device resources + metadata, and transient data (service lifetime); Matter attributes (one per device, registered by the Matter driver on `MatterDevice` add and unregistered on removal, read-only, `MatterThread` affinity).
+Plugins (BARTON-430): device-service properties, device resources + metadata, and transient data (service lifetime); Matter attributes (one per device, registered by the Matter driver on `MatterDevice` add and unregistered on removal, read-only, `MatterThread` affinity).
 
 ```cpp
 // core/deviceDrivers/matter/sbmd/dal/DataKey.h
@@ -423,7 +423,7 @@ namespace barton::sbmd::dal
 
 ### D10: Attribute writes are device operations
 
-**Decision:** Attribute plugins are read-only. A `writeAttribute` is a device operation recorded in the SBMD Transaction's operation log, takes effect on device acceptance, and is undone only by the driver's failure handler. Read-your-own-writes: when a `writeAttribute` succeeds, the orchestrator records the written value on the transaction's binding to that device's attribute plugin; later reads of that attribute in the same DAL Transaction return it. The overlay is discarded at transaction end; subscription reports remain the source of truth. The DAL core exposes a generic `DalTransaction::SetOverlay(key, value)` hook; the attribute plugin binding behavior is in BARTON-426.
+**Decision:** Attribute plugins are read-only. A `writeAttribute` is a device operation recorded in the SBMD Transaction's operation log, takes effect on device acceptance, and is undone only by the driver's failure handler. Read-your-own-writes: when a `writeAttribute` succeeds, the orchestrator records the written value on the transaction's binding to that device's attribute plugin; later reads of that attribute in the same DAL Transaction return it. The overlay is discarded at transaction end; subscription reports remain the source of truth. The DAL core exposes a generic `DalTransaction::SetOverlay(key, value)` hook; the attribute plugin binding behavior is in BARTON-430.
 
 **Alternative considered:** Automatic attribute undo. Rejected — side effects, write-only and fabric-scoped attributes, device-originated changes.
 
@@ -456,9 +456,9 @@ Both primitives require the owning plugin to declare `PluginCaps::atomic`; other
 
 ### D13: Delivery order and interim data seam
 
-**Decision:** Delivery order is **412 fix → 423 → 421 → 426 → 422 → 424 → 425**. The orchestrator (BARTON-423) lands first on the existing data paths through an internal seam, `SbmdDataAccess` (batched supplement fetch, stage, commit, abort, sequence allocation stub, attribute-write overlay hook), implemented by `LegacySbmdDataAccess`, which wraps today's fetchers/setters and `transientStore` and is invoked from the orchestrator with correct thread affinity (`transientStore` and attribute-cache reads scheduled onto the Matter thread; device-service calls on the orchestrator/main loop). Staged writes are held in the `SbmdTransaction` and applied at commit by the legacy implementation. BARTON-421 (this change) adds `DalSbmdDataAccess`, a DAL-backed implementation of that seam. BARTON-426 adds the plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `transientStore` and `LegacySbmdDataAccess` entirely (no fallback). No interim locking (e.g. a mutex on the transient store) is ever needed. The `sbmd-v4-runtime` delta archive order stays 423 → 422 → 424.
+**Decision:** Delivery order is **412 fix → 423 → 421 → 430 → 422 → 424 → 425**. The orchestrator (BARTON-423) lands first on the existing data paths through an internal seam, `SbmdDataAccess` (batched supplement fetch, stage, commit, abort, sequence allocation stub, attribute-write overlay hook), implemented by `LegacySbmdDataAccess`, which wraps today's fetchers/setters and `transientStore` and is invoked from the orchestrator with correct thread affinity (`transientStore` and attribute-cache reads scheduled onto the Matter thread; device-service calls on the orchestrator/main loop). Staged writes are held in the `SbmdTransaction` and applied at commit by the legacy implementation. BARTON-421 (this change) adds `DalSbmdDataAccess`, a DAL-backed implementation of that seam. BARTON-430 adds the plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `transientStore` and `LegacySbmdDataAccess` entirely (no fallback). No interim locking (e.g. a mutex on the transient store) is ever needed. The `sbmd-v4-runtime` delta archive order stays 423 → 422 → 424.
 
-**Alternative considered:** DAL first (421 → 426 → 423). Rejected — the plugins would have to be usable from today's Matter-thread call sites, forcing an interim mutex or a forbidden Matter → main-loop wait.
+**Alternative considered:** DAL first (421 → 430 → 423). Rejected — the plugins would have to be usable from today's Matter-thread call sites, forcing an interim mutex or a forbidden Matter → main-loop wait.
 
 **Trade-offs:** The seam is an extra abstraction; it also isolates the orchestrator from the DAL for testing.
 
@@ -594,7 +594,7 @@ namespace barton::sbmd::dal
 } // namespace barton::sbmd::dal
 ```
 
-Requirements on 423's `ThreadHop`: `PostMainLoop` is currently `protected`; the DAL needs a public non-blocking main-loop post. This change adds `void PostMainLoopAsync(std::function<void()> fn)` to `ThreadHop` (a public forwarder to the protected `PostMainLoop`), with no behavior change for 423 callers. The DAL façade takes the same `std::shared_ptr<barton::ThreadHop>` instance the orchestrator uses, so tests can inject one fake hop for both. Matter-thread posting is already provided by `DefaultThreadHop`; no separate Matter hook installation is needed by 426.
+Requirements on 423's `ThreadHop`: `PostMainLoop` is currently `protected`; the DAL needs a public non-blocking main-loop post. This change adds `void PostMainLoopAsync(std::function<void()> fn)` to `ThreadHop` (a public forwarder to the protected `PostMainLoop`), with no behavior change for 423 callers. The DAL façade takes the same `std::shared_ptr<barton::ThreadHop>` instance the orchestrator uses, so tests can inject one fake hop for both. Matter-thread posting is already provided by `DefaultThreadHop`; no separate Matter hook installation is needed by 430.
 
 Deadlines: DAL entry points accept `std::chrono::milliseconds` budgets and convert them once to `ThreadHop::Deadline` (`steady_clock::now() + budget`); nested hops (main loop → Matter thread for an attribute plugin) share the caller's absolute deadline.
 
@@ -761,11 +761,11 @@ DAL-backed implementation of the `SbmdDataAccess` / `SbmdDataSession` seam defin
 | `SbmdDataSession::Abort(reason)` | `Dal::Abort`; sequence allocations are not returned |
 | `SbmdDataSession::SetAbortListener(listener)` | invoked when the DAL aborts the transaction (e.g. plugin unregistered) |
 
-`log` ops are not DAL writes and stay with the orchestrator. In this change `DalSbmdDataAccess` is built and unit-tested against fake plugins and a fake orchestrator caller; the orchestrator keeps using `LegacySbmdDataAccess`. BARTON-426 registers the real plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `LegacySbmdDataAccess` entirely.
+`log` ops are not DAL writes and stay with the orchestrator. In this change `DalSbmdDataAccess` is built and unit-tested against fake plugins and a fake orchestrator caller; the orchestrator keeps using `LegacySbmdDataAccess`. BARTON-430 registers the real plugins, switches the orchestrator to `DalSbmdDataAccess`, and deletes `LegacySbmdDataAccess` entirely.
 
 ## Migrations
 
-No persistent migration. Creation order inside this change: `DataKey`/`DalTypes` → `DataSourcePlugin` → `DalExecutor` → `DalPluginRegistry` → `DalTransaction` (including D11 primitives) → `Dal` → `DalSbmdDataAccess`. This change depends on BARTON-423 (the `SbmdDataAccess` seam). Production code does not route through the DAL until BARTON-426 registers the plugins and switches the orchestrator from `LegacySbmdDataAccess` to `DalSbmdDataAccess`.
+No persistent migration. Creation order inside this change: `DataKey`/`DalTypes` → `DataSourcePlugin` → `DalExecutor` → `DalPluginRegistry` → `DalTransaction` (including D11 primitives) → `Dal` → `DalSbmdDataAccess`. This change depends on BARTON-423 (the `SbmdDataAccess` seam). Production code does not route through the DAL until BARTON-430 registers the plugins and switches the orchestrator from `LegacySbmdDataAccess` to `DalSbmdDataAccess`.
 
 ### Delivery order across the epic
 
@@ -773,7 +773,7 @@ No persistent migration. Creation order inside this change: `DataKey`/`DalTypes`
 BARTON-412 fix (sbmd-deferred-failure-callbacks)
   -> BARTON-423 sbmd-transaction-orchestrator    (SbmdDataAccess seam + LegacySbmdDataAccess)
   -> BARTON-421 sbmd-dal-core                    (this change: DAL core, D11, DalSbmdDataAccess)
-  -> BARTON-426 sbmd-dal-source-plugins          (plugins; switch to DalSbmdDataAccess; delete LegacySbmdDataAccess + transientStore)
+  -> BARTON-430 sbmd-dal-source-plugins          (plugins; switch to DalSbmdDataAccess; delete LegacySbmdDataAccess + transientStore)
   -> BARTON-422 sbmd-dal-driver-api
   -> BARTON-424 sbmd-transaction-failure-handler
   -> BARTON-425 sbmd-dal-driver-migration
@@ -814,7 +814,7 @@ An `Atomic` fake plugin. Verify `AllocateSequence` increments from absent (1, 2,
 
 ### Unit — `DalSbmdDataAccess`
 
-Against fake plugins: supplement fetch maps every category to the right keys and back to the supplement shape in one read hop; each op type stages the right write; sequence and overlay hooks route correctly; commit failure reasons map to the `commitFailed`/`aborted` failure types expected by the orchestrator. Run the shared `SbmdDataAccess` contract test suite owned by BARTON-423 against `DalSbmdDataAccess` (fake plugins here; real plugins in 426). The same suite runs against `LegacySbmdDataAccess` in 423.
+Against fake plugins: supplement fetch maps every category to the right keys and back to the supplement shape in one read hop; each op type stages the right write; sequence and overlay hooks route correctly; commit failure reasons map to the `commitFailed`/`aborted` failure types expected by the orchestrator. Run the shared `SbmdDataAccess` contract test suite owned by BARTON-423 against `DalSbmdDataAccess` (fake plugins here; real plugins in 430). The same suite runs against `LegacySbmdDataAccess` in 423.
 
 ### Unit — executor
 
@@ -822,7 +822,7 @@ Use 423's `ThreadHop` test fake (or `DefaultThreadHop` with a real `GMainLoop` t
 
 ### Integration
 
-Deferred to BARTON-426, where real plugins are registered and the orchestrator (already delivered by BARTON-423) is switched to `DalSbmdDataAccess`. No Docker or hardware beyond the standard build container is required.
+Deferred to BARTON-430, where real plugins are registered and the orchestrator (already delivered by BARTON-423) is switched to `DalSbmdDataAccess`. No Docker or hardware beyond the standard build container is required.
 
 ## Documentation Plan
 
@@ -842,7 +842,7 @@ Add an "SBMD Data Access Layer" architecture subsection with the glossary, the o
 - Whether a future two-phase commit is ever needed.
 - Whether any non-transient namespace needs `Atomic` support.
 
-Resolved: sequence counters are decimal `int64_t` strings in the `Transient` namespace with no expiry and are lost on restart (accepted; session IDs are transient too). `SbmdDataAccess` contract tests are owned by BARTON-423 and run against both implementations. `LegacySbmdDataAccess` is deleted entirely by BARTON-426 (no fallback). The DAL reuses 423's `ThreadHop` rather than a parallel executor.
+Resolved: sequence counters are decimal `int64_t` strings in the `Transient` namespace with no expiry and are lost on restart (accepted; session IDs are transient too). `SbmdDataAccess` contract tests are owned by BARTON-423 and run against both implementations. `LegacySbmdDataAccess` is deleted entirely by BARTON-430 (no fallback). The DAL reuses 423's `ThreadHop` rather than a parallel executor.
 
 ## Risks / Trade-offs
 
@@ -878,6 +878,6 @@ Resolved: sequence counters are decimal `int64_t` strings in the `Transient` nam
 
 ### Seam drift between 423 and 421
 
-**Risk:** `DalSbmdDataAccess` must match the `SbmdDataAccess` seam exactly as 423 lands it; behavior differences from `LegacySbmdDataAccess` could surface only after the 426 switch.
+**Risk:** `DalSbmdDataAccess` must match the `SbmdDataAccess` seam exactly as 423 lands it; behavior differences from `LegacySbmdDataAccess` could surface only after the 430 switch.
 
-**Mitigation:** Shared contract tests run against both implementations; 426 runs the full SBMD suite after switching.
+**Mitigation:** Shared contract tests run against both implementations; 430 runs the full SBMD suite after switching.

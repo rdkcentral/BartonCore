@@ -2,14 +2,14 @@
 
 ## Context
 
-Depends on every other change in the epic. Delivery order (epic D13): 412 fix → 423 → 421 → 426 → 422 → 424 → **425**. The epic architecture and glossary are in `openspec/changes/sbmd-dal-core/design.md`. This change is drivers, tests, and docs only.
+Depends on every other change in the epic. Delivery order (epic D13): 412 fix → 423 → 421 → 430 → 422 → 424 → **425**. The epic architecture and glossary are in `openspec/changes/sbmd-dal-core/design.md`. This change is drivers, tests, and docs only.
 
 Terminology (epic glossary D1): an **SBMD Transaction** is the driver-level execution of one request — initial handler, every parked device operation and deferred callback, the terminal result, and on failure the driver-level `onTransactionFailure`. A **DAL Transaction** is the data-access unit owned by it: routed reads, staged writes, commit or abort.
 
 Contract this change relies on:
 
 - Every step receives `args.supplements` fetched by the `SbmdTransactionOrchestrator` at that step's time; deferred callbacks inherit the originating handler's declaration (BARTON-422).
-- `storage.mergeTransientData(name, patch, ttl)` applies an RFC 7396 merge patch at commit (BARTON-422, resolved by the transient data plugin from BARTON-426).
+- `storage.mergeTransientData(name, patch, ttl)` applies an RFC 7396 merge patch at commit (BARTON-422, resolved by the transient data plugin from BARTON-430).
 - Writes are staged and discarded if the SBMD Transaction fails, including writes before an `error` terminal; `log` still runs (BARTON-423, extended by BARTON-422).
 - `supplements: { sequence: KEY }` atomically allocates a counter value during the step's fetch, delivered in `args.supplements.sequence[KEY]`, never rolled back; `storage.setTransientDataIf` fails the commit with `commitFailed`/`conditionFailed` on mismatch (BARTON-422, epic D11).
 - Recovery rule (epic D12): if a hop's `onError` returns a non-`error` terminal that the runtime honors, the SBMD Transaction recovers and `onTransactionFailure` does not run. For `timeout` and depth-limit failures the recovery terminal is ignored (BARTON-412/423).
