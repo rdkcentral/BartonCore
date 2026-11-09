@@ -96,15 +96,15 @@ The SBMD runtime SHALL record the time a request spends waiting to acquire the J
 - **THEN** `sbmd.js.mutex.wait_ms` records an observation close to zero
 
 ### Requirement: Driver load cost tracking
-The SBMD runtime SHALL record, for each successfully loaded driver: the wall-clock time to evaluate and activate its `.sbmd.js` file as a histogram named `sbmd.driver.load.duration_ms` with attribute `"driver"`, and the net heap bytes consumed during load and activation as a histogram named `sbmd.driver.load.heap_bytes` with attribute `"driver"`. Both SHALL be recorded once per driver at startup in `SbmdFactory::RegisterDriversFromDirectory`.
+The SBMD runtime SHALL record, for each successfully loaded driver: the wall-clock time to evaluate its `.sbmd.js` file and register it as a histogram named `sbmd.driver.load.duration_ms` with attribute `"driver"`, and the net heap bytes consumed during load and reduction to claim metadata as a histogram named `sbmd.driver.load.heap_bytes` with attribute `"driver"`. Both SHALL be recorded once per driver at startup in `SbmdFactory::RegisterDriversFromDirectory`. These metrics SHALL NOT include activation cost, because drivers are no longer activated at load.
 
 #### Scenario: Load duration recorded per driver
-- **WHEN** a `.sbmd.js` file is successfully loaded and activated
+- **WHEN** a `.sbmd.js` file is successfully loaded and registered
 - **THEN** `sbmd.driver.load.duration_ms` contains one observation attributed to that driver's name
 
 #### Scenario: Load heap cost recorded per driver
-- **WHEN** a `.sbmd.js` file is successfully loaded and activated
-- **THEN** `sbmd.driver.load.heap_bytes` contains one observation reflecting the heap consumed
+- **WHEN** a `.sbmd.js` file is successfully loaded and reduced to its claim metadata
+- **THEN** `sbmd.driver.load.heap_bytes` contains one observation reflecting the resident heap consumed
 
 ### Requirement: Registered driver count tracking
 The SBMD runtime SHALL record the total number of successfully registered drivers as a gauge named `sbmd.driver.registered.count` once after all drivers have been loaded in `SbmdFactory::RegisterDriversFromDirectory`.
@@ -114,15 +114,19 @@ The SBMD runtime SHALL record the total number of successfully registered driver
 - **THEN** `sbmd.driver.registered.count` gauge records N
 
 ### Requirement: Driver load failure tracking
-The SBMD runtime SHALL count driver load failures using a counter named `sbmd.driver.load.failure` with attributes `"driver"` (filename stem) and `"reason"`. Valid reason values are: `"file_read"` (file could not be opened or read), `"eval_failed"` (JS evaluation failed), `"activation_failed"` (driver Activate() failed).
+The SBMD runtime SHALL count driver load failures using a counter named `sbmd.driver.load.failure` with attributes `"driver"` (filename stem) and `"reason"`. Valid reason values are: `"file_read"` (file could not be opened or read), `"eval_failed"` (JS evaluation or registration extraction failed), and `"invalid_field"` (a numeric claim/version field is not an integer within its range; the driver is skipped). Activation no longer occurs at load, so `reason="activation_failed"` SHALL NOT be emitted here; runtime activation failures are tracked by the activation-failure counter (see Driver activation lifecycle tracking).
 
 #### Scenario: Evaluation failure counted
-- **WHEN** `SbmdLoader::LoadDriver` fails due to a JS evaluation error
+- **WHEN** `SbmdLoader::LoadDriver` fails due to a JS evaluation or registration-extraction error
 - **THEN** `sbmd.driver.load.failure` counter for `reason="eval_failed"` increments for that driver
 
-#### Scenario: Activation failure counted
-- **WHEN** `SbmdDriver::Activate` fails
-- **THEN** `sbmd.driver.load.failure` counter for `reason="activation_failed"` increments for that driver
+#### Scenario: File read failure counted
+- **WHEN** a `.sbmd.js` file cannot be opened or read during load
+- **THEN** `sbmd.driver.load.failure` counter for `reason="file_read"` increments for that driver
+
+#### Scenario: Invalid numeric field counted
+- **WHEN** a `.sbmd.js` file is rejected at load because a numeric claim/version field is not an integer within its range
+- **THEN** `sbmd.driver.load.failure` counter for `reason="invalid_field"` increments for that driver
 
 ### Requirement: JS exception event tracking
 The SBMD runtime SHALL count JS exception events during lifecycle phases using a counter named `sbmd.js.exception` with attributes `"driver"` and `"phase"`. The `"driver"` attribute SHALL be set to the driver's filename stem when known (loading phase) and SHALL be omitted entirely when not known (init phase); implementations MUST NOT record an empty string or placeholder value. Valid phase values are: `"init"` (exception during runtime/polyfill initialization) and `"loading"` (exception during driver script evaluation). Handler-phase exceptions are captured by `sbmd.handler.outcome{outcome="exception"}` and are not recorded here.
@@ -213,3 +217,33 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.js.gc_roots` reflecting the 
 #### Scenario: GC root count is stable after driver teardown
 - **WHEN** all `SafeJSValue` objects for a driver are destroyed and a snapshot is taken
 - **THEN** `sbmd.js.gc_roots` gauge does not increase relative to its pre-load value
+
+### Requirement: Driver activation lifecycle tracking
+Because drivers are loaded inactive and activated on demand when a device first binds (and deactivated when the last device is removed), the SBMD runtime SHALL record the following under `BARTON_CONFIG_SBMD_METRICS`, owned by `SpecBasedMatterDeviceDriver`:
+- a counter `sbmd.driver.activation` with attribute `"driver"` (filename stem), incremented on each successful on-demand activation;
+- a counter `sbmd.driver.deactivation` with attribute `"driver"`, incremented on each deactivation;
+- a gauge `sbmd.driver.active.count` set to the live number of activated drivers on each activation/deactivation transition (and published once after startup registration);
+- a histogram `sbmd.driver.activation.duration_ms` with attribute `"driver"`, recording the time to activate a driver on demand;
+- a counter `sbmd.driver.activation.failure` with attributes `"driver"` and `"reason"`, incremented when a bind-time activation fails. Valid reason values are:
+  - `"read_failed"`: the spec file could not be read;
+  - `"invalid_field"`: a numeric claim/version field in the re-read spec is not an integer within its range;
+  - `"load_failed"`: the re-read spec could not be evaluated or its registration extracted;
+  - `"claim_mismatch"`: the re-read spec's claim identity no longer matches the claim metadata;
+  - `"version_mismatch"`: the re-read device-class or endpoint profile version/set no longer matches the values cached at construction;
+  - `"runtime_unavailable"`: the JS runtime has been shut down.
+
+#### Scenario: Activation recorded on first bind
+- **WHEN** a device first binds to an inactive driver and activation succeeds
+- **THEN** `sbmd.driver.activation` increments for that driver, `sbmd.driver.active.count` reflects the new active total, and `sbmd.driver.activation.duration_ms` records one observation
+
+#### Scenario: Deactivation recorded on last-device removal
+- **WHEN** the last device bound to an active driver is removed
+- **THEN** `sbmd.driver.deactivation` increments for that driver and `sbmd.driver.active.count` reflects the reduced active total
+
+#### Scenario: Activation failure counted with reason
+- **WHEN** a bind-time activation fails because the re-read spec cannot be read, contains an invalid numeric field, cannot be evaluated, or no longer matches the claim metadata
+- **THEN** `sbmd.driver.activation.failure` increments for that driver with `reason` set to `"read_failed"`, `"invalid_field"`, `"load_failed"`, or `"claim_mismatch"` respectively
+
+#### Scenario: Version-mismatch activation failure counted
+- **WHEN** a bind-time activation is rejected because the re-read device-class or profile version/set no longer matches the cached values
+- **THEN** `sbmd.driver.activation.failure` increments for that driver with `reason="version_mismatch"`

@@ -183,6 +183,16 @@ if (BCORE_MATTER)
     )
 
     bcore_add_cpp_test(
+        NAME testSbmdLifecycle
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdLifecycleTest.cpp
+        LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/api/c/public
+                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    bcore_add_cpp_test(
         NAME testSbmdPrerequisites
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdPrerequisitesTest.cpp
         LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
