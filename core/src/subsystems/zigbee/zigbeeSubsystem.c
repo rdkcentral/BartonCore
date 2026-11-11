@@ -391,6 +391,33 @@ __attribute__((constructor)) static void registerSubsystem(void)
     subsystemManagerRegister(zigbeeSubsystem);
 }
 
+/*
+ * zhalInit fails (and starts no reconnect machinery) when the ZHAL server is not accepting connections at that
+ * instant, which happens when ZigbeeCore is still starting or upgrading the radio.  Keep trying until the server
+ * answers or the startup timeout expires.
+ */
+static void connectToZhalServer(const char *ip, uint16_t port)
+{
+    timeTracker *timer = timeTrackerCreate();
+    timeTrackerStart(timer, BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS);
+
+    int rc;
+    while ((rc = zhalInit(ip, port, &callbacks, NULL, requestMonitor)) != ZHAL_STATUS_OK &&
+           timeTrackerExpired(timer) == false)
+    {
+        icLogWarn(
+            LOG_TAG, "%s: ZHAL server %s:%" PRIu16 " is not reachable yet (rc=%d), retrying", __func__, ip, port, rc);
+        sleep(DELAY_BETWEEN_INITIAL_HEARTBEATS_SECONDS);
+    }
+
+    if (rc != ZHAL_STATUS_OK)
+    {
+        icLogError(LOG_TAG, "%s: unable to connect to the ZHAL server %s:%" PRIu16 " (rc=%d)", __func__, ip, port, rc);
+    }
+
+    timeTrackerDestroy(timer);
+}
+
 static void waitForInitialZigbeeCoreStartup(void)
 {
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
@@ -555,7 +582,7 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     memset(&callbacks, 0, sizeof(callbacks));
     zigbeeEventHandlerInit(&callbacks);
 
-    zhalInit(ip, portNum, &callbacks, NULL, requestMonitor);
+    connectToZhalServer(ip, portNum);
 
     // wait here until ZigbeeCore is functional or we time out
     waitForInitialZigbeeCoreStartup();
