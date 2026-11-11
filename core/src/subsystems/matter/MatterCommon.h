@@ -89,6 +89,16 @@ namespace barton
              * Calculate link score for a Matter device, given an RSSI value in dBM (range -120 to 0).
              * @return link score (range 0-100)
              */
+            /**
+             * Determine which BlueZ HCI adapter index to use for BLE operations, from the barton.ble.adapterId
+             * property. Uses hci0 when the property is not set. A value that is set but malformed or outside
+             * 0-9999 is a configuration error: it never falls back, since another adapter may belong to someone else.
+             *
+             * @param[out] adapterId the HCI adapter index to pass to BLEMgrImpl::ConfigureBle()
+             * @return false if the property is set but invalid
+             */
+            bool ResolveBleAdapterId(uint32_t &adapterId);
+
             uint8_t calculateLinkScore(int8_t rssi);
 
             /**

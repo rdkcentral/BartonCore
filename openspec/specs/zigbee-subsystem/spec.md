@@ -143,3 +143,32 @@ The Zigbee subsystem SHALL support changing the Zigbee operating channel, includ
 #### Scenario: Channel change errors
 - **WHEN** a channel change is attempted while another is in progress
 - **THEN** the operation SHALL fail with `BCoreZigbeeChannelChangeError` `IN_PROGRESS`
+
+### Requirement: ZigbeeCore address
+The Zigbee subsystem SHALL determine the ZigbeeCore address from, in order: the `ZIGBEE_CORE_IP` system property, the `barton.zigbee.address` property (`B_CORE_BARTON_ZIGBEE_ADDRESS`), and the default `127.0.0.1`. The address SHALL be a numeric IPv4 address; the Zigbee subsystem SHALL fail initialization with an error log when it is not. The Zigbee subsystem SHALL log the address and port used and which source supplied the address. It SHALL NOT read the address from environment variables or resolve host names.
+
+#### Scenario: Address from property
+- **WHEN** the `ZIGBEE_CORE_IP` system property is unset and `barton.zigbee.address` is `172.18.0.5`
+- **THEN** ZHAL SHALL send requests to `172.18.0.5` and log that the address came from `barton.zigbee.address`
+
+#### Scenario: Host name rejected
+- **WHEN** the configured ZigbeeCore address is a host name such as `remote-zigbee`
+- **THEN** the Zigbee subsystem SHALL log an error and fail initialization
+
+### Requirement: ZHAL event source trust
+The ZHAL asynchronous receiver SHALL process events and IPC responses only from loopback or from the configured ZigbeeCore address, compared numerically without name resolution. Packets from other sources SHALL be dropped, and the drops SHALL be logged at most once per minute with a count and the latest source address.
+
+#### Scenario: Event from ZigbeeCore in another container
+- **WHEN** ZigbeeCore is configured at `172.18.0.5` and an event arrives from `172.18.0.5`
+- **THEN** the event SHALL be processed
+
+#### Scenario: Event from an untrusted source
+- **WHEN** an event arrives from an address that is neither loopback nor the ZigbeeCore address
+- **THEN** the event SHALL be dropped and counted in the rate-limited warning
+
+### Requirement: Unset local EUI64
+When the local 802.15.4 EUI64 property (`barton.fifteenfour.eui64`) is not set, as on a first start, `getLocalEui64()` SHALL return `0`, which ZigbeeCore treats as no address assigned.
+
+#### Scenario: First start
+- **WHEN** the Zigbee subsystem initializes the network and `barton.fifteenfour.eui64` is not set
+- **THEN** the local EUI64 SHALL be `0` and initialization SHALL continue

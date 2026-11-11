@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#include "deviceServiceProperties.h"
 #include "glib.h"
 #include "icConcurrent/threadUtils.h"
 #include "subsystemManager.h"
@@ -64,6 +65,13 @@ icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem);
 DeviceDescriptor *__wrap_deviceServiceGetDeviceDescriptorForDevice(icDevice *device);
 gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir();
 void __wrap_subsystemManagerRegister(Subsystem *subsystem);
+gchar *__real_b_core_property_provider_get_property_as_string(BCorePropertyProvider *self,
+                                                              const gchar *property_name,
+                                                              const gchar *default_value);
+gchar *__wrap_b_core_property_provider_get_property_as_string(BCorePropertyProvider *self,
+                                                              const gchar *property_name,
+                                                              const gchar *default_value);
+static bool mockLocalEui64Property = false;
 static icDevice *createDummyDevice(const char *manufacturer,
                                    const char *model,
                                    const char *hardwareVersion,
@@ -383,6 +391,27 @@ static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
     capturedZigbeeSubsystemRef->shutdown();
 }
 
+static void test_getLocalEui64WhenUnset(void **state)
+{
+    (void) state;
+
+    // On a first start there is no stored EUI64; this must not crash and reports none assigned.
+    mockLocalEui64Property = true;
+    will_return(__wrap_b_core_property_provider_get_property_as_string, NULL);
+    assert_int_equal(getLocalEui64(), 0);
+    mockLocalEui64Property = false;
+}
+
+static void test_getLocalEui64WhenSet(void **state)
+{
+    (void) state;
+
+    mockLocalEui64Property = true;
+    will_return(__wrap_b_core_property_provider_get_property_as_string, "000d6f0003c04a7d");
+    assert_int_equal(getLocalEui64(), 0x000d6f0003c04a7dULL);
+    mockLocalEui64Property = false;
+}
+
 // ******************************
 // Setup/Teardown
 // ******************************
@@ -532,6 +561,19 @@ DeviceDescriptor *__wrap_deviceServiceGetDeviceDescriptorForDevice(icDevice *dev
     return result;
 }
 
+gchar *__wrap_b_core_property_provider_get_property_as_string(BCorePropertyProvider *self,
+                                                              const gchar *property_name,
+                                                              const gchar *default_value)
+{
+    if (mockLocalEui64Property && g_strcmp0(property_name, LOCAL_EUI64_PROP_KEY) == 0)
+    {
+        const gchar *value = mock_type(const gchar *);
+        return g_strdup(value != NULL ? value : default_value);
+    }
+
+    return __real_b_core_property_provider_get_property_as_string(self, property_name, default_value);
+}
+
 gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir()
 {
     assert_non_null(dynamicDir);
@@ -566,7 +608,9 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_encodeDecodeIcDiscoveredDeviceDetails),
         cmocka_unit_test(test_icDiscoveredDeviceDetailsGetClusterEndpoint),
         cmocka_unit_test(test_icDiscoveredDeviceDetailsGetAttributeEndpoint),
-        cmocka_unit_test(test_zigbeeSubsystemSetWatchdogDelegate)};
+        cmocka_unit_test(test_zigbeeSubsystemSetWatchdogDelegate),
+        cmocka_unit_test(test_getLocalEui64WhenUnset),
+        cmocka_unit_test(test_getLocalEui64WhenSet)};
 
     int retval = cmocka_run_group_tests(tests, testSetup, testTeardown);
 

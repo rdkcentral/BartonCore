@@ -189,6 +189,21 @@ static gchar *getDefaultConfigDirectory(void)
     return confDir;
 }
 
+/*
+ * Development configurations (such as the remote-radios containers) select radios and border routers through the
+ * environment.  Barton validates the values when it reads the properties.
+ */
+static void
+setPropertyFromEnvironment(BCorePropertyProvider *propProvider, const gchar *envName, const gchar *propertyName)
+{
+    const gchar *value = g_getenv(envName);
+
+    if (value != NULL && *value != '\0')
+    {
+        b_core_property_provider_set_property_string(propProvider, propertyName, value);
+    }
+}
+
 static void setDefaultParameters(BCoreInitializeParamsContainer *params)
 {
     BCorePropertyProvider *propProvider =
@@ -259,6 +274,12 @@ static void setDefaultParameters(BCoreInitializeParamsContainer *params)
             b_core_property_provider_set_property_uint32(
                 propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 20202021);
         }
+
+        setPropertyFromEnvironment(propProvider, "BARTON_BLE_ADAPTER_ID", B_CORE_BARTON_BLE_ADAPTER_ID);
+        setPropertyFromEnvironment(propProvider, "BARTON_THREAD_INTERFACE", B_CORE_BARTON_THREAD_INTERFACE_NAME);
+        setPropertyFromEnvironment(
+            propProvider, "BARTON_THREAD_ATTACH_WAIT_SECONDS", B_CORE_BARTON_THREAD_ATTACH_WAIT_SECONDS);
+        setPropertyFromEnvironment(propProvider, "ZIGBEE_CORE_IP", B_CORE_BARTON_ZIGBEE_ADDRESS);
     }
 }
 
