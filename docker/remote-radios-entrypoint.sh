@@ -422,6 +422,19 @@ restart_cpcd() {
 # bluetoothd then manages.  The workstation's own Bluetooth adapter is never
 # touched.
 
+# stop_bt_socat — stop the usb-ip bridge and the per-connection children it
+# forked.  A child left behind keeps the old usb-ip session open, so the next
+# attach would compete with it.  Only children of this container's own bridge
+# are signalled; the container has its own PID namespace, so other users'
+# bridges on the dev server are never visible here either way.
+stop_bt_socat() {
+    [ -n "${BT_SOCAT_PID:-}" ] || return 0
+    pkill -P "${BT_SOCAT_PID}" -x socat 2>/dev/null || true
+    kill "${BT_SOCAT_PID}" 2>/dev/null || true
+    wait "${BT_SOCAT_PID}" 2>/dev/null || true
+    BT_SOCAT_PID=""
+}
+
 # bt_usbip_attach — attach the dongle over usb-ip in the host netns.
 # Auto-detects the busid if BT_USBIP_BUSID is unset.  Returns non-zero on
 # failure.
@@ -472,7 +485,7 @@ bt_usbip_attach() {
     fi
 
     # (Re)start the socat UNIX->TCP bridge for usbip.
-    [ -n "${BT_SOCAT_PID:-}" ] && kill "${BT_SOCAT_PID}" 2>/dev/null || true
+    stop_bt_socat
     socat "TCP4-LISTEN:${BT_USBIP_TCP_PORT},bind=127.0.0.1,reuseaddr,fork" \
           "UNIX-CONNECT:${BT_USBIP_SOCKET}" &
     BT_SOCAT_PID=$!
@@ -720,6 +733,16 @@ start_bluetooth_chain() {
         waited=$((waited + 1))
     done
     if ! bt_controller_registered; then
+        # bluetoothd only takes the adapter once the kernel has set it up.  A
+        # controller that stops answering HCI commands (seen with Realtek
+        # dongles after long use) fails that setup forever, whichever machine
+        # drives it; USB resets do not clear it, only a power cycle does.
+        if ! timeout 5 nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" version >/dev/null 2>&1; then
+            echo "[remote-radios] WARNING: the Bluetooth dongle (${radioHci}) is not answering HCI commands." >&2
+            echo "[remote-radios]          Unplug it from the workstation and plug it back in;" >&2
+            echo "[remote-radios]          it is re-attached automatically." >&2
+            return 1
+        fi
         echo "[remote-radios] WARNING: the dev server's bluetoothd does not expose ${radioHci}." >&2
         echo "[remote-radios]          BLE will not work.  On the dev server run:" >&2
         echo "[remote-radios]              sudo systemctl unmask bluetooth.service" >&2
@@ -742,7 +765,7 @@ teardown_bluetooth_chain() {
     rm -f "${DBUS_DIR}/ble_adapter_id"
     bt_usbip_detach
     # Stop the usbip socat bridge so a restart re-establishes it cleanly.
-    [ -n "${BT_SOCAT_PID:-}" ] && kill "${BT_SOCAT_PID}" 2>/dev/null || true
+    stop_bt_socat
     sleep 1
 }
 
