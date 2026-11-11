@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Observability Metrics
+
+## Purpose
+
+Specifies BartonCore's metrics instruments — counters, gauges, and histograms — along with the telemetry JSON dump command and conditional compilation of the observability subsystem.
+
+## Requirements
 
 ### Requirement: Counter metric instrument
 The system SHALL provide an `ObservabilityCounter` opaque type that tracks a monotonically increasing uint64 value. The API SHALL support `observabilityCounterCreate(name)`, `observabilityCounterAdd(counter, value)`, and `observabilityCounterAddWithAttrs(counter, value, ...)` with NULL-terminated key-value attribute pairs.

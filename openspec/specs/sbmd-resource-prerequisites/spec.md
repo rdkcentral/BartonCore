@@ -1,4 +1,10 @@
-## ADDED Requirements
+# SBMD Resource Prerequisites
+
+## Purpose
+
+Specifies prerequisite gating for SBMD resources: alias definitions in `matterMeta`, prerequisite declarations on resources, alias-based mapper metadata, parser enforcement, and commissioning-time evaluation that leaves unsatisfied resources unregistered.
+
+## Requirements
 
 ### Requirement: Alias definitions in `matterMeta`
 Each SBMD driver spec MAY declare a `matterMeta.aliases` list. Each alias SHALL have a `name` (unique within the spec) and exactly one of `attribute` (with `clusterId`, `attributeId`, `name`, `type`) or `event` (with `clusterId`, `eventId`, `name`). An alias name referenced in `prerequisites` or mapper metadata that does not exist in `matterMeta.aliases` SHALL be a parse-time error.

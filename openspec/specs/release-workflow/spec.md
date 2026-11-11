@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Release Workflow
+
+## Purpose
+
+Specifies release safety and mechanics: the branch guard that prevents non-main releases, annotated tagging, and pushing the version commit to main.
+
+## Requirements
 
 ### Requirement: Branch guard prevents non-main releases
 The release workflow SHALL refuse to run when triggered on any branch other than `main`.
