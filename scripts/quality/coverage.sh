@@ -64,7 +64,9 @@ lcov --remove "${REPORT_DIR}/lcov.raw.info" '/usr/*' '*/test/*' '*/third_party/*
     || quality_finish error "lcov filter failed (see lcov.log)"
 
 mkdir -p "${REPORT_DIR}/html"
-gcovr --root "$QUALITY_ROOT" --object-directory "$BDIR" --gcov-executable "$GCOV_TOOL" \
+# Search only this build tree; other coverage builds under the checkout would
+# otherwise contribute stale .gcda data.
+gcovr "$BDIR" --root "$QUALITY_ROOT" --object-directory "$BDIR" --gcov-executable "$GCOV_TOOL" \
     --filter 'api/' --filter 'core/' --filter 'libs/' --exclude '.*/test/.*' \
     --gcov-ignore-errors all \
     --cobertura "${REPORT_DIR}/cobertura.xml" --html-details "${REPORT_DIR}/html/index.html" \

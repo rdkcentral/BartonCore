@@ -251,7 +251,7 @@ Under clang, UBSan excludes `vptr`: C executables that link `libBartonCore` (the
 
 ### D4: Warnings and `BCORE_WERROR` scoped to first-party targets
 
-**Decision:** Define an INTERFACE target `bCoreWarnings` carrying `-Wall -Wextra` (and `-Werror` when `BCORE_WERROR=ON`) and link it into first-party targets (`bCoreObject`, `libs/*`, reference app, unit tests). Third-party and Matter SDK builds do not get it.
+**Decision:** A `bcore_target_warnings(<target>)` function adds `-Wall -Wextra` (and `-Werror` when `BCORE_WERROR=ON`) as PRIVATE compile options on first-party targets (`bCoreObject`, `libs/*`, reference app, unit tests). Third-party and Matter SDK builds do not get it. An INTERFACE library linked with `$<BUILD_INTERFACE:...>` was tried first and rejected in review: `BUILD_INTERFACE` is active for `add_subdirectory` consumers, so plain-signature links passed `-Werror` to their code, and making the link PRIVATE would require converting every target's existing plain `target_link_libraries` calls.
 
 `-Wall -Wextra` are gated by `BCORE_EXTRA_WARNINGS` (default OFF, set ON in `config/cmake/platforms/dev/linux.cmake`, so `./build.sh` and every preset get them). The cross-project review found that zilker injects `-Wall -Werror` into BartonCore's build; unconditional `-Wextra` would turn the ~50 existing `-Wextra`-class baseline warnings (e.g. `-Wunused-parameter`) into errors on its next tag bump. The option is deliberately private (advanced, not listed in user docs, not a `bcore_option`, no compile definition) and temporary: once the existing findings are fixed it is removed and the flags become unconditional.
 
@@ -259,13 +259,14 @@ Under clang, UBSan excludes `vptr`: C executables that link `libBartonCore` (the
 # config/cmake/modules/BCoreWarnings.cmake
 option(BCORE_EXTRA_WARNINGS "Internal: enable -Wall -Wextra on first-party targets" OFF)
 mark_as_advanced(BCORE_EXTRA_WARNINGS)
-add_library(bCoreWarnings INTERFACE)
-if (BCORE_EXTRA_WARNINGS)
-    target_compile_options(bCoreWarnings INTERFACE -Wall -Wextra)
-endif()
-if (BCORE_WERROR)
-    target_compile_options(bCoreWarnings INTERFACE -Werror)
-endif()
+function(bcore_target_warnings target)
+    if (BCORE_EXTRA_WARNINGS)
+        target_compile_options(${target} PRIVATE -Wall -Wextra)
+    endif()
+    if (BCORE_WERROR)
+        target_compile_options(${target} PRIVATE -Werror)
+    endif()
+endfunction()
 ```
 
 **Alternative considered:** Appending to `CMAKE_C_FLAGS`. Rejected — would leak `-Werror` into `third_party/` subprojects.
@@ -351,7 +352,7 @@ Differences from `-C`:
 
 **Alternative considered:** Copying `linux.cmake` values into preset `cacheVariables`. Rejected — duplicates the platform file and cannot express the `BCoreMatterHelper` function calls. **Alternative considered:** Teaching `CMakeLists.txt` to include a platform file chosen by a preset variable. Rejected — the top-level project must stay platform-agnostic. **Alternative considered:** `CMAKE_PROJECT_INCLUDE` (no project name). Rejected — it would also run for every subproject `project()` call. **Alternative considered:** Extending `build.sh` flags only. Rejected — presets are what agents and IDEs discover generically.
 
-**Matter install directory (added during implementation):** `build-matter.sh` previously always installed to `<repo>/build/matter-install`, while `linux.cmake` and several `CMakeLists.txt` files used `${CMAKE_BINARY_DIR}/matter-install`, so preset trees under `build/<preset>/` could not find Matter. A new cache path `BCORE_MATTER_INSTALL_DIR` (default `${CMAKE_BINARY_DIR}/matter-install`, defined in `options.cmake` and `linux.cmake`) replaces those references and is passed to a new `build-matter.sh -i <install-dir>` option. Because Matter is built with or without `-a` (ASAN), presets share two installs: `build/matter-install` for ASAN presets (the same one `build.sh` uses) and `build/matter-noasan/matter-install` for `coverage`, `ubsan`, `tsan`, and `tidy`.
+**Matter install directory (added during implementation):** `build-matter.sh` previously always installed to `<repo>/build/matter-install`, while `linux.cmake` and several `CMakeLists.txt` files used `${CMAKE_BINARY_DIR}/matter-install`, so preset trees under `build/<preset>/` could not find Matter. A new cache path `BCORE_MATTER_INSTALL_DIR` (default `${CMAKE_BINARY_DIR}/matter-install`, defined in `options.cmake` and `linux.cmake`) replaces those references and is passed to a new `build-matter.sh -i <install-dir>` option. Because Matter is built with or without `-a` (ASAN), presets share two installs: `build/matter-install` for ASAN presets (the same one `build.sh` uses) `build/matter-noasan/matter-install` for `coverage`, `ubsan`, `tsan`, and `tidy` (SSP on), and `build/matter-release/matter-install` for `size` (SSP off) so the size snapshot does not depend on which preset built Matter first. `build-matter.sh` writes `.barton-matter-install` into an install dir after a successful build and only ever deletes an install dir carrying that marker, so a shared prefix such as `/usr/local` is never removed.
 
 **Trade-offs:** Preset build trees live under `build/<preset>/` rather than `build/`, so preset and `build.sh` builds do not share a tree.
 

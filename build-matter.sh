@@ -77,6 +77,8 @@ while getopts ":hc:i:sat" option; do
     esac
 done
 
+INSTALL_MARKER=".barton-matter-install"
+
 # MATTER_INSTALL_DIR may come from -i (e.g. a CMake cache value) and is removed
 # below before a rebuild, so refuse paths that are obviously not a Matter install.
 case "${MATTER_INSTALL_DIR}" in
@@ -97,9 +99,12 @@ if [ -e "${MATTER_BUILD_DIR}" ] && [ ! -d "${MATTER_INSTALL_DIR}" ]; then
 elif [ -e "${MATTER_BUILD_DIR}" ]; then
     echo "Matter build dir already exists at: ${MATTER_BUILD_DIR}. Delete it if you want to rebuild Matter."
 else
+    # Only delete an install dir this script created (marked after a successful
+    # install), never a shared prefix that merely contains include/matter.
     if [ -e "${MATTER_INSTALL_DIR}" ]; then
-        if [ ! -d "${MATTER_INSTALL_DIR}/include/matter" ]; then
-            echo "Refusing to delete ${MATTER_INSTALL_DIR}: it exists but does not look like a Matter install (no include/matter)." >&2
+        if [ ! -f "${MATTER_INSTALL_DIR}/${INSTALL_MARKER}" ]; then
+            echo "Refusing to delete ${MATTER_INSTALL_DIR}: it was not created by build-matter.sh (no ${INSTALL_MARKER})." >&2
+            echo "Delete it yourself or choose another install dir." >&2
             exit 1
         fi
         rm -rf "${MATTER_INSTALL_DIR}"
@@ -119,6 +124,7 @@ else
 
     git am ${MY_DIR}/third_party/matter/barton-library/patches/*.patch || (git am --abort && git reset --hard ${MATTER_COMMIT} && exit 1)
     CHIP_ROOT=${MATTER_BUILD_DIR} ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER} ${BUILD_WITH_MESSAGE_TRACING}
+    touch "${MATTER_INSTALL_DIR}/${INSTALL_MARKER}"
 
     cd ${MATTER_BUILD_DIR}
     git reset --hard ${MATTER_COMMIT}

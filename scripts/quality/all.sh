@@ -53,39 +53,48 @@ for check in "${CHECKS[@]}"; do
     set -e
 done
 
-python3 - "${REPORTS_ROOT}" "${REPORTS_ROOT}/summary.json" "${CHECKS[@]}" <<'PY'
+RC_ARGS=()
+for check in "${CHECKS[@]}"; do
+    RC_ARGS+=("${check}=${RESULTS[$check]}")
+done
+
+# The aggregate exit code is derived from the same per-check status written to
+# summary.json, so the two always agree.
+set +e
+python3 - "${REPORTS_ROOT}" "${REPORTS_ROOT}/summary.json" "${RC_ARGS[@]}" <<'PY'
 import datetime
 import json
 import os
 import sys
 
-root, out, checks = sys.argv[1], sys.argv[2], sys.argv[3:]
+CODES = {"pass": 0, "findings": 1, "error": 2, "blocked": 3}
+RANK = {0: 0, 3: 1, 1: 2, 2: 3}  # severity: error > findings > blocked > pass
+
+root, out, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
 results = []
-for check in checks:
+for pair in pairs:
+    check, rc = pair.rsplit("=", 1)
+    rc = int(rc)
     path = os.path.join(root, check, "summary.json")
     try:
         with open(path) as f:
-            results.append(json.load(f))
+            result = json.load(f)
     except (OSError, ValueError):
-        results.append({"check": check, "status": "error", "message": "no summary.json written"})
+        result = {"check": check, "status": "error", "message": f"no summary.json written (exit {rc})"}
+    if CODES.get(result.get("status")) != rc and result["status"] != "error":
+        result = {"check": check, "status": "error",
+                  "message": f"exit {rc} does not match status '{result.get('status')}': {result.get('message', '')}"}
+    results.append(result)
 with open(out, "w") as f:
     json.dump({"generated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                "checks": results}, f, indent=2)
     f.write("\n")
 for r in results:
     print(f"{r['check']:<20} {r['status']:<9} {r['message']}")
+worst = max((CODES[r["status"]] for r in results), key=RANK.get, default=0)
+sys.exit(worst)
 PY
-
-worst=0
-for check in "${CHECKS[@]}"; do
-    rc=${RESULTS[$check]}
-    case $rc in
-        2) worst=2 ;;
-        1) [[ $worst -ne 2 ]] && worst=1 ;;
-        3) [[ $worst -eq 0 ]] && worst=3 ;;
-        0) ;;
-        *) worst=2 ;;
-    esac
-done
+worst=$?
+set -e
 echo "Summary: ${REPORTS_ROOT}/summary.json"
 exit $worst

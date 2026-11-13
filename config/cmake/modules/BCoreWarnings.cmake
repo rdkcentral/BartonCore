@@ -21,9 +21,10 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-# Warning flags for first-party targets only. Link with
-# $<BUILD_INTERFACE:bCoreWarnings> so third_party/ and the Matter SDK are
-# unaffected and installed targets do not reference it.
+# Warning flags for first-party targets only. bcore_target_warnings(<target>)
+# adds them as PRIVATE compile options, so they apply to that target's own
+# sources and never propagate to dependents (including add_subdirectory
+# consumers), third_party/, or the Matter SDK.
 #
 # BCORE_EXTRA_WARNINGS is private and temporary: consumers that inject -Werror
 # (e.g. zilker) would fail on existing -Wextra findings, so the flags are opt-in
@@ -31,10 +32,11 @@
 # Remove the option and make the flags unconditional at that point.
 option(BCORE_EXTRA_WARNINGS "Internal: enable -Wall -Wextra on first-party targets" OFF)
 mark_as_advanced(BCORE_EXTRA_WARNINGS)
-add_library(bCoreWarnings INTERFACE)
-if (BCORE_EXTRA_WARNINGS)
-    target_compile_options(bCoreWarnings INTERFACE -Wall -Wextra)
-endif()
-if (BCORE_WERROR)
-    target_compile_options(bCoreWarnings INTERFACE -Werror)
-endif()
+function(bcore_target_warnings target)
+    if (BCORE_EXTRA_WARNINGS)
+        target_compile_options(${target} PRIVATE -Wall -Wextra)
+    endif()
+    if (BCORE_WERROR)
+        target_compile_options(${target} PRIVATE -Werror)
+    endif()
+endfunction()

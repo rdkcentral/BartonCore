@@ -74,7 +74,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "BCORE_BUILD_WITH_ASAN": "OFF",
         "BCORE_BUILD_WITH_SSP": "OFF",
-        "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-noasan/matter-install"
+        "BCORE_MATTER_INSTALL_DIR": "${sourceDir}/build/matter-release/matter-install"
       }
     }
   ]

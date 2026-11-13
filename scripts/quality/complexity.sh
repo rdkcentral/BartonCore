@@ -37,16 +37,22 @@ EXCLUDES=(-x "*/test/*" -x "*/tests/*" -x "*/zap-generated/*")
 lizard "${EXCLUDES[@]}" --csv "${SRC[@]}" > "${REPORT_DIR}/lizard.csv" \
     || quality_finish error "lizard failed"
 # CSV columns: nloc, ccn, token, param, length, location, file, function, long_name, start, end
-python3 - "${REPORT_DIR}/lizard.csv" <<'PY' | LC_ALL=C sort > "${REPORT_DIR}/findings.txt"
+python3 - "${REPORT_DIR}/lizard.csv" > "${REPORT_DIR}/findings.unsorted.txt" <<'PY' \
+    || quality_finish error "cannot parse lizard.csv"
 import csv
 import sys
 
 with open(sys.argv[1], newline="") as f:
-    for row in csv.reader(f):
-        ccn, params, length = int(row[1]), int(row[3]), int(row[4])
-        if ccn > 15 or length > 1000 or params > 10:
-            print(f"{row[6]}: {row[7]}")
+    rows = list(csv.reader(f))
+# lizard --csv has no header; check the shape so a layout change fails loudly.
+if rows and (len(rows[0]) != 11 or not all(rows[0][i].isdigit() for i in (0, 1, 2, 3, 4))):
+    sys.exit(f"unexpected lizard CSV layout: {rows[0]}")
+for row in rows:
+    ccn, params, length = int(row[1]), int(row[3]), int(row[4])
+    if ccn > 15 or length > 1000 or params > 10:
+        print(f"{row[6]}: {row[7]}")
 PY
+LC_ALL=C sort "${REPORT_DIR}/findings.unsorted.txt" > "${REPORT_DIR}/findings.txt"
 
 BASELINE="${BASELINE_DIR}/complexity-baseline.txt"
 if quality_update_requested "$@"; then

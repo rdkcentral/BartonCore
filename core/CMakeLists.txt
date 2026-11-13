@@ -309,7 +309,7 @@ set(BARTON_PUBLIC_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public)
 # statice/shared libraries.
 add_library(bCoreObject OBJECT ${SOURCES} ${B_CORE_API_SOURCES})
 target_link_libraries(bCoreObject ${bCoreLinkLibraries})
-target_link_libraries(bCoreObject $<BUILD_INTERFACE:bCoreWarnings>)
+bcore_target_warnings(bCoreObject)
 target_include_directories(bCoreObject PRIVATE
                             ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC
@@ -445,12 +445,25 @@ if (BCORE_GEN_GIR)
         # during that short-lived import-only path, so disable leak detection
         # for this post-install helper just as we already do for GIR generation.
         set(ASAN_STUBS_ENV "LSAN_OPTIONS=detect_leaks=0")
+    elseif (BCORE_BUILD_WITH_TSAN)
+        # TSan-instrumented libraries need the TSan runtime in the
+        # uninstrumented python3 process that imports them.
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            set(ASAN_LD_PRELOAD "LD_PRELOAD=$(clang -print-file-name=libclang_rt.tsan-x86_64.so)")
+        elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(ASAN_LD_PRELOAD "LD_PRELOAD=$(gcc -print-file-name=libtsan.so)")
+        endif()
+        set(ASAN_STUBS_ENV "TSAN_OPTIONS=report_bugs=0")
     endif()
 
     configure_file(gen_pygobject_stubs.in gen_pygobject_stubs @ONLY)
 
     # We need to run gen_pygobject_stubs after install for it to work.
-    install(CODE "execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/gen_pygobject_stubs)")
+    install(CODE "
+        execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/gen_pygobject_stubs RESULT_VARIABLE _bcoreStubsResult)
+        if (NOT _bcoreStubsResult EQUAL 0)
+            message(FATAL_ERROR \"gen_pygobject_stubs failed (\${_bcoreStubsResult}); see ${CMAKE_CURRENT_BINARY_DIR}/pygobject-stubs-generate-output.txt\")
+        endif()")
 endif()
 
 # temporary until zhal is relocated to its own repo
