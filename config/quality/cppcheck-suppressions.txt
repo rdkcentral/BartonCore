@@ -1,0 +1,3 @@
+// cppcheck suppressions for BartonCore. One suppression per line:
+//   <id>:<file>[:<line>]
+// Keep this list minimal; prefer fixing findings or inline suppressions.

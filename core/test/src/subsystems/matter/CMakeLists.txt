@@ -46,7 +46,7 @@ pkg_check_modules(OPENSSL REQUIRED openssl)
 bcore_add_cpp_test(NAME testMatterSDKTooling
                 LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto BartonCommon::xhLog BartonCommon::xhUtil xhDeviceDescriptors BartonCommon::xhConfig
                 INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                         ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                         ${BCORE_MATTER_INSTALL_DIR}/include/matter
                          ${PROJECT_SOURCE_DIR}/api/c/public
                          ${PRIVATE_API_INCLUDES}
                 SOURCES ${TEST_SRC}

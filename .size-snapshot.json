@@ -1,0 +1,14 @@
+{
+  "artifact": "libBartonCore.so",
+  "preset": "size",
+  "tool": "bloaty",
+  "generated_from": "4.4.0-28-g7827dc2c",
+  "sections": {
+    ".text": 6953204,
+    ".rodata": 670036,
+    ".data": 3584,
+    ".bss": 118608
+  },
+  "vm_total": 16843473,
+  "file_total": 83185480
+}
