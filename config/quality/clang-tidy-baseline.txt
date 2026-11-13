@@ -521,7 +521,9 @@ core/deviceDrivers/matter/sbmd/../clusters/PowerSource.h: performance-unnecessar
 core/deviceDrivers/matter/sbmd/../clusters/WifiNetworkDiagnostics.h: performance-unnecessary-value-param: parameter 'deviceDataCache' is passed by value and only copied once; consider moving it to avoid unnecessary copies
 core/deviceDrivers/matter/sbmd/../clusters/WifiNetworkDiagnostics.h: performance-unnecessary-value-param: parameter 'deviceId' is passed by value and only copied once; consider moving it to avoid unnecessary copies
 core/deviceDrivers/matter/sbmd/SbmdDispatch.h: performance-enum-size: enum 'HandlerPriority' uses a larger base type ('int', size: 4 bytes) than necessary for its value set, consider using 'std::uint8_t' (1 byte) as the base type to reduce its size
+core/deviceDrivers/matter/sbmd/SbmdDriver.h: performance-enum-size: enum 'ActivationFailure' uses a larger base type ('int', size: 4 bytes) than necessary for its value set, consider using 'std::uint8_t' (1 byte) as the base type to reduce its size
 core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp: bugprone-branch-clone: repeated branch body in conditional chain
+core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp: bugprone-lambda-function-name: inside a lambda, '__func__' expands to the name of the function call operator; consider capturing the name of the enclosing function explicitly
 core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp: bugprone-lambda-function-name: inside a lambda, '__func__' expands to the name of the function call operator; consider capturing the name of the enclosing function explicitly
 core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp: bugprone-lambda-function-name: inside a lambda, '__func__' expands to the name of the function call operator; consider capturing the name of the enclosing function explicitly
 core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp: bugprone-lambda-function-name: inside a lambda, '__func__' expands to the name of the function call operator; consider capturing the name of the enclosing function explicitly
@@ -531,6 +533,7 @@ core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp: bugprone-uncheck
 core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp: cert-err58-cpp: initialization of 'metrics' with static storage duration may throw an exception that cannot be caught
 core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp: cert-err58-cpp: initialization of 'metrics' with static storage duration may throw an exception that cannot be caught
 core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp: performance-inefficient-string-concatenation: string concatenation results in allocation of unnecessary temporary strings; consider using 'operator+=' or 'string::append()' instead
+core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h: performance-enum-size: enum 'SbmdLoadFailure' uses a larger base type ('int', size: 4 bytes) than necessary for its value set, consider using 'std::uint8_t' (1 byte) as the base type to reduce its size
 core/deviceDrivers/onvif/OnvifDeviceDriver.cpp: cert-err34-c: 'atoi' used to convert a string to an integer value, but function will not report conversion errors; consider using 'strtol' instead
 core/deviceDrivers/onvif/OnvifSoapClient.cpp: bugprone-implicit-widening-of-multiplication-result: performing an implicit widening conversion to type 'const size_t' (aka 'const unsigned long') of a multiplication performed in type 'int'
 core/deviceDrivers/onvif/OnvifSoapClient.cpp: bugprone-narrowing-conversions: narrowing conversion from 'size_type' (aka 'unsigned long') to signed type 'gssize' (aka 'long') is implementation-defined
@@ -892,9 +895,6 @@ core/test/src/SbmdDriverTest.cpp: bugprone-unchecked-optional-access: unchecked 
 core/test/src/SbmdDriverTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
 core/test/src/SbmdDriverTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
 core/test/src/SbmdDriverTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
-core/test/src/SbmdDriverTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
-core/test/src/SbmdDriverTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
-core/test/src/SbmdDriverTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
 core/test/src/SbmdDriverTestBase.h: bugprone-implicit-widening-of-multiplication-result: performing an implicit widening conversion to type 'size_t' (aka 'unsigned long') of a multiplication performed in type 'int'
 core/test/src/SbmdDriverTestBase.h: bugprone-unchecked-optional-access: unchecked access to optional value
 core/test/src/SbmdDriverTestBase.h: bugprone-unchecked-optional-access: unchecked access to optional value
@@ -942,6 +942,8 @@ core/test/src/SbmdHandlerInvokerTest.cpp: bugprone-unchecked-optional-access: un
 core/test/src/SbmdHandlerInvokerTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
 core/test/src/SbmdHandlerInvokerTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
 core/test/src/SbmdHandlerInvokerTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
+core/test/src/SbmdLifecycleTest.cpp: bugprone-implicit-widening-of-multiplication-result: performing an implicit widening conversion to type 'size_t' (aka 'unsigned long') of a multiplication performed in type 'int'
+core/test/src/SbmdLifecycleTest.cpp: cert-err58-cpp: initialization of 'chipEnv' with static storage duration may throw an exception that cannot be caught
 core/test/src/SbmdLoaderTest.cpp: bugprone-implicit-widening-of-multiplication-result: performing an implicit widening conversion to type 'size_t' (aka 'unsigned long') of a multiplication performed in type 'int'
 core/test/src/SbmdLoaderTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value
 core/test/src/SbmdLoaderTest.cpp: bugprone-unchecked-optional-access: unchecked access to optional value

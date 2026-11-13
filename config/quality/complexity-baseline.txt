@@ -11,6 +11,7 @@ core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp: barton::MQuickJsRun
 core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp: barton::FindMatchingBrace
 core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp: barton::SbmdLoader::ExtractConstants
 core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp: barton::SbmdLoader::ExtractEndpoints
+core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp: barton::SbmdLoader::ExtractMetadata
 core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp: barton::SbmdLoader::ExtractRegistration
 core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp: barton::SbmdResultExecutor::ParseTerminal
 core/deviceDrivers/matter/sbmd/quickjs/QuickJsRuntime.cpp: barton::QuickJsRuntime::CheckAndClearPendingException

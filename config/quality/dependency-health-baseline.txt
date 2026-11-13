@@ -28,6 +28,10 @@ setuptools==73.0.0: PYSEC-2025-49
 setuptools==73.0.0: PYSEC-2025-49
 setuptools==73.0.0: PYSEC-2026-3447
 setuptools==73.0.0: PYSEC-2026-3447
+soupsieve==2.5: CVE-2026-126190
+soupsieve==2.5: CVE-2026-126191
+soupsieve==2.5: CVE-2026-126192
+soupsieve==2.5: CVE-2026-126193
 soupsieve==2.5: PYSEC-2026-3071
 soupsieve==2.5: PYSEC-2026-3071
 soupsieve==2.5: PYSEC-2026-3072

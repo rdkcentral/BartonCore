@@ -113,6 +113,7 @@ testing/test/light_test.py: ruff-I001: Import block is un-sorted or un-formatted
 testing/test/onvif_camera_test.py: mypy-assignment: Incompatible types in assignment (expression has type "None", variable has type Module)
 testing/test/onvif_camera_test.py: ruff-UP015: Unnecessary mode argument
 testing/test/sbmd_deferred_metrics_test.py: ruff-I001: Import block is un-sorted or un-formatted
+testing/test/sbmd_lazy_activation_test.py: ruff-I001: Import block is un-sorted or un-formatted
 testing/test/temperature_sensor_test.py: ruff-I001: Import block is un-sorted or un-formatted
 testing/test/thermostat_test.py: ruff-F401: `testing.mocks.devices.matter.matter_thermostat.matter_thermostat` imported but unused
 testing/test/thermostat_test.py: ruff-F811: Redefinition of unused `matter_thermostat` from line 28: `matter_thermostat` redefined here
