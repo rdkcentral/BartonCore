@@ -70,6 +70,7 @@ ZHAL_STATUS __wrap_zhalAttributesRead(guint64 eui64,
                                       gboolean toServer,
                                       GArray *attributeIds,
                                       GPtrArray **attributeData);
+ZHAL_STATUS __wrap_zhalGetAndClearCounters(GHashTable **counters);
 static icDevice *createDummyDevice(const char *manufacturer,
                                    const char *model,
                                    const char *hardwareVersion,
@@ -615,9 +616,60 @@ static void test_zigbeeSubsystemReadStringMatchesById(void **state)
     (void) state;
 }
 
+/*
+ * XHCPE-2771: zhal returns counters as strings; callers need JSON numbers.
+ * Values are taken from the XER10 log (NCP counters read at 09:39:28).
+ */
+static void test_zigbeeSubsystemGetAndClearCountersReturnsNumbers(void **state)
+{
+    static const struct
+    {
+        const char *key;
+        const char *value;
+        int expected;
+    } entries[] = {{"sampleIntervalMillis", "900000", 900000},
+                   {"macRxBcast", "0", 0},
+                   {"macTxBcast", "37", 37},
+                   {"macRxUcast", "57", 57},
+                   {"macTxUcastSuccesses", "9", 9},
+                   {"apsRxBcast", "1", 1},
+                   {"apsTxBcast", "1", 1},
+                   {"apsRxUcast", "3", 3},
+                   {"apsTxUcastSuccesses", "3", 3}};
+
+    GHashTable *table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    for (size_t i = 0; i < G_N_ELEMENTS(entries); i++)
+    {
+        g_hash_table_insert(table, g_strdup(entries[i].key), g_strdup(entries[i].value));
+    }
+    g_hash_table_insert(table, g_strdup("bogus"), g_strdup("notANumber"));
+    will_return(__wrap_zhalGetAndClearCounters, table);
+
+    cJSON *result = zigbeeSubsystemGetAndClearCounters();
+    assert_non_null(result);
+
+    for (size_t i = 0; i < G_N_ELEMENTS(entries); i++)
+    {
+        cJSON *item = cJSON_GetObjectItem(result, entries[i].key);
+        assert_non_null(item);
+        assert_true(cJSON_IsNumber(item));
+        assert_int_equal(item->valueint, entries[i].expected);
+    }
+    assert_null(cJSON_GetObjectItem(result, "bogus"));
+
+    cJSON_Delete(result);
+    (void) state;
+}
+
 // ******************************
 // wrapped(mocked) functions
 // ******************************
+
+ZHAL_STATUS __wrap_zhalGetAndClearCounters(GHashTable **counters)
+{
+    *counters = mock_type(GHashTable *);
+    return ZHAL_STATUS_OK;
+}
 
 ZHAL_STATUS __wrap_zhalAttributesRead(guint64 eui64,
                                       guint8 endpointId,
@@ -684,7 +736,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_zigbeeSubsystemReadNumbersInRequestOrder),
         cmocka_unit_test(test_zigbeeSubsystemReadNumbersOutOfOrder),
         cmocka_unit_test(test_zigbeeSubsystemReadNumbersMissingAndFailedAttributes),
-        cmocka_unit_test(test_zigbeeSubsystemReadStringMatchesById)};
+        cmocka_unit_test(test_zigbeeSubsystemReadStringMatchesById),
+        cmocka_unit_test(test_zigbeeSubsystemGetAndClearCountersReturnsNumbers)};
 
     int retval = cmocka_run_group_tests(tests, testSetup, testTeardown);
 

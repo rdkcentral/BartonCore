@@ -3292,7 +3292,18 @@ cJSON *zigbeeSubsystemGetAndClearCounters(void)
     g_hash_table_iter_init(&iter, counters);
     while (g_hash_table_iter_next(&iter, &key, &value))
     {
-        cJSON_AddStringToObject(result, (const char *) key, (const char *) value);
+        // Callers (telemetry gatherer, etc.) only accept numeric JSON values.
+        const char *valueStr = (const char *) value;
+        char *end = NULL;
+        gint64 number = g_ascii_strtoll(valueStr, &end, 10);
+        if (end != valueStr && *end == '\0')
+        {
+            cJSON_AddNumberToObject(result, (const char *) key, (double) number);
+        }
+        else
+        {
+            icLogWarn(LOG_TAG, "%s: ignoring non-numeric counter '%s'='%s'", __FUNCTION__, (const char *) key, valueStr);
+        }
     }
     g_hash_table_destroy(counters);
     return result;
