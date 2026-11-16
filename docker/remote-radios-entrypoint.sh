@@ -805,12 +805,30 @@ bt_transport_healthy() {
     [ -n "$idx" ] || return 1
     # The dongle must still be present on our vhci port (usb-ip session alive);
     # the same number on any other adapter is not ours.
-    bt_hci_is_ours "${idx}" || return 1
-    timeout 5 nsenter --net="${HOST_NETNS}" hciconfig "hci${idx}" version >/dev/null 2>&1 || return 1
+    if ! bt_hci_is_ours "${idx}"; then
+        echo "[monitor] Bluetooth check failed: hci${idx} is no longer on our vhci port." >&2
+        return 1
+    fi
+
+    # During a BLE connection (e.g. Matter commissioning) the usb-ip link can be
+    # saturated and the HCI probe time out, and restarting then kills the session
+    # it is serving.  The connection list is a local kernel query, so it answers
+    # regardless of the link; the adapter is ours (-i), never another developer's.
+    if ! timeout 5 nsenter --net="${HOST_NETNS}" hcitool -i "hci${idx}" con 2>/dev/null \
+        | grep -qE '^[[:space:]]*[<>] LE '; then
+        if ! timeout 5 nsenter --net="${HOST_NETNS}" hciconfig "hci${idx}" version >/dev/null 2>&1; then
+            echo "[monitor] Bluetooth check failed: hci${idx} did not answer an HCI command." >&2
+            return 1
+        fi
+    fi
+
     # ...and bluetoothd must still own it.  A daemon crash, or another bluetoothd
     # stealing the adapter, leaves the kernel checks above passing while BLE is
     # unusable — the monitor must treat that as unhealthy and rebuild the chain.
-    bt_controller_registered || return 1
+    if ! bt_controller_registered; then
+        echo "[monitor] Bluetooth check failed: bluetoothd does not expose hci${idx}." >&2
+        return 1
+    fi
     return 0
 }
 
