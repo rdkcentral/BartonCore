@@ -326,6 +326,7 @@ namespace barton
          */
         bool SetAccessRestrictionList();
 
+
         bool OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeoutSecs, SetupPayload &setupPayload);
 
         bool serverIsInitialized = false;

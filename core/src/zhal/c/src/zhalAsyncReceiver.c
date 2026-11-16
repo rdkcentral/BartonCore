@@ -31,7 +31,9 @@
 #include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
 #include <icLog/logging.h>
+#include <icTime/timeUtils.h>
 #include <icUtil/stringUtils.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <string.h>
@@ -57,11 +59,21 @@ static pthread_cond_t STARTUP_COND = PTHREAD_COND_INITIALIZER;
 static void *invokeIpcHandlerCallback(void *arg);
 static void *invokeEventHandlerCallback(void *arg);
 
-// the host name of the event producer
-static char *eventProducerHostname = NULL;
+// The address of the event producer (ZigbeeCore).  Written only before the receiver thread is created and after it
+// has been joined, so the thread reads it without locking.
+static struct in_addr eventProducerAddress;
+
+// Untrusted packets are logged at most once per interval so that a flood cannot flood the log
+#define UNTRUSTED_SOURCE_LOG_INTERVAL_MILLIS (60 * 1000)
 
 int zhalAsyncReceiverStart(const char *host, zhalIpcResponseHandler ipcHandler, zhalEventHandler eventHandler)
 {
+    if (host == NULL || inet_pton(AF_INET, host, &eventProducerAddress) != 1)
+    {
+        icLogError(LOG_TAG, "event producer address '%s' is not an IPv4 address", stringCoalesce(host));
+        return -1;
+    }
+
     myIpcHandler = ipcHandler;
     myEventHandler = eventHandler;
 
@@ -70,8 +82,6 @@ int zhalAsyncReceiverStart(const char *host, zhalIpcResponseHandler ipcHandler, 
     initTimedWaitCond(&STARTUP_COND);
 
     pthread_mutex_lock(&STARTUP_MTX);
-
-    eventProducerHostname = strdup(host);
 
     createThread(&asyncThread, asyncReceiverThreadProc, NULL, "zhalAsyncRcvr");
 
@@ -95,8 +105,6 @@ int zhalAsyncReceiverStop()
     pthread_mutex_lock(&STARTUP_MTX);
     bool asyncReceiverThreadWasRunning = asyncReceiverThreadRunning;
     asyncReceiverThreadRunning = false;
-    free(eventProducerHostname);
-    eventProducerHostname = NULL;
     pthread_mutex_unlock(&STARTUP_MTX);
 
     if (asyncReceiverThreadWasRunning == true)
@@ -171,7 +179,7 @@ static int setupAsyncSocket()
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
 
-    if (stringCompare("127.0.0.1", eventProducerHostname, false) == 0)
+    if (eventProducerAddress.s_addr == htonl(INADDR_LOOPBACK))
     {
         // the event producer is on loopback, so just bind that
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -194,6 +202,21 @@ static int setupAsyncSocket()
     return sockFD;
 }
 
+bool zhalAsyncReceiverIsTrustedSource(const struct in_addr *source, const struct in_addr *producer)
+{
+    if (source == NULL)
+    {
+        return false;
+    }
+
+    if (source->s_addr == htonl(INADDR_LOOPBACK))
+    {
+        return true;
+    }
+
+    return producer != NULL && producer->s_addr != htonl(INADDR_ANY) && source->s_addr == producer->s_addr;
+}
+
 static void *asyncReceiverThreadProc(void *arg)
 {
     icLogInfo(LOG_TAG, "asyncReceiverThreadProc starting");
@@ -210,6 +233,8 @@ static void *asyncReceiverThreadProc(void *arg)
     int maxFD = sockFD > pipeFDs[0] ? sockFD + 1 : pipeFDs[0] + 1;
 
     char *recvBuf = (char *) malloc(ASYNC_RECVBUF_SIZE * sizeof(char));
+    uint64_t untrustedPacketCount = 0;
+    uint64_t lastUntrustedLogTime = 0;
 
     while (sockFD >= 0)
     {
@@ -246,11 +271,7 @@ static void *asyncReceiverThreadProc(void *arg)
 
         recvBuf[nbytes] = '\0'; // null terminate
 
-        /*
-         * Only handle packets sent from our local loopback. Any other
-         * packets might be destructive so audit log those packets.
-         */
-        if (remoteAddr.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+        if (zhalAsyncReceiverIsTrustedSource(&remoteAddr.sin_addr, &eventProducerAddress))
         {
             cJSON *asyncJson = cJSON_Parse(recvBuf);
             if (asyncJson == NULL)
@@ -287,8 +308,20 @@ static void *asyncReceiverThreadProc(void *arg)
         }
         else
         {
-            icLogWarn(
-                LOG_TAG, "Received async event from invalid source address: [%s]", inet_ntoa(remoteAddr.sin_addr));
+            untrustedPacketCount++;
+
+            uint64_t now = getMonotonicMillis();
+            if (lastUntrustedLogTime == 0 || now - lastUntrustedLogTime >= UNTRUSTED_SOURCE_LOG_INTERVAL_MILLIS)
+            {
+                char sourceStr[INET_ADDRSTRLEN] = "";
+                inet_ntop(AF_INET, &remoteAddr.sin_addr, sourceStr, sizeof(sourceStr));
+                icLogWarn(LOG_TAG,
+                          "Ignored %" PRIu64 " async event(s) from untrusted source addresses; latest from [%s]",
+                          untrustedPacketCount,
+                          sourceStr);
+                untrustedPacketCount = 0;
+                lastUntrustedLogTime = now;
+            }
         }
     }
 

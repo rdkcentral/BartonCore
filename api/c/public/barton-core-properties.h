@@ -55,6 +55,10 @@ G_BEGIN_DECLS
 #define B_CORE_THREAD_PREFIX             "thread."
 // Prefix for 802.15.4 related properties
 #define B_CORE_FIFTEEN_FOUR_PREFIX       "fifteenfour."
+// Prefix for zigbee properties
+#define B_CORE_ZIGBEE_PREFIX             "zigbee."
+// Prefix for bluetooth low energy properties
+#define B_CORE_BLE_PREFIX                "ble."
 
 /**
  * FIFTEEN_FOUR_EUI64: (value "barton.fifteenfour.eui64")
@@ -237,6 +241,45 @@ G_BEGIN_DECLS
  */
 #define B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER                                                                \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "spake2pVerifier"
+
+/**
+ * BLE_ADAPTER_ID: (value "barton.ble.adapterId")
+ *
+ * The BlueZ HCI adapter index used for BLE operations (e.g. 0 for hci0, 1 for hci1).
+ * Defaults to 0 if not set. A value outside 0-9999 or not a number makes Matter initialization fail.
+ * Property Value Type: uint32
+ */
+#define B_CORE_BARTON_BLE_ADAPTER_ID B_CORE_BARTON_PREFIX B_CORE_BLE_PREFIX "adapterId"
+
+/**
+ * THREAD_INTERFACE_NAME: (value "barton.thread.interfaceName")
+ *
+ * The network interface name of the Thread border router to use. The border router is reached
+ * on D-Bus as io.openthread.BorderRouter.<interfaceName>.
+ * Defaults to "wpan0" if not set.
+ * Property Value Type: string
+ */
+#define B_CORE_BARTON_THREAD_INTERFACE_NAME B_CORE_BARTON_PREFIX B_CORE_THREAD_PREFIX "interfaceName"
+
+/**
+ * THREAD_ATTACH_WAIT_SECONDS: (value "barton.thread.attachWaitSeconds")
+ *
+ * The maximum number of seconds to wait for the Thread border router to attach to a newly
+ * created network and publish its active dataset. Valid range is 1 to 600.
+ * Defaults to 25 if not set or out of range.
+ * Property Value Type: uint32
+ */
+#define B_CORE_BARTON_THREAD_ATTACH_WAIT_SECONDS B_CORE_BARTON_PREFIX B_CORE_THREAD_PREFIX "attachWaitSeconds"
+
+/**
+ * ZIGBEE_ADDRESS: (value "barton.zigbee.address")
+ *
+ * The IPv4 address (numeric literal only) of ZigbeeCore. Used when the ZIGBEE_CORE_IP system
+ * property is not set. Events are accepted only from loopback and this address.
+ * Defaults to "127.0.0.1" if not set.
+ * Property Value Type: string
+ */
+#define B_CORE_BARTON_ZIGBEE_ADDRESS B_CORE_BARTON_PREFIX B_CORE_ZIGBEE_PREFIX "address"
 
 
 G_END_DECLS

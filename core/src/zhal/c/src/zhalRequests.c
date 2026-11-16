@@ -44,6 +44,11 @@
 // On EM357 with maximum of 70 devices this could take about a minute.  Extrapolating to a max 128 is about 150 secs.
 #define SET_DEVICES_TIMEOUT_SECONDS     150
 
+// Initializing a saved network makes ZigbeeCore read the network's tokens from
+// zigbeed, hundreds of EZSP commands; over a slow link to the radio (such as a
+// remote radio) that takes well over the default timeout.
+#define NETWORK_INIT_TIMEOUT_SECONDS    120
+
 // If we get a 'network busy' response from ZigbeeCore, we will wait a little bit and try again
 #define MAX_NETWORK_BUSY_RETRIES        5
 #define NETWORK_BUSY_RETRY_DELAY_MILLIS 250
@@ -84,7 +89,7 @@ int zhalNetworkInit(uint64_t eui64, const char *region, const char *networkConfi
         cJSON_AddItemToObject(request, "properties", stringHashMapToJSON(properties));
     }
 
-    return sendRequestNoResponse(0, request);
+    return sendRequestWithTimeout(0, request, NETWORK_INIT_TIMEOUT_SECONDS, NULL);
 }
 
 int zhalNetworkTerm(void)

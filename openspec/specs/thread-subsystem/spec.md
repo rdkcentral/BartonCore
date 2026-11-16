@@ -63,3 +63,25 @@ The Thread subsystem SHALL only be compiled and available when `BCORE_THREAD=ON`
 #### Scenario: Thread disabled
 - **WHEN** `BCORE_THREAD=OFF` in CMake
 - **THEN** all Thread subsystem code SHALL be excluded from the build and Thread-related API calls SHALL be no-ops or return errors
+
+### Requirement: Border router interface selection
+The Thread subsystem SHALL select the OTBR instance by network interface name, read once per process from the `barton.thread.interfaceName` property (`B_CORE_BARTON_THREAD_INTERFACE_NAME`) and defaulting to `wpan0` when unset or empty. The `OpenThreadClient` SHALL address `io.openthread.BorderRouter.<interfaceName>`, and the Matter subsystem SHALL pass the same name to the Matter SDK's Thread stack manager (Matter patch 0004), so both use the same border router. The Thread subsystem SHALL NOT read the interface name from environment variables.
+
+#### Scenario: Default interface
+- **WHEN** `barton.thread.interfaceName` is not set
+- **THEN** the Thread subsystem and the Matter subsystem SHALL both use the border router on `wpan0`
+
+#### Scenario: Configured interface
+- **WHEN** `barton.thread.interfaceName` is set to `wpan1000`
+- **THEN** the `OpenThreadClient` SHALL use `io.openthread.BorderRouter.wpan1000` and the Matter SDK SHALL be configured for `wpan1000`
+
+### Requirement: Network creation wait
+When creating a Thread network, the `OpenThreadClient` SHALL wait for the OTBR's attach callback and then retry fetching the active dataset TLVs until they are available, for at most the attach wait. The attach wait SHALL come from the `barton.thread.attachWaitSeconds` property (`B_CORE_BARTON_THREAD_ATTACH_WAIT_SECONDS`), valid from 1 to 600 seconds, defaulting to 25 seconds; an invalid value SHALL be logged and the default used. The D-Bus connection lock SHALL be held only for individual D-Bus calls and short dispatch slices, not for the whole wait. A lost D-Bus connection SHALL end the wait with an error.
+
+#### Scenario: Attach wait out of range
+- **WHEN** `barton.thread.attachWaitSeconds` is `0`, greater than `600`, or not a number
+- **THEN** a warning SHALL be logged and the 25 second default SHALL be used
+
+#### Scenario: Dataset available after attach
+- **WHEN** the attach callback reports success before the active dataset is published
+- **THEN** the `OpenThreadClient` SHALL keep processing D-Bus messages and retry `GetActiveDatasetTlvs` until it returns a non-empty dataset or the attach wait expires

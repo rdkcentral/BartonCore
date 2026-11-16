@@ -1,0 +1,249 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2026 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# Optional Docker Compose overlay that adds a container managing a developer's
+# forwarded physical radios:
+#
+#   - cpcd        : CPC daemon (Silabs Zigbee/Thread serial <-> CPC socket)
+#   - otbr-agent  : OpenThread Border Router agent (CPC socket <-> D-Bus API)
+#   - mdnsd       : mDNSResponder, publishing the border router's services
+#   - usbip       : attaches the developer's Bluetooth dongle, which the dev
+#                   server's own bluetoothd then manages
+#
+# The two radios are independent physical devices forwarded from the
+# developer's workstation:
+#   - Silabs Zigbee/Thread radio : serial-over-SSH tunnel to a per-user UNIX
+#     socket (bind-mounted here as SILABS_SOCKET).
+#   - Bluetooth USB dongle       : usb-ip, attached inside this (privileged)
+#     container — no host root required on the dev server.
+#
+# Thread and Bluetooth both use the dev server's own system bus, mounted in at
+# /run/host-dbus.  A per-user named volume, <user>-remote-radios-state, carries
+# ble_adapter_id to each of the user's barton containers and shares cpcd's
+# sockets with the user's zigbee container.
+#
+# Running this overlay is OPTIONAL.  It is only layered in when a developer has
+# forwarded radios (via scripts/remote-radios/remote-radios-setup.sh) and runs
+# `./dockerw -T`.
+#
+# ─── Usage ───────────────────────────────────────────────────────────────────
+#
+#   On the workstation, once (no checkout needed):
+#       curl -fsSL <raw>/scripts/remote-radios/remote-radios-setup.sh \
+#         | bash -s -- <user>@<devserver>
+#   Then, on the dev server:
+#       ./dockerw -T bash
+#
+# ─── Environment variables ────────────────────────────────────────────────────
+#
+#   SILABS_SOCKET   Path (inside the container) of the bind-mounted UNIX socket
+#                   for the Silabs serial tunnel.  Written to docker/.env by
+#                   setupDockerEnv.sh from the developer's radio config.
+#
+#   SILABS_DEVICE   Host path of a locally-attached Silabs USB serial device
+#                   (alternative to SILABS_SOCKET, for a radio on the dev
+#                   server itself).
+#
+#   BT_USBIP_SOCKET Path (inside the container) of the bind-mounted UNIX socket
+#                   that the workstation's usbipd is reverse-tunnelled to.  When
+#                   set, the dongle is attached via usb-ip.  Optional.
+#   BT_USBIP_TCP_PORT  Local TCP port socat listens on for usbip (default 3240).
+#   BT_USBIP_BUSID  Remote busid to attach (default: auto-detect).
+#
+#   BACKBONE_IF     Thread backbone interface.  Default: host default-route
+#                   interface detected by docker/setupDockerEnv.sh.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+    remote-radios:
+        # Exactly one per user, so it is named outright; an accidental second
+        # instance then fails instead of quietly appearing as "-2".
+        container_name: $BUILDER_USER-remote-radios
+        image: $BUILDER_USER-remote-radios
+        build:
+            context: .
+            dockerfile: Dockerfile.remote-radios
+        # privileged is required for:
+        #   - creating the wpan0 network interface
+        #   - configuring iptables rules for Thread border routing
+        #   - loading vhci-hcd and attaching the Bluetooth dongle over usb-ip
+        privileged: true
+        # IPv6 forwarding must be enabled for otbr-agent to route packets
+        # between the Docker bridge (eth0) and the Thread mesh (wpan0).
+        # proxy_ndp allows otbr-agent to proxy Neighbor Discovery between
+        # interfaces so Thread devices are reachable from the bridge.
+        # NOTE: interface-specific sysctls (net.ipv6.conf.eth0.*) cannot be
+        # set here — Docker requires them via driver options.  They are set
+        # in the entrypoint instead since the container is privileged.
+        sysctls:
+            - net.ipv6.conf.all.forwarding=1
+            - net.ipv6.conf.all.proxy_ndp=1
+        # The radios stack is per *user*, not per workspace: the radio sockets in
+        # ~/.remote-radios are per user, so there is exactly one stack to share.
+        # It sits on its own per-user network, which every one of the user's
+        # barton containers joins in addition to its workspace network.  The
+        # network is private to the user, so mDNS (and therefore Matter
+        # discovery) never reaches another developer's border router.
+        networks:
+            remote-radios:
+                aliases:
+                    - remote-radios
+        volumes:
+            # ble_adapter_id, published to the user's barton containers.
+            - type: volume
+              source: state
+              target: /var/run/remote-radios-dbus
+              volume:
+                  subpath: ble
+            # cpcd's sockets.  The path is compiled into cpcd and libcpc, so it
+            # must be /dev/shm/cpcd here and in the zigbee container.
+            - type: volume
+              source: state
+              target: /dev/shm/cpcd
+              volume:
+                  subpath: cpcd
+            # Bind-mount the developer's per-user Silabs serial tunnel socket
+            # DIRECTORY (not the socket file).  remote-radios-setup.sh
+            # (remote-serial.py) serves the socket inside this dir on the dev
+            # server via `ssh -R`; socat in the entrypoint bridges it to a PTY
+            # for cpcd.  Mounting the directory (rather than the socket file)
+            # avoids Docker auto-creating a bogus directory in place of the
+            # socket when the tunnel is not yet up.  The host dir is written to
+            # docker/.env by setupDockerEnv.sh.
+            - ${SILABS_SOCKET_DIR_HOST:-/run/remote-radios/radios}:${SILABS_SOCKET_DIR:-/run/remote-radios/radios}
+            # Bind-mount the developer's per-user usb-ip socket DIRECTORY.  The
+            # workstation reverse-tunnels its usbipd to a UNIX socket inside
+            # this dir; socat in the entrypoint bridges it to a local TCP port
+            # for `usbip attach` (avoids any sshd GatewayPorts change).
+            - ${BT_USBIP_SOCKET_DIR_HOST:-/run/remote-radios/usbip}:${BT_USBIP_SOCKET_DIR:-/run/remote-radios/usbip}
+            # Bind-mount the claim directory (read-only — this container only
+            # observes claims, never writes them).  A consumer that cannot share
+            # a radio drops a file here; see the RADIO_CLAIM_DIR comment in
+            # remote-radios-entrypoint.sh.
+            - ${RADIO_CLAIM_DIR_HOST:-/run/remote-radios/claims}:${RADIO_CLAIM_DIR:-/run/remote-radios/claims}:ro
+            # /dev is needed so a locally-attached Silabs radio (SILABS_DEVICE)
+            # and the usb-ip virtual devices are visible.  privileged: true
+            # grants the necessary device access.
+            - /dev:/dev
+            # Bind-mount the host's network namespace so that bluetoothd (and
+            # the usb-ip-created HCI device) live in the initial (host) netns.
+            # AF_BLUETOOTH sockets are only available in the host netns.
+            - /proc/1/ns/net:/run/host-netns:ro
+            # Bind-mount the dev server's own D-Bus directory (read-only) so
+            # this container can reach the dev server's
+            # shared bluetoothd.  Only the socket is used; nothing here is
+            # written.  See the BT_DBUS_ADDRESS comment in the entrypoint for
+            # why a single shared bluetoothd is required.
+            - /run/dbus:/run/host-dbus:ro
+            # Mount the host kernel modules (read-only) so the privileged
+            # container can load vhci-hcd (usb-ip client) itself, without
+            # requiring host root/sudo on the dev server.
+            - /lib/modules:/lib/modules:ro
+            # Bind-mount the entrypoint for development iteration without
+            # rebuilding the Docker image.
+            - ./remote-radios-entrypoint.sh:/entrypoint.sh:ro
+            # The radio normally runs on the workstation; its cpcd's client
+            # sockets arrive relayed through this directory, and radio-relay.py
+            # recreates them here for otbr-agent.
+            - ${RADIO_RELAY_DIR_HOST:-/run/remote-radios/cpc}:${RADIO_RELAY_DIR:-/run/remote-radios/cpc}
+            - ../scripts/remote-radios/radio-relay.py:/usr/local/bin/radio-relay.py:ro
+        extra_hosts:
+            # Allow the container to reach the workstation for the usb-ip
+            # reverse tunnel (bluetooth dongle).
+            - "host.docker.internal:host-gateway"
+        environment:
+            # Silabs radio: SILABS_SOCKET (remote tunnel, the usual case) or
+            # SILABS_DEVICE (local radio on the dev server).  The entrypoint
+            # validates and exits with a clear error if neither is usable.
+            - SILABS_SOCKET=${SILABS_SOCKET:-/run/remote-radios/radios/silabs.sock}
+            - SILABS_DEVICE=${SILABS_DEVICE:-}
+            # Bluetooth dongle over usb-ip.  The container runs without one, but
+            # ./dockerw -T requires it.
+            - BT_USBIP_SOCKET=${BT_USBIP_SOCKET:-}
+            - BT_USBIP_TCP_PORT=${BT_USBIP_TCP_PORT:-3240}
+            - BT_USBIP_BUSID=${BT_USBIP_BUSID:-}
+            - BACKBONE_IF=${BACKBONE_IF:-}
+            # Where to look for radio claim files (see the entrypoint).
+            - RADIO_CLAIM_DIR=${RADIO_CLAIM_DIR:-/run/remote-radios/claims}
+            - RADIO_RELAY_SOCKET=${RADIO_RELAY_DIR:-/run/remote-radios/cpc}/relay.sock
+            # The dev server's shared bluetoothd owns every adapter; this is
+            # where the container reaches it.  See BT_DBUS_ADDRESS in the
+            # entrypoint for why a single shared daemon is required.
+            - HOST_DBUS_SOCKET=${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}
+            # This developer's Thread interface.  otbr-agent registers on the
+            # dev server's shared bus as io.openthread.BorderRouter.<name>, so
+            # the name must be unique on the server; setupDockerEnv.sh derives
+            # it from the developer's uid.
+            - THREAD_INTERFACE=${REMOTE_RADIOS_THREAD_INTERFACE:-wpan0}
+            - CPC_INSTANCE=${CPC_INSTANCE:-cpcd_0}
+        # Restart automatically if the stack crashes, but limit retries so a
+        # missing/invalid radio does not cause an infinite restart loop and log
+        # spam when this overlay is included without hardware.
+        restart: on-failure:5
+    # Barton reaches both Bluetooth and Thread over the dev server's own system
+    # bus.  org.bluez comes from the server's single shared bluetoothd (the
+    # kernel allows AF_BLUETOOTH only in the initial netns, and bluetoothd
+    # cannot be scoped to one adapter), and each developer's otbr-agent
+    # registers there under its own interface name.  Matter requires both on
+    # one bus.
+    barton:
+        # Join the user's radios network as well as the workspace network.
+        networks:
+            workspace: {}
+            remote-radios: {}
+        volumes:
+            - type: volume
+              source: state
+              target: /var/run/remote-radios-dbus
+              volume:
+                  subpath: ble
+            # Expose the host network namespace so tools requiring AF_BLUETOOTH
+            # (e.g. bluetoothctl) can run via nsenter.
+            - /proc/1/ns/net:/run/host-netns:ro
+            # The dev server's own D-Bus: org.bluez and the border routers.
+            - /run/dbus:/run/host-dbus:ro
+        environment:
+            - DBUS_SYSTEM_BUS_ADDRESS=${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=/run/host-dbus/system_bus_socket}
+            # Selects this developer's border router; ble_adapter_id likewise
+            # selects their Bluetooth adapter.
+            - BARTON_THREAD_INTERFACE=${REMOTE_RADIOS_THREAD_INTERFACE:-wpan0}
+            # CPC-based radios can take 35 s or more to attach, plus 30-40 s to
+            # publish the active dataset; Barton's default wait is 25 s.
+            - BARTON_THREAD_ATTACH_WAIT_SECONDS=${BARTON_THREAD_ATTACH_WAIT_SECONDS:-120}
+networks:
+    workspace:
+        name: $BUILDER_USER-$BARTON_WORKSPACE_ID
+        # Network is created by setupDockerEnv.sh and declared in compose.yaml
+        external: true
+    # Per-user network for the radios stack, shared by all of the user's
+    # workspaces.  Created by setupDockerEnv.sh.
+    remote-radios:
+        name: $BUILDER_USER-remote-radios
+        external: true
+volumes:
+    # Per-user state shared across Compose projects (the radios containers and
+    # each workspace's barton container run in separate ones), so it is created
+    # by setupDockerEnv.sh and declared external.  Mounted by subpath; see there.
+    state:
+        name: $BUILDER_USER-remote-radios-state
+        external: true

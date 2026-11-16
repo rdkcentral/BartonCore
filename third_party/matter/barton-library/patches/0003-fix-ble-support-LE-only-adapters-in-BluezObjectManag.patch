@@ -1,0 +1,71 @@
+From 2da4505b3e420b5f640914ce0a7a7039df6d429a Mon Sep 17 00:00:00 2001
+From: Thomas Lea <thomas_lea@comcast.com>
+Date: Mon, 8 Jun 2026 13:37:55 +0000
+Subject: [PATCH] fix(ble): support LE-only adapters in BluezObjectManager
+
+BluezObjectManager ignores an adapter until its Class property is non-zero,
+which only happens for dual-mode (BR/EDR + LE) adapters. LE-only adapters
+never get a Class, so they were never reported to BLEManagerImpl.
+
+Accept an adapter in OnObjectAdded when it is already Powered, and in
+OnInterfacePropertiesChanged when an LE-only adapter becomes Powered, so one
+exported before BlueZ powered it is not ignored for good. Dual-mode adapters
+are still reported only through the Class change.
+---
+ .../Linux/bluez/BluezObjectManager.cpp        | 26 ++++++++++++-------
+ 1 file changed, 16 insertions(+), 10 deletions(-)
+
+diff --git a/src/platform/Linux/bluez/BluezObjectManager.cpp b/src/platform/Linux/bluez/BluezObjectManager.cpp
+index 6071ce91..4a09b3cd 100644
+--- a/src/platform/Linux/bluez/BluezObjectManager.cpp
++++ b/src/platform/Linux/bluez/BluezObjectManager.cpp
+@@ -196,16 +196,12 @@ BluezObjectManager::NotificationsDelegates BluezObjectManager::GetDeviceNotifica
+ void BluezObjectManager::OnObjectAdded(GDBusObjectManager * aMgr, BluezObject * aObj)
+ {
+     GAutoPtr<BluezAdapter1> adapter(bluez_object_get_adapter1(aObj));
+-    // Verify that the adapter is properly initialized - the class property must be set.
+-    // BlueZ can export adapter objects on the bus before it is fully initialized. Such
+-    // adapter objects are not usable and must be ignored.
+-    //
+-    // TODO: Find a better way to determine whether the adapter interface exposed by
+-    //       BlueZ D-Bus service is fully functional. The current approach is based on
+-    //       the assumption that the class property is non-zero, which is true only
+-    //       for BR/EDR + LE adapters. LE-only adapters do not have HCI command to read
+-    //       the class property and BlueZ sets it to 0 as a default value.
+-    if (adapter && bluez_adapter1_get_class(adapter.get()) != 0)
++    // Verify that the adapter is properly initialized.  For dual-mode (BR/EDR + LE) adapters
++    // the Class property is non-zero once BlueZ has read the device class via HCI.  LE-only
++    // adapters (e.g. CPC HCI bridges) never receive a device class from the controller, so
++    // BlueZ leaves Class at 0.  For those adapters, accept the adapter when Powered is true,
++    // which indicates BlueZ has completed its HCI setup sequence.
++    if (adapter && (bluez_adapter1_get_class(adapter.get()) != 0 || bluez_adapter1_get_powered(adapter.get())))
+     {
+         NotifyAdapterAdded(adapter.get());
+         return;
+@@ -245,6 +241,7 @@ void BluezObjectManager::OnInterfacePropertiesChanged(GDBusObjectManagerClient *
+                                                       GVariant * aChangedProps, const char * const * aInvalidatedProps)
+ {
+     uint32_t classValue = 0;
++    gboolean powered    = FALSE;
+     GAutoPtr<BluezAdapter1> adapter(bluez_object_get_adapter1(aObj));
+     // When the adapter's readonly class property is set, it means that the adapter has been
+     // fully initialized and is ready to be used. It's most likely that the adapter has been
+@@ -255,6 +252,15 @@ void BluezObjectManager::OnInterfacePropertiesChanged(GDBusObjectManagerClient *
+         NotifyAdapterAdded(adapter.get());
+         return;
+     }
++    // LE-only adapters never get a Class, so OnObjectAdded accepts them once Powered.  One that
++    // was exported before BlueZ powered it was ignored there; accept it when it powers up.
++    // Dual-mode adapters are left to the Class change above, so they are not reported twice.
++    if (adapter && bluez_adapter1_get_class(adapter.get()) == 0 && g_variant_lookup(aChangedProps, "Powered", "b", &powered) &&
++        powered)
++    {
++        NotifyAdapterAdded(adapter.get());
++        return;
++    }
+ 
+     GAutoPtr<BluezDevice1> device(bluez_object_get_device1(aObj));
+     if (device)
+-- 
+2.53.0
+

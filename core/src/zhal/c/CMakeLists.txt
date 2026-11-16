@@ -33,7 +33,7 @@
 file(GLOB SOURCES "src/*.c")
 
 add_library(zhal STATIC ${SOURCES})
-target_link_libraries(zhal BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil BartonCommon::xhConcurrent cjson BartonCommon::xhJsonHelper m ${CONFIG_LDFLAG})
+target_link_libraries(zhal BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil BartonCommon::xhConcurrent BartonCommon::xhTime cjson BartonCommon::xhJsonHelper m ${CONFIG_LDFLAG})
 
 # export our 'public' folder so others can include our headers
 target_include_directories(zhal PUBLIC public)
@@ -44,6 +44,13 @@ bcore_add_cmocka_test(
         WRAPPED_FUNCTIONS connect send recv zhalNetworkTerm
         LINK_LIBRARIES zhal
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+bcore_add_cmocka_test(
+        NAME testZhalAsyncReceiver
+        TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/zhalAsyncReceiverUnitTest.c
+        LINK_LIBRARIES zhal
         INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
