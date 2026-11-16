@@ -449,6 +449,12 @@ int main(int argc, char **argv)
 
     g_autoptr(BCoreClient) client = initializeClient(confDir);
 
+    // Log output stays hidden until the I/O loop below starts, and starting the
+    // client waits for every subsystem (a remote radio's Zigbee can take
+    // several seconds), so say what the silence is.
+    fprintf(stdout, "Starting subsystems; this can take a while...\n");
+    fflush(stdout);
+
     b_core_client_start(client);
     // TODO remove once ddl command available
     b_core_client_set_system_property(client, "deviceDescriptorBypass", "true");
