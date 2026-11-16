@@ -103,6 +103,11 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "remote-radios" /entrypoint.sh 2>/dev/nu
         USE_CURL_API=true
     fi
 
+    # The container cannot see ~/.remote-radios, so tell it whether ZigbeeCore
+    # was set up for this user; Zigbee is then expected rather than optional.
+    ZIGBEE_EXPECTED_ENV=""
+    [ -f "${HOME}/.remote-radios/zigbee.env" ] && ZIGBEE_EXPECTED_ENV="REMOTE_ZIGBEE_EXPECTED=1"
+
     if [ "$USE_CURL_API" = true ]; then
         _DOCKER_API="http://localhost/v1.45"
         _CURL="curl -s --unix-socket /var/run/docker.sock"
@@ -133,12 +138,13 @@ print(urllib.parse.quote(json.dumps(
             # Arguments are passed as additional positional params (${@:2})
             # so spaces and special characters are preserved without injection.
             _SCRIPT_B64=$(base64 -w0 "$0")
-            _EXEC_PAYLOAD=$(python3 -c "
+            _EXEC_PAYLOAD=$(ZIGBEE_EXPECTED_ENV="$ZIGBEE_EXPECTED_ENV" python3 -c "
 import json, sys
 script_b64 = sys.argv[1]
 args = sys.argv[2:]
 cmd = ['bash', '-c', 'echo \"\$1\" | base64 -d | bash -s -- \"\${@:2}\"', '--', script_b64] + args
-print(json.dumps({'Cmd': cmd, 'AttachStdout': True, 'AttachStderr': True}))
+print(json.dumps({'Cmd': cmd, 'AttachStdout': True, 'AttachStderr': True,
+                  'Env': [e for e in [__import__('os').environ.get('ZIGBEE_EXPECTED_ENV', '')] if e]}))
 " "$_SCRIPT_B64" "$@")
             _EXEC_ID=$($_CURL -X POST "$_DOCKER_API/containers/${OTBR_CONTAINER}/exec" \
                 -H "Content-Type: application/json" \
@@ -180,7 +186,7 @@ sys.stdout.buffer.flush()
             echo ""
         fi
         # Pass the script via stdin and forward arguments.
-        exec $DOCKER_CMD exec -i "$OTBR_CONTAINER" bash -s -- "$@" < "$0"
+        exec $DOCKER_CMD exec -i ${ZIGBEE_EXPECTED_ENV:+-e "$ZIGBEE_EXPECTED_ENV"} "$OTBR_CONTAINER" bash -s -- "$@" < "$0"
     else
         echo "ERROR: Not inside the remote-radios container and could not find" >&2
         echo "       your radio container (Compose project '${RADIOS_PROJECT}')." >&2
@@ -809,7 +815,14 @@ check_zigbee() {
     # radio.  ZigbeeCore's own container is checked by dockerw -T, from outside
     # this container, which is not on its network.
     if [ ! -S "${RADIO_RELAY_SOCKET:-/run/remote-radios/cpc/relay.sock}" ]; then
-        skip "zigbeed" "Not running — the workstation forwards the radio's serial port (ZigbeeCore not set up, or an hh4 guest holds the radio)"
+        if [ -n "${REMOTE_ZIGBEE_EXPECTED:-}" ]; then
+            # ZigbeeCore is set up, so Zigbee will not work: it needs zigbeed
+            # next to cpcd on the workstation.  Usually the workstation runs an
+            # older remote-radios-setup.sh that only forwards the serial port.
+            fail "zigbeed" "Not running — the workstation only forwards the radio's serial port, so ZigbeeCore has no zigbeed. Update remote-radios-setup.sh there (and re-run it), or an hh4 guest may hold the radio."
+        else
+            skip "zigbeed" "Not running — the workstation forwards the radio's serial port (ZigbeeCore not set up, or an hh4 guest holds the radio)"
+        fi
         return
     fi
     pass "zigbeed" "Runs on the workstation (see remote-radios.service there)"
