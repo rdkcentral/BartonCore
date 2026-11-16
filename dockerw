@@ -159,6 +159,18 @@ if [ "$USE_REMOTE_RADIOS" = true ]; then
             "$zigbeeContainer" 2>/dev/null)"
         if [ -n "$zigbeeIp" ]; then
             notice "ZigbeeCore is at ${zigbeeIp} on ${zigbeeNetwork}."
+            # ZigbeeCore sends its events to whichever container holds the
+            # zigbee-client name, so a second Barton would silently break the
+            # first (or this one would wait forever for events).
+            for other in $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$zigbeeNetwork" 2>/dev/null); do
+                if docker inspect -f "{{with index .NetworkSettings.Networks \"${zigbeeNetwork}\"}}{{.Aliases}}{{end}}" \
+                    "$other" 2>/dev/null | grep -qw zigbee-client; then
+                    notice "Another Barton container (${other}) is already ZigbeeCore's client on ${zigbeeNetwork}."
+                    notice "Only one Barton can use ZigbeeCore at a time.  Exit that one, or remove it with:"
+                    notice "    docker rm -f ${other}"
+                    exit 1
+                fi
+            done
             EXTRA_ENV="${EXTRA_ENV} -e ZIGBEE_CORE_IP=${zigbeeIp}"
             COMPOSE_FILES+=(-f "${DIR}/docker/compose.remote-zigbee-client.yaml")
         else
