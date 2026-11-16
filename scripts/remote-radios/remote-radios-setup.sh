@@ -40,6 +40,8 @@
 #
 # Overridable: REMOTE_RADIOS_REPO, REMOTE_RADIOS_REF (default main) or
 # REMOTE_RADIOS_RAW_BASE to install from somewhere other than rdkcentral/main.
+# A re-run of the installed copy keeps files installed from a checkout or
+# changed since; REMOTE_RADIOS_UPDATE=1 forces the published copy.
 #
 # What it does:
 #   * Installs its runtime (this script + remote-serial.py) to
@@ -704,18 +706,67 @@ EOF
 # when this was run from one, downloaded from the published raw URLs when it was
 # piped in from curl.  The service always runs the installed copy, so the
 # workstation never needs a checkout and nothing breaks if one is moved later.
+# Where each installed file came from, and its checksum when we installed it:
+# "<file> <sha256> <origin>", origin being "checkout" or "download:<ref>".
+# Re-running the installed copy downloads from the saved ref, which would
+# silently replace a copy a developer put there from a checkout or by hand
+# (testing a branch) with an older published one.  A file is therefore left
+# alone when it was installed from a checkout, or no longer matches what we
+# installed (edited or copied over since).  An explicit REMOTE_RADIOS_REF,
+# REMOTE_RADIOS_RAW_BASE or REMOTE_RADIOS_UPDATE=1 always downloads.  With no
+# record (an older install) the file is replaced, as before, so upgrades never
+# get stuck.
+INSTALLED_SUMS="${CONFIG_DIR}/installed.sums"
+
+file_sha256() { sha256sum -- "$1" 2>/dev/null | cut -d' ' -f1; }
+
+# install_pin_reason <file> — print why the installed file must be kept, and
+# succeed, or fail when it is safe to replace.
+install_pin_reason() {
+    local f="$1" rec sum origin
+    [ -n "${REMOTE_RADIOS_REF:-}${REMOTE_RADIOS_RAW_BASE:-}${REMOTE_RADIOS_UPDATE:-}" ] && return 1
+    [ -s "${INSTALL_DIR}/${f}" ] && [ -r "$INSTALLED_SUMS" ] || return 1
+    rec="$(awk -v f="$f" '$1 == f { print $2, $3 }' "$INSTALLED_SUMS" | tail -1)"
+    [ -n "$rec" ] || return 1
+    sum="${rec%% *}"
+    origin="${rec#* }"
+    if [ "$(file_sha256 "${INSTALL_DIR}/${f}")" != "$sum" ]; then
+        echo "it was changed after it was installed (copied or edited)"
+        return 0
+    fi
+    if [ "$origin" = checkout ]; then
+        echo "it was installed from a checkout"
+        return 0
+    fi
+    return 1
+}
+
+# record_install <file> <origin> — remember the installed file's checksum.
+record_install() {
+    local f="$1" origin="$2" tmp="${INSTALLED_SUMS}.tmp.$$"
+    { [ -r "$INSTALLED_SUMS" ] && awk -v f="$f" '$1 != f' "$INSTALLED_SUMS"
+      printf '%s %s %s\n' "$f" "$(file_sha256 "${INSTALL_DIR}/${f}")" "$origin"
+    } > "$tmp" 2>/dev/null
+    mv -f "$tmp" "$INSTALLED_SUMS"
+}
+
 install_runtime_files() {
     local staging="${CONFIG_DIR}/staging"
     mkdir -p "$INSTALL_DIR" "$staging"
     RUNTIME_CHANGED=0
 
-    local f tmp src
+    local f tmp src pin
     for f in "$SCRIPT_NAME" remote-serial.py radio-relay.py; do
         tmp="${staging}/${f}"
         src=""
         if [ -n "$SCRIPT_DIR" ] && [ "$SCRIPT_DIR" != "$INSTALL_DIR" ] \
             && [ -f "${SCRIPT_DIR}/${f}" ]; then
             cp -- "${SCRIPT_DIR}/${f}" "$tmp" && src="checkout"
+        elif pin="$(install_pin_reason "$f")"; then
+            warn "Keeping the installed ${f}: ${pin}."
+            warn "  To replace it with the published copy, re-run with REMOTE_RADIOS_UPDATE=1."
+            rm -f "$tmp"
+            continue
         elif command -v curl >/dev/null 2>&1 \
             && curl -fsSL "${RAW_BASE}/${f}" -o "$tmp" 2>/dev/null; then
             # This branch also covers re-running the already-installed copy.
@@ -747,6 +798,11 @@ install_runtime_files() {
             info "Updated ${f} (from ${src})."
         fi
         rm -f "$tmp"
+        if [ "$src" = checkout ]; then
+            record_install "$f" checkout
+        else
+            record_install "$f" "download:${RAW_REF}"
+        fi
     done
 
     [ -s "$INSTALLED_SETUP" ] || die "Runtime install failed: ${INSTALLED_SETUP} is missing."
