@@ -24,7 +24,7 @@
 include(FetchContent)
 
 set(ZHAL_GIT_REPOSITORY https://github.com/rdkcentral/BartonZigbeeHAL)
-set(ZHAL_GIT_TAG 501e33dfcbabb014d049a9f7ce341d845adce3c4)
+set(ZHAL_GIT_TAG f4ed54755a3996ef354fd06f97d20b05974bb181)
 
 # BartonCore only consumes the zhal-client library; skip zhal's own test suite.
 set(ZHAL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
