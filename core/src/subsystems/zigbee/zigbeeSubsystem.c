@@ -1944,7 +1944,7 @@ int zigbeeSubsystemAttributesSetReporting(uint64_t eui64,
                                           uint8_t numConfigs)
 {
     GPtrArray *configList = reportingConfigsToPtrArray(configs, numConfigs);
-    int result = zhalAttributesSetReporting(eui64, endpointId, clusterId, configList);
+    int result = zhalAttributesSetReporting(eui64, endpointId, clusterId, configList, NULL);
     g_ptr_array_unref(configList);
     return result;
 }
@@ -1957,7 +1957,7 @@ int zigbeeSubsystemAttributesSetReportingMfgSpecific(uint64_t eui64,
                                                      uint8_t numConfigs)
 {
     GPtrArray *configList = reportingConfigsToPtrArray(configs, numConfigs);
-    int result = zhalAttributesSetReportingMfgSpecific(eui64, endpointId, clusterId, mfgId, configList);
+    int result = zhalAttributesSetReportingMfgSpecific(eui64, endpointId, clusterId, mfgId, configList, NULL);
     g_ptr_array_unref(configList);
     return result;
 }
