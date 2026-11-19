@@ -391,6 +391,47 @@ __attribute__((constructor)) static void registerSubsystem(void)
     subsystemManagerRegister(zigbeeSubsystem);
 }
 
+#define ZHAL_LOG_TAG "zhal"
+
+static const logPriority zhalToIcLogPriority[] = {IC_LOG_ERROR, IC_LOG_WARN, IC_LOG_INFO, IC_LOG_DEBUG, IC_LOG_TRACE};
+
+// forward ZHAL's log messages to the logger configured for this client
+static void zhalLogHandler(ZhalLogLevel level, const gchar *message)
+{
+    if (level >= ZHAL_LOG_LEVEL_ERROR && level <= ZHAL_LOG_LEVEL_TRACE)
+    {
+        icLogMsg(__FILE__,
+                 sizeof(__FILE__) - 1,
+                 __func__,
+                 sizeof(__func__) - 1,
+                 __LINE__,
+                 ZHAL_LOG_TAG,
+                 zhalToIcLogPriority[level],
+                 "%s",
+                 message);
+    }
+}
+
+// let ZHAL skip building messages for levels the client's logger would drop
+static bool zhalLogLevelEnabled(ZhalLogLevel level)
+{
+    switch (level)
+    {
+        case ZHAL_LOG_LEVEL_ERROR:
+            return isIcLogPriorityError();
+        case ZHAL_LOG_LEVEL_WARN:
+            return isIcLogPriorityWarn();
+        case ZHAL_LOG_LEVEL_INFO:
+            return isIcLogPriorityInfo();
+        case ZHAL_LOG_LEVEL_DEBUG:
+            return isIcLogPriorityDebug();
+        case ZHAL_LOG_LEVEL_TRACE:
+            return isIcLogPriorityTrace();
+    }
+
+    return false;
+}
+
 /*
  * zhalInit fails (and starts no reconnect machinery) when the ZHAL server is not accepting connections at that
  * instant, which happens when ZigbeeCore is still starting or upgrading the radio.  Keep trying until the server
@@ -398,6 +439,9 @@ __attribute__((constructor)) static void registerSubsystem(void)
  */
 static void connectToZhalServer(const char *ip, uint16_t port)
 {
+    zhalSetLogger(zhalLogHandler);
+    zhalSetLogLevelQuery(zhalLogLevelEnabled);
+
     timeTracker *timer = timeTrackerCreate();
     timeTrackerStart(timer, BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS);
 
