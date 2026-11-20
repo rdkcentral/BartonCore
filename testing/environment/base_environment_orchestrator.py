@@ -94,11 +94,18 @@ class BaseEnvironmentOrchestrator(ABC):
     _barton_storage_path: str
     _matter_storage_path: str
     _sbmd_dirs: str
+    _sbmd_test_specs_dir: str
 
-    def __init__(self):
+    def __init__(self, sbmd_test_specs_dir=None):
         """
         Set up the necessary synchronization primitives and initialize the Barton client.
+
+        Args:
+            sbmd_test_specs_dir: Optional override for the SBMD test-specs directory. When a test
+                needs to mutate a spec file, it can point this at an isolated copy so the checked-in
+                resources are never touched. Defaults to testing/resources/sbmd-specs.
         """
+
         self._ready_for_devices_condition = Condition()
         self._ready_to_commission = False
         self._device_added_condition = Condition()
@@ -112,8 +119,12 @@ class BaseEnvironmentOrchestrator(ABC):
         production_specs = str(
             workspace_root / "core" / "deviceDrivers" / "matter" / "sbmd" / "specs"
         )
-        test_specs = str(workspace_root / "testing" / "resources" / "sbmd-specs")
-        self._sbmd_dirs = production_specs + ";" + test_specs
+        self._sbmd_test_specs_dir = str(
+            sbmd_test_specs_dir
+            if sbmd_test_specs_dir is not None
+            else workspace_root / "testing" / "resources" / "sbmd-specs"
+        )
+        self._sbmd_dirs = production_specs + ";" + self._sbmd_test_specs_dir
         # Test-only hook: append extra spec directories (e.g. generated stub
         # drivers for scale tests).  Unset in production, so this is a no-op there.
         extra_sbmd_dirs = os.environ.get("BARTON_EXTRA_SBMD_DIRS")
@@ -164,6 +175,10 @@ class BaseEnvironmentOrchestrator(ABC):
             BCore.Client: The Barton client instance.
         """
         return self._barton_client
+
+    def get_sbmd_test_specs_dir(self) -> str:
+        """Return the SBMD test-specs directory this environment loaded drivers from."""
+        return self._sbmd_test_specs_dir
 
     def start_client(self):
         """

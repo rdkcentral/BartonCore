@@ -62,7 +62,7 @@ SbmdDriver({
     },
 
     matter: {
-        deviceTypes: [0xfff10000],
+        deviceTypes: [0xfff1],
         defaultTimeoutMs: 15000
     },
 

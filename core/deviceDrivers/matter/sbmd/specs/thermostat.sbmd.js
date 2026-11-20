@@ -30,7 +30,7 @@
 //
 
 SbmdDriver({
-    schemaVersion: '5.0',
+    schemaVersion: '5.1',
     driverVersion: 1,
     name: 'Thermostat',
 

@@ -32,12 +32,12 @@ namespace barton
         driverLoadFailureCounter =
             observabilityCounterCreate("sbmd.driver.load.failure", "Number of SBMD driver loads that failed", "1");
         driverLoadDurationHisto = observabilityHistogramCreate(
-            "sbmd.driver.load.duration_ms", "Time to load and activate an SBMD driver", "ms");
+            "sbmd.driver.load.duration_ms", "Time to load and register an SBMD driver", "ms");
         registeredDriversGauge = observabilityGaugeCreate(
             "sbmd.driver.registered.count", "Number of SBMD drivers successfully registered", "1");
         registrationTotalHisto =
             observabilityHistogramCreate("sbmd.driver.registration.total_ms",
-                                         "Total wall time to discover, load, activate, and register all SBMD drivers",
+                                         "Total wall time to discover, load, and register all SBMD drivers",
                                          "ms");
         bundleLoadHisto =
             observabilityHistogramCreate("sbmd.driver.bundle_load_ms",

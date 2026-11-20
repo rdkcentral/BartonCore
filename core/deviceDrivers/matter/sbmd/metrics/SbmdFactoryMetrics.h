@@ -49,7 +49,7 @@ namespace barton
         /** Record the current registered-driver count. */
         void RecordRegisteredDriverCount(int64_t count);
 
-        /** Record total wall time to discover, load, activate, and register all drivers. */
+        /** Record total wall time to discover, load, and register all drivers. */
         void RecordRegistrationTotal(double durationMs);
 
         /** Record the one-time SBMD bundle load + capture-injection time. */

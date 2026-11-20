@@ -34,7 +34,7 @@
 //
 
 SbmdDriver({
-    schemaVersion: '5.0',
+    schemaVersion: '5.1',
     driverVersion: 2,
     name: 'Door Lock',
 

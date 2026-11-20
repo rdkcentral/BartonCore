@@ -432,9 +432,17 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
+        bool removedLastDevice = false;
+
         {
             std::lock_guard<std::mutex> lock(devicesMutex);
-            devices.erase(device->uuid);
+            // Only treat this as the last-device removal when an entry was actually erased.
+            removedLastDevice = devices.erase(device->uuid) > 0 && devices.empty();
+        }
+
+        if (removedLastDevice)
+        {
+            OnLastDeviceRemoved();
         }
     });
 
@@ -1083,7 +1091,10 @@ bool MatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 
     {
         std::lock_guard<std::mutex> lock(devicesMutex);
-        auto deviceResult = devices.emplace(deviceId, std::move(device));
+        // try_emplace leaves device untouched when the id is already present, so a rejected device is
+        // destroyed after devicesMutex is released (~MatterDevice takes the Matter stack lock, and
+        // Matter-thread dispatch takes devicesMutex while holding it).
+        auto deviceResult = devices.try_emplace(deviceId, std::move(device));
         result = deviceResult.second;
     }
 
@@ -1203,7 +1214,6 @@ static void synchronizeDevice(void *self, icDevice *device)
 {
     static_cast<MatterDeviceDriver *>(self)->SynchronizeDevice(device);
 }
-
 
 void MatterDeviceDriver::ProcessDeviceDescriptorMetadata(const icDevice *device, const icStringHashMap *metadata)
 {

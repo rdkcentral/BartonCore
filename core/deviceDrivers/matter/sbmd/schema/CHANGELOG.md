@@ -6,6 +6,19 @@ each spec's `schemaVersion` field is validated against the schema's expected
 version. Each versioned heading below describes the changes introduced by that
 version.
 
+## v5.1
+
+- Breaking: numeric claim/version fields are now validated at parse time:
+  `matter.deviceTypes`, `matter.vendorId`, and `matter.productId` must be
+  integers in 0–65535, and `barton.deviceClassVersion` and endpoint
+  `profileVersion` must be integers in 0–255. A spec with any other value
+  (out of range, fractional, `NaN`, or a non-number such as a string, boolean, or
+  `null`; an optional field is omitted by leaving it out)
+  previously loaded with the value silently wrapped, narrowed, truncated, or
+  coerced; it now fails to load, and at startup that driver is skipped rather
+  than registered. This closes a gap where a disk re-read of a spec could alias a
+  changed claim identity or version past activation's validation.
+
 ## v5.0
 
 - The schema version is no longer encoded in the schema filename

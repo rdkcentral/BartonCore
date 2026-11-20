@@ -66,9 +66,44 @@ namespace barton
         std::optional<uint16_t> GetOptUint16Prop(JSContext *ctx, JSValue obj, const char *name);
 
         /**
+         * Validate a JS value as an integer in [0, maxValue] without any coercion, so a value that
+         * would wrap, narrow, truncate, or be coerced into a different in-range value is rejected
+         * instead of silently aliasing it. Returns true and sets `out` only when the value is a JS
+         * number that is finite, has no fractional part, and lies in [0, maxValue] (negative zero is
+         * the integer 0 and is accepted). Returns false for anything else, including NaN, ±Infinity,
+         * fractional values, and non-numbers such as strings, booleans, and null.
+         */
+        bool ToBoundedUint(JSContext *ctx, JSValue val, uint32_t maxValue, uint32_t &out);
+
+        /**
+         * Read an optional integer property with ToBoundedUint() semantics. A property that is absent
+         * (undefined) leaves `out` as nullopt and returns true. Returns false if the property is
+         * present but is not an integer in [0, maxValue], including an explicit null.
+         */
+        bool ReadOptBoundedUintProp(JSContext *ctx,
+                                    JSValue obj,
+                                    const char *name,
+                                    uint32_t maxValue,
+                                    std::optional<uint32_t> &out);
+
+        /**
+         * ReadOptBoundedUintProp() with a maxValue of UINT16_MAX, narrowed to uint16.
+         */
+        bool ReadOptBoundedUint16Prop(JSContext *ctx, JSValue obj, const char *name, std::optional<uint16_t> &out);
+
+        /**
          * Get the length of a JS array, or 0 if it has no length.
          */
         uint32_t GetArrayLength(JSContext *ctx, JSValue arr);
+
+        /**
+         * Whether an active script deadline (MQuickJsRuntime::SetDeadline) has fired; false when no
+         * deadline is active. The engine checks the deadline only periodically, so every further
+         * call into script code after it fires still runs for a while before being interrupted
+         * again; loops that read script values (getters, valueOf/toString) must stop as soon as
+         * this returns true.
+         */
+        bool ScriptTimedOut();
 
         /**
          * Return true if a JS object has a defined property with the given name.
@@ -79,11 +114,6 @@ namespace barton
          * Read a JS array of strings.
          */
         std::vector<std::string> GetStringArray(JSContext *ctx, JSValue arr);
-
-        /**
-         * Read a JS array of uint16_t values.
-         */
-        std::vector<uint16_t> GetUint16Array(JSContext *ctx, JSValue arr);
 
         /**
          * Read a JS array of uint32_t values.
