@@ -65,7 +65,9 @@ def _write_is_on_n_times(client, device, n):
         wait_for_resource_value(queue, value, timeout=10)
 
 
-def test_handler_attributes_are_populated(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="handler_attributes_populated", metrics=["sbmd.handler.outcome"])
+def test_handler_attributes_are_populated(default_environment, matter_light, sbmd_report):
     """
     After read, write, and execute operations, every datapoint in
     handler.duration_ms, handler.heap_delta_bytes, and handler.outcome
@@ -128,7 +130,9 @@ def test_handler_attributes_are_populated(default_environment, matter_light):
         )
 
 
-def test_handler_outcome_counts_all_invocations(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="handler_outcome_counts_all_invocations", metrics=["sbmd.handler.outcome"])
+def test_handler_outcome_counts_all_invocations(default_environment, matter_light, sbmd_report):
     """
     After _N isOn writes, handler.outcome{outcome="success"} equals _N, and
     the sum of ALL outcome labels for the same driver/op_type/resource_id also
@@ -173,7 +177,14 @@ def test_handler_outcome_counts_all_invocations(default_environment, matter_ligh
     )
 
 
-def test_handler_duration_in_low_latency_buckets(default_environment, matter_light):
+# NOT marked ci_gate: forcing a GC before every allocation (the dev-default
+# DEBUG_GC=on mquickjs build CI also uses) inflates handler durations
+# 50-130x, so the "all observations land in a fast bucket" assertion below
+# only holds under the production-representative DEBUG_GC=off build, which
+# CI cannot currently produce on demand (see testing/gcflip.sh's CI-cache
+# limitations). Still contributes to the observability-suite report.
+@pytest.mark.sbmd_report(scenario="handler_duration_low_latency", metrics=["sbmd.handler.duration_ms"])
+def test_handler_duration_in_low_latency_buckets(default_environment, matter_light, sbmd_report):
     """
     For _N writes on a simple resource, all measured handler durations fall
     in histogram buckets ≤ 25 ms (indices 0–3).  The worst-case (max) is also
@@ -217,7 +228,9 @@ def test_handler_duration_in_low_latency_buckets(default_environment, matter_lig
     )
 
 
-def test_handler_heap_delta_bytes_recorded_per_invocation(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="handler_heap_delta_per_invocation", metrics=["sbmd.handler.heap_delta_bytes"])
+def test_handler_heap_delta_bytes_recorded_per_invocation(default_environment, matter_light, sbmd_report):
     """
     After _N invocations, handler.heap_delta_bytes has count == _N.
 
@@ -256,7 +269,9 @@ def test_handler_heap_delta_bytes_recorded_per_invocation(default_environment, m
         )
 
 
-def test_heap_used_bytes_snapshots_accumulate(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="handler_heap_used_bytes_accumulate", metrics=["sbmd.js.heap.used_bytes"])
+def test_heap_used_bytes_snapshots_accumulate(default_environment, matter_light, sbmd_report):
     """
     After _N invocations, heap.used_bytes has count >= _N + 1.
 

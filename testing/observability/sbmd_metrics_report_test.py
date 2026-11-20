@@ -66,6 +66,34 @@ _N_HEAP_CALLS = 200
 _HEAP_SNAPSHOT_INTERVAL = 50
 _N_GC_PRESSURE = 20
 
+# ── Sanity ceilings (task 8, sbmd-observability-ci-gating) ──────────────────
+#
+# These are loose "did something go completely off the rails" ceilings, not
+# regression gates: a build-independent *count* metric (unaffected by the
+# mquickjs DEBUG_GC compile-time state, unlike every duration/timing metric
+# and sbmd.js.heap.peak_bytes's DEBUG_GC byte offset) checked against a
+# generous multiple of a real recorded baseline. Deliberately NOT computed
+# from the same run that checks them -- see design.md Decision 5 for why a
+# flat "2x this run's own max" would be a tautology. Update only via a
+# reviewed code change, never from a live CI run.
+#
+# NOT marked @pytest.mark.ci_gate even though they're build-independent: this
+# file's tests call emit_report() directly, unconditionally -- unlike every
+# ci_gate test elsewhere, there's no SBMD_REPORT_DISABLE check here, so
+# including them in CI would reintroduce report I/O into the CI run.
+
+# Baseline: 76 live roots observed after 50 isOn writes on a light driver
+# (2026-11-16 full observability-suite run, testing/.metrics-reports/sbmd_metrics.txt).
+# 2x margin.
+_SANITY_CEILING_GC_ROOTS = 150
+
+# Baseline: 0 re-arms observed for the plain "toggle" resource (single
+# round-trip, no re-arming) in the same 2026-11-16 run. rearmToggle/
+# timeoutToggle/runawayToggle deliberately re-arm by design and are excluded.
+# Absolute floor of 2 (not a multiplier of 0) so a genuinely flat baseline
+# still has a meaningful, non-zero margin.
+_SANITY_CEILING_DEFERRED_DEPTH_TOGGLE = 2
+
 
 def _heap_row(ops, metrics):
     """Extract one heap time-series row from a metrics snapshot."""
@@ -195,7 +223,7 @@ def test_report_driver_startup_costs(default_environment):
         print(f"  {drv:<38} {ms:>14.2f}")
 
     print(f"  {'-' * 38} {'-' * 14}")
-    print(f"  {'TOTAL (eval+activate)':<38} {total_ms:>14.2f}")
+    print(f"  {'TOTAL (eval+register)':<38} {total_ms:>14.2f}")
 
     def _hsum(name):
         return sum(dp["sum"] for dp in metrics.get(name, {}).get("dataPoints", []))
@@ -288,6 +316,20 @@ def test_report_handler_invocation_profile(default_environment, matter_light):
     format_heap_snapshot(
         f"Heap after {_N_HANDLER_CALLS} handler calls:", metrics
     )
+
+    # Sanity ceiling: gc_roots is a plain object count, unaffected by DEBUG_GC,
+    # so unlike every other metric here this one can be hard-gated.
+    gc_roots_dps = metrics.get("sbmd.js.gc_roots", {}).get("dataPoints", [])
+    gc_roots = gc_roots_dps[0]["value"] if gc_roots_dps else None
+    print(f"\n  gc_roots: {gc_roots} (sanity ceiling: {_SANITY_CEILING_GC_ROOTS})")
+    if gc_roots is not None:
+        assert gc_roots <= _SANITY_CEILING_GC_ROOTS, (
+            f"gc_roots is {gc_roots}, above the sanity ceiling of "
+            f"{_SANITY_CEILING_GC_ROOTS} -- the root set may be growing "
+            f"unexpectedly. This is a loose ceiling, not a regression gate: "
+            f"if this is a legitimate change, raise the checked-in constant "
+            f"via a reviewed change, don't just re-run."
+        )
 
     emit_report(
         "handler_profile",
@@ -450,11 +492,19 @@ def test_report_mutex_characterization(default_environment, matter_light):
             except Exception as exc:
                 errors.append(exc)
 
-    threads = [threading.Thread(target=worker) for _ in range(5)]
+    # daemon=True: a worker stuck on a deadlocked JS mutex must not keep this
+    # (child) pytest process alive after the test fails.
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(5)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=30)
+
+    stuck = [t for t in threads if t.is_alive()]
+    assert not stuck, (
+        f"{len(stuck)}/{len(threads)} worker thread(s) still blocked after the 30s "
+        f"join timeout — a write never returned, which points at a JS mutex deadlock."
+    )
 
     if errors:
         print(f"  WARNING: {len(errors)} concurrent calls raised exceptions: {errors}")
@@ -529,6 +579,26 @@ def test_report_deferred_profile(default_environment, matter_deferred_cmd_test_d
     # runawayToggle unwinds up to the depth limit asynchronously; let it settle.
     time.sleep(5)
     metrics = get_metrics(client)
+
+    # Sanity ceiling: deferred.depth is a re-arm count, unaffected by DEBUG_GC,
+    # but ONLY for "toggle" -- rearmToggle/timeoutToggle/runawayToggle
+    # deliberately re-arm by design and must not be held to this ceiling.
+    toggle_depth_dp = find_datapoint(
+        metrics, "sbmd.deferred.depth",
+        driver="deferred-command-test", op_type="execute", resource_id="toggle",
+    )
+    toggle_depth = toggle_depth_dp["sum"] if toggle_depth_dp else None
+    print(f"\n  deferred.depth (toggle only): {toggle_depth} "
+          f"(sanity ceiling: {_SANITY_CEILING_DEFERRED_DEPTH_TOGGLE})")
+    if toggle_depth is not None:
+        assert toggle_depth <= _SANITY_CEILING_DEFERRED_DEPTH_TOGGLE, (
+            f"deferred.depth for the plain 'toggle' resource is {toggle_depth}, "
+            f"above the sanity ceiling of {_SANITY_CEILING_DEFERRED_DEPTH_TOGGLE}. "
+            f"toggle is a single round-trip with no re-arming by design -- "
+            f"unexpected re-arming here suggests a real behavior change, not "
+            f"just noise. This is a loose ceiling, not a regression gate: if "
+            f"legitimate, raise the checked-in constant via a reviewed change."
+        )
 
     emit_report("deferred_profile", {
         "context": {

@@ -36,8 +36,10 @@ making it easier to maintain and scale the test suite.
 """
 
 import logging
+import math
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -57,8 +59,29 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "slow: marks tests that take more than 10 seconds. Purely informational — "
-        "the default CI run excludes the observability suite by path "
-        "(scripts/ci/run_integration_tests.sh --ignore), not by this marker.",
+        "has no effect on CI test selection (see the ci_gate marker for that).",
+    )
+    config.addinivalue_line(
+        "markers",
+        "observability_suite: auto-applied to every test under testing/observability/ "
+        "by path (see pytest_collection_modifyitems below). Not meant to be applied "
+        "manually.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "ci_gate(): marks an observability_suite test as safe for CI to also run as "
+        "part of the default integration test selection — i.e. its assertions do not "
+        "depend on the mquickjs DEBUG_GC build state and it does not require heavy, "
+        "multi-subprocess fixtures. See testing/observability/README.md for the "
+        "decision criteria before adding this marker to a new test.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "sbmd_report(scenario, metrics, client_fixture='default_environment'): marks a "
+        "test as contributing its own pass/fail result to the consolidated SBMD metrics "
+        "report via the sbmd_report fixture. 'scenario' names the report entry; "
+        "'metrics' is the list of metric names to sample; 'client_fixture' overrides "
+        "which fixture to call .get_client() on if not default_environment.",
     )
 
     # Assign one report run id in the parent process (not the per-test
@@ -68,6 +91,52 @@ def pytest_configure(config):
     # colliding on the same id, which would make _load() reuse a stale report.
     if not os.environ.get(_SUBPROCESS_MARKER_ENV):
         os.environ["SBMD_REPORT_RUN_ID"] = str(time.time_ns())
+        _install_termination_handlers()
+    else:
+        # The outer process starts this child with SIGINT/SIGHUP/SIGTERM blocked
+        # (see _run_in_subprocess), and a blocked mask survives exec. Unblock
+        # them so this test, and the device processes it starts, get normal
+        # signal behavior.
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, _child_start_blocked_signums())
+
+
+# Each test's child pytest runs in its own session (see _run_in_subprocess), so
+# a terminal hangup or SIGTERM aimed at this outer process no longer reaches it.
+# Turn those signals into KeyboardInterrupt here, which runs the same cleanup
+# path as Ctrl-C: kill the child's process group, then exit.
+_TERMINATION_SIGNALS = ("SIGHUP", "SIGTERM")
+_previous_signal_handlers = {}
+
+
+def _termination_signums():
+    return {getattr(signal, name) for name in _TERMINATION_SIGNALS if hasattr(signal, name)}
+
+
+def _child_start_blocked_signums():
+    """Signals held while a test's child process starts and while it is cleaned
+    up: the termination signals plus SIGINT, all of which raise
+    KeyboardInterrupt in this process."""
+    return _termination_signums() | {signal.SIGINT}
+
+
+def _raise_keyboard_interrupt(signum, _frame):
+    raise KeyboardInterrupt(f"received {signal.Signals(signum).name}")
+
+
+def _install_termination_handlers():
+    for name in _TERMINATION_SIGNALS:
+        signum = getattr(signal, name, None)
+        # Leave the signal alone if someone else already handles or ignores it
+        # (e.g. SIG_IGN under nohup).
+        if signum is None or signal.getsignal(signum) is not signal.SIG_DFL:
+            continue
+        _previous_signal_handlers[signum] = signal.signal(signum, _raise_keyboard_interrupt)
+
+
+def pytest_unconfigure(config):
+    for signum, handler in _previous_signal_handlers.items():
+        signal.signal(signum, handler)
+    _previous_signal_handlers.clear()
 
 
 # The following list of plugins are automatically loaded by pytest when running tests.
@@ -126,17 +195,107 @@ def _matterjs_available() -> bool:
 _has_matterjs = _matterjs_available()
 
 
-def pytest_collection_modifyitems(config, items):
-    if _has_matterjs:
-        return
+_OBSERVABILITY_DIR = os.path.join(os.path.dirname(__file__), "observability")
 
+
+def pytest_collection_modifyitems(config, items):
     skip_marker = pytest.mark.skip(
         reason="Requires Node.js and matter.js (not available)"
     )
 
     for item in items:
-        if "requires_matterjs" in item.keywords:
+        # Path-based, not opt-in: every test collected from testing/observability/
+        # is an observability_suite test, full stop — see the ci_gate marker docs
+        # for how a subset of these also run as part of CI.
+        if str(item.fspath).startswith(_OBSERVABILITY_DIR + os.sep):
+            item.add_marker(pytest.mark.observability_suite)
+
+        if not _has_matterjs and "requires_matterjs" in item.keywords:
             item.add_marker(skip_marker)
+
+
+# ---------------------------------------------------------------------------
+#  Per-test contribution to the consolidated SBMD metrics report.
+#
+#  A test opts in via @pytest.mark.sbmd_report(scenario=..., metrics=[...]) plus
+#  requesting the sbmd_report fixture. The test body is unchanged otherwise: the
+#  fixture's teardown reads the test's own outcome (stashed by the hookwrapper
+#  below, a standard pytest idiom) and, unless reporting is disabled for this
+#  invocation, records a report entry carrying that outcome alongside a fresh
+#  sample of the named metrics. This runs inside the per-test subprocess (see
+#  the subprocess-isolation section below), which sbmd_report_writer.py's
+#  SBMD_REPORT_RUN_ID + fcntl locking already exists to support.
+# ---------------------------------------------------------------------------
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, f"rep_{rep.when}", rep)
+
+
+def _sbmd_report_enabled():
+    return not os.environ.get("SBMD_REPORT_DISABLE")
+
+
+def _skip_reason(rep):
+    # A skip report's longrepr is a (path, lineno, reason) tuple.
+    longrepr = rep.longrepr
+    if isinstance(longrepr, tuple) and len(longrepr) == 3:
+        return str(longrepr[2])
+    return str(longrepr)
+
+
+def _sbmd_check_outcome(node):
+    """Return (status, message) for the sbmd_report entry: PASS, FAIL, or SKIP.
+    A skipped test is reported as SKIP, never as FAIL."""
+    rep_setup = getattr(node, "rep_setup", None)
+    rep_call = getattr(node, "rep_call", None)
+
+    if rep_call is not None:
+        if rep_call.passed:
+            return "PASS", ""
+        if rep_call.skipped:
+            return "SKIP", _skip_reason(rep_call)
+        return "FAIL", str(rep_call.longrepr)
+
+    if rep_setup is not None and rep_setup.skipped:
+        return "SKIP", _skip_reason(rep_setup)
+
+    if rep_setup is not None and rep_setup.failed:
+        return "FAIL", str(rep_setup.longrepr)
+
+    return "FAIL", ""
+
+
+@pytest.fixture
+def sbmd_report(request):
+    """See the sbmd_report marker (registered in pytest_configure) for usage."""
+    ctx = {}
+    yield ctx
+
+    marker = request.node.get_closest_marker("sbmd_report")
+    if marker is None or not _sbmd_report_enabled():
+        return
+
+    from testing.helpers.sbmd_metrics_helpers import get_metrics
+    from testing.helpers.sbmd_report_writer import collect, emit_report
+
+    status, message = _sbmd_check_outcome(request.node)
+
+    metric_names = marker.kwargs.get("metrics", [])
+    if metric_names:
+        client_fixture = marker.kwargs.get("client_fixture", "default_environment")
+        client = request.getfixturevalue(client_fixture).get_client()
+        metrics = collect(get_metrics(client), metric_names)
+    else:
+        metrics = {}
+
+    emit_report(marker.kwargs["scenario"], {
+        "context": {**ctx, "check_status": status, "check_message": message},
+        "metrics": metrics,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +315,25 @@ def pytest_collection_modifyitems(config, items):
 # ---------------------------------------------------------------------------
 
 _SUBPROCESS_MARKER_ENV = "_PYTEST_SUBPROCESS_INNER"
+
+# Upper bound on one test's child pytest process, so a deadlocked test fails
+# with a named node instead of hanging the whole run until the CI job timeout.
+# Generous by default (the slowest scale tests take minutes); override with
+# BARTON_TEST_TIMEOUT_S.
+_DEFAULT_SUBPROCESS_TIMEOUT_S = 1800
+
+
+def _subprocess_timeout_s():
+    raw = os.environ.get("BARTON_TEST_TIMEOUT_S")
+    if not raw:
+        return _DEFAULT_SUBPROCESS_TIMEOUT_S
+    try:
+        value = float(raw)
+    except ValueError:
+        raise pytest.UsageError(f"BARTON_TEST_TIMEOUT_S must be a number of seconds, got {raw!r}")
+    if not math.isfinite(value) or value <= 0:
+        raise pytest.UsageError(f"BARTON_TEST_TIMEOUT_S must be a positive, finite number, got {raw!r}")
+    return value
 
 
 def pytest_runtest_protocol(item, nextitem):
@@ -266,13 +444,89 @@ def _run_in_subprocess(item):
         child_env = dict(os.environ)
         child_env[_SUBPROCESS_MARKER_ENV] = "1"
 
-        result = subprocess.run(
-            cmd,
-            cwd=str(item.config.rootpath),
-            capture_output=True,
-            text=True,
-            env=child_env,
-        )
+        timeout_s = _subprocess_timeout_s()
+
+        # Own process group: on timeout or interrupt the whole group is killed,
+        # including mock-device processes (matter.js etc.) the child started, so
+        # none of them outlive the test and run alongside later tests. The child
+        # is in its own session, so a terminal's SIGINT/SIGHUP no longer reaches
+        # it; the finally below takes it down on every exit path this process
+        # gets to run. Not covered: SIGKILL of this outer process (it gets no
+        # chance to clean up), which leaves the child running until it exits on
+        # its own. CI is unaffected because its container is discarded.
+        #
+        # The signal masks below apply to the calling thread only. That is
+        # sufficient because the outer pytest runs single-threaded, so these
+        # signals are always delivered to this thread.
+        proc = None
+
+        def _kill_group():
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+        try:
+            # Hold SIGINT/SIGHUP/SIGTERM while the child starts so their
+            # KeyboardInterrupt can't fire after the fork but before `proc` is
+            # assigned, leaving a child nothing would kill. A pending signal is
+            # delivered when the mask is restored, with `proc` set.
+            old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, _child_start_blocked_signums())
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=str(item.config.rootpath),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=child_env,
+                    start_new_session=True,
+                )
+            finally:
+                signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                _kill_group()
+                try:
+                    stdout, stderr = proc.communicate(timeout=30)
+                except subprocess.TimeoutExpired:
+                    # Something outside the group still holds the pipes; give up
+                    # on the remaining output rather than hang.
+                    stdout, stderr = "", ""
+
+                partial = ((stdout or "") + (stderr or "")).strip()
+                raise AssertionError(
+                    f"Subprocess test timed out after {timeout_s:g}s and was killed "
+                    f"(set BARTON_TEST_TIMEOUT_S to change the limit)\n"
+                    f"command: {' '.join(cmd)}\n\n"
+                    f"Captured output before the timeout:\n{partial or '<none>'}"
+                ) from None
+        finally:
+            # Any exit while the child still runs (KeyboardInterrupt from Ctrl-C,
+            # SIGHUP or SIGTERM, or anything else) kills its whole group. Hold
+            # those signals while doing it, so a second Ctrl-C can't abort the
+            # cleanup; a signal that lands before the mask is set is absorbed by
+            # the retry, and one that arrives during cleanup is delivered when
+            # the mask is restored, after the group is gone.
+            while True:
+                try:
+                    cleanup_mask = signal.pthread_sigmask(
+                        signal.SIG_BLOCK, _child_start_blocked_signums()
+                    )
+                    break
+                except KeyboardInterrupt:
+                    continue
+
+            try:
+                if proc is not None and proc.poll() is None:
+                    _kill_group()
+                    proc.wait()
+            finally:
+                signal.pthread_sigmask(signal.SIG_SETMASK, cleanup_mask)
+
+        result = subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
         outcome, message = _parse_junit_outcome(junit_path)
 

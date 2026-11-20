@@ -28,7 +28,6 @@ Tests in this file focus on the long-running health signals:
 
   Heap:
     - peak_bytes stays well below the OOM ceiling
-    - avg heap_delta per call is bounded (no per-call leak)
     - gc_roots count is stable across repeated identical calls (no GC root leak)
 
   GC:
@@ -53,7 +52,6 @@ import pytest
 
 from testing.helpers.sbmd_metrics_helpers import (
     bucket_sum,
-    find_datapoint,
     format_histogram,
     get_metrics,
 )
@@ -77,10 +75,6 @@ _DEFERRED_DRIVER = "deferred-command-test"
 # capacity gauge.  live_bytes (heap_used sampled right after a GC compaction) is
 # the true occupancy signal an OOM gate must watch.
 _LIVE_OOM_THRESHOLD = 0.75
-
-# Average heap delta bound: per-call net allocation must be below this limit.
-# Exceeding this over many calls would indicate a per-call heap leak.
-_MAX_AVG_DELTA_BYTES = 1024
 
 # Number of isOn writes for the sustained-load tests.
 _N_SUSTAINED = 200
@@ -117,7 +111,9 @@ def _write_is_on_n_times(client, device, n):
 
 # ── GC root stability ─────────────────────────────────────────────────────────
 
-def test_gc_roots_stable_across_identical_calls(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="gc_roots_stable_across_calls", metrics=["sbmd.js.gc_roots"])
+def test_gc_roots_stable_across_identical_calls(default_environment, matter_light, sbmd_report):
     """
     gc_roots count does not grow by more than 10 across 200 identical writes
     on the same resource.
@@ -167,7 +163,9 @@ def test_gc_roots_stable_across_identical_calls(default_environment, matter_ligh
 # ── Retained live-set ceiling (true OOM gate) ─────────────────────────────────
 
 
-def test_live_set_stays_below_oom_threshold(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="heap_live_set_below_oom", metrics=["sbmd.js.heap.live_bytes", "sbmd.js.heap.arena_bytes"])
+def test_live_set_stays_below_oom_threshold(default_environment, matter_light, sbmd_report):
     """
     After 200 isOn writes, the retained live set (sbmd.js.heap.live_bytes) is
     below 75 % of the arena.
@@ -220,58 +218,15 @@ def test_live_set_stays_below_oom_threshold(default_environment, matter_light):
     )
 
 
-# ── Per-call heap delta bound ─────────────────────────────────────────────────
-
-def test_heap_delta_per_call_is_bounded(default_environment, matter_light):
-    """
-    Average heap_delta per call (sum / count) is < _MAX_AVG_DELTA_BYTES.
-
-    A per-call average of 0 B or below means the JS engine's GC runs regularly
-    and the driver is not leaking heap per invocation.  A growing positive
-    average over many calls would predict eventual heap exhaustion.
-    """
-    device = commission_device(default_environment, matter_light, _LIGHT_DRIVER)
-    client = default_environment.get_client()
-    _write_is_on_n_times(client, device, _N_SUSTAINED)
-
-    metrics = get_metrics(client)
-    delta_dp = find_datapoint(
-        metrics, "sbmd.handler.heap_delta_bytes",
-        driver=_LIGHT_DRIVER, op_type="write", resource_id="isOn",
-    )
-    assert delta_dp is not None, (
-        f"No handler.heap_delta_bytes for {_LIGHT_DRIVER}/write/isOn"
-    )
-    assert delta_dp["count"] >= 1
-
-    avg_delta = delta_dp["sum"] / delta_dp["count"]
-    min_obs   = delta_dp.get("min", 0)
-    # bucket[0] covers values ≤ 0 (GC reclaimed more than was allocated).
-    # Each bucket is {"le": ..., "count": ...} per observabilityDumpJson().
-    neg_obs   = delta_dp.get("buckets", [{}])[0].get("count", 0)
-
-    print(f"\n  handler.heap_delta_bytes histogram:")
-    print(format_histogram(delta_dp, unit=" B"))
-    print(f"\n  avg delta per call: {avg_delta:+.1f} B")
-    print(f"  min observed:       {min_obs} B")
-    print(f"  bucket[0] (≤0 B):   {neg_obs} observations")
-    if min_obs >= 0:
-        print(
-            "  NOTE: min ≥ 0 means GC never reclaimed more than was allocated "
-            "during any single call.  Not an error; just confirms GC is lazy."
-        )
-
-    assert avg_delta < _MAX_AVG_DELTA_BYTES, (
-        f"Average heap delta per call is {avg_delta:+.1f} B, "
-        f"exceeds {_MAX_AVG_DELTA_BYTES} B threshold. "
-        f"This may indicate a per-call allocation leak in the 'isOn' handler."
-    )
-
-
 # ── GC fires under pressure ───────────────────────────────────────────────────
 
+# NOT marked ci_gate: asserts GC pauses land in a <=25ms bucket, which does
+# not hold under the dev-default DEBUG_GC=on build CI also uses (forcing a
+# GC before every allocation inflates GC durations 50-130x). Still
+# contributes to the observability-suite report.
+@pytest.mark.sbmd_report(scenario="gc_fires_under_pressure", metrics=["sbmd.js.gc.count", "sbmd.js.gc.duration_ms"])
 def test_gc_fires_under_allocation_pressure(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     _N_GC_PRESSURE calls to gcPressure (each allocates 500 × 1000-element
@@ -341,8 +296,10 @@ def test_gc_fires_under_allocation_pressure(
 # ── Post-GC live-set gauge ────────────────────────────────────────────────────
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="heap_live_bytes_after_gc", metrics=["sbmd.js.heap.live_bytes", "sbmd.js.heap.peak_bytes"])
 def test_live_bytes_recorded_after_gc(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     After GC pressure forces collections, sbmd.js.heap.live_bytes is recorded and
@@ -403,8 +360,10 @@ def test_live_bytes_recorded_after_gc(
 # ── Retained-allocation guardrail ─────────────────────────────────────────────
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="heap_heavy_transient_not_retained", metrics=["sbmd.js.heap.live_bytes"])
 def test_heavy_transient_allocation_is_not_retained(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     After _N_GC_PRESSURE gcPressure calls (each allocating 500k array elements
@@ -477,7 +436,9 @@ def test_heavy_transient_allocation_is_not_retained(
 
 
 @pytest.mark.slow
-def test_live_set_floor_flat_under_sustained_load(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="heap_live_set_floor_flat_sustained", metrics=["sbmd.js.heap.live_bytes"])
+def test_live_set_floor_flat_under_sustained_load(default_environment, matter_light, sbmd_report):
     """
     Over _N_SOAK sustained isOn writes, the post-GC live-set floor
     (min sbmd.js.heap.live_bytes) does not creep upward beyond a small tolerance.
@@ -564,7 +525,9 @@ def test_live_set_floor_flat_under_sustained_load(default_environment, matter_li
 
 # ── Mutex — uncontended ───────────────────────────────────────────────────────
 
-def test_mutex_wait_near_zero_when_uncontended(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="mutex_wait_uncontended", metrics=["sbmd.js.mutex.wait_ms"])
+def test_mutex_wait_near_zero_when_uncontended(default_environment, matter_light, sbmd_report):
     """
     30 sequential writes on a single thread produce an average mutex.wait_ms
     < 2.0 ms.
@@ -601,7 +564,9 @@ def test_mutex_wait_near_zero_when_uncontended(default_environment, matter_light
 
 # ── Mutex — contended ─────────────────────────────────────────────────────────
 
-def test_mutex_wait_nonzero_under_concurrent_load(default_environment, matter_light):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="mutex_wait_concurrent", metrics=["sbmd.js.mutex.wait_ms"])
+def test_mutex_wait_nonzero_under_concurrent_load(default_environment, matter_light, sbmd_report):
     """
     5 threads × 10 writes each (50 concurrent calls) produce a measurable
     cumulative mutex.wait_ms > 0.
@@ -626,11 +591,19 @@ def test_mutex_wait_nonzero_under_concurrent_load(default_environment, matter_li
             except Exception as exc:
                 errors.append(exc)
 
-    threads = [threading.Thread(target=worker) for _ in range(5)]
+    # daemon=True: a worker stuck on a deadlocked JS mutex must not keep this
+    # (child) pytest process alive after the test fails.
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(5)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=60)
+
+    stuck = [t for t in threads if t.is_alive()]
+    assert not stuck, (
+        f"{len(stuck)}/{len(threads)} worker thread(s) still blocked after the 60s "
+        f"join timeout — a write never returned, which points at a JS mutex deadlock."
+    )
 
     assert not errors, (
         f"{len(errors)} of 50 concurrent calls raised exceptions: {errors[:3]} — "

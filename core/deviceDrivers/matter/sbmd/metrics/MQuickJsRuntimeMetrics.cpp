@@ -50,8 +50,9 @@ namespace barton
             "sbmd.js.heap.free_bytes", "Bytes between top of heap and bottom of JS call stack", "By");
         heapPeakGauge = observabilityGaugeCreate(
             "sbmd.js.heap.peak_bytes",
-            "All-time high-water mark of heap_used observed at handler-invocation heap snapshots "
-            "(periodic idle sampler and forced snapshots). Under production's lazy compacting GC "
+            "All-time high-water mark of heap_used observed at heap snapshots (handler invocations, "
+            "the periodic idle sampler, and forced snapshots) and, with GC instrumentation, at GC "
+            "end (post-compaction). Under production's lazy compacting GC "
             "this tends toward the GC trigger threshold rather than reflecting any one driver's "
             "true allocation footprint — see sbmd.js.gc.alloc_churn_bytes for a per-cycle signal "
             "that is not subject to this saturation",
@@ -144,8 +145,16 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::StopSampler()
     {
-        samplerShouldStop.store(true, std::memory_order_relaxed);
-        TickleSampler();
+        // Change the wait predicate's inputs under samplerCvMutex: otherwise the store and
+        // notify can land between the sampler's predicate check and its block in wait_until,
+        // and the stop is missed until the full sample period elapses.
+        {
+            std::lock_guard<std::mutex> lock(samplerCvMutex);
+            samplerShouldStop.store(true, std::memory_order_relaxed);
+            tickleSeq.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        samplerCv.notify_one();
 
         if (periodicSamplerThread.joinable())
         {
@@ -184,7 +193,14 @@ namespace barton
 
     void MQuickJsRuntimeMetrics::TickleSampler()
     {
-        tickleSeq.fetch_add(1, std::memory_order_relaxed);
+        // Same reason as StopSampler: update the predicate input under samplerCvMutex. The
+        // sampler thread never holds samplerCvMutex while calling ForceSnapshot (the only path
+        // back into here from that thread), so this cannot self-deadlock.
+        {
+            std::lock_guard<std::mutex> lock(samplerCvMutex);
+            tickleSeq.fetch_add(1, std::memory_order_relaxed);
+        }
+
         samplerCv.notify_one();
     }
 
@@ -243,8 +259,9 @@ namespace barton
             // for this cycle. Under production's lazy allocator this value is ~constant across
             // cycles (a GC only fires once the arena is nearly exhausted), so it is NOT a useful
             // peak_bytes candidate — captured here only as the "before" side of the allocation-
-            // churn calculation at GC end. We are already on the thread holding the JS mutex, so
-            // read usage directly without re-locking.
+            // churn calculation at GC end. A GC only runs inside JS execution on the shared
+            // context, and every such path holds the JS mutex, so read usage directly without
+            // re-locking.
             if (ctx)
             {
                 JSMemoryUsage usage = {};
@@ -268,7 +285,8 @@ namespace barton
         // GC end: the heap has just been compacted, so heap_used now equals the true retained
         // live set (transient garbage reclaimed). Record it as sbmd.js.heap.live_bytes. This is
         // the leak-visible occupancy signal that used_bytes/peak_bytes cannot provide under lazy
-        // compacting GC. We are on the thread holding the JS mutex; read usage without re-locking.
+        // compacting GC. As at GC start, this runs on the thread holding the JS mutex; read usage
+        // without re-locking.
         if (ctx)
         {
             JSMemoryUsage usage = {};
@@ -277,14 +295,23 @@ namespace barton
             {
                 auto postGCHeapUsed = static_cast<int64_t>(usage.heap_used);
 
-                observabilityGaugeRecord(metrics->heapLiveGauge, postGCHeapUsed);
+                // The live set is part of the heap's occupancy history, so peak_bytes must never
+                // read below it. Advance the peak from this post-compaction value (not the GC-start
+                // reading, which sits at the allocator's trigger threshold every cycle), and do it
+                // before publishing live_bytes so no reader sees live above peak.
+                if (postGCHeapUsed > metrics->peakHeapRecorded)
+                {
+                    metrics->peakHeapRecorded = postGCHeapUsed;
+                    observabilityGaugeRecord(metrics->heapPeakGauge, metrics->peakHeapRecorded);
+                }
 
+                observabilityGaugeRecord(metrics->heapLiveGauge, postGCHeapUsed);
                 // Churn = what this cycle's allocations added on top of the PREVIOUS cycle's
                 // retained live set. No prior baseline on the very first cycle, so skip it.
                 if (metrics->prevPostGCHeapUsed >= 0)
                 {
-                    double churn = static_cast<double>(metrics->preGCHeapUsed) -
-                                   static_cast<double>(metrics->prevPostGCHeapUsed);
+                    double churn =
+                        static_cast<double>(metrics->preGCHeapUsed) - static_cast<double>(metrics->prevPostGCHeapUsed);
                     observabilityHistogramRecord(metrics->gcAllocChurnHisto, churn);
                 }
 

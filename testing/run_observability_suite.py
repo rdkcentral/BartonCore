@@ -63,6 +63,37 @@ OBS_DIR = REPO / "testing" / "observability"
 # child process below.
 REPORT_DIR = Path(os.environ.get("SBMD_REPORT_DIR", str(REPO / "testing" / ".metrics-reports")))
 GCFLIP = REPO / "testing" / "gcflip.sh"
+CMAKE_CACHE = REPO / "build" / "CMakeCache.txt"
+# Options the suite needs: without them the GC/live-set tests skip and the run
+# still "passes", so the runner refuses to start instead.
+REQUIRED_CMAKE_OPTIONS = ("BCORE_SBMD_METRICS", "BCORE_SBMD_GC_INSTRUMENTATION")
+_CMAKE_TRUE = {"ON", "TRUE", "YES", "Y", "1"}
+
+
+def _require_gc_instrumentation():
+    """Exit with an error unless build/ is configured with every option in
+    REQUIRED_CMAKE_OPTIONS turned on."""
+    if not CMAKE_CACHE.is_file():
+        sys.exit(
+            f"ERROR: {CMAKE_CACHE} not found. Configure the build first "
+            f"(./build.sh uses the dev profile, which enables GC instrumentation)."
+        )
+
+    values = {}
+    for line in CMAKE_CACHE.read_text(encoding="utf-8", errors="replace").splitlines():
+        name, sep, value = line.partition("=")
+        key = name.split(":", 1)[0]
+        if sep and key in REQUIRED_CMAKE_OPTIONS:
+            values[key] = value.strip().upper()
+
+    missing = [opt for opt in REQUIRED_CMAKE_OPTIONS if values.get(opt) not in _CMAKE_TRUE]
+    if missing:
+        sys.exit(
+            f"ERROR: {CMAKE_CACHE} has {', '.join(missing)} off or unset; the GC and "
+            f"live-set tests would silently skip. Reconfigure with "
+            + " ".join(f"-D{opt}=ON" for opt in missing)
+            + " (or use ./build.sh, whose dev profile enables them)."
+        )
 
 
 def _run(cmd, check=True):
@@ -147,6 +178,8 @@ def main():
 
     # Strip a leading `--` separator if argparse kept it.
     extra = args.pytest_args[1:] if args.pytest_args[:1] == ["--"] else args.pytest_args
+
+    _require_gc_instrumentation()
 
     rc = 0
     try:

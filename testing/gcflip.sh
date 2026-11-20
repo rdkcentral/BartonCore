@@ -62,6 +62,19 @@ err() { printf '\033[1;31m[gcflip] ERROR:\033[0m %s\n' "$*" >&2; }
 
 sha_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
+# Copy $1 to $2 atomically: write a temp file next to the destination, then
+# rename it into place, so an interrupted copy never leaves a truncated archive
+# at $2 for the next link to pick up.
+install_atomic() {
+    local src="$1" dst="$2"
+    local tmp="$dst.gcflip-tmp.$$"
+    if ! cp "$src" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    mv -f "$tmp" "$dst"
+}
+
 # A cache key covering everything that changes what gets built: the mquickjs
 # pin, the variant (on|off), and the content of every file that feeds the
 # build (patched CMakeLists.txt + all patches). If any of these change, the
@@ -106,7 +119,12 @@ build_variant() {
             tail -n 40 "$build_log" >&2
             exit 1
         fi
-        find . -name libmquickjs.a -exec cp {} "$out" \;
+        local built; built="$(find . -name libmquickjs.a | head -n 1)"
+        if [[ -z "$built" ]]; then
+            err "build produced no libmquickjs.a for variant '$variant'"
+            exit 1
+        fi
+        install_atomic "$built" "$out"
     )
     rm -rf "$src"
     [[ -f "$out" ]] || { err "build produced no libmquickjs.a for variant '$variant'"; exit 1; }
@@ -161,7 +179,7 @@ flip_to() {
     # though it won't byte-match either cached on/off variant.
     local original_backup="$CACHE_DIR/libmquickjs-original.a"
     if [[ ! -f "$original_backup" && -f "$INSTALLED_A" ]]; then
-        cp "$INSTALLED_A" "$original_backup"
+        install_atomic "$INSTALLED_A" "$original_backup"
         log "backed up pristine installed archive -> $original_backup"
     fi
 
@@ -174,15 +192,31 @@ flip_to() {
     fi
 
     log "swapping installed archive -> DEBUG_GC-$variant"
-    cp "$target" "$INSTALLED_A"
+    install_atomic "$target" "$INSTALLED_A"
     relink_bartoncore
     local now_sha; now_sha="$(sha_of "$INSTALLED_A")"
     log "now DEBUG_GC-$variant (sha ${now_sha:0:12})"
 }
 
+# Serialize flips: two concurrent runs (e.g. two worktrees in one container)
+# must not interleave the cache build, the archive swap, and the relink. The
+# lock sits next to the shared installed archive, not in the cache dir, so runs
+# with different GCFLIP_CACHE_DIR values still serialize on it.
+FLIP_LOCK="$(dirname "$INSTALLED_A")/.libmquickjs.gcflip.lock"
+
+with_flip_lock() {
+    mkdir -p "$CACHE_DIR"
+    exec 9>"$FLIP_LOCK"
+    if ! flock -n 9; then
+        log "another gcflip is running — waiting for it to finish"
+        flock 9
+    fi
+    "$@"
+}
+
 cmd="${1:-status}"
 case "$cmd" in
-    on|off) flip_to "$cmd" ;;
+    on|off) with_flip_lock flip_to "$cmd" ;;
     status)
         st="$(current_state)"
         log "current DEBUG_GC state: $st"

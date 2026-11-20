@@ -94,7 +94,9 @@ _DEV_ARENA_BYTES = 1_048_576
 _MIN_FREE_FRACTION = 0.20
 
 
-def test_all_metric_names_present(default_environment):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="baseline_all_metric_names_present", metrics=[])
+def test_all_metric_names_present(default_environment, sbmd_report):
     """
     Every expected SBMD metric is present in the telemetry JSON with the
     correct type field after a clean startup.
@@ -126,7 +128,9 @@ def test_all_metric_names_present(default_environment):
             print(f"  –  {name}  (absent — BCORE_SBMD_GC_INSTRUMENTATION may be OFF)")
 
 
-def test_heap_arena_size(default_environment):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="baseline_heap_arena_size", metrics=["sbmd.js.heap.arena_bytes"])
+def test_heap_arena_size(default_environment, sbmd_report):
     """
     sbmd.js.heap.arena_bytes has exactly one datapoint with a positive value.
     On the dev build the value equals BCORE_MQUICKJS_MEMSIZE_BYTES (1 MiB).
@@ -152,7 +156,12 @@ def test_heap_arena_size(default_environment):
         )
 
 
-def test_startup_heap_headroom(default_environment):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(
+    scenario="baseline_startup_heap_headroom",
+    metrics=["sbmd.js.heap.arena_bytes", "sbmd.js.heap.free_bytes"],
+)
+def test_startup_heap_headroom(default_environment, sbmd_report):
     """
     After all drivers load, at least _MIN_FREE_FRACTION of the arena is free.
 
@@ -176,7 +185,12 @@ def test_startup_heap_headroom(default_environment):
     )
 
 
-def test_heap_used_bytes_has_initial_snapshot(default_environment):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(
+    scenario="baseline_heap_used_bytes_initial_snapshot",
+    metrics=["sbmd.js.heap.used_bytes"],
+)
+def test_heap_used_bytes_has_initial_snapshot(default_environment, sbmd_report):
     """
     sbmd.js.heap.used_bytes has at least one histogram observation after
     startup.  This snapshot is taken at the end of MQuickJsRuntime::Initialize()
@@ -198,7 +212,12 @@ def test_heap_used_bytes_has_initial_snapshot(default_environment):
         print(format_histogram(dp, unit=" B"))
 
 
-def test_deferred_in_flight_zero_at_startup(default_environment):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(
+    scenario="baseline_deferred_in_flight_zero_at_startup",
+    metrics=["sbmd.deferred.in_flight"],
+)
+def test_deferred_in_flight_zero_at_startup(default_environment, sbmd_report):
     """
     sbmd.deferred.in_flight gauge reflects zero in-flight deferred ops at
     startup.  The gauge is only recorded when ExecuteRequestCommand runs, so
@@ -221,7 +240,12 @@ def test_deferred_in_flight_zero_at_startup(default_environment):
           f"({'recorded' if in_flight_dps else 'gauge never set — no deferred ops yet'})")
 
 
-def test_driver_registered_count_matches_filesystem(default_environment):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(
+    scenario="baseline_driver_registered_count",
+    metrics=["sbmd.driver.registered.count"],
+)
+def test_driver_registered_count_matches_filesystem(default_environment, sbmd_report):
     """
     sbmd.driver.registered.count equals the number of .sbmd.js files on
     disk across both the production and test specs directories.
@@ -255,7 +279,12 @@ def test_driver_registered_count_matches_filesystem(default_environment):
     )
 
 
-def test_driver_load_cost_metrics_populated(default_environment):
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(
+    scenario="baseline_driver_load_cost",
+    metrics=["sbmd.driver.load.duration_ms"],
+)
+def test_driver_load_cost_metrics_populated(default_environment, sbmd_report):
     """
     sbmd.driver.load.duration_ms has one datapoint per successfully loaded
     driver (count=1, sum>0).
@@ -288,3 +317,28 @@ def test_driver_load_cost_metrics_populated(default_environment):
     total_ms = sum(dp["sum"] for dp in dur_dps)
     print(f"  {'-' * 38} {'-' * 10}")
     print(f"  {'TOTAL':<38} {total_ms:>10.1f}")
+
+
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(
+    scenario="baseline_load_span_metrics",
+    metrics=["sbmd.driver.registration.total_ms", "sbmd.driver.bundle_load_ms"],
+)
+def test_load_span_metrics_populated(default_environment, sbmd_report):
+    """
+    The coarse load spans recorded by RegisterDriversFromDirectory are present
+    and positive: registration.total_ms (whole discover->register) and
+    bundle_load_ms (one-time bundle + capture injection).
+
+    Folded in from testing/test/sbmd_load_metrics_test.py, which duplicated
+    the rest of this file's coverage but did not have a unique check for
+    these two span metrics.
+    """
+    client = default_environment.get_client()
+    metrics = get_metrics(client)
+
+    for name in ("sbmd.driver.registration.total_ms", "sbmd.driver.bundle_load_ms"):
+        dps = metrics[name]["dataPoints"]
+        assert sum(dp["count"] for dp in dps) >= 1, f"{name} has no observations"
+        assert sum(dp["sum"] for dp in dps) > 0, f"{name} sum should be positive"
+

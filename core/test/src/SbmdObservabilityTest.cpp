@@ -332,12 +332,15 @@ public:
         observabilityInit();
 
         ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(512 * 1024));
+        // The unit tests drive the shared context from the test thread and never use the idle
+        // heap sampler; stop it so it can't walk GC-root lists while a test changes them.
+        MQuickJsRuntime::Instance().GetMetrics().StopSampler();
 
         auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
-        ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
@@ -636,6 +639,10 @@ TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
 
 TEST_F(SbmdObservabilityTest, GcCountIncrements)
 {
+#if !defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION)
+    GTEST_SKIP() << "sbmd.js.gc.count requires BCORE_SBMD_GC_INSTRUMENTATION=ON";
+#endif
+
     double countBefore = GetCounterValue("sbmd.js.gc.count");
 
     {
@@ -651,7 +658,32 @@ TEST_F(SbmdObservabilityTest, GcCountIncrements)
 
 TEST_F(SbmdObservabilityTest, GcRootsGaugeHasValue)
 {
+#if !defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION)
+    GTEST_SKIP() << "sbmd.js.gc_roots requires BCORE_SBMD_GC_INSTRUMENTATION=ON";
+#endif
+
     MQuickJsRuntime::Instance().GetMetrics().ForceSnapshot();
     double roots = GetGaugeValue("sbmd.js.gc_roots");
     EXPECT_GT(roots, 0.0);
+}
+
+// peak_bytes must never read below the live set: the GC-end callback advances the
+// peak from the post-compaction heap_used it records as live_bytes.
+TEST_F(SbmdObservabilityTest, PeakNotBelowLiveSetAfterGc)
+{
+#if !defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION)
+    GTEST_SKIP() << "sbmd.js.heap.live_bytes requires BCORE_SBMD_GC_INSTRUMENTATION=ON";
+#endif
+
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+        ASSERT_NE(ctx, nullptr);
+        JS_GC(ctx);
+    }
+
+    double live = GetGaugeValue("sbmd.js.heap.live_bytes");
+    double peak = GetGaugeValue("sbmd.js.heap.peak_bytes");
+    EXPECT_GT(live, 0.0);
+    EXPECT_GE(peak, live);
 }

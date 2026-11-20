@@ -56,6 +56,9 @@ namespace barton
          * sub-namespaces. The object is frozen after loading to prevent
          * modification by scripts.
          *
+         * Evaluates JS on the shared context: the caller must hold
+         * MQuickJsRuntime::Instance().GetMutex().
+         *
          * @param ctx The mquickjs context to load the bundles into
          * @return true if all bundles were loaded successfully, false otherwise
          */

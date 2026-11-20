@@ -161,22 +161,23 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &configuredDir,
 
     // Load the SBMD utilities bundle and inject the capture function into the
     // already-initialized JS runtime. Done only once per factory lifetime.
-    // Note: do NOT hold the JS mutex across these calls — LoadBundle and
-    // InjectCaptureFunction may acquire it internally.
+    // Both evaluate JS on the shared context, so hold the JS mutex across them:
+    // the idle heap sampler thread is already running and takes the same mutex
+    // to read heap and GC-root state.
     if (!runtimeReady)
     {
         auto bundleStart = std::chrono::steady_clock::now();
-        auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
-
-        if (!SbmdBundleLoader::LoadBundle(ctx))
-        {
-            icError("Failed to load SBMD bundles for drivers");
-            allRegistered = false;
-            return;
-        }
 
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+            auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+
+            if (!SbmdBundleLoader::LoadBundle(ctx))
+            {
+                icError("Failed to load SBMD bundles for drivers");
+                allRegistered = false;
+                return;
+            }
 
             if (!SbmdLoader::InjectCaptureFunction(ctx))
             {

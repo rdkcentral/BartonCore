@@ -191,37 +191,44 @@ def test_retained_memory_vs_device_count(default_environment):
     live set.  Assert the retained set scales sanely (bounded per-device slope)
     and never approaches the arena ceiling, and emit the full curve as a report
     time-series so the "KB/device" / "devices per MiB" sizing can be read off.
+
+    Drivers load inactive and activate when the first device binds, so the
+    slope baseline is the live set after the FIRST device (driver active), not
+    the zero-device reading: otherwise the one-time activation cost would be
+    spread across N and skew the per-device figure.  The zero-device reading
+    is still reported for context, but it is whatever the last startup GC left
+    behind, not a clean pre-activation floor, so no activation cost is derived
+    from it.
     """
+    if _N_DEVICES < 2:
+        pytest.skip(f"SBMD_SCALE_DEVICES={_N_DEVICES}: need at least 2 devices for a slope")
+
     client = default_environment.get_client()
 
-    # Baseline: post-GC live set with zero commissioned devices.  Wait briefly for
-    # a natural GC (fired during startup / driver load) to populate the gauge.
+    # Informational zero-device reading (driver not yet active).  Wait briefly
+    # for a natural GC (fired during startup / driver load) to populate it.
     for _ in range(20):
         if _live_bytes(client) is not None:
             break
         time.sleep(0.25)
-
-    baseline = _live_bytes(client)
-    if baseline is None:
-        pytest.skip(
-            "sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF "
-            "or no GC fired"
-        )
+    zero_device_live = _live_bytes(client)
 
     devices = []
     rows = []
-    live_samples = [baseline]  # every present post-GC reading; min = cleanest floor
+    live_samples = []  # every present post-GC reading; min = cleanest floor
 
     metrics0 = get_metrics(client)
     arena = metrics0["sbmd.js.heap.arena_bytes"]["dataPoints"][0]["value"]
     rows.append([
         0,
-        baseline,
+        zero_device_live if zero_device_live is not None else "",
         _gauge(metrics0, "sbmd.js.heap.free_bytes"),
         _gauge(metrics0, "sbmd.js.heap.peak_bytes"),
         _gauge(metrics0, "sbmd.js.gc_roots"),
         arena,
     ])
+
+    baseline = None
 
     try:
         for i in range(_N_DEVICES):
@@ -238,6 +245,15 @@ def test_retained_memory_vs_device_count(default_environment):
             # Drive real load on this device until a fresh GC cycle confirms
             # live_bytes reflects THIS commission, not a stale prior reading.
             live = _drive_until_fresh_sample(client, commissioned)
+
+            if i == 0:
+                if live is None:
+                    pytest.skip(
+                        "sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF "
+                        "or no GC fired"
+                    )
+                baseline = live
+
             if live is not None:
                 live_samples.append(live)
             metrics = get_metrics(client)
@@ -250,11 +266,11 @@ def test_retained_memory_vs_device_count(default_environment):
                 arena,
             ])
 
-        present = [r[1] for r in rows if r[1] != ""]
+        present = [r[1] for r in rows[1:] if r[1] != ""]
         final_live = present[-1] if present else baseline
         floor = min(live_samples)
-
-        per_device = (final_live - baseline) / _N_DEVICES
+        # Slope over devices 2..N, measured from the 1-device (driver active) baseline.
+        per_device = (final_live - baseline) / (_N_DEVICES - 1)
         devices_per_arena = arena / per_device if per_device > 0 else None
 
         print(f"\n  ── Retained memory vs device count ({_N_DEVICES} lights) ──")
@@ -262,7 +278,9 @@ def test_retained_memory_vs_device_count(default_environment):
         for count, live, *_ in rows:
             if live != "":
                 print(f"  {count:>7}  {live:>12,}  {live / arena:>7.1%}")
-        print(f"\n  baseline (0 devices):     {baseline:,} B")
+        if zero_device_live is not None:
+            print(f"\n  0 devices (startup GC):   {zero_device_live:,} B (context only)")
+        print(f"  baseline (1 device):      {baseline:,} B")
         print(f"  final ({_N_DEVICES} devices):        {final_live:,} B")
         print(f"  cleanest floor (min):     {floor:,} B ({floor / arena:.1%})")
         print(f"  avg retained per device:  {per_device:,.0f} B")
@@ -285,7 +303,9 @@ def test_retained_memory_vs_device_count(default_environment):
                 "context": {
                     "device_type": "light",
                     "devices": _N_DEVICES,
+                    "zero_device_live_bytes": zero_device_live,
                     "baseline_live_bytes": baseline,
+                    "baseline_devices": 1,
                     "final_live_bytes": final_live,
                     "floor_live_bytes": floor,
                     "avg_retained_bytes_per_device": round(per_device),
@@ -875,8 +895,9 @@ def test_driver_load_scales_with_stub_drivers(hundred_driver_environment):
 
     This answers "what happens at 100 drivers?" — whether load time and memory
     scale linearly and stay inside the 1 MiB arena, or hit a wall.  Stubs are
-    minimal (no handlers), so this isolates the discover -> eval -> activate ->
-    register pipeline cost per driver.
+    minimal (no handlers), so this isolates the discover -> eval -> register
+    pipeline cost per driver (drivers load inactive; activation happens on
+    first device bind, not at startup).
     """
     client = hundred_driver_environment.get_client()
     metrics = get_metrics(client)

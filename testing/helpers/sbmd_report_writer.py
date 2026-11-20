@@ -90,35 +90,48 @@ def _fresh():
     }
 
 
-def _clear_stale_csv_sidecars():
-    """Remove leftover <scenario>.csv files from a previous run.  Called once,
-    the first time a fresh run starts, so a filtered/partial rerun doesn't
-    leave CSVs for scenarios that aren't in the current report."""
-    if not REPORT_DIR.is_dir():
+def _clear_stale_csv_sidecars(previous):
+    """Remove the <scenario>.csv sidecars a previous run's report recorded.
+    Called once, the first time a fresh run starts, so a filtered/partial rerun
+    doesn't leave CSVs for scenarios that aren't in the current report.
+
+    Only files named in the previous report's timeseries entries are deleted:
+    SBMD_REPORT_DIR may point at a directory holding unrelated CSV files, and
+    those must never be touched."""
+    scenarios = previous.get("scenarios") if isinstance(previous, dict) else None
+    if not isinstance(scenarios, dict):
         return
-    for csv_path in REPORT_DIR.glob("*.csv"):
+    for entry in scenarios.values():
+        timeseries = entry.get("timeseries") if isinstance(entry, dict) else None
+        name = timeseries.get("csv") if isinstance(timeseries, dict) else None
+        # Accept only a bare "<name>.csv" so a tampered report can't direct the
+        # unlink outside REPORT_DIR.
+        if not isinstance(name, str) or Path(name).name != name or not name.endswith(".csv"):
+            continue
         try:
-            csv_path.unlink()
+            (REPORT_DIR / name).unlink()
         except OSError:
             pass
 
 
 def _load():
     """Load the current run's data, or start fresh if the file is from an old run."""
+    previous = None
     if JSON_PATH.exists():
         try:
-            data = json.loads(JSON_PATH.read_text())
+            previous = json.loads(JSON_PATH.read_text())
 
-            if data.get("run_id") == _run_id():
-                return data
-        except (ValueError, OSError) as exc:
+            if previous.get("run_id") == _run_id():
+                return previous
+        except (ValueError, OSError, AttributeError) as exc:
+            previous = None
             print(
                 f"WARNING: sbmd_report_writer: failed to parse {JSON_PATH} ({exc}) "
                 f"— starting a fresh report; any earlier scenarios in this run are lost",
                 flush=True,
             )
 
-    _clear_stale_csv_sidecars()
+    _clear_stale_csv_sidecars(previous)
     return _fresh()
 
 
@@ -173,8 +186,8 @@ def emit_timeseries(scenario, columns, rows, payload=None):
 
     # The CSV write must happen inside the same locked load-mutate-write
     # transaction as the JSON entry that references it: _load() can trigger
-    # _clear_stale_csv_sidecars() (on a fresh run id) which deletes every
-    # *.csv in REPORT_DIR, so writing the CSV outside the lock risks either a
+    # _clear_stale_csv_sidecars() (on a fresh run id) which deletes the
+    # previous run's sidecars, so writing the CSV outside the lock risks either a
     # concurrent writer deleting it out from under the JSON entry, or two
     # writers racing on the same sidecar file.
     with _locked():
@@ -610,6 +623,23 @@ def _render_scenario(name, payload):
     return head + body, worst
 
 
+def _check_rollup(data):
+    """Count PASS/FAIL/SKIP across every scenario whose context carries a
+    check_status (i.e. scenarios contributed via the sbmd_report fixture).
+    SKIP is its own bucket: a skipped check is not a failure."""
+    passed = failed = skipped = 0
+    for payload in data.get("scenarios", {}).values():
+        context = payload.get("context")
+        status = context.get("check_status") if isinstance(context, dict) else None
+        if status == "PASS":
+            passed += 1
+        elif status == "SKIP":
+            skipped += 1
+        elif status is not None:
+            failed += 1
+    return passed, failed, skipped
+
+
 def _render(data):
     scenario_lines = []
     overall = "ok"
@@ -619,12 +649,28 @@ def _render(data):
         scenario_lines.extend(lines)
         overall = _worse(overall, worst)
 
+    passed, failed, skipped = _check_rollup(data)
+    total = passed + failed + skipped
+    if failed:
+        rollup_badge = "🚫"
+    elif skipped:
+        rollup_badge = "⚠️"
+    else:
+        rollup_badge = "✅"
+    rollup_line = (
+        f"  CHECKS:    {rollup_badge} {passed} passed, {failed} failed, "
+        f"{skipped} skipped (of {total})"
+        if total
+        else "  CHECKS:    (no sbmd_report-tagged checks in this run)"
+    )
+
     banner = [
         "=" * 72,
         "SBMD METRICS REPORT",
         f"  run_id:    {data.get('run_id')}",
         f"  generated: {data.get('generated')}",
         f"  VERDICT:   {_BADGE[overall]}",
+        rollup_line,
         "=" * 72,
         "  Legend: ✅ ok   ⚠️ watch   🚫 concern   ℹ️ info",
     ]

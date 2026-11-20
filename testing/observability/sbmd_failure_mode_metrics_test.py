@@ -69,8 +69,10 @@ def _commission(default_environment, matter_deferred_cmd_test_device):
     )
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="failure_exception_outcome", metrics=["sbmd.handler.outcome", "sbmd.js.exception"])
 def test_exception_outcome_increments_correctly(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     _N calls to throwError produce handler.outcome{outcome="exception"} == _N.
@@ -82,6 +84,7 @@ def test_exception_outcome_increments_correctly(
     Also verifies that handler.duration_ms is recorded for the exception path
     (JS_Call was reached before the throw, so timing is valid).
     """
+    sbmd_report["fault_injection"] = True
     device = _commission(default_environment, matter_deferred_cmd_test_device)
     client = default_environment.get_client()
 
@@ -123,8 +126,10 @@ def test_exception_outcome_increments_correctly(
 
 
 @pytest.mark.slow
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="failure_timeout_outcome", metrics=["sbmd.handler.outcome", "sbmd.handler.duration_ms"])
 def test_timeout_outcome_records_duration_in_high_latency_buckets(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     One call to busyLoop busy-loops until the SBMD script timeout fires
@@ -139,6 +144,7 @@ def test_timeout_outcome_records_duration_in_high_latency_buckets(
 
     This test takes ~5 s to complete.
     """
+    sbmd_report["fault_injection"] = True
     device = _commission(default_environment, matter_deferred_cmd_test_device)
     client = default_environment.get_client()
 
@@ -181,8 +187,10 @@ def test_timeout_outcome_records_duration_in_high_latency_buckets(
     )
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="failure_error_result_outcome", metrics=["sbmd.handler.outcome", "sbmd.js.exception"])
 def test_error_result_outcome_does_not_produce_exception_outcome(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     _N calls to errorResult (returns Sbmd.result().error()) produce:
@@ -193,6 +201,7 @@ def test_error_result_outcome_does_not_produce_exception_outcome(
     only after SbmdResultExecutor::Parse() returns and identifies the Error
     terminal.  This is distinct from outcome="exception" (thrown JS exception).
     """
+    sbmd_report["fault_injection"] = True
     device = _commission(default_environment, matter_deferred_cmd_test_device)
     client = default_environment.get_client()
 

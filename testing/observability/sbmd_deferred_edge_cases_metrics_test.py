@@ -64,8 +64,10 @@ def _commission(default_environment, matter_deferred_cmd_test_device):
     )
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="deferred_rearm_depth_one", metrics=["sbmd.deferred.depth", "sbmd.deferred.in_flight"])
 def test_deferred_re_arm_records_depth_one(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     rearmToggle executes a Toggle command, then re-arms once in onResponse
@@ -122,8 +124,10 @@ def test_deferred_re_arm_records_depth_one(
     )
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="deferred_timeout_circuit_breaker", metrics=["sbmd.deferred.timeout", "sbmd.deferred.in_flight"])
 def test_deferred_timeout_increments_counter_and_cleans_up(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     timeoutToggle issues requestCommand with timeoutMs=1.  The command
@@ -170,8 +174,10 @@ def test_deferred_timeout_increments_counter_and_cleans_up(
     )
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="deferred_max_depth_circuit_breaker", metrics=["sbmd.deferred.max_depth", "sbmd.deferred.in_flight"])
 def test_deferred_max_depth_increments_and_cleans_up(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     runawayToggle always re-arms in onResponse until MAX_DEFERRAL_DEPTH (10)

@@ -56,8 +56,15 @@ echo "***********************************"
 echo ""
 
 # The SBMD observability characterization/report suite (testing/observability/)
-# is intentionally excluded here: it is heavy and produces a metrics report
-# rather than gating merges.  Run it on demand with
-# `python3 testing/run_observability_suite.py`.  The pre-existing observability
-# coverage under testing/test/ still runs as part of this suite.
-"$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" --ignore="$REPO_ROOT/testing/observability"
+# has its own heavy, report-oriented tests (metrics-report dumps, multi-device
+# scale scenarios) that are intentionally excluded here -- they produce a
+# metrics report rather than gating merges, and are run on demand with
+# `python3 testing/run_observability_suite.py`. A subset of that same
+# directory IS build-independent, cheap correctness checks (tagged `ci_gate`)
+# and runs below as part of this one invocation. See
+# testing/observability/README.md for the marker criteria.
+#
+# SBMD_REPORT_DISABLE=1: CI wants a pure pass/fail signal, not report I/O --
+# the sbmd_report fixture consults this before any file read/write/lock.
+SBMD_REPORT_DISABLE=1 "$REPO_ROOT/testing/py_test.sh" "$REPO_ROOT/testing" -m "not observability_suite or ci_gate"
+
