@@ -105,6 +105,7 @@ namespace
             file.read(source.data(), fileSize);
             file.close();
 
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
             auto reg = SbmdLoader::LoadDriver(ctx, specPath, source.c_str(), source.size());
             ASSERT_NE(reg, nullptr) << "SbmdLoader::LoadDriver failed for camera.sbmd.js";
 
@@ -116,8 +117,13 @@ namespace
         {
             if (s_driver)
             {
-                auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
-                s_driver->Deactivate(ctx);
+                {
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+                    s_driver->Deactivate(ctx);
+                }
+
+                // ~SbmdDriver takes the JS mutex itself.
                 s_driver.reset();
             }
 

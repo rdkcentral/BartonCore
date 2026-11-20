@@ -25,7 +25,7 @@
 // Created by tlea on 2/19/26
 //
 
-#define LOG_TAG "SbmdBundleLoader"
+#define LOG_TAG     "SbmdBundleLoader"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdBundleLoader.h"
@@ -103,10 +103,7 @@ namespace barton
         {
             icError("Failed to execute SBMD %s bundle: %s", name, GetExceptionString(ctx).c_str());
             MQuickJsRuntime::Instance().GetMetrics().RecordJsException("init", nullptr);
-            {
-                std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
-                MQuickJsRuntime::Instance().LogMemoryUsage("sbmd-bundle-load-failed", IC_LOG_ERROR, true);
-            }
+            MQuickJsRuntime::Instance().LogMemoryUsage("sbmd-bundle-load-failed", IC_LOG_ERROR, true);
             return false;
         }
 

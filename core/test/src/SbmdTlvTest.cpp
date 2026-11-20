@@ -54,9 +54,15 @@ namespace
         static void SetUpTestSuite()
         {
             ASSERT_TRUE(MQuickJsRuntime::Instance().Initialize(256 * 1024));
+            // The unit tests drive the shared context from the test thread and never use the idle
+            // heap sampler; stop it so it can't walk GC-root lists while a test changes them.
+            MQuickJsRuntime::Instance().GetMetrics().StopSampler();
             auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
             ASSERT_NE(ctx, nullptr);
-            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
+            {
+                std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+                ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
+            }
         }
 
         static void TearDownTestSuite() { MQuickJsRuntime::Instance().Shutdown(); }
