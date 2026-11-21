@@ -92,6 +92,13 @@ namespace barton
          */
         void RecordArenaSize(int64_t bytes);
 
+        /**
+         * Forget the GC-cycle baselines used for sbmd.js.gc.alloc_churn_bytes, so
+         * the first GC in a new JS context has no prior baseline and records no
+         * churn. Call before installing the GC callback on a new context.
+         */
+        void ResetGcBaselines();
+
         /** Record a JS mutex wait duration in milliseconds. */
         void RecordMutexWait(double ms);
 
@@ -171,6 +178,8 @@ namespace barton
         void RecordHeapSnapshot(const JSMemoryUsage &, size_t) {}
 
         void RecordArenaSize(int64_t) {}
+
+        void ResetGcBaselines() {}
 
         void RecordMutexWait(double) {}
 

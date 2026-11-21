@@ -225,6 +225,12 @@ namespace barton
         observabilityGaugeRecord(heapArenaGauge, bytes);
     }
 
+    void MQuickJsRuntimeMetrics::ResetGcBaselines()
+    {
+        preGCHeapUsed = 0;
+        prevPostGCHeapUsed = -1;
+    }
+
     void MQuickJsRuntimeMetrics::RecordMutexWait(double ms)
     {
         observabilityHistogramRecord(mutexWaitHisto, ms);

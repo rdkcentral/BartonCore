@@ -63,5 +63,5 @@
 - [x] 9.4 `testing/gcflip.sh` installs archives with a temp-file-then-rename copy and serializes flips with `flock` on a lock file next to the shared installed archive, so runs with different `GCFLIP_CACHE_DIR` values also serialize.
 - [x] 9.5 The report writer deletes only the CSV sidecars recorded in the previous run's report, never other CSV files in `SBMD_REPORT_DIR`.
 - [x] 9.6 Re-collect the suite (`py_test.sh testing/observability --collect-only -q`, then with `-m ci_gate`) and confirm 40 tests and 27 `ci_gate`. (40 collected; 27/40 with `-m ci_gate`.)
-- [ ] 9.7 Re-run `openspec validate sbmd-observability-ci-gating --strict`.
+- [x] 9.7 Re-run `openspec validate sbmd-observability-ci-gating --strict`. (Strict validation passes; full `run_observability_suite.py` passes under `DEBUG_GC`-off: 38 passed, 2 skipped; report roll-up: 28 passed, 0 failed, 1 skipped. Runner restored `DEBUG_GC`-on.)
 - [x] 9.8 The `sbmd_report` fixture records a skipped test as `SKIP` (with the skip reason), and the report's `CHECKS` line counts passed, failed, and skipped separately; a skip is never counted as a failure.

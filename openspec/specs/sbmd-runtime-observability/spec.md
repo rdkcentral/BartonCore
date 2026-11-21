@@ -37,15 +37,19 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recordin
 - **THEN** `sbmd.js.heap.peak_bytes` is raised to that value in the same GC callback, before any later snapshot
 
 ### Requirement: Per-GC-cycle allocation churn tracking
-The SBMD runtime SHALL record, for each completed GC cycle after the first, the allocation churn since the previous cycle as a histogram named `sbmd.js.gc.alloc_churn_bytes`, computed as `preGCHeapUsed - prevPostGCHeapUsed` — this cycle's pre-compaction `heap_used` (captured at `is_end == 0`) minus the PREVIOUS cycle's post-compaction `heap_used` (the previous cycle's retained live set). This is the honest replacement for "how much did a driver load / handler burst allocate": unlike `sbmd.js.heap.peak_bytes`, it is not saturated by the allocator's GC-trigger threshold, because it is a cycle-to-cycle delta rather than an absolute reading. The very first GC cycle in a process's lifetime has no prior post-GC baseline and SHALL NOT produce an observation. This histogram SHALL be compiled only when `BCORE_SBMD_GC_INSTRUMENTATION` is enabled (it depends on the `JS_SetGCCallback` API), using data already read by the live_bytes sampling at GC start/end, so it adds no additional memory-usage reads.
+The SBMD runtime SHALL record, for each completed GC cycle after the first, the allocation churn since the previous cycle as a histogram named `sbmd.js.gc.alloc_churn_bytes`, computed as `preGCHeapUsed - prevPostGCHeapUsed` — this cycle's pre-compaction `heap_used` (captured at `is_end == 0`) minus the PREVIOUS cycle's post-compaction `heap_used` (the previous cycle's retained live set). This is the honest replacement for "how much did a driver load / handler burst allocate": unlike `sbmd.js.heap.peak_bytes`, it is not saturated by the allocator's GC-trigger threshold, because it is a cycle-to-cycle delta rather than an absolute reading. The first GC cycle of each JS context (after every `MQuickJsRuntime::Initialize()`, including a re-initialization after `Shutdown()`) has no prior post-GC baseline and SHALL NOT produce an observation; the baseline from a previous context SHALL NOT be used. This histogram SHALL be compiled only when `BCORE_SBMD_GC_INSTRUMENTATION` is enabled (it depends on the `JS_SetGCCallback` API), using data already read by the live_bytes sampling at GC start/end, so it adds no additional memory-usage reads.
 
 #### Scenario: Churn recorded from the second GC cycle onward
 - **WHEN** a second (or later) GC cycle completes
 - **THEN** `sbmd.js.gc.alloc_churn_bytes` gains one observation equal to this cycle's pre-compaction `heap_used` minus the previous cycle's post-compaction `heap_used`
 
 #### Scenario: No observation on the very first GC cycle
-- **WHEN** the first GC cycle of a process's lifetime completes
+- **WHEN** the first GC cycle of a JS context completes
 - **THEN** `sbmd.js.gc.alloc_churn_bytes` gains no observation, because there is no prior post-GC baseline to subtract against
+
+#### Scenario: No observation on the first GC cycle after re-initialization
+- **WHEN** the runtime is shut down, initialized again, and the new context's first GC cycle completes
+- **THEN** `sbmd.js.gc.alloc_churn_bytes` gains no observation, rather than subtracting the previous context's live set
 
 ### Requirement: Retained live-set gauge
 The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.live_bytes` recording `heap_used` sampled at GC end (`is_end == 1`, after compaction) in `MQuickJsRuntimeMetrics::GCCallback`. Because transient garbage has just been reclaimed at this point, the sampled value equals the true retained live set — the one heap metric capable of distinguishing genuine retained-memory growth from the churn that `sbmd.js.heap.used_bytes` and `sbmd.js.heap.peak_bytes` cannot separate from reclaimable garbage under a lazy compacting GC. Sampling SHALL be opportunistic: it SHALL occur only when the engine drives a GC cycle on its own (or an explicit `JS_GC()` call in tests); the runtime SHALL NOT force an additional GC cycle solely to populate this gauge, so it has zero effect on `sbmd.js.heap.peak_bytes` or GC cadence. This gauge SHALL be compiled only when `BCORE_SBMD_GC_INSTRUMENTATION` is enabled (it depends on the `JS_SetGCCallback` API).

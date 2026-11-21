@@ -248,10 +248,11 @@ def test_gc_fires_under_allocation_pressure(
     if "sbmd.js.gc_roots" not in metrics_before:
         pytest.skip("sbmd.js.gc_roots not present — BCORE_SBMD_GC_INSTRUMENTATION=OFF")
 
+    gc_count_before_points = metrics_before.get("sbmd.js.gc.count", {}).get(
+        "dataPoints", []
+    )
     gc_count_before = (
-        metrics_before.get("sbmd.js.gc.count", {})
-        .get("dataPoints", [{}])[0]
-        .get("value", 0)
+        gc_count_before_points[0].get("value", 0) if gc_count_before_points else 0
     )
 
     for _ in range(_N_GC_PRESSURE):
@@ -261,10 +262,11 @@ def test_gc_fires_under_allocation_pressure(
     time.sleep(2)
 
     metrics_after = get_metrics(client)
+    gc_count_after_points = metrics_after.get("sbmd.js.gc.count", {}).get(
+        "dataPoints", []
+    )
     gc_count_after = (
-        metrics_after.get("sbmd.js.gc.count", {})
-        .get("dataPoints", [{}])[0]
-        .get("value", 0)
+        gc_count_after_points[0].get("value", 0) if gc_count_after_points else 0
     )
     gc_dur_dps = metrics_after.get("sbmd.js.gc.duration_ms", {}).get("dataPoints", [])
     gc_obs = sum(dp["count"] for dp in gc_dur_dps)

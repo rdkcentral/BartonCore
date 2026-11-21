@@ -687,3 +687,26 @@ TEST_F(SbmdObservabilityTest, PeakNotBelowLiveSetAfterGc)
     EXPECT_GT(live, 0.0);
     EXPECT_GE(peak, live);
 }
+
+// Initialize() resets the churn baselines before installing the GC callback on a new
+// context. After a reset, the first GC has no baseline and records no churn; the next
+// one does.
+TEST_F(SbmdObservabilityTest, ChurnSkipsFirstGcAfterBaselineReset)
+{
+#if !defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION)
+    GTEST_SKIP() << "sbmd.js.gc.alloc_churn_bytes requires BCORE_SBMD_GC_INSTRUMENTATION=ON";
+#endif
+
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::Instance().GetMutex());
+    auto *ctx = MQuickJsRuntime::Instance().GetSharedContext();
+    ASSERT_NE(ctx, nullptr);
+
+    MQuickJsRuntime::Instance().GetMetrics().ResetGcBaselines();
+    int64_t countBefore = GetHistogramCount("sbmd.js.gc.alloc_churn_bytes");
+
+    JS_GC(ctx);
+    EXPECT_EQ(GetHistogramCount("sbmd.js.gc.alloc_churn_bytes"), countBefore);
+
+    JS_GC(ctx);
+    EXPECT_EQ(GetHistogramCount("sbmd.js.gc.alloc_churn_bytes"), countBefore + 1);
+}

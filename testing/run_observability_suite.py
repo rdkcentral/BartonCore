@@ -72,7 +72,8 @@ _CMAKE_TRUE = {"ON", "TRUE", "YES", "Y", "1"}
 
 def _require_gc_instrumentation():
     """Exit with an error unless build/ is configured with every option in
-    REQUIRED_CMAKE_OPTIONS turned on."""
+    REQUIRED_CMAKE_OPTIONS turned on. Raises SystemExit, so callers'
+    finally blocks still run."""
     if not CMAKE_CACHE.is_file():
         sys.exit(
             f"ERROR: {CMAKE_CACHE} not found. Configure the build first "
@@ -179,12 +180,15 @@ def main():
     # Strip a leading `--` separator if argparse kept it.
     extra = args.pytest_args[1:] if args.pytest_args[:1] == ["--"] else args.pytest_args
 
-    _require_gc_instrumentation()
-
     rc = 0
     try:
         if not args.no_build:
             _run(["cmake", "--build", "build", "--target", "install"])
+
+        # Validate the cache the build just used (or the existing one with
+        # --no-build). Inside the try so the DEBUG_GC-on restore below still
+        # runs if this fails.
+        _require_gc_instrumentation()
 
         if not args.no_deps:
             # BartonCore's client needs the D-Bus session bus; best-effort (already up is fine).

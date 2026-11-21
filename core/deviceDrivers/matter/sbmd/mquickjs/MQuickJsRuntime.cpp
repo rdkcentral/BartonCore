@@ -179,8 +179,11 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     JS_SetInterruptHandler(ctx, ScriptInterruptHandler);
     icDebug("Script execution interrupt handler installed");
 
-    // Install the GC instrumentation callback (passes the metrics instance as opaque)
+    // Install the GC instrumentation callback (passes the metrics instance as opaque).
+    // The metrics object outlives Shutdown()/Initialize(), so drop the previous
+    // context's GC baselines first: churn must not be computed across contexts.
 #if defined(BARTON_CONFIG_SBMD_METRICS) && defined(BARTON_CONFIG_SBMD_GC_INSTRUMENTATION)
+    metrics.ResetGcBaselines();
     JS_SetGCCallback(ctx, &MQuickJsRuntimeMetrics::GCCallback, &metrics);
 #endif
 
