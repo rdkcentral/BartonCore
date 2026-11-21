@@ -51,8 +51,10 @@ import time
 import pytest
 
 from testing.helpers.sbmd_metrics_helpers import (
+    GC_WAIT_MAX_WRITES,
     bucket_sum,
     format_histogram,
+    gc_instrumented,
     get_metrics,
 )
 from testing.utils.barton_utils import (
@@ -455,8 +457,8 @@ def test_live_set_floor_flat_under_sustained_load(default_environment, matter_li
 
     NOTE: A production-representative soak runs for hours; this scaled-down
     version proves the mechanism and catches gross leaks in CI-adjacent time.
-    Skipped when live_bytes is absent (BCORE_SBMD_GC_INSTRUMENTATION=OFF or no GC
-    fired).
+    Skipped when BCORE_SBMD_GC_INSTRUMENTATION=OFF. Under DEBUG_GC off it first
+    drives writes until a GC produces the first live-set sample.
     """
     device = commission_device(default_environment, matter_light, _LIGHT_DRIVER)
     client = default_environment.get_client()
@@ -466,15 +468,22 @@ def test_live_set_floor_flat_under_sustained_load(default_environment, matter_li
         dps = m.get("sbmd.js.heap.live_bytes", {}).get("dataPoints", [])
         return dps[0]["value"] if dps else None
 
-    if _live_now() is None:
-        # Nudge a few writes in case no GC has fired at idle yet.
-        _write_is_on_n_times(client, device, 10)
-        time.sleep(0.5)
-        if _live_now() is None:
-            pytest.skip(
-                "sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF "
-                "or no GC fired"
+    if not gc_instrumented(get_metrics(client)):
+        pytest.skip("sbmd.js.heap.live_bytes absent — BCORE_SBMD_GC_INSTRUMENTATION=OFF")
+
+    # Under DEBUG_GC off no GC may have fired yet (one fires about every 500
+    # writes), so drive writes until the first live-set sample exists.
+    warmup_batch = 20
+    warmup_writes = 0
+    while _live_now() is None:
+        if warmup_writes >= GC_WAIT_MAX_WRITES:
+            pytest.fail(
+                f"No GC fired after {warmup_writes} isOn writes, so there is no "
+                f"live-set sample to start the soak from."
             )
+        _write_is_on_n_times(client, device, warmup_batch)
+        warmup_writes += warmup_batch
+        time.sleep(0.2)
 
     samples = []  # (ops, live_bytes)
     for i in range(_N_SOAK):

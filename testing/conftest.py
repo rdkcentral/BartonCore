@@ -119,6 +119,12 @@ def _child_start_blocked_signums():
     return _termination_signums() | {signal.SIGINT}
 
 
+def _run_pending_handlers():
+    # Entering a Python function is a point where CPython runs pending signal
+    # handlers, so calling this flushes any that are queued.
+    pass
+
+
 def _raise_keyboard_interrupt(signum, _frame):
     raise KeyboardInterrupt(f"received {signal.Signals(signum).name}")
 
@@ -507,24 +513,37 @@ def _run_in_subprocess(item):
             # Any exit while the child still runs (KeyboardInterrupt from Ctrl-C,
             # SIGHUP or SIGTERM, or anything else) kills its whole group. Hold
             # those signals while doing it, so a second Ctrl-C can't abort the
-            # cleanup; a signal that lands before the mask is set is absorbed by
-            # the retry, and one that arrives during cleanup is delivered when
-            # the mask is restored, after the group is gone.
+            # cleanup. Kept inline (no helper call) so no handler runs between
+            # entering this block and the try below.
+            #
+            # Read the original mask with a no-op query, then block. CPython can
+            # run a pending handler right after either call returns; the retry
+            # catches that, re-blocking is idempotent, and the original mask is
+            # never overwritten by an already-blocked one. _run_pending_handlers()
+            # gives a handler for a signal that arrived just before the block a
+            # chance to run while still inside the try. An interrupt caught here
+            # is re-raised after cleanup instead of being dropped.
+            original_mask = None
+            interrupted = False
             while True:
                 try:
-                    cleanup_mask = signal.pthread_sigmask(
-                        signal.SIG_BLOCK, _child_start_blocked_signums()
-                    )
+                    if original_mask is None:
+                        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, set())
+                    signal.pthread_sigmask(signal.SIG_BLOCK, _child_start_blocked_signums())
+                    _run_pending_handlers()
                     break
                 except KeyboardInterrupt:
-                    continue
+                    interrupted = True
 
             try:
                 if proc is not None and proc.poll() is None:
                     _kill_group()
                     proc.wait()
             finally:
-                signal.pthread_sigmask(signal.SIG_SETMASK, cleanup_mask)
+                signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+
+            if interrupted:
+                raise KeyboardInterrupt("interrupted during test subprocess cleanup")
 
         result = subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 

@@ -56,7 +56,12 @@ import pytest
 from testing.environment.default_environment_orchestrator import (
     DefaultEnvironmentOrchestrator,
 )
-from testing.helpers.sbmd_metrics_helpers import get_metrics
+from testing.helpers.sbmd_metrics_helpers import (
+    GC_WAIT_MAX_WRITES,
+    gc_count,
+    gc_instrumented,
+    get_metrics,
+)
 from testing.helpers.sbmd_report_writer import collect, emit_report, emit_timeseries
 from testing.mocks.devices.matter.matter_deferred_cmd_test_device import (
     MatterDeferredCmdTestDevice,
@@ -150,13 +155,16 @@ def _gauge(metrics, name):
 
 
 def _gc_count(client):
-    dps = get_metrics(client).get("sbmd.js.gc.count", {}).get("dataPoints", [])
-    return dps[0].get("value", 0) if dps else None
+    """GC cycles so far, or None when the build has no GC instrumentation."""
+    metrics = get_metrics(client)
+    return gc_count(metrics) if gc_instrumented(metrics) else None
 
 
 # Bounded retries for the freshness check below.  Each round drives another
-# _SWEEP_LOAD_WRITES batch, so this caps worst-case extra load per device.
-_MAX_FRESHNESS_ROUNDS = 5
+# _SWEEP_LOAD_WRITES batch; the cap allows GC_WAIT_MAX_WRITES writes per device,
+# enough for a GC to fire under DEBUG_GC off, where one fires only about every
+# 500 writes.
+_MAX_FRESHNESS_ROUNDS = -(-GC_WAIT_MAX_WRITES // _SWEEP_LOAD_WRITES)
 
 
 def _drive_until_fresh_sample(client, device):
@@ -165,11 +173,11 @@ def _drive_until_fresh_sample(client, device):
     previous device's GC), then return the fresh post-GC live set.
 
     Under DEBUG_GC off, live_bytes only updates when the engine's own lazy GC
-    fires; one _SWEEP_LOAD_WRITES batch usually fills the arena enough to
-    trigger it, but if it doesn't, driving more load (rather than silently
-    returning whatever value happens to still be sitting in the gauge) is what
-    makes the per-device curve trustworthy as a *fresh* sample series, not an
-    artifact of under-driving.
+    fires, about every 500 writes, so this may take many rounds; driving more
+    load (rather than returning whatever value is still sitting in the gauge)
+    is what makes the per-device curve a *fresh* sample series.  A build with
+    no GC yet counts as 0 cycles, so the first device also waits for a real GC.
+    Returns None only when the build has no GC instrumentation.
     """
     gc_before = _gc_count(client)
     live = None

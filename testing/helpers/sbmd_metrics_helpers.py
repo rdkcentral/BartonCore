@@ -71,6 +71,25 @@ def get_metrics(client):
     return json.loads(client.get_telemetry()).get("metrics", {})
 
 
+# Under the production-representative DEBUG_GC-off build the engine only collects
+# once the 1 MiB arena is nearly full: about every 500 isOn writes (~2 KB each).
+# Tests that need a fresh post-GC sample drive up to this many writes, a 4x margin.
+GC_WAIT_MAX_WRITES = 2000
+
+
+def gc_instrumented(metrics):
+    """True if the build has GC instrumentation. sbmd.js.gc_roots is recorded at
+    runtime init in that build and never exists otherwise."""
+    return "sbmd.js.gc_roots" in metrics
+
+
+def gc_count(metrics):
+    """Completed GC cycles so far. 0 when no GC has fired yet (the counter has no
+    datapoint until its first increment); check gc_instrumented() first."""
+    dps = metrics.get("sbmd.js.gc.count", {}).get("dataPoints", [])
+    return dps[0].get("value", 0) if dps else 0
+
+
 def find_datapoint(metrics, metric_name, **attrs):
     """
     Return the first datapoint in *metric_name* whose attributes dict contains
