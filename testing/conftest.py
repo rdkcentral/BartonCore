@@ -36,10 +36,8 @@ making it easier to maintain and scale the test suite.
 """
 
 import logging
-import math
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -91,58 +89,6 @@ def pytest_configure(config):
     # colliding on the same id, which would make _load() reuse a stale report.
     if not os.environ.get(_SUBPROCESS_MARKER_ENV):
         os.environ["SBMD_REPORT_RUN_ID"] = str(time.time_ns())
-        _install_termination_handlers()
-    else:
-        # The outer process starts this child with SIGINT/SIGHUP/SIGTERM blocked
-        # (see _run_in_subprocess), and a blocked mask survives exec. Unblock
-        # them so this test, and the device processes it starts, get normal
-        # signal behavior.
-        signal.pthread_sigmask(signal.SIG_UNBLOCK, _child_start_blocked_signums())
-
-
-# Each test's child pytest runs in its own session (see _run_in_subprocess), so
-# a terminal hangup or SIGTERM aimed at this outer process no longer reaches it.
-# Turn those signals into KeyboardInterrupt here, which runs the same cleanup
-# path as Ctrl-C: kill the child's process group, then exit.
-_TERMINATION_SIGNALS = ("SIGHUP", "SIGTERM")
-_previous_signal_handlers = {}
-
-
-def _termination_signums():
-    return {getattr(signal, name) for name in _TERMINATION_SIGNALS if hasattr(signal, name)}
-
-
-def _child_start_blocked_signums():
-    """Signals held while a test's child process starts and while it is cleaned
-    up: the termination signals plus SIGINT, all of which raise
-    KeyboardInterrupt in this process."""
-    return _termination_signums() | {signal.SIGINT}
-
-
-def _run_pending_handlers():
-    # Entering a Python function is a point where CPython runs pending signal
-    # handlers, so calling this flushes any that are queued.
-    pass
-
-
-def _raise_keyboard_interrupt(signum, _frame):
-    raise KeyboardInterrupt(f"received {signal.Signals(signum).name}")
-
-
-def _install_termination_handlers():
-    for name in _TERMINATION_SIGNALS:
-        signum = getattr(signal, name, None)
-        # Leave the signal alone if someone else already handles or ignores it
-        # (e.g. SIG_IGN under nohup).
-        if signum is None or signal.getsignal(signum) is not signal.SIG_DFL:
-            continue
-        _previous_signal_handlers[signum] = signal.signal(signum, _raise_keyboard_interrupt)
-
-
-def pytest_unconfigure(config):
-    for signum, handler in _previous_signal_handlers.items():
-        signal.signal(signum, handler)
-    _previous_signal_handlers.clear()
 
 
 # The following list of plugins are automatically loaded by pytest when running tests.
@@ -322,25 +268,6 @@ def sbmd_report(request):
 
 _SUBPROCESS_MARKER_ENV = "_PYTEST_SUBPROCESS_INNER"
 
-# Upper bound on one test's child pytest process, so a deadlocked test fails
-# with a named node instead of hanging the whole run until the CI job timeout.
-# Generous by default (the slowest scale tests take minutes); override with
-# BARTON_TEST_TIMEOUT_S.
-_DEFAULT_SUBPROCESS_TIMEOUT_S = 1800
-
-
-def _subprocess_timeout_s():
-    raw = os.environ.get("BARTON_TEST_TIMEOUT_S")
-    if not raw:
-        return _DEFAULT_SUBPROCESS_TIMEOUT_S
-    try:
-        value = float(raw)
-    except ValueError:
-        raise pytest.UsageError(f"BARTON_TEST_TIMEOUT_S must be a number of seconds, got {raw!r}")
-    if not math.isfinite(value) or value <= 0:
-        raise pytest.UsageError(f"BARTON_TEST_TIMEOUT_S must be a positive, finite number, got {raw!r}")
-    return value
-
 
 def pytest_runtest_protocol(item, nextitem):
     """Run each test in a subprocess to isolate C library output and state."""
@@ -450,102 +377,13 @@ def _run_in_subprocess(item):
         child_env = dict(os.environ)
         child_env[_SUBPROCESS_MARKER_ENV] = "1"
 
-        timeout_s = _subprocess_timeout_s()
-
-        # Own process group: on timeout or interrupt the whole group is killed,
-        # including mock-device processes (matter.js etc.) the child started, so
-        # none of them outlive the test and run alongside later tests. The child
-        # is in its own session, so a terminal's SIGINT/SIGHUP no longer reaches
-        # it; the finally below takes it down on every exit path this process
-        # gets to run. Not covered: SIGKILL of this outer process (it gets no
-        # chance to clean up), which leaves the child running until it exits on
-        # its own. CI is unaffected because its container is discarded.
-        #
-        # The signal masks below apply to the calling thread only. That is
-        # sufficient because the outer pytest runs single-threaded, so these
-        # signals are always delivered to this thread.
-        proc = None
-
-        def _kill_group():
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-
-        try:
-            # Hold SIGINT/SIGHUP/SIGTERM while the child starts so their
-            # KeyboardInterrupt can't fire after the fork but before `proc` is
-            # assigned, leaving a child nothing would kill. A pending signal is
-            # delivered when the mask is restored, with `proc` set.
-            old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, _child_start_blocked_signums())
-            try:
-                proc = subprocess.Popen(
-                    cmd,
-                    cwd=str(item.config.rootpath),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env=child_env,
-                    start_new_session=True,
-                )
-            finally:
-                signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
-
-            try:
-                stdout, stderr = proc.communicate(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                _kill_group()
-                try:
-                    stdout, stderr = proc.communicate(timeout=30)
-                except subprocess.TimeoutExpired:
-                    # Something outside the group still holds the pipes; give up
-                    # on the remaining output rather than hang.
-                    stdout, stderr = "", ""
-
-                partial = ((stdout or "") + (stderr or "")).strip()
-                raise AssertionError(
-                    f"Subprocess test timed out after {timeout_s:g}s and was killed "
-                    f"(set BARTON_TEST_TIMEOUT_S to change the limit)\n"
-                    f"command: {' '.join(cmd)}\n\n"
-                    f"Captured output before the timeout:\n{partial or '<none>'}"
-                ) from None
-        finally:
-            # Any exit while the child still runs (KeyboardInterrupt from Ctrl-C,
-            # SIGHUP or SIGTERM, or anything else) kills its whole group. Hold
-            # those signals while doing it, so a second Ctrl-C can't abort the
-            # cleanup. Kept inline (no helper call) so no handler runs between
-            # entering this block and the try below.
-            #
-            # Read the original mask with a no-op query, then block. CPython can
-            # run a pending handler right after either call returns; the retry
-            # catches that, re-blocking is idempotent, and the original mask is
-            # never overwritten by an already-blocked one. _run_pending_handlers()
-            # gives a handler for a signal that arrived just before the block a
-            # chance to run while still inside the try. An interrupt caught here
-            # is re-raised after cleanup instead of being dropped.
-            original_mask = None
-            interrupted = False
-            while True:
-                try:
-                    if original_mask is None:
-                        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, set())
-                    signal.pthread_sigmask(signal.SIG_BLOCK, _child_start_blocked_signums())
-                    _run_pending_handlers()
-                    break
-                except KeyboardInterrupt:
-                    interrupted = True
-
-            try:
-                if proc is not None and proc.poll() is None:
-                    _kill_group()
-                    proc.wait()
-            finally:
-                signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
-
-            if interrupted:
-                raise KeyboardInterrupt("interrupted during test subprocess cleanup")
-
-        result = subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+        result = subprocess.run(
+            cmd,
+            cwd=str(item.config.rootpath),
+            capture_output=True,
+            text=True,
+            env=child_env,
+        )
 
         outcome, message = _parse_junit_outcome(junit_path)
 

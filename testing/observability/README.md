@@ -207,11 +207,6 @@ against a build directory that has it off.
 heap reading before and after a driver load does not measure that driver's
 cost. Use `sbmd.js.heap.live_bytes` for retained memory instead.
 
-Every integration test (this suite included) runs in its own pytest subprocess.
-That subprocess is killed and reported as a failure after
-`BARTON_TEST_TIMEOUT_S` seconds (default 1800), so a deadlock fails the named
-test instead of hanging the run.
-
 ### Time series (CSV)
 
 Scenarios that sample a metric over a sweep also drop a `<scenario>.csv` — e.g.
