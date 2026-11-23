@@ -90,8 +90,13 @@ def _find_datapoint(metrics, metric_name, **attrs):
     return None
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(
+    scenario="deferred_duration_and_in_flight",
+    metrics=["sbmd.deferred.duration_ms", "sbmd.deferred.in_flight"],
+)
 def test_deferred_duration_and_in_flight_metrics(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     Execute a toggle command via the requestCommand path and verify:
@@ -151,8 +156,10 @@ def test_deferred_duration_and_in_flight_metrics(
     )
 
 
+@pytest.mark.ci_gate
+@pytest.mark.sbmd_report(scenario="deferred_depth_single_round_trip", metrics=["sbmd.deferred.depth"])
 def test_deferred_depth_zero_for_single_round_trip(
-    default_environment, matter_deferred_cmd_test_device
+    default_environment, matter_deferred_cmd_test_device, sbmd_report
 ):
     """
     Execute a toggle command and verify sbmd.deferred.depth records 0.

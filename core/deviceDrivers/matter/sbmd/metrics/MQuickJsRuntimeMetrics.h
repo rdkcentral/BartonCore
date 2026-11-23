@@ -92,6 +92,13 @@ namespace barton
          */
         void RecordArenaSize(int64_t bytes);
 
+        /**
+         * Forget the GC-cycle baselines used for sbmd.js.gc.alloc_churn_bytes, so
+         * the first GC in a new JS context has no prior baseline and records no
+         * churn. Call before installing the GC callback on a new context.
+         */
+        void ResetGcBaselines();
+
         /** Record a JS mutex wait duration in milliseconds. */
         void RecordMutexWait(double ms);
 
@@ -108,7 +115,20 @@ namespace barton
          * GC instrumentation callback — registered with JS_SetGCCallback with
          * this instance as opaque. Records GC cycle frequency (sbmd.js.gc.count)
          * and per-cycle duration (sbmd.js.gc.duration_ms). Called by the mquickjs
-         * engine at GC start (isEnd == 0) and end (isEnd == 1).
+         * engine at GC start (isEnd == 0) and end (isEnd == 1). Under the
+         * production (DEBUG_GC off) allocator, a GC only fires when the arena is
+         * nearly exhausted, so the pre-compaction heap_used at GC start is ~constant
+         * (close to the trigger threshold) on every cycle — NOT a signal of how much
+         * a particular driver or handler burst allocated. At GC start it is captured
+         * only to compute allocation churn since the previous cycle
+         * (sbmd.js.gc.alloc_churn_bytes = this cycle's pre-compaction heap_used minus
+         * the previous cycle's post-compaction live set), which IS a meaningful
+         * per-cycle signal and is free given the two reads this callback already
+         * does. At GC end it samples the just-compacted heap_used into
+         * sbmd.js.heap.live_bytes — the true retained live set, with transient
+         * garbage reclaimed. This is opportunistic (only when the engine runs a GC
+         * on its own) so it adds no forced collections and cannot perturb the
+         * runtime's GC cadence.
          */
         static void GCCallback(JSContext *ctx, int isEnd, void *opaque) noexcept;
 
@@ -122,6 +142,8 @@ namespace barton
         ObservabilityCounter *gcCountCounter = nullptr;
         ObservabilityHistogram *gcDurationHisto = nullptr;
         ObservabilityGauge *gcRootsGauge = nullptr;
+        ObservabilityGauge *heapLiveGauge = nullptr;
+        ObservabilityHistogram *gcAllocChurnHisto = nullptr;
 
         void RunSampler();
 
@@ -132,6 +154,8 @@ namespace barton
         std::mutex samplerCvMutex;
         std::chrono::steady_clock::time_point gcStartTime;
         int64_t peakHeapRecorded = 0;
+        size_t preGCHeapUsed = 0;
+        int64_t prevPostGCHeapUsed = -1; // -1 sentinel: no prior post-GC baseline yet
     };
 
 } // namespace barton
@@ -154,6 +178,8 @@ namespace barton
         void RecordHeapSnapshot(const JSMemoryUsage &, size_t) {}
 
         void RecordArenaSize(int64_t) {}
+
+        void ResetGcBaselines() {}
 
         void RecordMutexWait(double) {}
 

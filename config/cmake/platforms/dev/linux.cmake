@@ -34,6 +34,11 @@ set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to M
 
 set(BCORE_GEN_GIR ON CACHE BOOL "Gir generation")
 
+# BCORE_SBMD_GC_INSTRUMENTATION defaults off (unconditional per-GC-cycle cost
+# in shipping builds); the dev profile turns it on so the observability test
+# suite and local characterization work have the metric available.
+set(BCORE_SBMD_GC_INSTRUMENTATION ON CACHE BOOL "Enable GC callback and live-root-count instrumentation within SBMD metrics")
+
 # Build the reference app's camera stream command (GStreamer WebRTC) in the dev platform.
 set(BCORE_REFERENCE_CAMERA_SUPPORT ON CACHE BOOL "Enable reference app camera support")
 
