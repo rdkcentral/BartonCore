@@ -113,29 +113,76 @@ std::future<bool> DeviceDataCache::Start()
         future = startupPromise->get_future();
     }
 
-    chip::DeviceLayer::PlatformMgr().ScheduleWork(
-        [](intptr_t arg) {
-            auto *self = reinterpret_cast<DeviceDataCache *>(arg);
+    // Post without waiting: callers (e.g. CommissioningOrchestrator::Pair) hold their own locks and bound
+    // the wait on the returned future. A blocking hand-off here could deadlock against Matter-thread work
+    // that needs those locks, or hang forever if the event loop stops before running the work.
+    CHIP_ERROR scheduleErr = ScheduleOnMatterThread(&DeviceDataCache::ConnectToDevice);
 
-            CHIP_ERROR err =
-                self->controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(self->deviceUuid),
-                                                     &self->mOnDeviceConnectedCallback,
-                                                     &self->mOnDeviceConnectionFailureCallback);
+    if (scheduleErr != CHIP_NO_ERROR)
+    {
+        icError("Failed to schedule device connection for %s: %" CHIP_ERROR_FORMAT,
+                deviceUuid.c_str(),
+                scheduleErr.Format());
+        std::lock_guard<std::mutex> lock(startupPromiseMutex);
 
-            if (err != CHIP_NO_ERROR)
-            {
-                icError("Failed to start device connection: %s", err.AsString());
-                std::lock_guard<std::mutex> lock(self->startupPromiseMutex);
-                if (self->startupPromise)
-                {
-                    self->startupPromise->set_value(false);
-                    self->startupPromise.reset();
-                }
-            }
-        },
-        reinterpret_cast<intptr_t>(this));
+        if (startupPromise)
+        {
+            startupPromise->set_value(false);
+            startupPromise.reset();
+        }
+    }
 
     return future;
+}
+
+CHIP_ERROR DeviceDataCache::ScheduleOnMatterThread(void (DeviceDataCache::*work)())
+{
+    // A caller may let go of the cache while this work is still queued (for example when its wait for
+    // Start() times out), so the work owns a reference instead of capturing a raw this. If the work is
+    // the last owner, the cache is destroyed on the Matter thread when it finishes.
+    auto *self = new std::shared_ptr<DeviceDataCache>(shared_from_this());
+
+    CHIP_ERROR err = chip::DeviceLayer::SystemLayer().ScheduleLambda([self, work]() {
+        std::unique_ptr<std::shared_ptr<DeviceDataCache>> owner(self);
+
+        // If this work holds the only reference, every caller has let go of the cache (Start()'s
+        // caller gave up waiting, the device was removed, or the stack was restarted with this work
+        // still queued). Nothing can use the result, so skip it; Start() would otherwise begin a
+        // connection for a cache that is destroyed as soon as this returns.
+        if (owner->use_count() == 1)
+        {
+            icDebug("Skipping queued work for %s: the cache has no other owner", (*owner)->deviceUuid.c_str());
+            return;
+        }
+
+        ((**owner).*work)();
+    });
+
+    if (err != CHIP_NO_ERROR)
+    {
+        delete self;
+    }
+
+    return err;
+}
+
+void DeviceDataCache::ConnectToDevice()
+{
+    CHIP_ERROR err = controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(deviceUuid),
+                                                    &mOnDeviceConnectedCallback,
+                                                    &mOnDeviceConnectionFailureCallback);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to start device connection: %s", err.AsString());
+        std::lock_guard<std::mutex> lock(startupPromiseMutex);
+
+        if (startupPromise)
+        {
+            startupPromise->set_value(false);
+            startupPromise.reset();
+        }
+    }
 }
 
 CHIP_ERROR DeviceDataCache::GetStringAttribute(chip::EndpointId endpointId,
@@ -616,98 +663,106 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
 {
     icDebug();
 
-    chip::DeviceLayer::PlatformMgr().ScheduleWork(
-        [](intptr_t context) {
-            auto *self = reinterpret_cast<DeviceDataCache *>(context);
+    // Post without waiting: callers expect the regenerated report to be delivered after their
+    // own in-flight Matter-thread work (e.g. startup sync seed handlers), and must never block if the
+    // event loop stops before running it.
+    CHIP_ERROR scheduleErr = ScheduleOnMatterThread(&DeviceDataCache::DoRegenerateAttributeReport);
 
-            if (!self->clusterStateCache)
-            {
-                icError("ClusterStateCache is null");
-                return;
-            }
+    if (scheduleErr != CHIP_NO_ERROR)
+    {
+        icError("Failed to schedule attribute report regeneration for %s: %" CHIP_ERROR_FORMAT,
+                deviceUuid.c_str(),
+                scheduleErr.Format());
+    }
 
-            if (!self->callback)
-            {
-                icWarn("No registered callback to notify for attribute report regeneration");
-                return;
-            }
+    return scheduleErr;
+}
 
-            // Get all endpoint IDs
-            std::vector<chip::EndpointId> endpointIds = self->GetEndpointIds();
+void DeviceDataCache::DoRegenerateAttributeReport()
+{
+    if (!clusterStateCache)
+    {
+        icError("ClusterStateCache is null");
+        return;
+    }
 
-            // Collect valid (non-expired) cluster callbacks, opportunistically erasing expired ones.
-            // This snapshot ensures the same set of callbacks receives both OnReportBegin and OnReportEnd.
-            std::vector<std::shared_ptr<chip::app::ClusterStateCache::Callback>> validClusterCallbacks;
-            for (auto it = self->clusterCallbacks.begin(); it != self->clusterCallbacks.end();)
-            {
-                auto cb = it->second.lock();
-                if (cb)
-                {
-                    validClusterCallbacks.push_back(std::move(cb));
-                    ++it;
-                }
-                else
-                {
-                    it = self->clusterCallbacks.erase(it);
-                }
-            }
+    if (!callback)
+    {
+        icWarn("No registered callback to notify for attribute report regeneration");
+        return;
+    }
 
-            // Trigger OnReportBegin on all registered callbacks for common clusters first,
-            // then for all other device-specific clusters.
-            for (const auto &clusterCallback : validClusterCallbacks)
-            {
-                clusterCallback->OnReportBegin();
-            }
-            self->callback->OnReportBegin();
+    // Get all endpoint IDs
+    std::vector<chip::EndpointId> endpointIds = GetEndpointIds();
 
-            // Iterate through all endpoints, clusters, and attributes
-            for (chip::EndpointId endpointId : endpointIds)
-            {
-                self->clusterStateCache->ForEachCluster(endpointId, [self, endpointId](chip::ClusterId clusterId) {
+    // Collect valid (non-expired) cluster callbacks, opportunistically erasing expired ones.
+    // This snapshot ensures the same set of callbacks receives both OnReportBegin and OnReportEnd.
+    std::vector<std::shared_ptr<chip::app::ClusterStateCache::Callback>> validClusterCallbacks;
+    for (auto it = clusterCallbacks.begin(); it != clusterCallbacks.end();)
+    {
+        auto cb = it->second.lock();
+        if (cb)
+        {
+            validClusterCallbacks.push_back(std::move(cb));
+            ++it;
+        }
+        else
+        {
+            it = clusterCallbacks.erase(it);
+        }
+    }
 
-                    // Iterate through all attributes in this cluster
-                    self->clusterStateCache->ForEachAttribute(
-                        endpointId, clusterId, [self](const chip::app::ConcreteAttributePath &path) {
-                            chip::app::ConcreteDataAttributePath dataPath(
-                                path.mEndpointId, path.mClusterId, path.mAttributeId);
-                            chip::TLV::TLVReader reader;
+    // Trigger OnReportBegin on all registered callbacks for common clusters first,
+    // then for all other device-specific clusters.
+    for (const auto &clusterCallback : validClusterCallbacks)
+    {
+        clusterCallback->OnReportBegin();
+    }
+    callback->OnReportBegin();
 
-                            CHIP_ERROR err = self->clusterStateCache->Get(dataPath, reader);
-                            if (err != CHIP_NO_ERROR)
-                            {
-                                icWarn("Failed to get cached attribute data for endpoint 0x%02x, cluster 0x%04" PRIx32 ", attribute 0x%04" PRIx32 ": %" CHIP_ERROR_FORMAT,
-                                       static_cast<unsigned int>(dataPath.mEndpointId),
-                                       static_cast<uint32_t>(dataPath.mClusterId),
-                                       static_cast<uint32_t>(dataPath.mAttributeId),
-                                       err.Format());
+    // Iterate through all endpoints, clusters, and attributes
+    for (chip::EndpointId endpointId : endpointIds)
+    {
+        clusterStateCache->ForEachCluster(endpointId, [this, endpointId](chip::ClusterId clusterId) {
+            // Iterate through all attributes in this cluster
+            clusterStateCache->ForEachAttribute(
+                endpointId, clusterId, [this](const chip::app::ConcreteAttributePath &path) {
+                    chip::app::ConcreteDataAttributePath dataPath(path.mEndpointId, path.mClusterId, path.mAttributeId);
+                    chip::TLV::TLVReader reader;
 
-                                // Skip notifying the callback for this attribute; continue with others.
-                                return CHIP_NO_ERROR;
-                            }
+                    CHIP_ERROR err = clusterStateCache->Get(dataPath, reader);
+                    if (err != CHIP_NO_ERROR)
+                    {
+                        icWarn("Failed to get cached attribute data for endpoint 0x%02x, cluster 0x%04" PRIx32
+                               ", attribute 0x%04" PRIx32 ": %" CHIP_ERROR_FORMAT,
+                               static_cast<unsigned int>(dataPath.mEndpointId),
+                               static_cast<uint32_t>(dataPath.mClusterId),
+                               static_cast<uint32_t>(dataPath.mAttributeId),
+                               err.Format());
 
-                            chip::app::StatusIB aStatus(chip::Protocols::InteractionModel::Status::Success);
-                            self->OnAttributeData(dataPath, &reader, aStatus);
+                        // Skip notifying the callback for this attribute; continue with others.
+                        return CHIP_NO_ERROR;
+                    }
 
-                            return CHIP_NO_ERROR;
-                        });
+                    chip::app::StatusIB aStatus(chip::Protocols::InteractionModel::Status::Success);
+                    OnAttributeData(dataPath, &reader, aStatus);
 
                     return CHIP_NO_ERROR;
                 });
-            }
 
-            // Trigger OnReportEnd on all registered callbacks for common clusters first,
-            // then for all other device-specific clusters.
-            for (const auto &clusterCallback : validClusterCallbacks)
-            {
-                clusterCallback->OnReportEnd();
-            }
-            self->callback->OnReportEnd();
+            return CHIP_NO_ERROR;
+        });
+    }
 
-            icDebug("Done regenerating attribute report");
-        },
-        reinterpret_cast<intptr_t>(this));
+    // Trigger OnReportEnd on all registered callbacks for common clusters first,
+    // then for all other device-specific clusters.
+    for (const auto &clusterCallback : validClusterCallbacks)
+    {
+        clusterCallback->OnReportEnd();
+    }
+    callback->OnReportEnd();
 
-    return CHIP_NO_ERROR;
+    icDebug("Done regenerating attribute report");
 }
 
 void DeviceDataCache::OnReportEnd()

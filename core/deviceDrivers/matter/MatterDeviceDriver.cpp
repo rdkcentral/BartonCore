@@ -1067,6 +1067,14 @@ bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid, uint
     // create and start the device data cache and add the device.
     if (GetDevice(deviceUuid) == nullptr)
     {
+        // Work a cache queues while the stack is down only runs if the stack is restarted, and it keeps the
+        // cache alive until then (see DeviceDataCache::ScheduleOnMatterThread()), so don't start one.
+        if (!Matter::GetInstance().IsRunning())
+        {
+            icError("Matter subsystem is down; not adding device %s", deviceUuid.c_str());
+            return false;
+        }
+
         auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
         std::future<bool> success = newCache->Start();
 
